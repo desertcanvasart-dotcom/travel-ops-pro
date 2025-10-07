@@ -30,13 +30,13 @@ export default function Home() {
 
           {/* Feature Cards */}
           <div className="grid md:grid-cols-3 gap-8 mb-16">
-            <div className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-shadow">
+            <a href="/rates" className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
               <div className="w-16 h-16 bg-[#DC834E] rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-white text-2xl">💬</span>
+                <span className="text-white text-2xl">💰</span>
               </div>
-              <h3 className="text-xl font-bold mb-2">WhatsApp Parser</h3>
-              <p className="text-gray-600">AI-powered conversation analysis</p>
-            </div>
+              <h3 className="text-xl font-bold mb-2">View Rates</h3>
+              <p className="text-gray-600">See current service pricing</p>
+            </a>
 
             <div className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-shadow">
               <div className="w-16 h-16 bg-[#DC834E] rounded-full flex items-center justify-center mx-auto mb-4">
@@ -48,10 +48,10 @@ export default function Home() {
 
             <div className="bg-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-shadow">
               <div className="w-16 h-16 bg-[#DC834E] rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-white text-2xl">💰</span>
+                <span className="text-white text-2xl">💬</span>
               </div>
-              <h3 className="text-xl font-bold mb-2">Instant Quotes</h3>
-              <p className="text-gray-600">Multi-language PDF generation</p>
+              <h3 className="text-xl font-bold mb-2">WhatsApp Parser</h3>
+              <p className="text-gray-600">AI-powered conversation analysis</p>
             </div>
           </div>
 
