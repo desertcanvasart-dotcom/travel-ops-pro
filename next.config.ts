@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Disable static page generation for all pages
+  output: 'standalone',
 }
 
 export default nextConfig
