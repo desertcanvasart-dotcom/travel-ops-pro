@@ -80,9 +80,12 @@ export default function FollowupDashboard() {
 
       if (error) throw error
 
+      // Show success message
+      alert('Follow-up marked as complete!')
       loadFollowups()
     } catch (error) {
       console.error('Error completing follow-up:', error)
+      alert('Failed to complete follow-up')
     }
   }
 
@@ -100,9 +103,12 @@ export default function FollowupDashboard() {
 
       if (error) throw error
 
+      // Show success message
+      alert(`Follow-up snoozed for ${days} day${days > 1 ? 's' : ''}!`)
       loadFollowups()
     } catch (error) {
       console.error('Error snoozing follow-up:', error)
+      alert('Failed to snooze follow-up')
     }
   }
 
@@ -117,9 +123,11 @@ export default function FollowupDashboard() {
 
       if (error) throw error
 
+      alert('Follow-up deleted successfully!')
       loadFollowups()
     } catch (error) {
       console.error('Error deleting follow-up:', error)
+      alert('Failed to delete follow-up')
     }
   }
 
@@ -209,11 +217,11 @@ export default function FollowupDashboard() {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high':
-        return 'bg-red-100 text-red-700 border-red-200'
+        return 'bg-danger/10 text-danger border-danger/20'
       case 'medium':
-        return 'bg-yellow-100 text-yellow-700 border-yellow-200'
+        return 'bg-warning/10 text-warning border-warning/20'
       case 'low':
-        return 'bg-green-100 text-green-700 border-green-200'
+        return 'bg-success/10 text-success border-success/20'
       default:
         return 'bg-gray-100 text-gray-700 border-gray-200'
     }
@@ -236,277 +244,275 @@ export default function FollowupDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Follow-up Dashboard</h1>
-              <p className="text-gray-600 mt-1">Never miss a client touchpoint</p>
+    <div className="p-4 lg:p-6 space-y-4">
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Follow-up Dashboard</h1>
+            <p className="text-sm text-gray-600 mt-1">Never miss a client touchpoint</p>
+          </div>
+          <Link
+            href="/clients"
+            className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 font-medium"
+          >
+            Back to Clients
+          </Link>
+        </div>
+
+        {/* Stats - White cards with dots */}
+        <div className="grid grid-cols-4 gap-3 mt-4">
+          <div 
+            onClick={() => setFilter('today')}
+            className={`cursor-pointer rounded-lg border p-4 transition-all ${
+              filter === 'today' 
+                ? 'border-primary-600 bg-primary-50 shadow-sm' 
+                : 'border-gray-200 bg-white hover:border-primary-300 shadow-sm'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
-            <Link
-              href="/clients"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-            >
-              Back to Clients
-            </Link>
+            <div className="text-2xl font-bold text-gray-900">
+              {stats.today}
+            </div>
+            <div className="text-xs font-medium text-gray-600 mt-1">
+              Due Today
+            </div>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-4 gap-6 mt-8">
-            <div 
-              onClick={() => setFilter('today')}
-              className={`cursor-pointer rounded-lg p-6 transition-all ${
-                filter === 'today' 
-                  ? 'bg-blue-600 text-white shadow-lg' 
-                  : 'bg-blue-50 hover:bg-blue-100'
-              }`}
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <Calendar className="w-6 h-6" />
-                <div className={`text-3xl font-bold ${filter === 'today' ? 'text-white' : 'text-blue-600'}`}>
-                  {stats.today}
-                </div>
-              </div>
-              <div className={`text-sm font-medium ${filter === 'today' ? 'text-blue-100' : 'text-blue-700'}`}>
-                Due Today
-              </div>
+          <div 
+            onClick={() => setFilter('week')}
+            className={`cursor-pointer rounded-lg border p-4 transition-all ${
+              filter === 'week' 
+                ? 'border-purple-600 bg-purple-50 shadow-sm' 
+                : 'border-gray-200 bg-white hover:border-purple-300 shadow-sm'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-4 h-4 text-gray-400" />
+              <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
-
-            <div 
-              onClick={() => setFilter('week')}
-              className={`cursor-pointer rounded-lg p-6 transition-all ${
-                filter === 'week' 
-                  ? 'bg-purple-600 text-white shadow-lg' 
-                  : 'bg-purple-50 hover:bg-purple-100'
-              }`}
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <TrendingUp className="w-6 h-6" />
-                <div className={`text-3xl font-bold ${filter === 'week' ? 'text-white' : 'text-purple-600'}`}>
-                  {stats.week}
-                </div>
-              </div>
-              <div className={`text-sm font-medium ${filter === 'week' ? 'text-purple-100' : 'text-purple-700'}`}>
-                This Week
-              </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {stats.week}
             </div>
-
-            <div 
-              onClick={() => setFilter('overdue')}
-              className={`cursor-pointer rounded-lg p-6 transition-all ${
-                filter === 'overdue' 
-                  ? 'bg-red-600 text-white shadow-lg' 
-                  : 'bg-red-50 hover:bg-red-100'
-              }`}
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <AlertCircle className="w-6 h-6" />
-                <div className={`text-3xl font-bold ${filter === 'overdue' ? 'text-white' : 'text-red-600'}`}>
-                  {stats.overdue}
-                </div>
-              </div>
-              <div className={`text-sm font-medium ${filter === 'overdue' ? 'text-red-100' : 'text-red-700'}`}>
-                Overdue
-              </div>
+            <div className="text-xs font-medium text-gray-600 mt-1">
+              This Week
             </div>
+          </div>
 
-            <div 
-              onClick={() => setFilter('all')}
-              className={`cursor-pointer rounded-lg p-6 transition-all ${
-                filter === 'all' 
-                  ? 'bg-gray-600 text-white shadow-lg' 
-                  : 'bg-gray-50 hover:bg-gray-100'
-              }`}
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <Clock className="w-6 h-6" />
-                <div className={`text-3xl font-bold ${filter === 'all' ? 'text-white' : 'text-gray-600'}`}>
-                  {stats.total}
-                </div>
-              </div>
-              <div className={`text-sm font-medium ${filter === 'all' ? 'text-gray-100' : 'text-gray-700'}`}>
-                All Pending
-              </div>
+          <div 
+            onClick={() => setFilter('overdue')}
+            className={`cursor-pointer rounded-lg border p-4 transition-all ${
+              filter === 'overdue' 
+                ? 'border-danger bg-red-50 shadow-sm' 
+                : 'border-gray-200 bg-white hover:border-red-300 shadow-sm'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="w-4 h-4 text-gray-400" />
+              <div className="w-1.5 h-1.5 rounded-full bg-danger" />
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {stats.overdue}
+            </div>
+            <div className="text-xs font-medium text-gray-600 mt-1">
+              Overdue
+            </div>
+          </div>
+
+          <div 
+            onClick={() => setFilter('all')}
+            className={`cursor-pointer rounded-lg border p-4 transition-all ${
+              filter === 'all' 
+                ? 'border-gray-600 bg-gray-50 shadow-sm' 
+                : 'border-gray-200 bg-white hover:border-gray-400 shadow-sm'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-4 h-4 text-gray-400" />
+              <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {stats.total}
+            </div>
+            <div className="text-xs font-medium text-gray-600 mt-1">
+              All Pending
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <div className="flex items-center gap-4">
-            <Filter className="w-5 h-5 text-gray-400" />
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Priorities</option>
-              <option value="high">High Priority</option>
-              <option value="medium">Medium Priority</option>
-              <option value="low">Low Priority</option>
-            </select>
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-3">
+          <Filter className="w-4 h-4 text-gray-400" />
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="all">All Priorities</option>
+            <option value="high">High Priority</option>
+            <option value="medium">Medium Priority</option>
+            <option value="low">Low Priority</option>
+          </select>
 
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Types</option>
-              <option value="call">Phone Call</option>
-              <option value="email">Email</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="meeting">Meeting</option>
-              <option value="quote">Send Quote</option>
-            </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="all">All Types</option>
+            <option value="call">Phone Call</option>
+            <option value="email">Email</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="meeting">Meeting</option>
+            <option value="quote">Send Quote</option>
+          </select>
 
-            <div className="ml-auto text-sm text-gray-600">
-              Showing {filteredFollowups.length} follow-up{filteredFollowups.length !== 1 ? 's' : ''}
-            </div>
+          <div className="ml-auto text-xs text-gray-600">
+            Showing {filteredFollowups.length} follow-up{filteredFollowups.length !== 1 ? 's' : ''}
           </div>
         </div>
+      </div>
 
-        {/* Follow-ups List */}
-        <div className="space-y-4">
-          {filteredFollowups.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-              <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-gray-900 mb-2">All Caught Up!</h3>
-              <p className="text-gray-600">No follow-ups matching your filters</p>
-            </div>
-          ) : (
-            filteredFollowups.map((followup) => {
-              const TypeIcon = getTypeIcon(followup.followup_type)
-              const overdue = isOverdue(followup.due_date)
-              const today = isToday(followup.due_date)
+      {/* Follow-ups List */}
+      <div className="space-y-3">
+        {filteredFollowups.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+            <CheckCircle className="w-12 h-12 text-success mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-gray-900 mb-2">All Caught Up!</h3>
+            <p className="text-sm text-gray-600">No follow-ups matching your filters</p>
+          </div>
+        ) : (
+          filteredFollowups.map((followup) => {
+            const TypeIcon = getTypeIcon(followup.followup_type)
+            const overdue = isOverdue(followup.due_date)
+            const today = isToday(followup.due_date)
 
-              return (
-                <div
-                  key={followup.id}
-                  className={`bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow ${
-                    overdue ? 'border-2 border-red-300' : today ? 'border-2 border-blue-300' : ''
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4 flex-1">
-                      {/* Icon */}
-                      <div className={`p-3 rounded-lg ${
-                        overdue ? 'bg-red-100' : today ? 'bg-blue-100' : 'bg-gray-100'
-                      }`}>
-                        <TypeIcon className={`w-6 h-6 ${
-                          overdue ? 'text-red-600' : today ? 'text-blue-600' : 'text-gray-600'
-                        }`} />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <Link
-                            href={`/clients/${followup.client_id}`}
-                            className="text-lg font-bold text-gray-900 hover:text-blue-600"
-                          >
-                            {followup.client.first_name} {followup.client.last_name}
-                          </Link>
-                          <span className="text-sm text-gray-500">
-                            {followup.client.client_code}
-                          </span>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(followup.priority)}`}>
-                            {followup.priority}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                          <div className="flex items-center gap-1">
-                            <TypeIcon className="w-4 h-4" />
-                            <span className="capitalize">{followup.followup_type}</span>
-                          </div>
-                          <div className={`flex items-center gap-1 font-medium ${
-                            overdue ? 'text-red-600' : today ? 'text-blue-600' : ''
-                          }`}>
-                            <Calendar className="w-4 h-4" />
-                            <span>{formatDate(followup.due_date)}</span>
-                            {overdue && <span className="text-xs">(Overdue)</span>}
-                            {today && <span className="text-xs">(Today)</span>}
-                          </div>
-                        </div>
-
-                        {followup.notes && (
-                          <p className="text-sm text-gray-700 mt-2 bg-gray-50 p-3 rounded-lg">
-                            {followup.notes}
-                          </p>
-                        )}
-
-                        {/* Contact Info */}
-                        <div className="flex items-center gap-4 mt-3 text-sm">
-                          {followup.client.phone && (
-                            
-                              href={`tel:${followup.client.phone}`}
-                              className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                            >
-                              <Phone className="w-4 h-4" />
-                              {followup.client.phone}
-                            </a>
-                          )}
-                          {followup.client.email && (
-                            
-                              href={`mailto:${followup.client.email}`}
-                              className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                            >
-                              <Mail className="w-4 h-4" />
-                              {followup.client.email}
-                            </a>
-                          )}
-                        </div>
-                      </div>
+            return (
+              <div
+                key={followup.id}
+                className={`bg-white rounded-lg shadow-sm border p-4 hover:shadow-md transition-all ${
+                  overdue ? 'border-danger' : today ? 'border-primary-300' : 'border-gray-200'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    {/* Icon */}
+                    <div className={`p-2 rounded-lg ${
+                      overdue ? 'bg-danger/10' : today ? 'bg-primary-100' : 'bg-gray-100'
+                    }`}>
+                      <TypeIcon className={`w-4 h-4 ${
+                        overdue ? 'text-danger' : today ? 'text-primary-600' : 'text-gray-600'
+                      }`} />
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex flex-col gap-2">
-                      <button
-                        onClick={() => completeFollowup(followup.id)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        Complete
-                      </button>
-                      <button
-                        onClick={() => snoozeFollowup(followup.id, 1)}
-                        className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 font-medium text-sm"
-                      >
-                        Snooze 1 day
-                      </button>
-                      <button
-                        onClick={() => snoozeFollowup(followup.id, 7)}
-                        className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 font-medium text-sm"
-                      >
-                        Snooze 1 week
-                      </button>
-                      <button
-                        onClick={() => deleteFollowup(followup.id)}
-                        className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 font-medium text-sm flex items-center gap-2"
-                      >
-                        <X className="w-4 h-4" />
-                        Delete
-                      </button>
+                    {/* Content */}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Link
+                          href={`/clients/${followup.client_id}`}
+                          className="text-base font-bold text-gray-900 hover:text-primary-600"
+                        >
+                          {followup.client.first_name} {followup.client.last_name}
+                        </Link>
+                        <span className="text-xs text-gray-500">
+                          {followup.client.client_code}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(followup.priority)}`}>
+                          {followup.priority}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs text-gray-600 mb-2">
+                        <div className="flex items-center gap-1">
+                          <TypeIcon className="w-3 h-3" />
+                          <span className="capitalize">{followup.followup_type}</span>
+                        </div>
+                        <div className={`flex items-center gap-1 font-medium ${
+                          overdue ? 'text-danger' : today ? 'text-primary-600' : ''
+                        }`}>
+                          <Calendar className="w-3 h-3" />
+                          <span>{formatDate(followup.due_date)}</span>
+                          {overdue && <span className="text-xs">(Overdue)</span>}
+                          {today && <span className="text-xs">(Today)</span>}
+                        </div>
+                      </div>
+
+                      {followup.notes && (
+                        <p className="text-xs text-gray-700 mt-2 bg-gray-50 p-2 rounded-lg">
+                          {followup.notes}
+                        </p>
+                      )}
+                    
+                      {/* Contact Info */}
+                      <div className="flex items-center gap-3 mt-2 text-xs">
+                        {followup.client.phone && (
+                          <a
+                            href={`tel:${followup.client.phone}`}
+                            className="flex items-center gap-1 text-primary-600 hover:text-primary-700"
+                          >
+                            <Phone className="w-3 h-3" />
+                            {followup.client.phone}
+                          </a>
+                        )}
+                        {followup.client.email && (
+                          <a
+                            href={`mailto:${followup.client.email}`}
+                            className="flex items-center gap-1 text-primary-600 hover:text-primary-700"
+                          >
+                            <Mail className="w-3 h-3" />
+                            {followup.client.email}
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  
+                  {/* Actions */}
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => completeFollowup(followup.id)}
+                      className="px-3 py-1.5 bg-success text-white text-sm rounded-lg hover:bg-success/90 font-medium flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      Complete
+                    </button>
+                    <button
+                      onClick={() => snoozeFollowup(followup.id, 1)}
+                      className="px-3 py-1.5 bg-warning/10 text-warning text-xs rounded-lg hover:bg-warning/20 font-medium whitespace-nowrap"
+                    >
+                      Snooze 1 day
+                    </button>
+                    <button
+                      onClick={() => snoozeFollowup(followup.id, 7)}
+                      className="px-3 py-1.5 bg-warning/10 text-warning text-xs rounded-lg hover:bg-warning/20 font-medium whitespace-nowrap"
+                    >
+                      Snooze 1 week
+                    </button>
+                    <button
+                      onClick={() => deleteFollowup(followup.id)}
+                      className="px-3 py-1.5 bg-danger/10 text-danger text-xs rounded-lg hover:bg-danger/20 font-medium flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <X className="w-3 h-3" />
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              )
-            })
-          )}
-        </div>
+              </div>
+            )
+          })
+        )}
       </div>
     </div>
   )

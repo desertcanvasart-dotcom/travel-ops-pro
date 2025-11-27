@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -40,7 +40,24 @@ interface ExistingClient {
   phone: string
 }
 
+// Main export with Suspense wrapper
 export default function WhatsAppParserPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3"></div>
+          <p className="text-sm text-gray-600">Loading WhatsApp Parser...</p>
+        </div>
+      </div>
+    }>
+      <WhatsAppParserContent />
+    </Suspense>
+  )
+}
+
+// Actual component with useSearchParams
+function WhatsAppParserContent() {
   const [conversation, setConversation] = useState('')
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -88,7 +105,7 @@ Cliente: Gran Plaza`
   }
 
   // Check for pre-selected client from URL
-     useEffect(() => {
+  useEffect(() => {
     if (preSelectedClientId && !selectedClientId) {
       setSelectedClientId(preSelectedClientId)
       setClientSaved(true)
@@ -160,28 +177,27 @@ Cliente: Gran Plaza`
 
     try {
       // Create new client
-      // Split the name into first and last
-const nameParts = extractedData.client_name.trim().split(' ')
-const firstName = nameParts[0] || ''
-const lastName = nameParts.slice(1).join(' ') || nameParts[0] // If no last name, use first name
+      const nameParts = extractedData.client_name.trim().split(' ')
+      const firstName = nameParts[0] || ''
+      const lastName = nameParts.slice(1).join(' ') || nameParts[0]
 
-const { data: newClient, error: clientError } = await supabase
-  .from('clients')
-  .insert({
-    first_name: firstName,                    // ✅ FIXED
-    last_name: lastName,                      // ✅ FIXED
-    email: extractedData.client_email || null,
-    phone: extractedData.client_phone || null,
-    nationality: extractedData.nationality || 'Unknown',
-    status: 'prospect',
-    client_type: extractedData.num_adults > 2 ? 'family' : 'individual',
-    passport_type: 'other',
-    preferred_language: extractedData.conversation_language || 'English',
-    client_source: 'whatsapp',
-    vip_status: false
-  })
-  .select()
-  .single()
+      const { data: newClient, error: clientError } = await supabase
+        .from('clients')
+        .insert({
+          first_name: firstName,
+          last_name: lastName,
+          email: extractedData.client_email || null,
+          phone: extractedData.client_phone || null,
+          nationality: extractedData.nationality || 'Unknown',
+          status: 'prospect',
+          client_type: extractedData.num_adults > 2 ? 'family' : 'individual',
+          passport_type: 'other',
+          preferred_language: extractedData.conversation_language || 'English',
+          client_source: 'whatsapp',
+          vip_status: false
+        })
+        .select()
+        .single()
 
       if (clientError) throw clientError
 
@@ -239,7 +255,7 @@ const { data: newClient, error: clientError } = await supabase
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...extractedData,
-          client_id: selectedClientId // Link to client if exists
+          client_id: selectedClientId
         })
       })
 
@@ -279,87 +295,99 @@ const { data: newClient, error: clientError } = await supabase
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-8">
+    <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-blue-600 rounded-xl">
-              <MessageSquare className="w-8 h-8 text-white" />
+        <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4 mb-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-primary-100 rounded-lg">
+              <MessageSquare className="w-5 h-5 text-primary-600" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">AI WhatsApp Parser</h1>
-              <p className="text-gray-600">Paste conversation → AI extracts info → Generate itinerary → Save client</p>
+              <h1 className="text-xl font-bold text-gray-900">AI WhatsApp Parser</h1>
+              <p className="text-xs text-gray-600">Paste conversation → AI extracts info → Generate itinerary → Save client</p>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="text-sm text-blue-600 font-medium">Step 1</div>
-              <div className="text-lg font-bold text-gray-900">Analyze Conversation</div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gray-400 text-lg">1️⃣</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+              </div>
+              <div className="text-xs text-gray-600">Step 1</div>
+              <div className="text-sm font-bold text-gray-900">Analyze</div>
             </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <div className="text-sm text-purple-600 font-medium">Step 2</div>
-              <div className="text-lg font-bold text-gray-900">Save Client (Optional)</div>
+            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gray-400 text-lg">2️⃣</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+              </div>
+              <div className="text-xs text-gray-600">Step 2</div>
+              <div className="text-sm font-bold text-gray-900">Save Client</div>
             </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <div className="text-sm text-green-600 font-medium">Step 3</div>
-              <div className="text-lg font-bold text-gray-900">Generate Itinerary</div>
+            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gray-400 text-lg">3️⃣</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
+              </div>
+              <div className="text-xs text-gray-600">Step 3</div>
+              <div className="text-sm font-bold text-gray-900">Generate</div>
             </div>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-2 gap-4">
           {/* Left: Input */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900">WhatsApp Conversation</h2>
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-bold text-gray-900">WhatsApp Conversation</h2>
                 <button
                   onClick={loadSample}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                 >
                   Load Sample
                 </button>
               </div>
               {preSelectedClientId && clientSaved && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-              <div className="flex items-center gap-2 text-green-800">
-              <CheckCircle className="w-5 h-5" />
-              <span className="font-medium">
-               Client linked! Any itinerary you generate will be automatically saved to this client.
-               </span>
-               </div>
-               </div>
-          )}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+                  <div className="flex items-center gap-2 text-green-800">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-xs font-medium">
+                      Client linked! Any itinerary you generate will be automatically saved to this client.
+                    </span>
+                  </div>
+                </div>
+              )}
               <textarea
                 value={conversation}
                 onChange={(e) => setConversation(e.target.value)}
                 placeholder="Paste WhatsApp conversation here...
 
-                Example:
-                Client: Hi, we want to visit Egypt
-                Agent: Great! When are you thinking?
-                Client: Maybe next month, around 10 days
-                ..."
-                className="w-full h-96 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-sm"
+Example:
+Client: Hi, we want to visit Egypt
+Agent: Great! When are you thinking?
+Client: Maybe next month, around 10 days
+..."
+                className="w-full h-96 px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none font-mono shadow-sm"
               />
 
               <button
                 onClick={analyzeConversation}
                 disabled={isAnalyzing || !conversation.trim()}
-                className="w-full mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full mt-3 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isAnalyzing ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Analyzing with AI...
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Analyzing...
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-5 h-5" />
+                    <Sparkles className="w-4 h-4" />
                     Analyze with AI
                   </>
                 )}
@@ -368,100 +396,100 @@ const { data: newClient, error: clientError } = await supabase
           </div>
 
           {/* Right: Extracted Data & Client Creation */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-800">{error}</p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-xs text-red-800">{error}</p>
               </div>
             )}
 
             {extractedData && (
               <>
                 {/* Extracted Data */}
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Extracted Information</h2>
+                <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                  <h2 className="text-base font-bold text-gray-900 mb-3">Extracted Information</h2>
 
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      <User className="w-5 h-5 text-gray-400 mt-0.5" />
-                      <div>
-                        <div className="text-sm text-gray-600">Client Name</div>
+                  <div className="space-y-2.5">
+                    <div className="flex items-start gap-2">
+                      <User className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Client Name</div>
                         <input
                           type="text"
                           value={extractedData.client_name}
                           onChange={(e) => setExtractedData({ ...extractedData, client_name: e.target.value })}
-                          className="font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none w-full"
+                          className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
                         />
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
-                      <div>
-                        <div className="text-sm text-gray-600">Email</div>
+                    <div className="flex items-start gap-2">
+                      <Mail className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Email</div>
                         <input
                           type="email"
                           value={extractedData.client_email}
                           onChange={(e) => setExtractedData({ ...extractedData, client_email: e.target.value })}
-                          className="font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none w-full"
+                          className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
                         />
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <Phone className="w-5 h-5 text-gray-400 mt-0.5" />
-                      <div>
-                        <div className="text-sm text-gray-600">Phone</div>
+                    <div className="flex items-start gap-2">
+                      <Phone className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Phone</div>
                         <input
                           type="tel"
                           value={extractedData.client_phone}
                           onChange={(e) => setExtractedData({ ...extractedData, client_phone: e.target.value })}
-                          className="font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-blue-500 outline-none w-full"
+                          className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
                         />
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
-                      <div>
-                        <div className="text-sm text-gray-600">Tour</div>
-                        <div className="font-medium text-gray-900">{extractedData.tour_name}</div>
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Tour</div>
+                        <div className="text-sm font-medium text-gray-900">{extractedData.tour_name}</div>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <Calendar className="w-5 h-5 text-gray-400 mt-0.5" />
-                      <div>
-                        <div className="text-sm text-gray-600">Date</div>
-                        <div className="font-medium text-gray-900">{extractedData.start_date}</div>
+                    <div className="flex items-start gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Date</div>
+                        <div className="text-sm font-medium text-gray-900">{extractedData.start_date}</div>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <Users className="w-5 h-5 text-gray-400 mt-0.5" />
-                      <div>
-                        <div className="text-sm text-gray-600">Travelers</div>
-                        <div className="font-medium text-gray-900">
+                    <div className="flex items-start gap-2">
+                      <Users className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Travelers</div>
+                        <div className="text-sm font-medium text-gray-900">
                           {extractedData.num_adults} adults
                           {extractedData.num_children > 0 && `, ${extractedData.num_children} children`}
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <Globe className="w-5 h-5 text-gray-400 mt-0.5" />
-                      <div>
-                        <div className="text-sm text-gray-600">Language</div>
-                        <div className="font-medium text-gray-900">{extractedData.conversation_language}</div>
+                    <div className="flex items-start gap-2">
+                      <Globe className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Language</div>
+                        <div className="text-sm font-medium text-gray-900">{extractedData.conversation_language}</div>
                       </div>
                     </div>
 
                     {extractedData.special_requests.length > 0 && (
-                      <div className="flex items-start gap-3">
-                        <MessageSquare className="w-5 h-5 text-gray-400 mt-0.5" />
-                        <div>
-                          <div className="text-sm text-gray-600">Special Requests</div>
-                          <div className="font-medium text-gray-900">
+                      <div className="flex items-start gap-2">
+                        <MessageSquare className="w-4 h-4 text-gray-400 mt-0.5" />
+                        <div className="flex-1">
+                          <div className="text-xs text-gray-600">Special Requests</div>
+                          <div className="text-sm font-medium text-gray-900">
                             {extractedData.special_requests.join(', ')}
                           </div>
                         </div>
@@ -472,25 +500,25 @@ const { data: newClient, error: clientError } = await supabase
 
                 {/* Existing Clients */}
                 {existingClients.length > 0 && !clientSaved && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-                    <h3 className="font-bold text-gray-900 mb-3">⚠️ Existing Clients Found</h3>
-                    <p className="text-sm text-gray-600 mb-4">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-2">⚠️ Existing Clients Found</h3>
+                    <p className="text-xs text-gray-600 mb-3">
                       We found {existingClients.length} client(s) with matching email/phone:
                     </p>
                     
-                    <div className="space-y-2 mb-4">
+                    <div className="space-y-2 mb-3">
                       {existingClients.map((client) => (
                         <div
                           key={client.id}
                           onClick={() => setSelectedClientId(client.id)}
-                          className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                          className={`p-2 border-2 rounded-lg cursor-pointer transition-all ${
                             selectedClientId === client.id
-                              ? 'border-blue-500 bg-blue-50'
+                              ? 'border-primary-500 bg-primary-50'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
-                          <div className="font-medium">{client.full_name}</div>
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm font-medium">{client.full_name}</div>
+                          <div className="text-xs text-gray-600">
                             {client.client_code} • {client.email}
                           </div>
                         </div>
@@ -500,10 +528,10 @@ const { data: newClient, error: clientError } = await supabase
                     {selectedClientId && (
                       <button
                         onClick={viewClientProfile}
-                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                        className="w-full px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2"
                       >
                         View Client Profile
-                        <ChevronRight className="w-4 h-4" />
+                        <ChevronRight className="w-3 h-3" />
                       </button>
                     )}
                   </div>
@@ -511,28 +539,28 @@ const { data: newClient, error: clientError } = await supabase
 
                 {/* Save as New Client */}
                 {!clientSaved && (
-                  <div className="bg-white rounded-xl shadow-lg p-6">
-                    <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                      <UserPlus className="w-5 h-5 text-purple-600" />
+                  <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                    <h3 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
+                      <UserPlus className="w-4 h-4 text-purple-600" />
                       Save as New Client
                     </h3>
-                    <p className="text-sm text-gray-600 mb-4">
+                    <p className="text-xs text-gray-600 mb-3">
                       Create a new client profile in your CRM with this information
                     </p>
                     
                     <button
                       onClick={saveAsNewClient}
                       disabled={isSavingClient}
-                      className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      className="w-full px-4 py-2 text-sm bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isSavingClient ? (
                         <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          Saving Client...
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Saving...
                         </>
                       ) : (
                         <>
-                          <UserPlus className="w-5 h-5" />
+                          <UserPlus className="w-4 h-4" />
                           Save as New Client
                         </>
                       )}
@@ -542,45 +570,45 @@ const { data: newClient, error: clientError } = await supabase
 
                 {/* Client Saved Success */}
                 {clientSaved && (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <h3 className="font-bold text-gray-900">Client Saved Successfully!</h3>
-                        <p className="text-sm text-gray-600">New client added to your CRM</p>
+                        <h3 className="text-sm font-bold text-gray-900">Client Saved Successfully!</h3>
+                        <p className="text-xs text-gray-600">New client added to your CRM</p>
                       </div>
                     </div>
                     
                     <button
                       onClick={viewClientProfile}
-                      className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                      className="w-full px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
                     >
                       View Client Profile
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="w-3 h-3" />
                     </button>
                   </div>
                 )}
 
                 {/* Generate Itinerary */}
-                <div className="bg-white rounded-xl shadow-lg p-6">
-                  <h3 className="font-bold text-gray-900 mb-3">Generate Itinerary</h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                  <h3 className="text-sm font-bold text-gray-900 mb-2">Generate Itinerary</h3>
+                  <p className="text-xs text-gray-600 mb-3">
                     AI will create a complete day-by-day itinerary with services and pricing
                   </p>
                   
                   <button
                     onClick={generateItinerary}
                     disabled={isGenerating}
-                    className="w-full px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full px-4 py-2 text-sm bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isGenerating ? (
                       <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                        Generating Itinerary...
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Generating...
                       </>
                     ) : (
                       <>
-                        <Sparkles className="w-5 h-5" />
+                        <Sparkles className="w-4 h-4" />
                         Generate Itinerary with AI
                       </>
                     )}
@@ -589,23 +617,23 @@ const { data: newClient, error: clientError } = await supabase
 
                 {/* Generated Itinerary Success */}
                 {generatedItinerary && (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <h3 className="font-bold text-gray-900">Itinerary Generated!</h3>
-                        <p className="text-sm text-gray-600">
+                        <h3 className="text-sm font-bold text-gray-900">Itinerary Generated!</h3>
+                        <p className="text-xs text-gray-600">
                           {generatedItinerary.itinerary_code} • €{generatedItinerary.total_cost}
                         </p>
                       </div>
                     </div>
                     
                     <button
-                     onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                      onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
+                      className="w-full px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2"
                     >
                       View Itinerary
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="w-3 h-3" />
                     </button>
                   </div>
                 )}

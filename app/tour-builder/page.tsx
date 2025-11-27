@@ -5,6 +5,7 @@ import { Tour, TourDay, TourPricingBreakdown } from './types'
 import TourSetup from './components/TourSetup'
 import DayPlanner from './components/DayPlanner'
 import PricingSidebar from './components/PricingSidebar'
+import { Users, Globe, ArrowLeft, Save, FileDown } from 'lucide-react'
 
 export default function TourBuilderPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1)
@@ -146,24 +147,25 @@ export default function TourBuilderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-xl font-bold text-gray-900">
                 🏗️ Multi-Day Tour Builder
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-xs text-gray-600 mt-0.5">
                 {tour.tour_name || 'Create a new tour package'}
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {/* PAX Selector */}
               <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">
-                  👥 PAX:
+                <Users className="w-4 h-4 text-gray-400" />
+                <label className="text-xs font-medium text-gray-600">
+                  PAX:
                 </label>
                 <input
                   type="number"
@@ -171,67 +173,88 @@ export default function TourBuilderPage() {
                   max="50"
                   value={pax}
                   onChange={(e) => setPax(parseInt(e.target.value) || 1)}
-                  className="w-20 px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
 
               {/* Passport Type Toggle */}
               <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">
-                  🛂 Passport:
+                <Globe className="w-4 h-4 text-gray-400" />
+                <label className="text-xs font-medium text-gray-600">
+                  Passport:
                 </label>
-                <button
-                  onClick={() => setIsEuroPassport(!isEuroPassport)}
-                  className={`px-3 py-1 rounded-lg font-medium text-sm transition-colors ${
-                    isEuroPassport
-                      ? 'bg-green-100 text-green-700 border border-green-300'
-                      : 'bg-blue-100 text-blue-700 border border-blue-300'
-                  }`}
-                >
-                  {isEuroPassport ? '🇪🇺 Euro' : '🌍 Non-Euro'}
-                </button>
+                <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setIsEuroPassport(true)}
+                    className={`px-2 py-0.5 rounded text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      isEuroPassport
+                        ? 'bg-gray-50 text-gray-900'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {isEuroPassport && <div className="w-1.5 h-1.5 rounded-full bg-green-600" />}
+                    🇪🇺 Euro
+                  </button>
+                  <button
+                    onClick={() => setIsEuroPassport(false)}
+                    className={`px-2 py-0.5 rounded text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      !isEuroPassport
+                        ? 'bg-gray-50 text-gray-900'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {!isEuroPassport && <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
+                    🌍 Non-Euro
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Progress Steps */}
-          <div className="mt-6 flex items-center">
-            <div className={`flex items-center ${step >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'
+          <div className="mt-4 flex items-center">
+            <div className={`flex items-center ${step >= 1 ? 'text-gray-900' : 'text-gray-400'}`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
+                step >= 1 
+                  ? 'bg-white border-primary-600 text-primary-600' 
+                  : 'bg-white border-gray-300 text-gray-400'
               }`}>
                 {step > 1 ? '✓' : '1'}
               </div>
-              <span className="ml-2 font-medium text-sm">Tour Setup</span>
+              <span className="ml-2 text-xs font-medium">Tour Setup</span>
             </div>
-            <div className={`h-1 w-24 mx-4 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-            <div className={`flex items-center ${step >= 2 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'
+            <div className={`h-0.5 w-20 mx-3 ${step >= 2 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
+            <div className={`flex items-center ${step >= 2 ? 'text-gray-900' : 'text-gray-400'}`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
+                step >= 2 
+                  ? 'bg-white border-primary-600 text-primary-600' 
+                  : 'bg-white border-gray-300 text-gray-400'
               }`}>
                 2
               </div>
-              <span className="ml-2 font-medium text-sm">Daily Planning</span>
+              <span className="ml-2 text-xs font-medium">Daily Planning</span>
             </div>
-            <div className={`h-1 w-24 mx-4 ${step >= 3 ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-            <div className={`flex items-center ${step >= 3 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                step >= 3 ? 'bg-blue-600 text-white' : 'bg-gray-200'
+            <div className={`h-0.5 w-20 mx-3 ${step >= 3 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
+            <div className={`flex items-center ${step >= 3 ? 'text-gray-900' : 'text-gray-400'}`}>
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
+                step >= 3 
+                  ? 'bg-white border-primary-600 text-primary-600' 
+                  : 'bg-white border-gray-300 text-gray-400'
               }`}>
                 3
               </div>
-              <span className="ml-2 font-medium text-sm">Review & Save</span>
+              <span className="ml-2 text-xs font-medium">Review & Save</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-6">
+      <div className="max-w-7xl mx-auto px-4 lg:px-6 py-6">
+        <div className="flex gap-4">
           {/* Left Side - Main Content */}
           <div className="flex-1">
-            <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
               {step === 1 && (
                 <TourSetup
                   tour={tour}
@@ -256,60 +279,73 @@ export default function TourBuilderPage() {
 
               {step === 3 && (
                 <div>
-                  <h2 className="text-2xl font-bold mb-4">Review & Save</h2>
-                  <p className="text-gray-600 mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <h2 className="text-lg font-bold text-gray-900">Review & Save</h2>
+                    <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                  </div>
+                  <p className="text-sm text-gray-600 mb-4">
                     Review your tour details and save the template.
                   </p>
                   
-                  <div className="space-y-4 mb-8">
-                    <div className="border rounded-lg p-4">
-                      <h3 className="font-semibold mb-2">Tour Details</h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-3 mb-6">
+                    {/* Tour Details Card */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-sm font-semibold text-gray-900">Tour Details</h3>
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <span className="text-gray-600">Tour Name:</span>
-                          <p className="font-medium">{tour.tour_name}</p>
+                          <span className="text-xs text-gray-600">Tour Name:</span>
+                          <p className="text-sm font-medium text-gray-900">{tour.tour_name}</p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Duration:</span>
-                          <p className="font-medium">{tour.duration_days} days</p>
+                          <span className="text-xs text-gray-600">Duration:</span>
+                          <p className="text-sm font-medium text-gray-900">{tour.duration_days} days</p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Cities:</span>
-                          <p className="font-medium">{tour.cities.join(', ')}</p>
+                          <span className="text-xs text-gray-600">Cities:</span>
+                          <p className="text-sm font-medium text-gray-900">{tour.cities.join(', ')}</p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Type:</span>
-                          <p className="font-medium capitalize">{tour.tour_type}</p>
+                          <span className="text-xs text-gray-600">Type:</span>
+                          <p className="text-sm font-medium text-gray-900 capitalize">{tour.tour_type}</p>
                         </div>
                       </div>
                     </div>
 
+                    {/* Pricing Card */}
                     {pricing && (
-                      <div className="border rounded-lg p-4 bg-green-50">
-                        <h3 className="font-semibold mb-2">Pricing Summary</h3>
-                        <div className="text-2xl font-bold text-green-700">
+                      <div className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-sm font-semibold text-gray-900">Pricing Summary</h3>
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">
                           €{pricing.totals.grand_total.toFixed(2)}
                         </div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-xs text-gray-600 mt-1">
                           €{pricing.per_person.toFixed(2)} per person ({pax} pax)
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex gap-4">
+                  <div className="flex gap-3">
                     <button
                       onClick={() => setStep(2)}
-                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
                     >
-                      ← Back to Planning
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to Planning
                     </button>
                     <button
                       onClick={handleSaveTour}
                       disabled={isSaving}
-                      className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      className="flex-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      {isSaving ? '💾 Saving...' : '💾 Save Tour'}
+                      <Save className="w-4 h-4" />
+                      {isSaving ? 'Saving...' : 'Save Tour'}
                     </button>
                     <button
                       onClick={async () => {
@@ -337,9 +373,10 @@ export default function TourBuilderPage() {
                           alert('Failed to export PDF')
                         }
                       }}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                      className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold flex items-center gap-2"
                     >
-                      📄 Export PDF
+                      <FileDown className="w-4 h-4" />
+                      Export PDF
                     </button>
                   </div>
                 </div>

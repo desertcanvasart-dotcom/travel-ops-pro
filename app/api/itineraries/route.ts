@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createClient()
     
-    // Get ALL itineraries (no auth check for now)
+    // Simple query without joins - just get the data
     const { data, error } = await supabase
       .from('itineraries')
       .select('*')
@@ -24,6 +24,35 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('❌ API error:', error)
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = createClient()
+    const body = await request.json()
+
+    const { data, error } = await supabase
+      .from('itineraries')
+      .insert([body])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating itinerary:', error)
+      throw error
+    }
+
+    return NextResponse.json({
+      success: true,
+      data
+    })
+  } catch (error: any) {
+    console.error('API error:', error)
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

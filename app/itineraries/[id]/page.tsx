@@ -3,7 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
+import ResourceAssignment from '@/app/components/ResourceAssignment'
+import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
+import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
 
 interface Itinerary {
@@ -22,6 +26,12 @@ interface Itinerary {
   total_cost: number
   status: string
   notes: string
+  assigned_guide_id: string
+  assigned_vehicle_id: string
+  guide_notes: string
+  vehicle_notes: string
+  pickup_location: string
+  pickup_time: string
 }
 
 interface ItineraryDay {
@@ -113,13 +123,11 @@ export default function ViewItineraryPage() {
   const handleSendWhatsApp = () => {
     if (!itinerary) return
 
-    // Check if client has phone number
     if (!itinerary.client_phone) {
       alert('Client phone number is required for WhatsApp. Please add it in edit mode.')
       return
     }
 
-    // Generate WhatsApp message
     const message = generateWhatsAppMessage(
       itinerary.client_name,
       itinerary.trip_name,
@@ -127,23 +135,16 @@ export default function ViewItineraryPage() {
       itinerary.currency
     )
 
-    // Format phone number for WhatsApp
     const formattedPhone = formatPhoneForWhatsApp(itinerary.client_phone)
-
-    // Generate WhatsApp link
     const whatsappUrl = generateWhatsAppLink(formattedPhone, message)
 
-    // Mark as sent
     markAsSent('WhatsApp')
-
-    // Open WhatsApp
     window.open(whatsappUrl, '_blank')
   }
 
   const handleSendEmail = async () => {
     if (!itinerary || days.length === 0) return
 
-    // Check if client has email
     if (!itinerary.client_email) {
       alert('Client email is required. Please add it in edit mode.')
       return
@@ -153,12 +154,10 @@ export default function ViewItineraryPage() {
     setShowSendModal(false)
     
     try {
-      // Generate PDF as base64
       const pdf = generateItineraryPDF(itinerary, days)
       const pdfBlob = pdf.output('blob')
       const pdfBase64 = await blobToBase64(pdfBlob)
 
-      // Send email
       const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: {
@@ -172,7 +171,7 @@ export default function ViewItineraryPage() {
           tripName: itinerary.trip_name,
           totalCost: itinerary.total_cost.toFixed(2),
           currency: itinerary.currency,
-          pdfBase64: pdfBase64.split(',')[1] // Remove data:application/pdf;base64, prefix
+          pdfBase64: pdfBase64.split(',')[1]
         })
       })
 
@@ -206,7 +205,6 @@ export default function ViewItineraryPage() {
         })
       })
       
-      // Update local state
       if (itinerary) {
         setItinerary({ ...itinerary, status: 'sent' })
       }
@@ -246,10 +244,11 @@ export default function ViewItineraryPage() {
 
   const getStatusBadge = (status: string) => {
     const styles = {
-      draft: 'bg-gray-100 text-gray-800',
-      sent: 'bg-blue-100 text-blue-800',
-      confirmed: 'bg-green-100 text-green-800',
-      completed: 'bg-purple-100 text-purple-800'
+      draft: 'bg-gray-50 text-gray-600 border-gray-200',
+      sent: 'bg-primary-50 text-primary-600 border-primary-200',
+      confirmed: 'bg-green-50 text-green-600 border-green-200',
+      completed: 'bg-purple-50 text-purple-600 border-purple-200',
+      cancelled: 'bg-red-50 text-red-600 border-red-200'
     }
     return styles[status as keyof typeof styles] || styles.draft
   }
@@ -269,10 +268,10 @@ export default function ViewItineraryPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center">
+      <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Loading itinerary...</p>
+          <div className="w-12 h-12 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Loading itinerary...</p>
         </div>
       </div>
     )
@@ -280,15 +279,16 @@ export default function ViewItineraryPage() {
 
   if (error || !itinerary) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center">
-        <div className="text-center bg-white p-8 rounded-xl shadow-lg">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-red-500 text-2xl">⚠️</span>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+          <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-red-500 text-xl">⚠️</span>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Itinerary</h2>
-          <p className="text-red-600 mb-4">{error}</p>
-          <Link href="/itineraries" className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            ← Back to List
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Itinerary</h2>
+          <p className="text-sm text-red-600 mb-4">{error}</p>
+          <Link href="/itineraries" className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 text-sm transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+            Back to List
           </Link>
         </div>
       </div>
@@ -296,61 +296,71 @@ export default function ViewItineraryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-8 shadow-lg">
-        <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-lg">
-                <span className="text-blue-600 text-xl font-bold">T2E</span>
-              </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* ⭐ COMPACT HEADER */}
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* Title Section */}
+            <div className="flex items-center gap-3">
+              <Link 
+                href="/itineraries"
+                className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                title="Back to list"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </Link>
               <div>
-                <h1 className="text-3xl font-bold">{itinerary.trip_name}</h1>
-                <p className="text-blue-100 text-sm">
-                  {itinerary.itinerary_code} • {itinerary.client_name}
+                <h1 className="text-xl font-semibold text-gray-900">{itinerary.trip_name}</h1>
+                <p className="text-sm text-gray-500">
+                  <span className="font-mono text-primary-600">{itinerary.itinerary_code}</span>
+                  <span className="mx-2">•</span>
+                  {itinerary.client_name}
                 </p>
               </div>
             </div>
+
+            {/* Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setShowSendModal(true)}
-                className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors font-medium shadow-md flex items-center gap-2"
+                className="bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 transition-colors text-sm font-medium flex items-center gap-1.5"
               >
-                <span>📤</span>
+                <Send className="w-4 h-4" />
                 Send Quote
               </button>
+              <Link
+                href={`/documents/contract/${itinerary.id}`}
+                className="px-3 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-1.5"
+              >
+                <FileText className="w-4 h-4" />
+                Contract
+              </Link>
               <button
                 onClick={handleDownloadPDF}
                 disabled={generatingPDF}
-                className={`bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors font-medium shadow-md flex items-center gap-2 ${
+                className={`px-3 py-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-1.5 ${
                   generatingPDF ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {generatingPDF ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Generating...
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Generating...</span>
                   </>
                 ) : (
                   <>
-                    <span>📄</span>
-                    Download PDF
+                    <Download className="w-4 h-4" />
+                    PDF
                   </>
                 )}
               </button>
               <Link 
                 href={`/itineraries/${itinerary.id}/edit`}
-                className="bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors font-medium shadow-md flex items-center gap-2"
+                className="p-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                title="Edit"
               >
-                <span>✏️</span>
-                Edit
-              </Link>
-              <Link 
-                href="/itineraries"
-                className="bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors font-medium shadow-md"
-              >
-                ← Back
+                <Edit2 className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -359,9 +369,9 @@ export default function ViewItineraryPage() {
 
       {/* Success Message */}
       {sendSuccess && (
-        <div className="container mx-auto px-4 pt-4">
-          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
-            <p className="text-green-700 font-medium">{sendSuccess}</p>
+        <div className="container mx-auto px-4 pt-3">
+          <div className="bg-green-50 border border-green-200 p-3 rounded-md">
+            <p className="text-sm text-green-700 font-medium">{sendSuccess}</p>
           </div>
         </div>
       )}
@@ -369,29 +379,27 @@ export default function ViewItineraryPage() {
       {/* Send Modal */}
       {showSendModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">Send Quote to Client</h3>
-            <p className="text-gray-600 mb-6">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-5">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Send Quote to Client</h3>
+            <p className="text-sm text-gray-600 mb-4">
               Choose how you'd like to send the itinerary to <strong>{itinerary.client_name}</strong>
             </p>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               <button
                 onClick={handleSendWhatsApp}
                 disabled={!itinerary.client_phone}
-                className={`w-full py-4 rounded-lg font-semibold flex items-center justify-center gap-3 transition-all ${
+                className={`w-full py-3 rounded-md font-medium flex items-center justify-center gap-2 transition-all text-sm ${
                   itinerary.client_phone
                     ? 'bg-green-500 text-white hover:bg-green-600'
-                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                <span className="text-2xl">📱</span>
+                <span className="text-lg">📱</span>
                 <div className="text-left">
                   <div>Send via WhatsApp</div>
-                  {itinerary.client_phone ? (
-                    <div className="text-sm opacity-80">{itinerary.client_phone}</div>
-                  ) : (
-                    <div className="text-sm opacity-80">No phone number</div>
+                  {itinerary.client_phone && (
+                    <div className="text-xs opacity-80">{itinerary.client_phone}</div>
                   )}
                 </div>
               </button>
@@ -399,26 +407,24 @@ export default function ViewItineraryPage() {
               <button
                 onClick={handleSendEmail}
                 disabled={!itinerary.client_email || sendingEmail}
-                className={`w-full py-4 rounded-lg font-semibold flex items-center justify-center gap-3 transition-all ${
+                className={`w-full py-3 rounded-md font-medium flex items-center justify-center gap-2 transition-all text-sm ${
                   itinerary.client_email && !sendingEmail
-                    ? 'bg-blue-500 text-white hover:bg-blue-600'
-                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
               >
                 {sendingEmail ? (
                   <>
-                    <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     <span>Sending Email...</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-2xl">📧</span>
+                    <span className="text-lg">📧</span>
                     <div className="text-left">
                       <div>Send via Email</div>
-                      {itinerary.client_email ? (
-                        <div className="text-sm opacity-80">{itinerary.client_email}</div>
-                      ) : (
-                        <div className="text-sm opacity-80">No email address</div>
+                      {itinerary.client_email && (
+                        <div className="text-xs opacity-80">{itinerary.client_email}</div>
                       )}
                     </div>
                   </>
@@ -428,7 +434,7 @@ export default function ViewItineraryPage() {
 
             <button
               onClick={() => setShowSendModal(false)}
-              className="w-full mt-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              className="w-full mt-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium"
             >
               Cancel
             </button>
@@ -436,134 +442,261 @@ export default function ViewItineraryPage() {
         </div>
       )}
 
-      <div className="container mx-auto px-4 py-8">
-        {/* Rest of the itinerary view (same as before) */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="container mx-auto px-4 py-4 space-y-4">
+        {/* ⭐ COMPACT INFO CARD */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <p className="text-sm text-gray-500 mb-1">Client</p>
-              <p className="text-lg font-semibold text-gray-900">{itinerary.client_name}</p>
+              <p className="text-xs text-gray-500 mb-1">Client</p>
+              <p className="text-sm font-semibold text-gray-900">{itinerary.client_name}</p>
               {itinerary.client_email && (
-                <p className="text-sm text-gray-600">{itinerary.client_email}</p>
+                <p className="text-xs text-gray-600 truncate">{itinerary.client_email}</p>
               )}
               {itinerary.client_phone && (
-                <p className="text-sm text-gray-600">{itinerary.client_phone}</p>
+                <p className="text-xs text-gray-600">{itinerary.client_phone}</p>
               )}
             </div>
             <div>
-              <p className="text-sm text-gray-500 mb-1">Dates</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {new Date(itinerary.start_date).toLocaleDateString()}
+              <p className="text-xs text-gray-500 mb-1">Dates</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {new Date(itinerary.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </p>
-              <p className="text-sm text-gray-600">
-                to {new Date(itinerary.end_date).toLocaleDateString()}
+              <p className="text-xs text-gray-600">
+                to {new Date(itinerary.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </p>
-              <p className="text-sm text-blue-600 font-medium mt-1">
+              <p className="text-xs text-primary-600 font-medium mt-0.5">
                 {itinerary.total_days} days
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500 mb-1">Passengers</p>
-              <p className="text-lg font-semibold text-gray-900">
+              <p className="text-xs text-gray-500 mb-1">Passengers</p>
+              <p className="text-sm font-semibold text-gray-900">
                 {itinerary.num_adults} {itinerary.num_adults === 1 ? 'adult' : 'adults'}
               </p>
               {itinerary.num_children > 0 && (
-                <p className="text-sm text-gray-600">
+                <p className="text-xs text-gray-600">
                   {itinerary.num_children} {itinerary.num_children === 1 ? 'child' : 'children'}
                 </p>
               )}
             </div>
             <div>
-              <p className="text-sm text-gray-500 mb-1">Total Cost</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-xs text-gray-500 mb-1">Total Cost</p>
+              <p className="text-xl font-bold text-gray-900">
                 {itinerary.currency} {itinerary.total_cost.toFixed(2)}
               </p>
-              <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(itinerary.status)}`}>
+              <span className={`inline-block mt-1 px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
                 {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
               </span>
             </div>
           </div>
           {itinerary.notes && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-sm text-gray-500 mb-2">Notes</p>
-              <p className="text-gray-700">{itinerary.notes}</p>
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <p className="text-xs text-gray-500 mb-1">Notes</p>
+              <p className="text-sm text-gray-700">{itinerary.notes}</p>
             </div>
           )}
         </div>
 
-        {/* Day Controls */}
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">Daily Itinerary</h2>
+        {/* ⭐ WHATSAPP ACTIONS - Compact */}
+        <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+              <span className="text-white text-lg">📱</span>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">WhatsApp Actions</h3>
+              <p className="text-xs text-gray-600">Send updates to {itinerary.client_name}</p>
+            </div>
+          </div>
+
+          {!itinerary.client_phone && (
+            <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-yellow-800 text-xs">
+                ⚠️ Client phone number required. Add it in edit mode.
+              </p>
+            </div>
+          )}
+
+          {itinerary.client_phone && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+              <WhatsAppButton 
+                itineraryId={itinerary.id}
+                type="quote"
+                clientPhone={itinerary.client_phone}
+                clientName={itinerary.client_name}
+                onSuccess={() => {
+                  setSendSuccess('Quote sent via WhatsApp! ✅')
+                  setTimeout(() => setSendSuccess(null), 5000)
+                  fetchItinerary()
+                }}
+              />
+
+              {itinerary.status === 'draft' && (
+                <WhatsAppButton 
+                  itineraryId={itinerary.id}
+                  type="status"
+                  status="confirmed"
+                  onSuccess={() => {
+                    setSendSuccess('Booking confirmation sent! ✅')
+                    setTimeout(() => setSendSuccess(null), 5000)
+                    fetchItinerary()
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                />
+              )}
+
+              {itinerary.status !== 'completed' && (
+                <WhatsAppButton 
+                  itineraryId={itinerary.id}
+                  type="status"
+                  status="pending_payment"
+                  onSuccess={() => {
+                    setSendSuccess('Payment reminder sent! ✅')
+                    setTimeout(() => setSendSuccess(null), 5000)
+                  }}
+                  className="bg-yellow-600 hover:bg-yellow-700"
+                />
+              )}
+
+              <WhatsAppButton 
+                itineraryId={itinerary.id}
+                type="status"
+                status="paid"
+                onSuccess={() => {
+                  setSendSuccess('Payment confirmation sent! ✅')
+                  setTimeout(() => setSendSuccess(null), 5000)
+                  fetchItinerary()
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              />
+            </div>
+          )}
+
+          {itinerary.client_phone && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="flex flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full">
+                  <span>📱</span>
+                  <span>{itinerary.client_phone}</span>
+                </div>
+                {itinerary.status === 'sent' && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 rounded-full">
+                    <span>✅</span>
+                    <span>Quote sent</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Resource Summary Card */}
+        <div>
+          <ResourceSummaryCard
+            guideId={itinerary.assigned_guide_id}
+            vehicleId={itinerary.assigned_vehicle_id}
+            guideNotes={itinerary.guide_notes}
+            vehicleNotes={itinerary.vehicle_notes}
+            pickupLocation={itinerary.pickup_location}
+            pickupTime={itinerary.pickup_time}
+            onEdit={() => {
+              document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
+        </div>
+
+        {/* Resource Assignment */}
+        <div id="resource-assignment">
+          <ResourceAssignment
+            itineraryId={itinerary.id}
+            startDate={itinerary.start_date}
+            endDate={itinerary.end_date}
+            numTravelers={itinerary.num_adults + itinerary.num_children}
+            currentGuideId={itinerary.assigned_guide_id}
+            currentVehicleId={itinerary.assigned_vehicle_id}
+            currentGuideNotes={itinerary.guide_notes}
+            currentVehicleNotes={itinerary.vehicle_notes}
+            currentPickupLocation={itinerary.pickup_location}
+            currentPickupTime={itinerary.pickup_time}
+            onUpdate={fetchItinerary}
+          />
+        </div>
+
+        {/* ⭐ COMPACT DAY CONTROLS */}
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Daily Itinerary</h2>
           <div className="flex gap-2">
             <button
               onClick={expandAll}
-              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
             >
               Expand All
             </button>
             <button
               onClick={collapseAll}
-              className="px-3 py-2 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
             >
               Collapse All
             </button>
           </div>
         </div>
 
-        {/* Days List */}
-        <div className="space-y-4">
+        {/* ⭐ COMPACT DAYS LIST */}
+        <div className="space-y-3">
           {days.map((day) => (
-            <div key={day.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div key={day.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
               <button
                 onClick={() => toggleDay(day.day_number)}
-                className="w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-between hover:from-blue-600 hover:to-blue-700 transition-all"
+                className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center font-bold text-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-primary-600 text-white rounded-md flex items-center justify-center font-semibold text-sm">
                     {day.day_number}
                   </div>
                   <div className="text-left">
-                    <h3 className="text-xl font-bold">{day.title || `Day ${day.day_number}`}</h3>
-                    <p className="text-blue-100 text-sm">
-                      {new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    <h3 className="text-sm font-semibold text-gray-900">{day.title || `Day ${day.day_number}`}</h3>
+                    <p className="text-xs text-gray-500">
+                      {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       {day.city && ` • ${day.city}`}
                     </p>
                   </div>
                 </div>
-                <span className="text-2xl">
-                  {expandedDays.has(day.day_number) ? '▼' : '▶'}
-                </span>
+                {expandedDays.has(day.day_number) ? (
+                  <ChevronUp className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                )}
               </button>
 
               {expandedDays.has(day.day_number) && (
-                <div className="p-6">
+                <div className="p-4">
                   {day.description && (
-                    <div className="mb-6">
-                      <p className="text-gray-700">{day.description}</p>
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-700">{day.description}</p>
                     </div>
                   )}
 
                   {day.services && day.services.length > 0 ? (
                     <div>
-                      <h4 className="text-lg font-semibold text-gray-900 mb-4">Services Included</h4>
-                      <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Services Included</h4>
+                      <div className="space-y-2">
                         {day.services.map((service) => (
-                          <div key={service.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                            <div className="flex items-center gap-3 flex-1">
-                              <span className="text-2xl">{getServiceIcon(service.service_type)}</span>
+                          <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="text-lg">{getServiceIcon(service.service_type)}</span>
                               <div>
-                                <p className="font-medium text-gray-900">{service.service_name}</p>
-                                <p className="text-sm text-gray-500 capitalize">
+                                <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
+                                <p className="text-xs text-gray-500 capitalize">
                                   {service.service_type.replace('_', ' ')} 
                                   {service.quantity > 1 && ` • Qty: ${service.quantity}`}
                                 </p>
                                 {service.notes && (
-                                  <p className="text-sm text-gray-600 mt-1">{service.notes}</p>
+                                  <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>
                                 )}
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="font-bold text-green-600">
+                              <p className="text-sm font-semibold text-gray-900">
                                 {itinerary.currency} {service.total_cost.toFixed(2)}
                               </p>
                             </div>
@@ -572,14 +705,14 @@ export default function ViewItineraryPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <p>No services added yet</p>
+                    <div className="text-center py-6 text-gray-500">
+                      <p className="text-sm">No services added yet</p>
                     </div>
                   )}
 
                   {day.overnight_city && (
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <p className="text-sm text-gray-600">
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs text-gray-600">
                         🌙 Overnight in <span className="font-medium">{day.overnight_city}</span>
                       </p>
                     </div>
@@ -591,8 +724,8 @@ export default function ViewItineraryPage() {
         </div>
 
         {days.length === 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-            <p className="text-gray-500 text-lg">No days planned yet</p>
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
+            <p className="text-sm text-gray-500">No days planned yet</p>
           </div>
         )}
       </div>

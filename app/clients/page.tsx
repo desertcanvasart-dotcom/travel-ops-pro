@@ -211,7 +211,7 @@ export default function ClientsPage() {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800'
       case 'inactive': return 'bg-gray-100 text-gray-800'
-      case 'prospect': return 'bg-blue-100 text-blue-800'
+      case 'prospect': return 'bg-primary-100 text-primary-800'
       case 'blacklisted': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -222,7 +222,7 @@ export default function ClientsPage() {
       case 'individual': return 'bg-purple-100 text-purple-800'
       case 'family': return 'bg-pink-100 text-pink-800'
       case 'group': return 'bg-orange-100 text-orange-800'
-      case 'corporate': return 'bg-blue-100 text-blue-800'
+      case 'corporate': return 'bg-primary-100 text-primary-800'
       case 'agent': return 'bg-indigo-100 text-indigo-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -232,22 +232,22 @@ export default function ClientsPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <Users className="w-8 h-8 text-blue-600" />
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-gray-400" />
                 Client Management
               </h1>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-xs text-gray-500">
                 Manage your clients, track communications, and monitor relationships
               </p>
             </div>
             <Link
               href="/clients/new"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
             >
-              <UserPlus className="w-5 h-5" />
+              <UserPlus className="w-4 h-4" />
               New Client
             </Link>
           </div>
@@ -255,88 +255,98 @@ export default function ClientsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Clients</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
+          {/* Total Clients */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-gray-400" />
+                <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
               </div>
-              <Users className="w-10 h-10 text-blue-600 opacity-50" />
             </div>
+            <p className="text-xs text-gray-600">Total Clients</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Active</p>
-                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+          {/* Active */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-gray-400" />
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
               </div>
-              <CheckCircle className="w-10 h-10 text-green-600 opacity-50" />
             </div>
+            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.active}</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">VIP Clients</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.vip}</p>
+          {/* VIP */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-gray-400" />
+                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
               </div>
-              <Star className="w-10 h-10 text-yellow-600 opacity-50" />
             </div>
+            <p className="text-xs text-gray-600">VIP Clients</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.vip}</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">New (This Month)</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.newThisMonth}</p>
+          {/* New This Month */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-gray-400" />
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
               </div>
-              <TrendingUp className="w-10 h-10 text-blue-600 opacity-50" />
             </div>
+            <p className="text-xs text-gray-600">New (This Month)</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.newThisMonth}</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  €{stats.totalRevenue.toLocaleString()}
-                </p>
+          {/* Total Revenue */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-gray-400" />
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
               </div>
-              <TrendingUp className="w-10 h-10 text-purple-600 opacity-50" />
             </div>
+            <p className="text-xs text-gray-600">Total Revenue</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">
+              €{stats.totalRevenue.toLocaleString()}
+            </p>
           </div>
         </div>
 
         {/* Enhanced Filters */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
           {/* Search Bar - Always Visible */}
-          <div className="p-4">
-            <div className="flex items-center gap-4">
+          <div className="p-3">
+            <div className="flex items-center gap-3">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Search by name, email, phone, or client code..."
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                   showFilters || hasActiveFilters
-                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    ? 'bg-primary-50 border-primary-300 text-primary-700'
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
               >
                 <SlidersHorizontal className="w-4 h-4" />
                 Filters
                 {hasActiveFilters && (
-                  <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className="bg-primary-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                     {[filters.status !== 'all', filters.clientType !== 'all', filters.vipOnly, filters.dateFrom, filters.dateTo, filters.sortBy !== 'recent'].filter(Boolean).length}
                   </span>
                 )}
@@ -344,7 +354,7 @@ export default function ClientsPage() {
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
                   Clear
@@ -355,17 +365,17 @@ export default function ClientsPage() {
 
           {/* Advanced Filters - Collapsible */}
           {showFilters && (
-            <div className="px-4 pb-4 border-t border-gray-200 pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="px-3 pb-3 border-t border-gray-200 pt-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 {/* Status Filter */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     Status
                   </label>
                   <select
                     value={filters.status}
                     onChange={(e) => handleFilterChange('status', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Active</option>
@@ -377,13 +387,13 @@ export default function ClientsPage() {
 
                 {/* Client Type Filter */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     Client Type
                   </label>
                   <select
                     value={filters.clientType}
                     onChange={(e) => handleFilterChange('clientType', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="all">All Types</option>
                     <option value="individual">Individual</option>
@@ -396,13 +406,13 @@ export default function ClientsPage() {
 
                 {/* Sort By */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     Sort By
                   </label>
                   <select
                     value={filters.sortBy}
                     onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="recent">Most Recent</option>
                     <option value="oldest">Oldest First</option>
@@ -416,15 +426,15 @@ export default function ClientsPage() {
 
                 {/* VIP Toggle */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     VIP Clients
                   </label>
-                  <label className="flex items-center gap-3 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <label className="flex items-center gap-2 px-2 py-1.5 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
                     <input
                       type="checkbox"
                       checked={filters.vipOnly}
                       onChange={(e) => handleFilterChange('vipOnly', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                     />
                     <Star className="w-4 h-4 text-yellow-500" />
                     <span className="text-sm text-gray-700">VIP Only</span>
@@ -433,20 +443,20 @@ export default function ClientsPage() {
               </div>
 
               {/* Date Range */}
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     Member Since (From)
                   </label>
                   <input
                     type="date"
                     value={filters.dateFrom}
                     onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     Member Since (To)
                   </label>
                   <input
@@ -454,7 +464,7 @@ export default function ClientsPage() {
                     value={filters.dateTo}
                     onChange={(e) => handleFilterChange('dateTo', e.target.value)}
                     max={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -463,17 +473,17 @@ export default function ClientsPage() {
         </div>
 
         {/* Clients Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           {loading ? (
-            <div className="p-12 text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">Loading clients...</p>
+            <div className="p-8 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="mt-3 text-sm text-gray-600">Loading clients...</p>
             </div>
           ) : clients.length === 0 ? (
-            <div className="p-12 text-center">
-              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No clients found</h3>
-              <p className="text-gray-600 mb-6">
+            <div className="p-8 text-center">
+              <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="text-base font-semibold text-gray-900 mb-2">No clients found</h3>
+              <p className="text-sm text-gray-600 mb-4">
                 {hasActiveFilters
                   ? 'Try adjusting your search or filters'
                   : 'Get started by adding your first client'}
@@ -481,17 +491,17 @@ export default function ClientsPage() {
               {hasActiveFilters ? (
                 <button
                   onClick={clearFilters}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                   Clear Filters
                 </button>
               ) : (
                 <Link
                   href="/clients/new"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
                 >
-                  <UserPlus className="w-5 h-5" />
+                  <UserPlus className="w-4 h-4" />
                   Add First Client
                 </Link>
               )}
@@ -501,25 +511,25 @@ export default function ClientsPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Client
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contact
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Type & Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Bookings
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Revenue
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Activity
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -527,78 +537,78 @@ export default function ClientsPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {clients.map((client) => (
                     <tr key={client.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                            <span className="text-blue-600 font-semibold">
+                          <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                            <span className="text-primary-600 font-semibold text-xs">
                               {client.first_name[0]}{client.last_name[0]}
                             </span>
                           </div>
-                          <div className="ml-4">
+                          <div className="ml-3">
                             <div className="flex items-center gap-2">
                               <Link
                                 href={`/clients/${client.id}`}
-                                className="text-sm font-medium text-gray-900 hover:text-blue-600"
+                                className="text-sm font-medium text-gray-900 hover:text-primary-600"
                               >
                                 {client.first_name} {client.last_name}
                               </Link>
                               {client.vip_status && (
-                                <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                                <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
                               )}
                             </div>
-                            <div className="text-sm text-gray-500">{client.client_code}</div>
+                            <div className="text-xs text-gray-500">{client.client_code}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{client.email}</div>
                         {client.phone && (
-                          <div className="text-sm text-gray-500">{client.phone}</div>
+                          <div className="text-xs text-gray-500">{client.phone}</div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex flex-col gap-1">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeColor(client.client_type)}`}>
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getTypeColor(client.client_type)}`}>
                             {client.client_type}
                           </span>
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
                             {client.status}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                         <div className="font-semibold">{client.total_bookings_count}</div>
                         <div className="text-xs text-gray-500">bookings</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <div className="font-semibold text-green-600">
                           €{client.total_revenue_generated.toLocaleString()}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3 text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
                           <div className="flex items-center gap-1">
-                            <MessageSquare className="w-4 h-4" />
+                            <MessageSquare className="w-3 h-3" />
                             <span>{client.total_communications}</span>
                           </div>
                           {client.pending_followups > 0 && (
                             <div className="flex items-center gap-1 text-orange-600">
-                              <Clock className="w-4 h-4" />
+                              <Clock className="w-3 h-3" />
                               <span>{client.pending_followups}</span>
                             </div>
                           )}
                         </div>
                         {client.last_contacted_at && (
                           <div className="text-xs text-gray-500 mt-1">
-                            Last contact: {new Date(client.last_contacted_at).toLocaleDateString()}
+                            Last: {new Date(client.last_contacted_at).toLocaleDateString()}
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm">
                         <div className="flex items-center gap-2">
                           <Link
                             href={`/clients/${client.id}`}
-                            className="text-blue-600 hover:text-blue-800"
+                            className="text-primary-600 hover:text-primary-800"
                           >
                             View
                           </Link>
@@ -629,7 +639,7 @@ export default function ClientsPage() {
 
         {/* Results Count */}
         {!loading && clients.length > 0 && (
-          <div className="mt-4 text-center text-sm text-gray-600">
+          <div className="mt-3 text-center text-xs text-gray-600">
             Showing {clients.length} client{clients.length !== 1 ? 's' : ''}
             {hasActiveFilters && ' (filtered)'}
           </div>

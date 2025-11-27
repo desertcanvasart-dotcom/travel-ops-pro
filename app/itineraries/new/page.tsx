@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Navigation from '../../components/Navigation'
+import { ArrowLeft, Check, User, Plane, Users, FileText } from 'lucide-react'
 
 export default function NewItineraryPage() {
   const router = useRouter()
@@ -85,244 +85,241 @@ export default function NewItineraryPage() {
   const totalDays = calculateDays()
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      <Navigation />
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
+    <div className="p-6 lg:p-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Create New Itinerary</h1>
-            <p className="text-gray-600">Fill in the details to create a new trip plan</p>
+            <h1 className="text-3xl font-bold text-gray-900">Create New Itinerary</h1>
+            <p className="text-gray-600 mt-1">Fill in the details to create a new trip plan</p>
           </div>
           <Link 
             href="/itineraries" 
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
           >
-            ← Back to List
+            <ArrowLeft className="w-4 h-4" />
+            Back to List
           </Link>
         </div>
 
-        <div className="max-w-4xl mx-auto">
-          <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg p-8">
-            
-            {error && (
-              <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
-                <p className="text-red-700">{error}</p>
-              </div>
-            )}
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-autoura border border-gray-200 p-8">
+          
+          {error && (
+            <div className="mb-6 p-4 bg-danger/10 border-l-4 border-danger rounded">
+              <p className="text-danger">{error}</p>
+            </div>
+          )}
 
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <span>👤</span>
-                Client Information
-              </h2>
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <User className="w-5 h-5 text-primary-600" />
+              Client Information
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Client Name <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="client_name"
+                  value={formData.client_name}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="John Smith"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  name="client_email"
+                  value={formData.client_email}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="john@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  name="client_phone"
+                  value={formData.client_phone}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="+1-555-0123"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Plane className="w-5 h-5 text-primary-600" />
+              Trip Details
+            </h2>
+            <div className="grid grid-cols-1 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Trip Name <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="trip_name"
+                  value={formData.trip_name}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Classic Egypt - 7 Days"
+                />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Client Name <span className="text-red-500">*</span>
+                    Start Date <span className="text-danger">*</span>
                   </label>
                   <input
-                    type="text"
-                    name="client_name"
-                    value={formData.client_name}
+                    type="date"
+                    name="start_date"
+                    value={formData.start_date}
                     onChange={handleChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                    placeholder="John Smith"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address
+                    End Date <span className="text-danger">*</span>
                   </label>
                   <input
-                    type="email"
-                    name="client_email"
-                    value={formData.client_email}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                    placeholder="john@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    name="client_phone"
-                    value={formData.client_phone}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                    placeholder="+1-555-0123"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <span>✈️</span>
-                Trip Details
-              </h2>
-              <div className="grid grid-cols-1 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Trip Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="trip_name"
-                    value={formData.trip_name}
+                    type="date"
+                    name="end_date"
+                    value={formData.end_date}
                     onChange={handleChange}
                     required
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                    placeholder="Classic Egypt - 7 Days"
+                    min={formData.start_date}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Start Date <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      name="start_date"
-                      value={formData.start_date}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      End Date <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      name="end_date"
-                      value={formData.end_date}
-                      onChange={handleChange}
-                      required
-                      min={formData.start_date}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                    />
-                  </div>
+              </div>
+              {totalDays > 0 && (
+                <div className="p-4 bg-primary-50 rounded-lg border border-primary-200">
+                  <p className="text-primary-900 font-medium">
+                    📅 Trip Duration: <span className="text-2xl font-bold">{totalDays}</span> {totalDays === 1 ? 'day' : 'days'}
+                  </p>
                 </div>
-                {totalDays > 0 && (
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <p className="text-blue-900 font-medium">
-                      📅 Trip Duration: <span className="text-2xl font-bold">{totalDays}</span> {totalDays === 1 ? 'day' : 'days'}
-                    </p>
-                  </div>
-                )}
+              )}
+            </div>
+          </div>
+
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary-600" />
+              Passengers
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Number of Adults
+                </label>
+                <input
+                  type="number"
+                  name="num_adults"
+                  value={formData.num_adults}
+                  onChange={handleChange}
+                  min="1"
+                  max="50"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Number of Children
+                </label>
+                <input
+                  type="number"
+                  name="num_children"
+                  value={formData.num_children}
+                  onChange={handleChange}
+                  min="0"
+                  max="50"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Currency
+                </label>
+                <select
+                  name="currency"
+                  value={formData.currency}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="EUR">EUR (€)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="GBP">GBP (£)</option>
+                </select>
               </div>
             </div>
-
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <span>👥</span>
-                Passengers
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Number of Adults
-                  </label>
-                  <input
-                    type="number"
-                    name="num_adults"
-                    value={formData.num_adults}
-                    onChange={handleChange}
-                    min="1"
-                    max="50"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Number of Children
-                  </label>
-                  <input
-                    type="number"
-                    name="num_children"
-                    value={formData.num_children}
-                    onChange={handleChange}
-                    min="0"
-                    max="50"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Currency
-                  </label>
-                  <select
-                    name="currency"
-                    value={formData.currency}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                  >
-                    <option value="EUR">EUR (€)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="GBP">GBP (£)</option>
-                  </select>
-                </div>
-              </div>
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <p className="text-gray-700">
-                  <span className="font-medium">Total Passengers:</span>{' '}
-                  {formData.num_adults + formData.num_children} 
-                  {' '}({formData.num_adults} {formData.num_adults === 1 ? 'adult' : 'adults'}
-                  {formData.num_children > 0 && `, ${formData.num_children} ${formData.num_children === 1 ? 'child' : 'children'}`})
-                </p>
-              </div>
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <p className="text-gray-700">
+                <span className="font-medium">Total Passengers:</span>{' '}
+                {formData.num_adults + formData.num_children} 
+                {' '}({formData.num_adults} {formData.num_adults === 1 ? 'adult' : 'adults'}
+                {formData.num_children > 0 && `, ${formData.num_children} ${formData.num_children === 1 ? 'child' : 'children'}`})
+              </p>
             </div>
+          </div>
 
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <span>📝</span>
-                Additional Notes
-              </h2>
-              <textarea
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-                placeholder="Add any special requests, preferences, or important information..."
-              />
-            </div>
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary-600" />
+              Additional Notes
+            </h2>
+            <textarea
+              name="notes"
+              value={formData.notes}
+              onChange={handleChange}
+              rows={4}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Add any special requests, preferences, or important information..."
+            />
+          </div>
 
-            <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-200">
-              <Link
-                href="/itineraries"
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </Link>
-              <button
-                type="submit"
-                disabled={loading}
-                className={`px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2 ${
-                  loading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {loading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <span>✓</span>
-                    Create Itinerary
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-200">
+            <Link
+              href="/itineraries"
+              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+            >
+              Cancel
+            </Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold flex items-center gap-2 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Check className="w-5 h-5" />
+                  Create Itinerary
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )

@@ -1,36 +1,43 @@
+'use client'
+
+import { useState } from 'react'
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from './contexts/AuthContext'
+import Sidebar from "@/components/Sidebar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ["latin"] });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "Travel2Egypt - Operations Platform",
-  description: "AI-powered tour operations management",
-};
+// Note: Move metadata to a separate metadata.ts file since we're now using 'use client'
+// Or keep it in a server component wrapper
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+      <body className={`${inter.className} bg-gray-50`}>
+        <div className="flex h-screen overflow-hidden">
+          {/* Sidebar Navigation - Pass state down */}
+          <Sidebar 
+            isCollapsed={isCollapsed}
+            setIsCollapsed={setIsCollapsed}
+          />
+          
+          {/* Main Content Area - Adjusts based on sidebar state */}
+          <main className={`
+            flex-1 overflow-y-auto transition-all duration-300 ease-in-out
+            ${isCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
+          `}>
+            <div className="min-h-screen">
+              {children}
+            </div>
+          </main>
+        </div>
       </body>
     </html>
   );

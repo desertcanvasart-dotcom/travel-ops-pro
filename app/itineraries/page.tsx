@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Navigation from '../components/Navigation'
 import { useRouter } from 'next/navigation'
+import { Search, Plus, FileText, Eye, Edit2, Trash2 } from 'lucide-react'
 
 interface Itinerary {
   id: string
@@ -27,6 +27,7 @@ export default function ItinerariesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -95,15 +96,41 @@ export default function ItinerariesPage() {
     }
   }
 
+  const updateStatus = async (id: string, newStatus: string) => {
+    setUpdatingStatus(id)
+    try {
+      const response = await fetch(`/api/itineraries/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setItineraries(itineraries.map(it => 
+          it.id === id ? { ...it, status: newStatus } : it
+        ))
+      } else {
+        alert('Failed to update status: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Error updating status:', error)
+      alert('Failed to update status')
+    } finally {
+      setUpdatingStatus(null)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     const colors: any = {
-      draft: 'bg-gray-100 text-gray-700',
-      sent: 'bg-blue-100 text-blue-700',
-      confirmed: 'bg-green-100 text-green-700',
-      completed: 'bg-purple-100 text-purple-700',
-      cancelled: 'bg-red-100 text-red-700'
+      draft: 'bg-gray-50 text-gray-600 border-gray-200',
+      sent: 'bg-primary-50 text-primary-600 border-primary-200',
+      confirmed: 'bg-green-50 text-green-600 border-green-200',
+      completed: 'bg-purple-50 text-purple-600 border-purple-200',
+      cancelled: 'bg-red-50 text-red-600 border-red-200'
     }
-    return colors[status] || 'bg-gray-100 text-gray-700'
+    return colors[status] || 'bg-gray-50 text-gray-600 border-gray-200'
   }
 
   const statusCounts = {
@@ -117,180 +144,245 @@ export default function ItinerariesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-        <Navigation />
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading itineraries...</p>
-          </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="w-12 h-12 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Loading itineraries...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      <Navigation />
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Itinerary Management</h1>
-            <p className="text-gray-600">Create and manage client trip itineraries</p>
-          </div>
-          <button
-            onClick={() => router.push('/itineraries/new')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-          >
-            <span className="text-xl">+</span>
-            Create New Itinerary
-          </button>
+    <div className="p-4 lg:p-6 space-y-4">
+      {/* ⭐ COMPACT HEADER */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Itineraries</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Create and manage client trip itineraries</p>
         </div>
+        <button
+          onClick={() => router.push('/itineraries/new')}
+          className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 flex items-center gap-2 text-sm font-medium shadow-sm transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          New Itinerary
+        </button>
+      </div>
 
-        {/* Status Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
-          <div className="bg-blue-600 text-white rounded-xl p-6 text-center">
-            <div className="text-sm mb-2">Total</div>
-            <div className="text-4xl font-bold">{statusCounts.total}</div>
-            <div className="text-2xl mt-2">📋</div>
+      {/* ⭐ COMPACT STATUS CARDS - Linear Style */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        {/* Total */}
+        <button
+          onClick={() => setStatusFilter('all')}
+          className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
+            statusFilter === 'all' 
+              ? 'border-primary-600 bg-primary-50' 
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-gray-600">Total</span>
+            <FileText className="w-4 h-4 text-gray-400" />
           </div>
-          <div className="bg-gray-600 text-white rounded-xl p-6 text-center">
-            <div className="text-sm mb-2">Draft</div>
-            <div className="text-4xl font-bold">{statusCounts.draft}</div>
-            <div className="text-2xl mt-2">📝</div>
-          </div>
-          <div className="bg-blue-500 text-white rounded-xl p-6 text-center">
-            <div className="text-sm mb-2">Sent</div>
-            <div className="text-4xl font-bold">{statusCounts.sent}</div>
-            <div className="text-2xl mt-2">📤</div>
-          </div>
-          <div className="bg-green-600 text-white rounded-xl p-6 text-center">
-            <div className="text-sm mb-2">Confirmed</div>
-            <div className="text-4xl font-bold">{statusCounts.confirmed}</div>
-            <div className="text-2xl mt-2">✓</div>
-          </div>
-          <div className="bg-purple-600 text-white rounded-xl p-6 text-center">
-            <div className="text-sm mb-2">Completed</div>
-            <div className="text-4xl font-bold">{statusCounts.completed}</div>
-            <div className="text-2xl mt-2">🎉</div>
-          </div>
-          <div className="bg-red-600 text-white rounded-xl p-6 text-center">
-            <div className="text-sm mb-2">Cancelled</div>
-            <div className="text-4xl font-bold">{statusCounts.cancelled}</div>
-            <div className="text-2xl mt-2">✕</div>
-          </div>
-        </div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.total}</div>
+        </button>
 
-        {/* Search and Filter */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-6 flex gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <span className="absolute left-3 top-3 text-gray-400">🔍</span>
-              <input
-                type="text"
-                placeholder="Search by client name, trip name, or code..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+        {/* Draft */}
+        <button
+          onClick={() => setStatusFilter('draft')}
+          className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
+            statusFilter === 'draft' 
+              ? 'border-gray-400 bg-gray-50' 
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-gray-600">Draft</span>
+            <div className="w-2 h-2 rounded-full bg-gray-400"></div>
           </div>
-          <div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.draft}</div>
+        </button>
+
+        {/* Sent */}
+        <button
+          onClick={() => setStatusFilter('sent')}
+          className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
+            statusFilter === 'sent' 
+              ? 'border-primary-500 bg-primary-50' 
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-gray-600">Sent</span>
+            <div className="w-2 h-2 rounded-full bg-primary-500"></div>
           </div>
-        </div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.sent}</div>
+        </button>
 
-        <div className="text-sm text-gray-600 mb-4">
-          Showing <span className="font-bold">{filteredItineraries.length}</span> of {itineraries.length} itineraries
-        </div>
+        {/* Confirmed */}
+        <button
+          onClick={() => setStatusFilter('confirmed')}
+          className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
+            statusFilter === 'confirmed' 
+              ? 'border-green-500 bg-green-50' 
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-gray-600">Confirmed</span>
+            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.confirmed}</div>
+        </button>
 
-        {/* Itineraries Table */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-blue-600 text-white">
+        {/* Completed */}
+        <button
+          onClick={() => setStatusFilter('completed')}
+          className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
+            statusFilter === 'completed' 
+              ? 'border-purple-500 bg-purple-50' 
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-gray-600">Completed</span>
+            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.completed}</div>
+        </button>
+
+        {/* Cancelled */}
+        <button
+          onClick={() => setStatusFilter('cancelled')}
+          className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
+            statusFilter === 'cancelled' 
+              ? 'border-red-500 bg-red-50' 
+              : 'border-gray-200 bg-white hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-gray-600">Cancelled</span>
+            <div className="w-2 h-2 rounded-full bg-red-500"></div>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.cancelled}</div>
+        </button>
+      </div>
+
+      {/* ⭐ SLIM SEARCH BAR */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search by client name, trip name, or code..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+        />
+      </div>
+
+      <div className="text-xs text-gray-500">
+        Showing <span className="font-semibold text-gray-700">{filteredItineraries.length}</span> of {itineraries.length} itineraries
+      </div>
+
+      {/* ⭐ COMPACT TABLE - Linear Style */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1200px]">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Code</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Client</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Trip Name</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold">Dates</th>
-                <th className="px-6 py-3 text-center text-sm font-semibold">Duration</th>
-                <th className="px-6 py-3 text-center text-sm font-semibold">Pax</th>
-                <th className="px-6 py-3 text-right text-sm font-semibold">Total Cost</th>
-                <th className="px-6 py-3 text-center text-sm font-semibold">Status</th>
-                <th className="px-6 py-3 text-center text-sm font-semibold">Actions</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Code</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Client</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Trip</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Dates</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">Days</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">Pax</th>
+                <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-600 whitespace-nowrap">Cost</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">Status</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap sticky right-0 bg-gray-50">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100">
               {filteredItineraries.map((itinerary) => (
-                <tr key={itinerary.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-mono text-blue-600">{itinerary.itinerary_code}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-gray-900">{itinerary.client_name}</div>
-                    <div className="text-sm text-gray-500">{itinerary.client_email}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{itinerary.trip_name}</div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    <div>{new Date(itinerary.start_date).toLocaleDateString()}</div>
-                    <div className="text-xs">to {new Date(itinerary.end_date).toLocaleDateString()}</div>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-                      {itinerary.total_days} days
+                <tr key={itinerary.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-primary-50 text-primary-700 border border-primary-200">
+                      {itinerary.itinerary_code}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-center text-sm">
-                    <div>{itinerary.num_adults} adults</div>
-                    <div className="text-xs text-gray-500">{itinerary.num_children} children</div>
+                  <td className="px-3 py-3">
+                    <div className="text-sm font-medium text-gray-900">{itinerary.client_name}</div>
+                    <div className="text-xs text-gray-500 truncate max-w-[150px]">{itinerary.client_email}</div>
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="font-bold text-green-600">
-                      {itinerary.currency} {itinerary.total_cost.toFixed(2)}
+                  <td className="px-3 py-3">
+                    <div className="text-sm text-gray-700 max-w-[250px] truncate">{itinerary.trip_name}</div>
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <div className="text-xs text-gray-700">
+                      {new Date(itinerary.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(itinerary.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(itinerary.status)}`}>
-                      {itinerary.status}
+                  <td className="px-3 py-3 text-center whitespace-nowrap">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700">
+                      {itinerary.total_days}d
                     </span>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex gap-2 justify-center">
+                  <td className="px-3 py-3 text-center text-xs whitespace-nowrap">
+                    <div className="text-gray-700">
+                      {itinerary.num_adults}A
+                      {itinerary.num_children > 0 && <span className="text-gray-500"> / {itinerary.num_children}C</span>}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    <div className="text-sm font-semibold text-gray-900">
+                      {itinerary.currency} {itinerary.total_cost.toFixed(0)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-center whitespace-nowrap">
+                    <select
+                      value={itinerary.status}
+                      onChange={(e) => updateStatus(itinerary.id, e.target.value)}
+                      disabled={updatingStatus === itinerary.id}
+                      className={`text-xs font-medium capitalize px-2 py-1 rounded border cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${getStatusColor(itinerary.status)} ${
+                        updatingStatus === itinerary.id ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="sent">Sent</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </td>
+                  <td className="px-3 py-3 sticky right-0 bg-white">
+                    <div className="flex gap-1 justify-center">
                       <button
                         onClick={() => router.push(`/itineraries/${itinerary.id}`)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-1"
+                        className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-primary-600 transition-colors"
+                        title="View"
                       >
-                        👁️ View
+                        <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => router.push(`/itineraries/${itinerary.id}/edit`)}
-                        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm flex items-center gap-1"
+                        className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                        title="Edit"
                       >
-                        ✏️ Edit
+                        <Edit2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => deleteItinerary(itinerary.id)}
-                        className={`px-4 py-2 rounded-lg text-sm flex items-center gap-1 ${
+                        className={`p-1.5 rounded transition-colors ${
                           deleteConfirm === itinerary.id
-                            ? 'bg-red-600 text-white hover:bg-red-700'
-                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                            ? 'bg-red-500 text-white hover:bg-red-600'
+                            : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
                         }`}
+                        title={deleteConfirm === itinerary.id ? "Click again to confirm" : "Delete"}
                       >
-                        {deleteConfirm === itinerary.id ? '⚠️ Confirm?' : '🗑️ Delete'}
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -298,15 +390,15 @@ export default function ItinerariesPage() {
               ))}
             </tbody>
           </table>
-
-          {filteredItineraries.length === 0 && (
-            <div className="text-center py-12 text-gray-500">
-              <div className="text-6xl mb-4">📭</div>
-              <p className="text-xl font-medium">No itineraries found</p>
-              <p className="mt-2">Try adjusting your search or filters</p>
-            </div>
-          )}
         </div>
+
+        {filteredItineraries.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-base font-medium text-gray-900">No itineraries found</p>
+            <p className="mt-1 text-sm text-gray-500">Try adjusting your search or filters</p>
+          </div>
+        )}
       </div>
     </div>
   )
