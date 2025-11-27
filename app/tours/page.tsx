@@ -1,10 +1,12 @@
+import { Suspense } from 'react'
 import ToursBrowserPage from './tours-browser-page'
 
-export default function ToursPage() {
-  return <ToursBrowserPage />
-}
+export const dynamic = 'force-dynamic'
 
-export const metadata = {
-  title: 'Browse Tours | Travel2Egypt',
-  description: 'Explore our complete tour database with flexible pricing tiers',
+export default function ToursPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>}>
+      <ToursBrowserPage />
+    </Suspense>
+  )
 }
