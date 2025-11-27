@@ -2,6 +2,8 @@
 
 export const dynamic = 'force-dynamic'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
