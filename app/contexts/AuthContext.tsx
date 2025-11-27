@@ -22,6 +22,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, fullName: string) => Promise<void>
   signOut: () => Promise<void>
+  resetPassword: (email: string) => Promise<void>
   isAdmin: boolean
   isAgent: boolean
   isViewer: boolean
@@ -29,7 +30,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Create single supabase instance
 const supabase = createClient()
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -39,7 +39,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
 
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
@@ -49,7 +48,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -78,28 +76,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
       
-      console.log('✅ Profile loaded:', data)
       setProfile(data)
     } catch (error) {
-      console.error('❌ Profile fetch failed:', error)
+      console.error('Profile fetch failed:', error)
     } finally {
       setLoading(false)
     }
   }
 
   const signIn = async (email: string, password: string) => {
-    console.log('🔐 Signing in...')
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
     
-    if (error) {
-      console.error('❌ Sign in error:', error)
-      throw error
-    }
-    
-    console.log('✅ Signed in successfully:', data.user?.email)
+    if (error) throw error
     router.push('/dashboard')
   }
 
@@ -122,6 +113,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login')
   }
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (error) throw error
+  }
+
   const value = {
     user,
     profile,
@@ -129,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signIn,
     signUp,
     signOut,
+    resetPassword,
     isAdmin: profile?.role === 'admin',
     isAgent: profile?.role === 'agent',
     isViewer: profile?.role === 'viewer',
