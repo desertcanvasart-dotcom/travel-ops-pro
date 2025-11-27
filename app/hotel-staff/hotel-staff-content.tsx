@@ -36,7 +36,7 @@ interface HotelStaff {
 // MAIN COMPONENT
 // ============================================
 
-export default function HotelStaffContent HotelStaffPage() {
+export default function HotelStaffContent() {
   const searchParams = useSearchParams()
   const [staff, setStaff] = useState<HotelStaff[]>([])
   const [hotels, setHotels] = useState<Hotel[]>([])

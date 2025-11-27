@@ -34,7 +34,7 @@ interface Restaurant {
 // MAIN COMPONENT
 // ============================================
 
-export default function RestaurantsContent RestaurantsPage() {
+export default function RestaurantsContent() {
   const searchParams = useSearchParams()
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [loading, setLoading] = useState(true)

@@ -32,7 +32,7 @@ interface Hotel {
 // MAIN COMPONENT
 // ============================================
 
-export default function HotelsContent HotelsPage() {
+export default function HotelsContent() {
   const searchParams = useSearchParams()
   const [hotels, setHotels] = useState<Hotel[]>([])
   const [loading, setLoading] = useState(true)

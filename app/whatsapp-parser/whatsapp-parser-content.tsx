@@ -43,7 +43,7 @@ interface ExistingClient {
 }
 
 // Main export with Suspense wrapper
-export default function WhatsappParserContent WhatsAppParserPage() {
+export default function WhatsappParserContent() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen bg-gray-50">

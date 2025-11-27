@@ -8,9 +8,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   output: 'standalone',
-  experimental: {
-    missingSuspenseWithCSRBailout: false,
-  },
 }
 
 export default nextConfig

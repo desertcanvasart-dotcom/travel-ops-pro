@@ -30,7 +30,7 @@ interface AirportStaff {
 // MAIN COMPONENT
 // ============================================
 
-export default function AirportStaffContent AirportStaffPage() {
+export default function AirportStaffContent() {
   const searchParams = useSearchParams()
   const [staff, setStaff] = useState<AirportStaff[]>([])
   const [loading, setLoading] = useState(true)
