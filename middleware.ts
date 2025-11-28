@@ -59,9 +59,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/login', '/signup', '/forgot-password']
+  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password']
   const isPublicRoute = publicRoutes.some(route => 
-    request.nextUrl.pathname.startsWith(route)
+    request.nextUrl.pathname === route || 
+    (route !== '/' && request.nextUrl.pathname.startsWith(route))
   )
 
   // If user is not logged in and trying to access protected route
@@ -69,8 +70,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // If user is logged in and trying to access login/signup
-  if (user && isPublicRoute) {
+  // If user is logged in and trying to access login/signup (but not homepage)
+  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
