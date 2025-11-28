@@ -141,12 +141,16 @@ export default function InboxPage() {
       const currentFolder = targetFolder || folder
       let folderQuery = query || ''
       
+      // Use proper Gmail search queries
       if (currentFolder === 'sent') {
-        folderQuery = 'label:sent ' + folderQuery
+        // "from:me" gets all emails sent by the user
+        folderQuery = 'from:me ' + folderQuery
       } else if (currentFolder === 'drafts') {
-        folderQuery = 'label:draft ' + folderQuery
+        folderQuery = 'in:drafts ' + folderQuery
       } else {
-        folderQuery = 'label:inbox ' + folderQuery
+        // Inbox: exclude sent emails by using "in:inbox -from:me" for received only
+        // Or just "in:inbox" to show all inbox items
+        folderQuery = 'in:inbox -from:me ' + folderQuery
       }
       
       if (folderQuery) params.append('query', folderQuery.trim())
@@ -250,7 +254,7 @@ export default function InboxPage() {
   }
 
   const getDisplayName = (email: Email) => {
-    if (isFromMe(email)) {
+    if (folder === 'sent' || isFromMe(email)) {
       const toName = extractName(email.to)
       return toName || email.to
     }
@@ -258,7 +262,7 @@ export default function InboxPage() {
   }
 
   const getDisplayEmail = (email: Email) => {
-    if (isFromMe(email)) {
+    if (folder === 'sent' || isFromMe(email)) {
       return email.to
     }
     return email.from
@@ -476,9 +480,17 @@ export default function InboxPage() {
           {filteredEmails.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-gray-500">
               <div className="text-center">
-                <Inbox className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p className="text-sm font-medium text-gray-600">No emails found</p>
-                <p className="text-xs text-gray-400 mt-1">Try adjusting your search or filters</p>
+                {folder === 'sent' ? (
+                  <Send className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                ) : (
+                  <Inbox className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                )}
+                <p className="text-sm font-medium text-gray-600">
+                  {folder === 'sent' ? 'No sent emails' : 'No emails found'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {folder === 'sent' ? 'Emails you send will appear here' : 'Try adjusting your search or filters'}
+                </p>
               </div>
             </div>
           ) : (
@@ -491,7 +503,7 @@ export default function InboxPage() {
                   {groupEmails.map((email) => {
                     const displayName = getDisplayName(email)
                     const displayEmail = getDisplayEmail(email)
-                    const isSentByMe = isFromMe(email)
+                    const isSentByMe = folder === 'sent' || isFromMe(email)
                     const isStarred = starredEmails.has(email.id)
                     
                     return (
@@ -588,7 +600,7 @@ export default function InboxPage() {
               </h2>
               
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
-                {isFromMe(selectedEmail) ? (
+                {folder === 'sent' || isFromMe(selectedEmail) ? (
                   <>
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium ${getAvatarColor(selectedEmail.to)}`}>
                       {getInitials(extractName(selectedEmail.to))}
@@ -614,7 +626,7 @@ export default function InboxPage() {
                 )}
                 <div className="text-right">
                   <p className="text-xs text-gray-500">{new Date(selectedEmail.date).toLocaleString()}</p>
-                  {!isFromMe(selectedEmail) && (
+                  {folder !== 'sent' && !isFromMe(selectedEmail) && (
                     <p className="text-xs text-gray-400">To: me</p>
                   )}
                 </div>
@@ -631,7 +643,7 @@ export default function InboxPage() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
                 >
                   <Send className="w-4 h-4" />
-                  {isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
+                  {folder === 'sent' || isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
                 </button>
               </div>
             </div>
@@ -644,7 +656,7 @@ export default function InboxPage() {
         <ComposeModal
           onClose={() => setShowCompose(false)}
           userId={user?.id || ''}
-          replyTo={selectedEmail && !isFromMe(selectedEmail) ? selectedEmail : null}
+          replyTo={selectedEmail && folder !== 'sent' && !isFromMe(selectedEmail) ? selectedEmail : null}
           onSent={() => {
             setShowCompose(false)
             fetchEmails()
@@ -686,7 +698,6 @@ function ToolbarButton({
   )
 }
 
-// Get file icon based on type
 function getFileIcon(mimeType: string) {
   if (mimeType.startsWith('image/')) return FileImage
   if (mimeType.includes('pdf')) return FileText
@@ -694,14 +705,13 @@ function getFileIcon(mimeType: string) {
   return File
 }
 
-// Format file size
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-// Compose Modal with Attachments, Signatures, and Templates
+// Compose Modal
 function ComposeModal({ 
   onClose, 
   userId, 
@@ -750,7 +760,6 @@ function ComposeModal({
     },
   })
 
-  // Fetch signatures and templates
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -765,7 +774,6 @@ function ComposeModal({
         if (sigData.signatures) setSignatures(sigData.signatures)
         if (tempData.templates) setTemplates(tempData.templates)
         
-        // Auto-insert default signature
         const defaultSig = sigData.signatures?.find((s: EmailSignature) => s.is_default)
         if (defaultSig && editor) {
           setTimeout(() => {
@@ -792,12 +800,11 @@ function ComposeModal({
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }, [editor])
 
-  // Handle file selection
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, isImage = false) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
 
-    const maxSize = 25 * 1024 * 1024 // 25MB limit
+    const maxSize = 25 * 1024 * 1024
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
@@ -807,7 +814,6 @@ function ComposeModal({
         continue
       }
 
-      // Convert to base64
       const reader = new FileReader()
       reader.onload = () => {
         const base64 = (reader.result as string).split(',')[1]
@@ -821,16 +827,13 @@ function ComposeModal({
       reader.readAsDataURL(file)
     }
 
-    // Reset input
     e.target.value = ''
   }
 
-  // Remove attachment
   const removeAttachment = (index: number) => {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Insert signature
   const insertSignature = (signature: EmailSignature) => {
     if (!editor) return
     const currentContent = editor.getHTML()
@@ -838,7 +841,6 @@ function ComposeModal({
     setShowSignatureDropdown(false)
   }
 
-  // Use template
   const useTemplate = (template: EmailTemplate) => {
     setSubject(template.subject)
     if (editor) {
@@ -890,7 +892,6 @@ function ComposeModal({
         isExpanded ? 'sm:max-w-4xl sm:h-[85vh]' : 'sm:max-w-2xl'
       } max-h-[95vh] flex flex-col`}>
         
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">
             {replyTo ? 'Reply' : 'New Message'}
@@ -912,7 +913,6 @@ function ComposeModal({
           </div>
         </div>
 
-        {/* Error */}
         {error && (
           <div className="mx-5 mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -923,9 +923,7 @@ function ComposeModal({
           </div>
         )}
 
-        {/* Form */}
         <div className="flex-1 overflow-y-auto flex flex-col">
-          {/* To Field */}
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">To</label>
             <input
@@ -937,7 +935,6 @@ function ComposeModal({
             />
           </div>
 
-          {/* Subject Field */}
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">Subject</label>
             <input
@@ -949,97 +946,29 @@ function ComposeModal({
             />
           </div>
 
-          {/* Formatting Toolbar */}
           <div className="flex items-center gap-0.5 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
-            <ToolbarButton
-              onClick={() => editor?.chain().focus().toggleBold().run()}
-              isActive={editor?.isActive('bold') || false}
-              title="Bold (Ctrl+B)"
-            >
-              <Bold className="w-4 h-4" />
-            </ToolbarButton>
-            
-            <ToolbarButton
-              onClick={() => editor?.chain().focus().toggleItalic().run()}
-              isActive={editor?.isActive('italic') || false}
-              title="Italic (Ctrl+I)"
-            >
-              <Italic className="w-4 h-4" />
-            </ToolbarButton>
-            
-            <ToolbarButton
-              onClick={() => editor?.chain().focus().toggleUnderline().run()}
-              isActive={editor?.isActive('underline') || false}
-              title="Underline (Ctrl+U)"
-            >
-              <UnderlineIcon className="w-4 h-4" />
-            </ToolbarButton>
-
+            <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} isActive={editor?.isActive('bold') || false} title="Bold"><Bold className="w-4 h-4" /></ToolbarButton>
+            <ToolbarButton onClick={() => editor?.chain().focus().toggleItalic().run()} isActive={editor?.isActive('italic') || false} title="Italic"><Italic className="w-4 h-4" /></ToolbarButton>
+            <ToolbarButton onClick={() => editor?.chain().focus().toggleUnderline().run()} isActive={editor?.isActive('underline') || false} title="Underline"><UnderlineIcon className="w-4 h-4" /></ToolbarButton>
             <div className="w-px h-5 bg-gray-200 mx-1" />
-            
-            <ToolbarButton
-              onClick={() => editor?.chain().focus().toggleBulletList().run()}
-              isActive={editor?.isActive('bulletList') || false}
-              title="Bullet List"
-            >
-              <List className="w-4 h-4" />
-            </ToolbarButton>
-            
-            <ToolbarButton
-              onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-              isActive={editor?.isActive('orderedList') || false}
-              title="Numbered List"
-            >
-              <ListOrdered className="w-4 h-4" />
-            </ToolbarButton>
-
+            <ToolbarButton onClick={() => editor?.chain().focus().toggleBulletList().run()} isActive={editor?.isActive('bulletList') || false} title="Bullet List"><List className="w-4 h-4" /></ToolbarButton>
+            <ToolbarButton onClick={() => editor?.chain().focus().toggleOrderedList().run()} isActive={editor?.isActive('orderedList') || false} title="Numbered List"><ListOrdered className="w-4 h-4" /></ToolbarButton>
             <div className="w-px h-5 bg-gray-200 mx-1" />
-            
-            <ToolbarButton
-              onClick={setLink}
-              isActive={editor?.isActive('link') || false}
-              title="Add Link"
-            >
-              <LinkIcon className="w-4 h-4" />
-            </ToolbarButton>
-
+            <ToolbarButton onClick={setLink} isActive={editor?.isActive('link') || false} title="Add Link"><LinkIcon className="w-4 h-4" /></ToolbarButton>
             <div className="w-px h-5 bg-gray-200 mx-1" />
-            
-            <ToolbarButton
-              onClick={() => editor?.chain().focus().undo().run()}
-              disabled={!editor?.can().undo()}
-              title="Undo"
-            >
-              <Undo className="w-4 h-4" />
-            </ToolbarButton>
-            
-            <ToolbarButton
-              onClick={() => editor?.chain().focus().redo().run()}
-              disabled={!editor?.can().redo()}
-              title="Redo"
-            >
-              <Redo className="w-4 h-4" />
-            </ToolbarButton>
+            <ToolbarButton onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().undo()} title="Undo"><Undo className="w-4 h-4" /></ToolbarButton>
+            <ToolbarButton onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()} title="Redo"><Redo className="w-4 h-4" /></ToolbarButton>
 
-            {/* Template & Signature Buttons */}
             <div className="ml-auto flex items-center gap-1">
               {templates.length > 0 && (
                 <div className="relative">
-                  <button
-                    onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    Templates
+                  <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors">
+                    <FileText className="w-3.5 h-3.5" />Templates
                   </button>
                   {showTemplateDropdown && (
                     <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
                       {templates.map((template) => (
-                        <button
-                          key={template.id}
-                          onClick={() => useTemplate(template)}
-                          className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50"
-                        >
+                        <button key={template.id} onClick={() => useTemplate(template)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">
                           <span className="font-medium text-gray-900">{template.name}</span>
                           <span className="block text-gray-500 truncate">{template.subject}</span>
                         </button>
@@ -1051,27 +980,15 @@ function ComposeModal({
               
               {signatures.length > 0 && (
                 <div className="relative">
-                  <button
-                    onClick={() => setShowSignatureDropdown(!showSignatureDropdown)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    <Signature className="w-3.5 h-3.5" />
-                    Signatures
+                  <button onClick={() => setShowSignatureDropdown(!showSignatureDropdown)} className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors">
+                    <Signature className="w-3.5 h-3.5" />Signatures
                   </button>
                   {showSignatureDropdown && (
                     <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
                       {signatures.map((sig) => (
-                        <button
-                          key={sig.id}
-                          onClick={() => insertSignature(sig)}
-                          className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center justify-between"
-                        >
+                        <button key={sig.id} onClick={() => insertSignature(sig)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center justify-between">
                           <span className="font-medium text-gray-900">{sig.name}</span>
-                          {sig.is_default && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded">
-                              Default
-                            </span>
-                          )}
+                          {sig.is_default && <span className="text-[10px] px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded">Default</span>}
                         </button>
                       ))}
                     </div>
@@ -1081,38 +998,24 @@ function ComposeModal({
             </div>
           </div>
 
-          {/* Editor */}
           <div className="flex-1 overflow-y-auto">
             <EditorContent editor={editor} className="h-full" />
           </div>
 
-          {/* Attachments Preview */}
           {attachments.length > 0 && (
             <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-              <p className="text-xs font-medium text-gray-600 mb-2">
-                Attachments ({attachments.length})
-              </p>
+              <p className="text-xs font-medium text-gray-600 mb-2">Attachments ({attachments.length})</p>
               <div className="flex flex-wrap gap-2">
                 {attachments.map((file, index) => {
                   const FileIcon = getFileIcon(file.mimeType)
                   return (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200"
-                    >
+                    <div key={index} className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200">
                       <FileIcon className="w-4 h-4 text-gray-400" />
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-gray-700 truncate max-w-[150px]">
-                          {file.filename}
-                        </p>
-                        <p className="text-[10px] text-gray-500">
-                          {formatFileSize(file.size)}
-                        </p>
+                        <p className="text-xs font-medium text-gray-700 truncate max-w-[150px]">{file.filename}</p>
+                        <p className="text-[10px] text-gray-500">{formatFileSize(file.size)}</p>
                       </div>
-                      <button
-                        onClick={() => removeAttachment(index)}
-                        className="p-1 hover:bg-gray-100 rounded"
-                      >
+                      <button onClick={() => removeAttachment(index)} className="p-1 hover:bg-gray-100 rounded">
                         <X className="w-3 h-3 text-gray-400" />
                       </button>
                     </div>
@@ -1123,111 +1026,38 @@ function ComposeModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50/80">
           <div className="flex items-center gap-1">
-            {/* File Input (Hidden) */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={(e) => handleFileSelect(e, false)}
-              className="hidden"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar"
-            />
-            <input
-              ref={imageInputRef}
-              type="file"
-              multiple
-              onChange={(e) => handleFileSelect(e, true)}
-              className="hidden"
-              accept="image/*"
-            />
-            
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
-              title="Attach file"
-            >
+            <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar" />
+            <input ref={imageInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" accept="image/*" />
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Attach file">
               <Paperclip className="w-4 h-4 text-gray-500" />
             </button>
-            <button 
-              onClick={() => imageInputRef.current?.click()}
-              className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
-              title="Insert image"
-            >
+            <button onClick={() => imageInputRef.current?.click()} className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Insert image">
               <Image className="w-4 h-4 text-gray-500" />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              Discard
-            </button>
-            <button
-              onClick={handleSend}
-              disabled={sending}
-              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm"
-            >
-              {sending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  Send
-                </>
-              )}
+            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">Discard</button>
+            <button onClick={handleSend} disabled={sending} className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm">
+              {sending ? <><Loader2 className="w-4 h-4 animate-spin" />Sending...</> : <><Send className="w-4 h-4" />Send</>}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Click outside to close dropdowns */}
       {(showSignatureDropdown || showTemplateDropdown) && (
-        <div 
-          className="fixed inset-0 z-0" 
-          onClick={() => {
-            setShowSignatureDropdown(false)
-            setShowTemplateDropdown(false)
-          }}
-        />
+        <div className="fixed inset-0 z-0" onClick={() => { setShowSignatureDropdown(false); setShowTemplateDropdown(false) }} />
       )}
 
-      {/* TipTap Styles */}
       <style jsx global>{`
-        .ProseMirror p.is-editor-empty:first-child::before {
-          color: #9ca3af;
-          content: attr(data-placeholder);
-          float: left;
-          height: 0;
-          pointer-events: none;
-        }
-        .ProseMirror {
-          min-height: 200px;
-        }
-        .ProseMirror:focus {
-          outline: none;
-        }
-        .ProseMirror ul {
-          list-style-type: disc;
-          padding-left: 1.5rem;
-        }
-        .ProseMirror ol {
-          list-style-type: decimal;
-          padding-left: 1.5rem;
-        }
-        .ProseMirror li {
-          margin: 0.25rem 0;
-        }
-        .ProseMirror a {
-          color: #4a5d4a;
-          text-decoration: underline;
-        }
+        .ProseMirror p.is-editor-empty:first-child::before { color: #9ca3af; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }
+        .ProseMirror { min-height: 200px; }
+        .ProseMirror:focus { outline: none; }
+        .ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; }
+        .ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; }
+        .ProseMirror li { margin: 0.25rem 0; }
+        .ProseMirror a { color: #4a5d4a; text-decoration: underline; }
       `}</style>
     </div>
   )
