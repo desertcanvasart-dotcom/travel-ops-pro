@@ -13,6 +13,7 @@ import {
   Star,
   Paperclip,
   ChevronRight,
+  ChevronLeft,
   X,
   AlertCircle,
   File,
@@ -55,6 +56,7 @@ export default function InboxPage() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [folder, setFolder] = useState<FolderType>('inbox')
   const [starredEmails, setStarredEmails] = useState<Set<string>>(new Set())
+  const [isFolderCollapsed, setIsFolderCollapsed] = useState(false)
   
   const supabase = createClient()
 
@@ -97,7 +99,6 @@ export default function InboxPage() {
         maxResults: '50',
       })
       
-      // Add folder-specific query
       let folderQuery = query || ''
       if (folder === 'sent') {
         folderQuery = 'in:sent ' + folderQuery
@@ -217,14 +218,12 @@ export default function InboxPage() {
     return colors[index]
   }
 
-  // Filter emails
   const filteredEmails = emails.filter(email => {
     if (filter === 'unread') return email.isUnread
     if (filter === 'starred') return starredEmails.has(email.id)
     return true
   })
 
-  // Group emails by date
   const groupedEmails = filteredEmails.reduce((groups, email) => {
     const group = getDateGroup(email.date)
     if (!groups[group]) groups[group] = []
@@ -272,7 +271,7 @@ export default function InboxPage() {
     <div className="h-screen bg-gray-50/50 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm flex-shrink-0 z-10">
-        <div className="px-4 py-3">
+        <div className="px-4 py-3 pr-6">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -323,7 +322,7 @@ export default function InboxPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="mx-4 mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="mx-4 mr-6 mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
           <AlertCircle className="w-4 h-4" />
           <span className="text-sm">{error}</span>
           <button onClick={() => setError(null)} className="ml-auto">
@@ -333,58 +332,79 @@ export default function InboxPage() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Folders Sidebar */}
-        <div className="w-48 bg-white border-r border-gray-200 flex-shrink-0 p-3">
-          <nav className="space-y-1">
-            {[
-              { id: 'inbox' as FolderType, label: 'Inbox', icon: Inbox, count: unreadCount },
-              { id: 'sent' as FolderType, label: 'Sent', icon: Send, count: 0 },
-              { id: 'drafts' as FolderType, label: 'Drafts', icon: File, count: 0 },
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setFolder(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  folder === item.id
-                    ? 'bg-primary-50 text-primary-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <item.icon className={`w-4 h-4 ${folder === item.id ? 'text-primary-600' : 'text-gray-400'}`} />
-                <span className="flex-1 text-left">{item.label}</span>
-                {item.count > 0 && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                    folder === item.id ? 'bg-primary-200 text-primary-800' : 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {item.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
+      <div className="flex-1 flex overflow-hidden pr-4">
+        {/* Folders Sidebar - Collapsible */}
+        <div className={`bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300 ${isFolderCollapsed ? 'w-12' : 'w-40'}`}>
+          <div className="p-2 flex flex-col h-full">
+            {/* Collapse Toggle */}
+            <button
+              onClick={() => setIsFolderCollapsed(!isFolderCollapsed)}
+              className="mb-2 p-1.5 hover:bg-gray-100 rounded-md transition-colors self-end"
+            >
+              {isFolderCollapsed ? (
+                <ChevronRight className="w-4 h-4 text-gray-500" />
+              ) : (
+                <ChevronLeft className="w-4 h-4 text-gray-500" />
+              )}
+            </button>
 
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Filters</p>
             <nav className="space-y-1">
               {[
-                { id: 'all' as FilterType, label: 'All Mail' },
-                { id: 'unread' as FilterType, label: 'Unread' },
-                { id: 'starred' as FilterType, label: 'Starred' },
+                { id: 'inbox' as FolderType, label: 'Inbox', icon: Inbox, count: unreadCount },
+                { id: 'sent' as FolderType, label: 'Sent', icon: Send, count: 0 },
+                { id: 'drafts' as FolderType, label: 'Drafts', icon: File, count: 0 },
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setFilter(item.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                    filter === item.id
-                      ? 'bg-gray-100 text-gray-900 font-medium'
-                      : 'text-gray-500 hover:bg-gray-50'
-                  }`}
+                  onClick={() => setFolder(item.id)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
+                    folder === item.id
+                      ? 'bg-primary-50 text-primary-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  } ${isFolderCollapsed ? 'justify-center' : ''}`}
+                  title={isFolderCollapsed ? item.label : ''}
                 >
-                  {item.label}
+                  <item.icon className={`w-4 h-4 flex-shrink-0 ${folder === item.id ? 'text-primary-600' : 'text-gray-400'}`} />
+                  {!isFolderCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {item.count > 0 && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                          folder === item.id ? 'bg-primary-200 text-primary-800' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {item.count}
+                        </span>
+                      )}
+                    </>
+                  )}
                 </button>
               ))}
             </nav>
+
+            {!isFolderCollapsed && (
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Filters</p>
+                <nav className="space-y-0.5">
+                  {[
+                    { id: 'all' as FilterType, label: 'All Mail' },
+                    { id: 'unread' as FilterType, label: 'Unread' },
+                    { id: 'starred' as FilterType, label: 'Starred' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setFilter(item.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
+                        filter === item.id
+                          ? 'bg-gray-100 text-gray-900 font-medium'
+                          : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            )}
           </div>
         </div>
 
@@ -402,8 +422,8 @@ export default function InboxPage() {
             <div>
               {Object.entries(groupedEmails).map(([group, groupEmails]) => (
                 <div key={group}>
-                  <div className="sticky top-0 px-4 py-2 bg-gray-50 border-b border-gray-100">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{group}</span>
+                  <div className="sticky top-0 px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{group}</span>
                   </div>
                   {groupEmails.map((email) => {
                     const name = extractName(email.from)
@@ -413,7 +433,7 @@ export default function InboxPage() {
                       <div
                         key={email.id}
                         onClick={() => setSelectedEmail(email)}
-                        className={`group px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors ${
+                        className={`group px-3 py-2.5 border-b border-gray-100 cursor-pointer transition-colors ${
                           selectedEmail?.id === email.id
                             ? 'bg-primary-50'
                             : email.isUnread
@@ -421,9 +441,9 @@ export default function InboxPage() {
                             : 'hover:bg-gray-50'
                         }`}
                       >
-                        <div className="flex items-start gap-3">
-                          {/* Avatar */}
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white text-sm font-medium ${getAvatarColor(name)}`}>
+                        <div className="flex items-start gap-2.5">
+                          {/* Avatar - Smaller */}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-medium ${getAvatarColor(name)}`}>
                             {getInitials(name)}
                           </div>
                           
@@ -433,29 +453,29 @@ export default function InboxPage() {
                               <span className={`text-sm truncate ${email.isUnread ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
                                 {name}
                               </span>
-                              <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
                                 <button
                                   onClick={(e) => toggleStar(email.id, e)}
                                   className={`p-0.5 rounded transition-colors ${
                                     isStarred ? 'text-yellow-500' : 'text-gray-300 opacity-0 group-hover:opacity-100'
                                   }`}
                                 >
-                                  <Star className={`w-4 h-4 ${isStarred ? 'fill-yellow-500' : ''}`} />
+                                  <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-yellow-500' : ''}`} />
                                 </button>
-                                <span className="text-xs text-gray-500">
+                                <span className="text-[11px] text-gray-500">
                                   {formatDate(email.date)}
                                 </span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               {email.isUnread && (
-                                <div className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />
+                                <div className="w-1.5 h-1.5 rounded-full bg-primary-500 flex-shrink-0" />
                               )}
-                              <p className={`text-sm truncate ${email.isUnread ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
+                              <p className={`text-xs truncate ${email.isUnread ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
                                 {decodeHtmlEntities(email.subject || '(No subject)')}
                               </p>
                             </div>
-                            <p className="text-xs text-gray-500 truncate mt-0.5">
+                            <p className="text-[11px] text-gray-500 truncate mt-0.5">
                               {decodeHtmlEntities(email.snippet)}
                             </p>
                           </div>
@@ -501,7 +521,7 @@ export default function InboxPage() {
               
               {/* Sender Info */}
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-medium ${getAvatarColor(extractName(selectedEmail.from))}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium ${getAvatarColor(extractName(selectedEmail.from))}`}>
                   {getInitials(extractName(selectedEmail.from))}
                 </div>
                 <div className="flex-1">
