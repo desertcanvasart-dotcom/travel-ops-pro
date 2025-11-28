@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { sendEmail, refreshAccessToken } from '@/lib/gmail'
+import { refreshAccessToken } from '@/lib/gmail'
+import { google } from 'googleapis'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+)
+
+interface Attachment {
+  filename: string
+  mimeType: string
+  data: string // base64 encoded
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { userId, to, subject, body, threadId } = await request.json()
+    const { userId, to, subject, body, threadId, attachments } = await request.json()
 
     if (!userId || !to || !subject || !body) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -43,12 +56,94 @@ export async function POST(request: NextRequest) {
         .eq('user_id', userId)
     }
 
-    // Send email
-    const result = await sendEmail(access_token, refresh_token, to, subject, body, threadId)
+    // Set credentials
+    oauth2Client.setCredentials({
+      access_token,
+      refresh_token,
+    })
 
-    return NextResponse.json({ success: true, messageId: result.id })
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+
+    // Build email with or without attachments
+    let rawEmail: string
+
+    if (attachments && attachments.length > 0) {
+      rawEmail = buildEmailWithAttachments(to, subject, body, attachments)
+    } else {
+      rawEmail = buildSimpleEmail(to, subject, body)
+    }
+
+    // Send email
+    const response = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: rawEmail,
+        threadId,
+      },
+    })
+
+    return NextResponse.json({ success: true, messageId: response.data.id })
   } catch (err: any) {
     console.error('Send email error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
+}
+
+function buildSimpleEmail(to: string, subject: string, body: string): string {
+  const emailLines = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    body,
+  ]
+  
+  return Buffer.from(emailLines.join('\r\n'))
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+function buildEmailWithAttachments(
+  to: string, 
+  subject: string, 
+  body: string, 
+  attachments: Attachment[]
+): string {
+  const boundary = `boundary_${Date.now()}`
+  
+  const emailParts = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(body).toString('base64'),
+  ]
+
+  // Add attachments
+  for (const attachment of attachments) {
+    emailParts.push(
+      `--${boundary}`,
+      `Content-Type: ${attachment.mimeType}; name="${attachment.filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${attachment.filename}"`,
+      '',
+      attachment.data
+    )
+  }
+
+  emailParts.push(`--${boundary}--`)
+
+  return Buffer.from(emailParts.join('\r\n'))
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
