@@ -1,8 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import TiptapLink from '@tiptap/extension-link'
+import Placeholder from '@tiptap/extension-placeholder'
 import { 
   Mail, 
   Inbox, 
@@ -20,10 +25,16 @@ import {
   Trash2,
   Archive,
   MoreHorizontal,
-  Check,
-  Circle,
-  Clock,
-  Filter
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  List,
+  ListOrdered,
+  Link as LinkIcon,
+  Undo,
+  Redo,
+  Minus,
+  Image
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
@@ -50,6 +61,7 @@ export default function InboxPage() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isConnected, setIsConnected] = useState(false)
+  const [connectedEmail, setConnectedEmail] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [showCompose, setShowCompose] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -81,6 +93,7 @@ export default function InboxPage() {
       }
 
       setIsConnected(true)
+      setConnectedEmail(data.email || '')
       await fetchEmails()
     } catch (err) {
       setIsConnected(false)
@@ -89,7 +102,7 @@ export default function InboxPage() {
     }
   }
 
-  const fetchEmails = async (query?: string) => {
+  const fetchEmails = async (query?: string, targetFolder?: FolderType) => {
     if (!user) return
     
     setRefreshing(true)
@@ -99,11 +112,17 @@ export default function InboxPage() {
         maxResults: '50',
       })
       
+      const currentFolder = targetFolder || folder
       let folderQuery = query || ''
-      if (folder === 'sent') {
-        folderQuery = 'in:sent ' + folderQuery
-      } else if (folder === 'drafts') {
-        folderQuery = 'in:drafts ' + folderQuery
+      
+      // Use label-based queries for better results
+      if (currentFolder === 'sent') {
+        folderQuery = 'label:sent ' + folderQuery
+      } else if (currentFolder === 'drafts') {
+        folderQuery = 'label:draft ' + folderQuery
+      } else {
+        // Inbox - exclude sent and drafts
+        folderQuery = 'label:inbox ' + folderQuery
       }
       
       if (folderQuery) params.append('query', folderQuery.trim())
@@ -126,7 +145,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (isConnected) {
-      fetchEmails(searchQuery)
+      fetchEmails(searchQuery, folder)
     }
   }, [folder])
 
@@ -196,17 +215,42 @@ export default function InboxPage() {
     return match ? match[1].trim().replace(/"/g, '') : from
   }
 
-  const extractEmail = (from: string) => {
+  const extractEmailAddress = (from: string) => {
     const match = from.match(/<(.+)>/)
-    return match ? match[1] : from
+    return match ? match[1].toLowerCase() : from.toLowerCase()
+  }
+
+  // Check if email is from current user
+  const isFromMe = (email: Email) => {
+    const fromEmail = extractEmailAddress(email.from)
+    return fromEmail === connectedEmail.toLowerCase()
+  }
+
+  // Get display name based on folder/sender
+  const getDisplayName = (email: Email) => {
+    if (isFromMe(email)) {
+      // This is a sent email - show recipient
+      const toName = extractName(email.to)
+      return toName || email.to
+    }
+    return extractName(email.from)
+  }
+
+  // Get display email for avatar
+  const getDisplayEmail = (email: Email) => {
+    if (isFromMe(email)) {
+      return email.to
+    }
+    return email.from
   }
 
   const getInitials = (name: string) => {
-    const parts = name.split(' ')
+    const cleanName = name.replace(/<[^>]+>/g, '').trim()
+    const parts = cleanName.split(' ')
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase()
     }
-    return name.substring(0, 2).toUpperCase()
+    return cleanName.substring(0, 2).toUpperCase()
   }
 
   const getAvatarColor = (name: string) => {
@@ -214,7 +258,8 @@ export default function InboxPage() {
       'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
       'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-red-500'
     ]
-    const index = name.charCodeAt(0) % colors.length
+    const cleanName = name.replace(/<[^>]+>/g, '').trim()
+    const index = cleanName.charCodeAt(0) % colors.length
     return colors[index]
   }
 
@@ -275,9 +320,11 @@ export default function InboxPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Inbox className="w-5 h-5 text-primary-600" />
-                Inbox
-                {unreadCount > 0 && (
+                {folder === 'inbox' && <Inbox className="w-5 h-5 text-primary-600" />}
+                {folder === 'sent' && <Send className="w-5 h-5 text-primary-600" />}
+                {folder === 'drafts' && <File className="w-5 h-5 text-primary-600" />}
+                {folder === 'inbox' ? 'Inbox' : folder === 'sent' ? 'Sent' : 'Drafts'}
+                {folder === 'inbox' && unreadCount > 0 && (
                   <span className="px-2 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
                     {unreadCount}
                   </span>
@@ -368,7 +415,7 @@ export default function InboxPage() {
                   {!isFolderCollapsed && (
                     <>
                       <span className="flex-1 text-left">{item.label}</span>
-                      {item.count > 0 && (
+                      {item.id === 'inbox' && item.count > 0 && (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
                           folder === item.id ? 'bg-primary-200 text-primary-800' : 'bg-gray-100 text-gray-600'
                         }`}>
@@ -426,7 +473,9 @@ export default function InboxPage() {
                     <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{group}</span>
                   </div>
                   {groupEmails.map((email) => {
-                    const name = extractName(email.from)
+                    const displayName = getDisplayName(email)
+                    const displayEmail = getDisplayEmail(email)
+                    const isSentByMe = isFromMe(email)
                     const isStarred = starredEmails.has(email.id)
                     
                     return (
@@ -436,23 +485,30 @@ export default function InboxPage() {
                         className={`group px-3 py-2.5 border-b border-gray-100 cursor-pointer transition-colors ${
                           selectedEmail?.id === email.id
                             ? 'bg-primary-50'
-                            : email.isUnread
+                            : email.isUnread && !isSentByMe
                             ? 'bg-blue-50/50 hover:bg-blue-50'
                             : 'hover:bg-gray-50'
                         }`}
                       >
                         <div className="flex items-start gap-2.5">
-                          {/* Avatar - Smaller */}
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-medium ${getAvatarColor(name)}`}>
-                            {getInitials(name)}
+                          {/* Avatar */}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-medium ${getAvatarColor(displayEmail)}`}>
+                            {getInitials(displayName)}
                           </div>
                           
                           {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2 mb-0.5">
-                              <span className={`text-sm truncate ${email.isUnread ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                                {name}
-                              </span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {isSentByMe && (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded font-medium flex-shrink-0">
+                                    To
+                                  </span>
+                                )}
+                                <span className={`text-sm truncate ${email.isUnread && !isSentByMe ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                                  {displayName}
+                                </span>
+                              </div>
                               <div className="flex items-center gap-1.5 flex-shrink-0">
                                 <button
                                   onClick={(e) => toggleStar(email.id, e)}
@@ -468,10 +524,10 @@ export default function InboxPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              {email.isUnread && (
+                              {email.isUnread && !isSentByMe && (
                                 <div className="w-1.5 h-1.5 rounded-full bg-primary-500 flex-shrink-0" />
                               )}
-                              <p className={`text-xs truncate ${email.isUnread ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
+                              <p className={`text-xs truncate ${email.isUnread && !isSentByMe ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
                                 {decodeHtmlEntities(email.subject || '(No subject)')}
                               </p>
                             </div>
@@ -519,18 +575,37 @@ export default function InboxPage() {
                 {decodeHtmlEntities(selectedEmail.subject || '(No subject)')}
               </h2>
               
-              {/* Sender Info */}
+              {/* Sender/Recipient Info */}
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium ${getAvatarColor(extractName(selectedEmail.from))}`}>
-                  {getInitials(extractName(selectedEmail.from))}
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{extractName(selectedEmail.from)}</p>
-                  <p className="text-xs text-gray-500">{extractEmail(selectedEmail.from)}</p>
-                </div>
+                {isFromMe(selectedEmail) ? (
+                  <>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium ${getAvatarColor(selectedEmail.to)}`}>
+                      {getInitials(extractName(selectedEmail.to))}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs px-2 py-0.5 bg-primary-100 text-primary-700 rounded font-medium">Sent</span>
+                        <p className="font-medium text-gray-900">To: {extractName(selectedEmail.to)}</p>
+                      </div>
+                      <p className="text-xs text-gray-500">{extractEmailAddress(selectedEmail.to)}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium ${getAvatarColor(selectedEmail.from)}`}>
+                      {getInitials(extractName(selectedEmail.from))}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{extractName(selectedEmail.from)}</p>
+                      <p className="text-xs text-gray-500">{extractEmailAddress(selectedEmail.from)}</p>
+                    </div>
+                  </>
+                )}
                 <div className="text-right">
                   <p className="text-xs text-gray-500">{new Date(selectedEmail.date).toLocaleString()}</p>
-                  <p className="text-xs text-gray-400">To: {selectedEmail.to}</p>
+                  {!isFromMe(selectedEmail) && (
+                    <p className="text-xs text-gray-400">To: me</p>
+                  )}
                 </div>
               </div>
 
@@ -547,7 +622,7 @@ export default function InboxPage() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
                 >
                   <Send className="w-4 h-4" />
-                  Reply
+                  {isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
                 </button>
               </div>
             </div>
@@ -560,7 +635,7 @@ export default function InboxPage() {
         <ComposeModal
           onClose={() => setShowCompose(false)}
           userId={user?.id || ''}
-          replyTo={selectedEmail}
+          replyTo={selectedEmail && !isFromMe(selectedEmail) ? selectedEmail : null}
           onSent={() => {
             setShowCompose(false)
             fetchEmails()
@@ -571,7 +646,38 @@ export default function InboxPage() {
   )
 }
 
-// Compose Modal Component
+// Rich Text Editor Toolbar Button
+function ToolbarButton({ 
+  onClick, 
+  isActive = false, 
+  disabled = false,
+  children,
+  title
+}: { 
+  onClick: () => void
+  isActive?: boolean
+  disabled?: boolean
+  children: React.ReactNode
+  title: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`p-1.5 rounded transition-colors ${
+        isActive 
+          ? 'bg-primary-100 text-primary-700' 
+          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+      } disabled:opacity-50 disabled:cursor-not-allowed`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// Compose Modal Component with Rich Text Editor
 function ComposeModal({ 
   onClose, 
   userId, 
@@ -583,19 +689,58 @@ function ComposeModal({
   replyTo?: Email | null
   onSent: () => void
 }) {
-  const extractEmail = (from: string) => {
+  const extractEmailAddr = (from: string) => {
     const match = from.match(/<(.+)>/)
     return match ? match[1] : from
   }
 
-  const [to, setTo] = useState(replyTo ? extractEmail(replyTo.from) : '')
+  const [to, setTo] = useState(replyTo ? extractEmailAddr(replyTo.from) : '')
   const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : '')
-  const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+      }),
+      Underline,
+      TiptapLink.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-primary-600 underline',
+        },
+      }),
+      Placeholder.configure({
+        placeholder: 'Write your message...',
+      }),
+    ],
+    content: '',
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] px-4 py-3',
+      },
+    },
+  })
+
+  const setLink = useCallback(() => {
+    if (!editor) return
+    
+    const previousUrl = editor.getAttributes('link').href
+    const url = window.prompt('URL', previousUrl)
+
+    if (url === null) return
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
+    }
+
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }, [editor])
 
   const handleSend = async () => {
-    if (!to || !subject || !body) {
+    if (!to || !subject || !editor?.getHTML()) {
       setError('Please fill in all fields')
       return
     }
@@ -611,7 +756,7 @@ function ComposeModal({
           userId,
           to,
           subject,
-          body: body.replace(/\n/g, '<br>'),
+          body: editor.getHTML(),
           threadId: replyTo?.threadId,
         }),
       })
@@ -631,65 +776,163 @@ function ComposeModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-      <div className="bg-white rounded-t-xl sm:rounded-xl shadow-2xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className={`bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full transition-all duration-300 ${
+        isExpanded ? 'sm:max-w-4xl sm:h-[80vh]' : 'sm:max-w-2xl'
+      } max-h-[95vh] flex flex-col`}>
+        
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">
             {replyTo ? 'Reply' : 'New Message'}
           </h3>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors">
-            <X className="w-4 h-4 text-gray-500" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors hidden sm:block"
+              title={isExpanded ? 'Minimize' : 'Expand'}
+            >
+              <Minus className="w-4 h-4 text-gray-500" />
+            </button>
+            <button 
+              onClick={onClose} 
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
         </div>
 
+        {/* Error */}
+        {error && (
+          <div className="mx-5 mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
+            <button onClick={() => setError(null)} className="ml-auto">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Form */}
-        <div className="flex-1 overflow-y-auto">
-          {error && (
-            <div className="mx-4 mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              {error}
-            </div>
-          )}
-
-          <div className="p-4 space-y-1">
-            <div className="flex items-center border-b border-gray-100 py-2">
-              <label className="w-16 text-xs font-medium text-gray-500">To</label>
-              <input
-                type="email"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="flex-1 text-sm outline-none"
-                placeholder="recipient@example.com"
-              />
-            </div>
-
-            <div className="flex items-center border-b border-gray-100 py-2">
-              <label className="w-16 text-xs font-medium text-gray-500">Subject</label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="flex-1 text-sm outline-none"
-                placeholder="Email subject"
-              />
-            </div>
-
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={12}
-              className="w-full text-sm outline-none resize-none py-3"
-              placeholder="Write your message..."
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          {/* To Field */}
+          <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
+            <label className="w-16 text-xs font-medium text-gray-400">To</label>
+            <input
+              type="email"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="flex-1 text-sm outline-none bg-transparent"
+              placeholder="recipient@example.com"
             />
+          </div>
+
+          {/* Subject Field */}
+          <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
+            <label className="w-16 text-xs font-medium text-gray-400">Subject</label>
+            <input
+              type="text"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="flex-1 text-sm outline-none bg-transparent"
+              placeholder="Email subject"
+            />
+          </div>
+
+          {/* Formatting Toolbar */}
+          <div className="flex items-center gap-0.5 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
+            <ToolbarButton
+              onClick={() => editor?.chain().focus().toggleBold().run()}
+              isActive={editor?.isActive('bold') || false}
+              title="Bold (Ctrl+B)"
+            >
+              <Bold className="w-4 h-4" />
+            </ToolbarButton>
+            
+            <ToolbarButton
+              onClick={() => editor?.chain().focus().toggleItalic().run()}
+              isActive={editor?.isActive('italic') || false}
+              title="Italic (Ctrl+I)"
+            >
+              <Italic className="w-4 h-4" />
+            </ToolbarButton>
+            
+            <ToolbarButton
+              onClick={() => editor?.chain().focus().toggleUnderline().run()}
+              isActive={editor?.isActive('underline') || false}
+              title="Underline (Ctrl+U)"
+            >
+              <UnderlineIcon className="w-4 h-4" />
+            </ToolbarButton>
+
+            <div className="w-px h-5 bg-gray-200 mx-1" />
+            
+            <ToolbarButton
+              onClick={() => editor?.chain().focus().toggleBulletList().run()}
+              isActive={editor?.isActive('bulletList') || false}
+              title="Bullet List"
+            >
+              <List className="w-4 h-4" />
+            </ToolbarButton>
+            
+            <ToolbarButton
+              onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+              isActive={editor?.isActive('orderedList') || false}
+              title="Numbered List"
+            >
+              <ListOrdered className="w-4 h-4" />
+            </ToolbarButton>
+
+            <div className="w-px h-5 bg-gray-200 mx-1" />
+            
+            <ToolbarButton
+              onClick={setLink}
+              isActive={editor?.isActive('link') || false}
+              title="Add Link"
+            >
+              <LinkIcon className="w-4 h-4" />
+            </ToolbarButton>
+
+            <div className="w-px h-5 bg-gray-200 mx-1" />
+            
+            <ToolbarButton
+              onClick={() => editor?.chain().focus().undo().run()}
+              disabled={!editor?.can().undo()}
+              title="Undo"
+            >
+              <Undo className="w-4 h-4" />
+            </ToolbarButton>
+            
+            <ToolbarButton
+              onClick={() => editor?.chain().focus().redo().run()}
+              disabled={!editor?.can().redo()}
+              title="Redo"
+            >
+              <Redo className="w-4 h-4" />
+            </ToolbarButton>
+          </div>
+
+          {/* Editor */}
+          <div className="flex-1 overflow-y-auto">
+            <EditorContent editor={editor} className="h-full" />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center gap-2">
-            <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Attach file">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50/80">
+          <div className="flex items-center gap-1">
+            <button 
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
+              title="Attach file"
+            >
               <Paperclip className="w-4 h-4 text-gray-500" />
+            </button>
+            <button 
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
+              title="Insert image"
+            >
+              <Image className="w-4 h-4 text-gray-500" />
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -702,7 +945,7 @@ function ComposeModal({
             <button
               onClick={handleSend}
               disabled={sending}
-              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm"
             >
               {sending ? (
                 <>
@@ -719,6 +962,38 @@ function ComposeModal({
           </div>
         </div>
       </div>
+
+      {/* Custom styles for TipTap */}
+      <style jsx global>{`
+        .ProseMirror p.is-editor-empty:first-child::before {
+          color: #9ca3af;
+          content: attr(data-placeholder);
+          float: left;
+          height: 0;
+          pointer-events: none;
+        }
+        .ProseMirror {
+          min-height: 200px;
+        }
+        .ProseMirror:focus {
+          outline: none;
+        }
+        .ProseMirror ul {
+          list-style-type: disc;
+          padding-left: 1.5rem;
+        }
+        .ProseMirror ol {
+          list-style-type: decimal;
+          padding-left: 1.5rem;
+        }
+        .ProseMirror li {
+          margin: 0.25rem 0;
+        }
+        .ProseMirror a {
+          color: #4a5d4a;
+          text-decoration: underline;
+        }
+      `}</style>
     </div>
   )
 }
