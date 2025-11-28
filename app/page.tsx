@@ -79,12 +79,12 @@ export default function HomePage() {
             </span>
             
             <h1 className="text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 leading-tight">
-              Autoura – Run Your Entire Travel Operation from One Smart System
+              Autoura – From WhatsApp Chat to Final Trip Plan in Under Two Minutes
             </h1>
             
             <p className="text-base lg:text-lg text-gray-600 leading-relaxed">
-              Turn scattered spreadsheets, chats and notes into one organised workspace for inquiries, pricing, itineraries, operations, and payments.
-            </p>
+            Autoura instantly reads your conversation with any customer — in any language — and converts it into a complete travel program with full pricing, itinerary, logistics, hotels, vehicles, guides, and profit margins.
+            No spreadsheets. No manual calculations. No wasted time. Just send, convert, book.            </p>
 
             <div className="flex flex-wrap gap-3">
               <Link 
