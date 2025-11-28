@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
 import { useEditor, EditorContent } from '@tiptap/react'
@@ -34,7 +34,11 @@ import {
   Undo,
   Redo,
   Minus,
-  Image
+  Image,
+  FileText,
+  FileImage,
+  FileArchive,
+  Signature
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
@@ -49,6 +53,28 @@ interface Email {
   body: string
   isUnread: boolean
   labelIds?: string[]
+}
+
+interface Attachment {
+  filename: string
+  mimeType: string
+  data: string
+  size: number
+}
+
+interface EmailSignature {
+  id: string
+  name: string
+  content: string
+  is_default: boolean
+}
+
+interface EmailTemplate {
+  id: string
+  name: string
+  subject: string
+  content: string
+  category: string
 }
 
 type FilterType = 'all' | 'unread' | 'starred'
@@ -115,13 +141,11 @@ export default function InboxPage() {
       const currentFolder = targetFolder || folder
       let folderQuery = query || ''
       
-      // Use label-based queries for better results
       if (currentFolder === 'sent') {
         folderQuery = 'label:sent ' + folderQuery
       } else if (currentFolder === 'drafts') {
         folderQuery = 'label:draft ' + folderQuery
       } else {
-        // Inbox - exclude sent and drafts
         folderQuery = 'label:inbox ' + folderQuery
       }
       
@@ -220,23 +244,19 @@ export default function InboxPage() {
     return match ? match[1].toLowerCase() : from.toLowerCase()
   }
 
-  // Check if email is from current user
   const isFromMe = (email: Email) => {
     const fromEmail = extractEmailAddress(email.from)
     return fromEmail === connectedEmail.toLowerCase()
   }
 
-  // Get display name based on folder/sender
   const getDisplayName = (email: Email) => {
     if (isFromMe(email)) {
-      // This is a sent email - show recipient
       const toName = extractName(email.to)
       return toName || email.to
     }
     return extractName(email.from)
   }
 
-  // Get display email for avatar
   const getDisplayEmail = (email: Email) => {
     if (isFromMe(email)) {
       return email.to
@@ -332,7 +352,6 @@ export default function InboxPage() {
               </h1>
             </div>
 
-            {/* Search */}
             <form onSubmit={handleSearch} className="flex-1 max-w-md">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -367,7 +386,6 @@ export default function InboxPage() {
         </div>
       </header>
 
-      {/* Error Message */}
       {error && (
         <div className="mx-4 mr-6 mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
           <AlertCircle className="w-4 h-4" />
@@ -378,12 +396,10 @@ export default function InboxPage() {
         </div>
       )}
 
-      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden pr-4">
-        {/* Folders Sidebar - Collapsible */}
+        {/* Folders Sidebar */}
         <div className={`bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300 ${isFolderCollapsed ? 'w-12' : 'w-40'}`}>
           <div className="p-2 flex flex-col h-full">
-            {/* Collapse Toggle */}
             <button
               onClick={() => setIsFolderCollapsed(!isFolderCollapsed)}
               className="mb-2 p-1.5 hover:bg-gray-100 rounded-md transition-colors self-end"
@@ -491,12 +507,10 @@ export default function InboxPage() {
                         }`}
                       >
                         <div className="flex items-start gap-2.5">
-                          {/* Avatar */}
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-medium ${getAvatarColor(displayEmail)}`}>
                             {getInitials(displayName)}
                           </div>
                           
-                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2 mb-0.5">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -549,7 +563,6 @@ export default function InboxPage() {
         {selectedEmail && (
           <div className="flex-1 bg-white overflow-y-auto">
             <div className="p-6">
-              {/* Actions Bar */}
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                   <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Archive">
@@ -570,12 +583,10 @@ export default function InboxPage() {
                 </button>
               </div>
 
-              {/* Subject */}
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 {decodeHtmlEntities(selectedEmail.subject || '(No subject)')}
               </h2>
               
-              {/* Sender/Recipient Info */}
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
                 {isFromMe(selectedEmail) ? (
                   <>
@@ -609,13 +620,11 @@ export default function InboxPage() {
                 </div>
               </div>
 
-              {/* Body */}
               <div 
                 className="prose prose-sm max-w-none text-gray-700"
                 dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
               />
 
-              {/* Reply Section */}
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <button
                   onClick={() => setShowCompose(true)}
@@ -646,7 +655,7 @@ export default function InboxPage() {
   )
 }
 
-// Rich Text Editor Toolbar Button
+// Toolbar Button Component
 function ToolbarButton({ 
   onClick, 
   isActive = false, 
@@ -677,7 +686,22 @@ function ToolbarButton({
   )
 }
 
-// Compose Modal Component with Rich Text Editor
+// Get file icon based on type
+function getFileIcon(mimeType: string) {
+  if (mimeType.startsWith('image/')) return FileImage
+  if (mimeType.includes('pdf')) return FileText
+  if (mimeType.includes('zip') || mimeType.includes('rar')) return FileArchive
+  return File
+}
+
+// Format file size
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+// Compose Modal with Attachments, Signatures, and Templates
 function ComposeModal({ 
   onClose, 
   userId, 
@@ -689,6 +713,9 @@ function ComposeModal({
   replyTo?: Email | null
   onSent: () => void
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  
   const extractEmailAddr = (from: string) => {
     const match = from.match(/<(.+)>/)
     return match ? match[1] : from
@@ -699,22 +726,21 @@ function ComposeModal({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [signatures, setSignatures] = useState<EmailSignature[]>([])
+  const [templates, setTemplates] = useState<EmailTemplate[]>([])
+  const [showSignatureDropdown, setShowSignatureDropdown] = useState(false)
+  const [showTemplateDropdown, setShowTemplateDropdown] = useState(false)
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        heading: false,
-      }),
+      StarterKit.configure({ heading: false }),
       Underline,
       TiptapLink.configure({
         openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-primary-600 underline',
-        },
+        HTMLAttributes: { class: 'text-primary-600 underline' },
       }),
-      Placeholder.configure({
-        placeholder: 'Write your message...',
-      }),
+      Placeholder.configure({ placeholder: 'Write your message...' }),
     ],
     content: '',
     editorProps: {
@@ -724,20 +750,102 @@ function ComposeModal({
     },
   })
 
+  // Fetch signatures and templates
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [sigRes, tempRes] = await Promise.all([
+          fetch(`/api/email/signatures?userId=${userId}`),
+          fetch(`/api/email/templates?userId=${userId}`)
+        ])
+        
+        const sigData = await sigRes.json()
+        const tempData = await tempRes.json()
+        
+        if (sigData.signatures) setSignatures(sigData.signatures)
+        if (tempData.templates) setTemplates(tempData.templates)
+        
+        // Auto-insert default signature
+        const defaultSig = sigData.signatures?.find((s: EmailSignature) => s.is_default)
+        if (defaultSig && editor) {
+          setTimeout(() => {
+            editor.commands.setContent(`<p></p><br/>${defaultSig.content}`)
+          }, 100)
+        }
+      } catch (err) {
+        console.error('Error fetching signatures/templates:', err)
+      }
+    }
+    
+    if (userId) fetchData()
+  }, [userId, editor])
+
   const setLink = useCallback(() => {
     if (!editor) return
-    
     const previousUrl = editor.getAttributes('link').href
     const url = window.prompt('URL', previousUrl)
-
     if (url === null) return
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
       return
     }
-
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }, [editor])
+
+  // Handle file selection
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, isImage = false) => {
+    const files = e.target.files
+    if (!files) return
+
+    const maxSize = 25 * 1024 * 1024 // 25MB limit
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      
+      if (file.size > maxSize) {
+        setError(`File "${file.name}" is too large. Maximum size is 25MB.`)
+        continue
+      }
+
+      // Convert to base64
+      const reader = new FileReader()
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1]
+        setAttachments(prev => [...prev, {
+          filename: file.name,
+          mimeType: file.type,
+          data: base64,
+          size: file.size
+        }])
+      }
+      reader.readAsDataURL(file)
+    }
+
+    // Reset input
+    e.target.value = ''
+  }
+
+  // Remove attachment
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Insert signature
+  const insertSignature = (signature: EmailSignature) => {
+    if (!editor) return
+    const currentContent = editor.getHTML()
+    editor.commands.setContent(`${currentContent}<br/>${signature.content}`)
+    setShowSignatureDropdown(false)
+  }
+
+  // Use template
+  const useTemplate = (template: EmailTemplate) => {
+    setSubject(template.subject)
+    if (editor) {
+      editor.commands.setContent(template.content)
+    }
+    setShowTemplateDropdown(false)
+  }
 
   const handleSend = async () => {
     if (!to || !subject || !editor?.getHTML()) {
@@ -758,6 +866,7 @@ function ComposeModal({
           subject,
           body: editor.getHTML(),
           threadId: replyTo?.threadId,
+          attachments: attachments.length > 0 ? attachments : undefined,
         }),
       })
 
@@ -778,7 +887,7 @@ function ComposeModal({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
       <div className={`bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full transition-all duration-300 ${
-        isExpanded ? 'sm:max-w-4xl sm:h-[80vh]' : 'sm:max-w-2xl'
+        isExpanded ? 'sm:max-w-4xl sm:h-[85vh]' : 'sm:max-w-2xl'
       } max-h-[95vh] flex flex-col`}>
         
         {/* Header */}
@@ -911,24 +1020,139 @@ function ComposeModal({
             >
               <Redo className="w-4 h-4" />
             </ToolbarButton>
+
+            {/* Template & Signature Buttons */}
+            <div className="ml-auto flex items-center gap-1">
+              {templates.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Templates
+                  </button>
+                  {showTemplateDropdown && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                      {templates.map((template) => (
+                        <button
+                          key={template.id}
+                          onClick={() => useTemplate(template)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50"
+                        >
+                          <span className="font-medium text-gray-900">{template.name}</span>
+                          <span className="block text-gray-500 truncate">{template.subject}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {signatures.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSignatureDropdown(!showSignatureDropdown)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                  >
+                    <Signature className="w-3.5 h-3.5" />
+                    Signatures
+                  </button>
+                  {showSignatureDropdown && (
+                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                      {signatures.map((sig) => (
+                        <button
+                          key={sig.id}
+                          onClick={() => insertSignature(sig)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <span className="font-medium text-gray-900">{sig.name}</span>
+                          {sig.is_default && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded">
+                              Default
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Editor */}
           <div className="flex-1 overflow-y-auto">
             <EditorContent editor={editor} className="h-full" />
           </div>
+
+          {/* Attachments Preview */}
+          {attachments.length > 0 && (
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50">
+              <p className="text-xs font-medium text-gray-600 mb-2">
+                Attachments ({attachments.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((file, index) => {
+                  const FileIcon = getFileIcon(file.mimeType)
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200"
+                    >
+                      <FileIcon className="w-4 h-4 text-gray-400" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-gray-700 truncate max-w-[150px]">
+                          {file.filename}
+                        </p>
+                        <p className="text-[10px] text-gray-500">
+                          {formatFileSize(file.size)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeAttachment(index)}
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
+                        <X className="w-3 h-3 text-gray-400" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50/80">
           <div className="flex items-center gap-1">
+            {/* File Input (Hidden) */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={(e) => handleFileSelect(e, false)}
+              className="hidden"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar"
+            />
+            <input
+              ref={imageInputRef}
+              type="file"
+              multiple
+              onChange={(e) => handleFileSelect(e, true)}
+              className="hidden"
+              accept="image/*"
+            />
+            
             <button 
+              onClick={() => fileInputRef.current?.click()}
               className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
               title="Attach file"
             >
               <Paperclip className="w-4 h-4 text-gray-500" />
             </button>
             <button 
+              onClick={() => imageInputRef.current?.click()}
               className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
               title="Insert image"
             >
@@ -963,7 +1187,18 @@ function ComposeModal({
         </div>
       </div>
 
-      {/* Custom styles for TipTap */}
+      {/* Click outside to close dropdowns */}
+      {(showSignatureDropdown || showTemplateDropdown) && (
+        <div 
+          className="fixed inset-0 z-0" 
+          onClick={() => {
+            setShowSignatureDropdown(false)
+            setShowTemplateDropdown(false)
+          }}
+        />
+      )}
+
+      {/* TipTap Styles */}
       <style jsx global>{`
         .ProseMirror p.is-editor-empty:first-child::before {
           color: #9ca3af;
