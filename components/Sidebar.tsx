@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/app/contexts/AuthContext'
 import {
   LayoutDashboard,
   Users,
@@ -25,8 +26,14 @@ import {
   UtensilsCrossed,
   Plane,
   BellRing,
-  Coins
+  Coins,
+  LogOut
 } from 'lucide-react'
+
+interface SidebarProps {
+  isCollapsed: boolean
+  setIsCollapsed: (collapsed: boolean) => void
+}
 
 interface NavItem {
   label: string
@@ -89,6 +96,15 @@ const navigation: NavSection[] = [
 export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const { profile, signOut } = useAuth()
+
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+    } catch (error) {
+      console.error('Sign out error:', error)
+    }
+  }
 
   return (
     <>
@@ -112,7 +128,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         />
       )}
 
-      {/* ⭐ REDESIGNED SIDEBAR - Compact Linear Style */}
+      {/* Sidebar */}
       <aside
         className={`
           fixed top-0 left-0 z-40 h-screen bg-white border-r border-gray-200
@@ -121,7 +137,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        {/* ⭐ COMPACT LOGO HEADER */}
+        {/* Logo Header */}
         <div className="flex items-center justify-between h-14 px-3 border-b border-gray-200 flex-shrink-0">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-7 h-7 flex-shrink-0">
@@ -138,7 +154,6 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             )}
           </Link>
           
-          {/* Collapse Toggle - Desktop Only */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="hidden lg:block p-1 hover:bg-gray-100 rounded transition-colors"
@@ -151,11 +166,10 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </button>
         </div>
 
-        {/* ⭐ COMPACT NAVIGATION - Reduced spacing */}
+        {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
           {navigation.map((section) => (
             <div key={section.title}>
-              {/* Section Title - Smaller */}
               {!isCollapsed && (
                 <div className="px-2 mb-1.5">
                   <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
@@ -164,12 +178,10 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 </div>
               )}
 
-              {/* Separator for collapsed state */}
               {isCollapsed && section.title !== 'Main' && (
                 <div className="h-px bg-gray-200 my-2 mx-2"></div>
               )}
 
-              {/* Section Items - Compact */}
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const Icon = item.icon
@@ -207,12 +219,12 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           ))}
         </nav>
 
-        {/* ⭐ COMPACT USER PROFILE FOOTER */}
-        <div className="border-t border-gray-200 p-2.5 flex-shrink-0">
-          <button
+        {/* User Profile Footer with Sign Out */}
+        <div className="border-t border-gray-200 p-2.5 flex-shrink-0 space-y-1">
+          {/* User Info */}
+          <div
             className={`
               flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md
-              hover:bg-gray-50 transition-colors
               ${isCollapsed ? 'justify-center' : ''}
             `}
           >
@@ -222,12 +234,28 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             {!isCollapsed && (
               <div className="flex-1 text-left min-w-0">
                 <p className="text-[13px] font-medium text-gray-700 truncate">
-                  Islam Hussein
+                  {profile?.full_name || 'User'}
                 </p>
                 <p className="text-[10px] text-gray-500 truncate">
-                  AUTOURA
+                  {profile?.role?.toUpperCase() || 'AUTOURA'}
                 </p>
               </div>
+            )}
+          </div>
+          
+          {/* Sign Out Button */}
+          <button
+            onClick={handleSignOut}
+            className={`
+              flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md
+              text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors
+              ${isCollapsed ? 'justify-center' : ''}
+            `}
+            title={isCollapsed ? 'Sign out' : ''}
+          >
+            <LogOut className="w-[18px] h-[18px] flex-shrink-0" />
+            {!isCollapsed && (
+              <span className="text-[13px]">Sign out</span>
             )}
           </button>
         </div>
