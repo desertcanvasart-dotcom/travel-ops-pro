@@ -9,11 +9,6 @@ import Underline from '@tiptap/extension-underline'
 import TiptapLink from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { 
-  const [customLabels, setCustomLabels] = useState<any[]>([])
-const [showLabelModal, setShowLabelModal] = useState(false)
-const [showMoveMenu, setShowMoveMenu] = useState<string | null>(null)
-const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
-
   Mail, 
   Inbox, 
   Send, 
@@ -43,7 +38,13 @@ const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
   FileText,
   FileImage,
   FileArchive,
-  Signature
+  Signature,
+  FolderPlus,
+  Tag,
+  MailOpen,
+  Move,
+  CheckSquare,
+  Square
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
@@ -82,6 +83,24 @@ interface EmailTemplate {
   category: string
 }
 
+interface GmailLabel {
+  id: string
+  name: string
+  type: 'system' | 'user'
+  color?: {
+    backgroundColor: string
+    textColor: string
+  }
+}
+
+interface EmailTemplate {
+  id: string
+  name: string
+  subject: string
+  content: string
+  category: string
+}
+
 type FilterType = 'all' | 'unread' | 'starred'
 type FolderType = 'inbox' | 'sent' | 'drafts'
 
@@ -100,6 +119,12 @@ export default function InboxPage() {
   const [folder, setFolder] = useState<FolderType>('inbox')
   const [starredEmails, setStarredEmails] = useState<Set<string>>(new Set())
   const [isFolderCollapsed, setIsFolderCollapsed] = useState(false)
+  
+  const [customLabels, setCustomLabels] = useState<GmailLabel[]>([])
+  const [showLabelModal, setShowLabelModal] = useState(false)
+  const [showMoveMenu, setShowMoveMenu] = useState<string | null>(null)
+  const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
+  const [actionLoading, setActionLoading] = useState(false)
   
   const supabase = createClient()
 
