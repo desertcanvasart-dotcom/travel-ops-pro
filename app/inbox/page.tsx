@@ -159,6 +159,19 @@ export default function InboxPage() {
     }
   }
 
+  const fetchLabels = async () => {
+    if (!user) return
+    try {
+      const response = await fetch(`/api/gmail/labels?userId=${user.id}`)
+      const data = await response.json()
+      if (data.labels) {
+        setCustomLabels(data.labels.filter((l: GmailLabel) => l.type === 'user'))
+      }
+    } catch (err) {
+      console.error('Error fetching labels:', err)
+    }
+  }
+
   const fetchEmails = async (query?: string, targetFolder?: FolderType) => {
     if (!user) return
     
@@ -171,19 +184,6 @@ export default function InboxPage() {
       
       const currentFolder = targetFolder || folder
       let folderQuery = query || ''
-
-      const fetchLabels = async () => {
-        if (!user) return
-        try {
-          const response = await fetch(`/api/gmail/labels?userId=${user.id}`)
-          const data = await response.json()
-          if (data.labels) {
-            setCustomLabels(data.labels.filter((l: any) => l.type === 'user'))
-          }
-        } catch (err) {
-          console.error('Error fetching labels:', err)
-        }
-      }
       
       // Use proper Gmail search queries
       if (currentFolder === 'sent') {
