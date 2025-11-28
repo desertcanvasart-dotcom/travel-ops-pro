@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
-export default function EmailSettingsPage() {
+function EmailSettingsContent() {
   const { user } = useAuth()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
@@ -232,5 +233,17 @@ export default function EmailSettingsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function EmailSettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    }>
+      <EmailSettingsContent />
+    </Suspense>
   )
 }
