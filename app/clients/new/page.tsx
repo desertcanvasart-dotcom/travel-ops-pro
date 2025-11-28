@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   User, Mail, Phone, MapPin, Globe, Building, CreditCard, Tag,
-  Star, Bell, Heart, ArrowLeft, Save, X
+  Star, Bell, Heart, ArrowLeft, Save, X, ChevronRight
 } from 'lucide-react'
 
 export default function NewClientPage() {
@@ -17,58 +17,39 @@ export default function NewClientPage() {
 
   // Form data
   const [formData, setFormData] = useState({
-    // Basic Information
     first_name: '',
     last_name: '',
     email: '',
     phone: '',
     alternative_phone: '',
-    
-    // Personal Details
     nationality: '',
     passport_type: 'euro_passport' as 'euro_passport' | 'other_passport',
     date_of_birth: '',
     preferred_language: 'English',
-    
-    // Address
     country: '',
     city: '',
     address_line1: '',
     address_line2: '',
     postal_code: '',
-    
-    // Contact Preferences
     preferred_contact_method: 'whatsapp' as 'email' | 'whatsapp' | 'phone' | 'sms',
     best_time_to_contact: 'morning',
     timezone: 'Africa/Cairo',
-    
-    // Travel Preferences
     preferred_accommodation_level: 'moderate' as 'budget' | 'moderate' | 'luxury' | 'ultra_luxury',
     dietary_restrictions: [] as string[],
     accessibility_needs: [] as string[],
     special_interests: [] as string[],
-    
-    // Business Information
     company_name: '',
     job_title: '',
     is_travel_agent: false,
     agent_commission_rate: 0,
-    
-    // Client Classification
     client_type: 'individual' as 'individual' | 'family' | 'group' | 'corporate' | 'agent',
     vip_status: false,
     client_source: '',
-    
-    // Marketing
     marketing_consent: false,
     newsletter_subscribed: false,
     sms_consent: false,
-    
-    // Tags and Notes
     tags: [] as string[],
     internal_notes: '',
-    
-    // Currency
     currency_preference: 'EUR' as 'EUR' | 'USD' | 'GBP'
   })
 
@@ -87,8 +68,6 @@ export default function NewClientPage() {
         .single()
 
       if (insertError) throw insertError
-
-      // Success - redirect to client profile
       router.push(`/clients/${data.id}`)
     } catch (err: any) {
       console.error('Error creating client:', err)
@@ -112,186 +91,182 @@ export default function NewClientPage() {
   }
 
   const totalSteps = 5
+  const steps = [
+    { num: 1, label: 'Basic Info', icon: User },
+    { num: 2, label: 'Contact', icon: MapPin },
+    { num: 3, label: 'Preferences', icon: Heart },
+    { num: 4, label: 'Business', icon: Building },
+    { num: 5, label: 'Classification', icon: Tag }
+  ]
+
+  // Reusable input class
+  const inputClass = "w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
+  const selectClass = "w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+  const labelClass = "block text-xs font-medium text-gray-600 mb-1"
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50/50">
       {/* Header */}
-      <div className="bg-white border-b">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
               <Link
                 href="/clients"
-                className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-3"
+                className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 mb-2"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-3.5 h-3.5" />
                 Back to Clients
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <User className="w-8 h-8 text-blue-600" />
+              <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <User className="w-5 h-5 text-primary-600" />
                 Add New Client
               </h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Create a comprehensive client profile
-              </p>
+              <p className="text-xs text-gray-500 mt-0.5">Create a comprehensive client profile</p>
             </div>
           </div>
 
           {/* Progress Steps */}
-          <div className="mt-8">
-            <div className="flex items-center justify-between">
-              {[
-                { num: 1, label: 'Basic Info' },
-                { num: 2, label: 'Contact & Address' },
-                { num: 3, label: 'Preferences' },
-                { num: 4, label: 'Business Info' },
-                { num: 5, label: 'Classification' }
-              ].map((step, index) => (
+          <div className="mt-6">
+            <div className="flex items-center">
+              {steps.map((step, index) => (
                 <div key={step.num} className="flex items-center flex-1">
-                  <div className="flex flex-col items-center flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(step.num)}
+                    className="flex flex-col items-center flex-1 group"
+                  >
                     <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all shadow-sm ${
                         currentStep >= step.num
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 text-gray-600'
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-white border border-gray-200 text-gray-400 group-hover:border-gray-300'
                       }`}
                     >
                       {step.num}
                     </div>
-                    <span className="text-xs mt-2 text-gray-600">{step.label}</span>
-                  </div>
-                  {index < 4 && (
-                    <div
-                      className={`flex-1 h-1 ${
-                        currentStep > step.num ? 'bg-blue-600' : 'bg-gray-200'
-                      }`}
-                    />
+                    <span className={`text-[10px] mt-1.5 ${currentStep >= step.num ? 'text-primary-600 font-medium' : 'text-gray-400'}`}>
+                      {step.label}
+                    </span>
+                  </button>
+                  {index < steps.length - 1 && (
+                    <div className={`flex-1 h-0.5 mx-2 ${currentStep > step.num ? 'bg-primary-600' : 'bg-gray-200'}`} />
                   )}
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <form onSubmit={handleSubmit} className="max-w-4xl mx-auto px-6 py-6">
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-800">{error}</p>
+          <div className="mb-4 bg-white border border-red-200 rounded-lg p-3 shadow-sm border-l-4 border-l-red-500">
+            <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
 
         {/* Step 1: Basic Information */}
         {currentStep === 1 && (
-          <div className="bg-white rounded-lg shadow p-8">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-              <User className="w-6 h-6 text-blue-600" />
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <User className="w-4 h-4 text-primary-600" />
               Basic Information
             </h2>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  First Name *
-                </label>
+                <label className={labelClass}>First Name *</label>
                 <input
                   type="text"
                   required
                   value={formData.first_name}
                   onChange={(e) => handleInputChange('first_name', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                   placeholder="John"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Last Name *
-                </label>
+                <label className={labelClass}>Last Name *</label>
                 <input
                   type="text"
                   required
                   value={formData.last_name}
                   onChange={(e) => handleInputChange('last_name', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                   placeholder="Smith"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="john@example.com"
-                />
+                <label className={labelClass}>Email Address *</label>
+                <div className="relative">
+                  <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    className={`${inputClass} pl-9`}
+                    placeholder="john@example.com"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="+1 234 567 8900"
-                />
+                <label className={labelClass}>Phone Number</label>
+                <div className="relative">
+                  <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    className={`${inputClass} pl-9`}
+                    placeholder="+1 234 567 8900"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Alternative Phone
-                </label>
+                <label className={labelClass}>Alternative Phone</label>
                 <input
                   type="tel"
                   value={formData.alternative_phone}
                   onChange={(e) => handleInputChange('alternative_phone', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                   placeholder="+1 234 567 8901"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date of Birth
-                </label>
+                <label className={labelClass}>Date of Birth</label>
                 <input
                   type="date"
                   value={formData.date_of_birth}
                   onChange={(e) => handleInputChange('date_of_birth', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nationality
-                </label>
+                <label className={labelClass}>Nationality</label>
                 <input
                   type="text"
                   value={formData.nationality}
                   onChange={(e) => handleInputChange('nationality', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                   placeholder="American, British, Spanish..."
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Passport Type
-                </label>
+                <label className={labelClass}>Passport Type</label>
                 <select
                   value={formData.passport_type}
                   onChange={(e) => handleInputChange('passport_type', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={selectClass}
                 >
                   <option value="euro_passport">Euro Passport</option>
                   <option value="other_passport">Other Passport</option>
@@ -299,13 +274,11 @@ export default function NewClientPage() {
               </div>
 
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Preferred Language
-                </label>
+                <label className={labelClass}>Preferred Language</label>
                 <select
                   value={formData.preferred_language}
                   onChange={(e) => handleInputChange('preferred_language', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={selectClass}
                 >
                   <option value="English">English</option>
                   <option value="Spanish">Spanish</option>
@@ -323,24 +296,23 @@ export default function NewClientPage() {
 
         {/* Step 2: Contact & Address */}
         {currentStep === 2 && (
-          <div className="bg-white rounded-lg shadow p-8">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-              <MapPin className="w-6 h-6 text-blue-600" />
-              Contact & Address Information
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-primary-600" />
+              Contact & Address
             </h2>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
+              {/* Contact Preferences */}
               <div>
-                <h3 className="text-lg font-semibold mb-4">Contact Preferences</h3>
-                <div className="grid grid-cols-3 gap-4">
+                <h3 className="text-xs font-semibold text-gray-700 mb-3">Contact Preferences</h3>
+                <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Preferred Contact Method
-                    </label>
+                    <label className={labelClass}>Preferred Method</label>
                     <select
                       value={formData.preferred_contact_method}
                       onChange={(e) => handleInputChange('preferred_contact_method', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={selectClass}
                     >
                       <option value="whatsapp">WhatsApp</option>
                       <option value="email">Email</option>
@@ -350,13 +322,11 @@ export default function NewClientPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Best Time to Contact
-                    </label>
+                    <label className={labelClass}>Best Time</label>
                     <select
                       value={formData.best_time_to_contact}
                       onChange={(e) => handleInputChange('best_time_to_contact', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={selectClass}
                     >
                       <option value="morning">Morning (8am-12pm)</option>
                       <option value="afternoon">Afternoon (12pm-5pm)</option>
@@ -366,80 +336,69 @@ export default function NewClientPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Timezone
-                    </label>
+                    <label className={labelClass}>Timezone</label>
                     <input
                       type="text"
                       value={formData.timezone}
                       onChange={(e) => handleInputChange('timezone', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={inputClass}
                       placeholder="Africa/Cairo"
                     />
                   </div>
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Address</h3>
-                <div className="grid grid-cols-2 gap-4">
+              {/* Address */}
+              <div className="pt-4 border-t border-gray-100">
+                <h3 className="text-xs font-semibold text-gray-700 mb-3">Address</h3>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Country
-                    </label>
+                    <label className={labelClass}>Country</label>
                     <input
                       type="text"
                       value={formData.country}
                       onChange={(e) => handleInputChange('country', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={inputClass}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      City
-                    </label>
+                    <label className={labelClass}>City</label>
                     <input
                       type="text"
                       value={formData.city}
                       onChange={(e) => handleInputChange('city', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={inputClass}
                     />
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Address Line 1
-                    </label>
+                    <label className={labelClass}>Address Line 1</label>
                     <input
                       type="text"
                       value={formData.address_line1}
                       onChange={(e) => handleInputChange('address_line1', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={inputClass}
                     />
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Address Line 2
-                    </label>
+                    <label className={labelClass}>Address Line 2</label>
                     <input
                       type="text"
                       value={formData.address_line2}
                       onChange={(e) => handleInputChange('address_line2', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={inputClass}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Postal Code
-                    </label>
+                    <label className={labelClass}>Postal Code</label>
                     <input
                       type="text"
                       value={formData.postal_code}
                       onChange={(e) => handleInputChange('postal_code', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className={inputClass}
                     />
                   </div>
                 </div>
@@ -450,21 +409,19 @@ export default function NewClientPage() {
 
         {/* Step 3: Travel Preferences */}
         {currentStep === 3 && (
-          <div className="bg-white rounded-lg shadow p-8">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-              <Heart className="w-6 h-6 text-blue-600" />
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Heart className="w-4 h-4 text-primary-600" />
               Travel Preferences
             </h2>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Accommodation Level
-                </label>
+                <label className={labelClass}>Accommodation Level</label>
                 <select
                   value={formData.preferred_accommodation_level}
                   onChange={(e) => handleInputChange('preferred_accommodation_level', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={selectClass}
                 >
                   <option value="budget">Budget (1-2 star)</option>
                   <option value="moderate">Moderate (3 star)</option>
@@ -473,58 +430,52 @@ export default function NewClientPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Special Interests
-                </label>
-                <div className="grid grid-cols-4 gap-3">
+              <div className="pt-4 border-t border-gray-100">
+                <label className="text-xs font-semibold text-gray-700 mb-3 block">Special Interests</label>
+                <div className="grid grid-cols-4 gap-2">
                   {['History', 'Photography', 'Adventure', 'Food', 'Culture', 'Shopping', 'Nature', 'Architecture'].map((interest) => (
-                    <label key={interest} className="flex items-center gap-2 cursor-pointer">
+                    <label key={interest} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                       <input
                         type="checkbox"
                         checked={formData.special_interests.includes(interest)}
                         onChange={() => handleArrayToggle('special_interests', interest)}
-                        className="w-4 h-4 text-blue-600 rounded"
+                        className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                       />
-                      <span className="text-sm">{interest}</span>
+                      <span className="text-xs text-gray-700">{interest}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Dietary Restrictions
-                </label>
-                <div className="grid grid-cols-4 gap-3">
+              <div className="pt-4 border-t border-gray-100">
+                <label className="text-xs font-semibold text-gray-700 mb-3 block">Dietary Restrictions</label>
+                <div className="grid grid-cols-4 gap-2">
                   {['Vegetarian', 'Vegan', 'Halal', 'Kosher', 'Gluten-Free', 'Lactose-Free', 'Nut Allergy', 'None'].map((restriction) => (
-                    <label key={restriction} className="flex items-center gap-2 cursor-pointer">
+                    <label key={restriction} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                       <input
                         type="checkbox"
                         checked={formData.dietary_restrictions.includes(restriction)}
                         onChange={() => handleArrayToggle('dietary_restrictions', restriction)}
-                        className="w-4 h-4 text-blue-600 rounded"
+                        className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                       />
-                      <span className="text-sm">{restriction}</span>
+                      <span className="text-xs text-gray-700">{restriction}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Accessibility Needs
-                </label>
-                <div className="grid grid-cols-3 gap-3">
+              <div className="pt-4 border-t border-gray-100">
+                <label className="text-xs font-semibold text-gray-700 mb-3 block">Accessibility Needs</label>
+                <div className="grid grid-cols-3 gap-2">
                   {['Wheelchair Access', 'Elevator Required', 'Ground Floor', 'Hearing Assistance', 'Visual Assistance', 'None'].map((need) => (
-                    <label key={need} className="flex items-center gap-2 cursor-pointer">
+                    <label key={need} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                       <input
                         type="checkbox"
                         checked={formData.accessibility_needs.includes(need)}
                         onChange={() => handleArrayToggle('accessibility_needs', need)}
-                        className="w-4 h-4 text-blue-600 rounded"
+                        className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                       />
-                      <span className="text-sm">{need}</span>
+                      <span className="text-xs text-gray-700">{need}</span>
                     </label>
                   ))}
                 </div>
@@ -535,54 +486,48 @@ export default function NewClientPage() {
 
         {/* Step 4: Business Information */}
         {currentStep === 4 && (
-          <div className="bg-white rounded-lg shadow p-8">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-              <Building className="w-6 h-6 text-blue-600" />
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Building className="w-4 h-4 text-primary-600" />
               Business Information
             </h2>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Company Name
-                </label>
+                <label className={labelClass}>Company Name</label>
                 <input
                   type="text"
                   value={formData.company_name}
                   onChange={(e) => handleInputChange('company_name', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Job Title
-                </label>
+                <label className={labelClass}>Job Title</label>
                 <input
                   type="text"
                   value={formData.job_title}
                   onChange={(e) => handleInputChange('job_title', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={inputClass}
                 />
               </div>
 
-              <div className="col-span-2">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="col-span-2 pt-3 border-t border-gray-100">
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                   <input
                     type="checkbox"
                     checked={formData.is_travel_agent}
                     onChange={(e) => handleInputChange('is_travel_agent', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded"
+                    className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                   />
-                  <span className="text-sm font-medium">This client is a travel agent</span>
+                  <span className="text-xs font-medium text-gray-700">This client is a travel agent</span>
                 </label>
               </div>
 
               {formData.is_travel_agent && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Commission Rate (%)
-                  </label>
+                  <label className={labelClass}>Commission Rate (%)</label>
                   <input
                     type="number"
                     min="0"
@@ -590,19 +535,17 @@ export default function NewClientPage() {
                     step="0.1"
                     value={formData.agent_commission_rate}
                     onChange={(e) => handleInputChange('agent_commission_rate', parseFloat(e.target.value))}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={inputClass}
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Currency Preference
-                </label>
+                <label className={labelClass}>Currency Preference</label>
                 <select
                   value={formData.currency_preference}
                   onChange={(e) => handleInputChange('currency_preference', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className={selectClass}
                 >
                   <option value="EUR">EUR (€)</option>
                   <option value="USD">USD ($)</option>
@@ -615,22 +558,20 @@ export default function NewClientPage() {
 
         {/* Step 5: Classification & Marketing */}
         {currentStep === 5 && (
-          <div className="bg-white rounded-lg shadow p-8">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-              <Tag className="w-6 h-6 text-blue-600" />
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Tag className="w-4 h-4 text-primary-600" />
               Classification & Marketing
             </h2>
 
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Client Type
-                  </label>
+                  <label className={labelClass}>Client Type</label>
                   <select
                     value={formData.client_type}
                     onChange={(e) => handleInputChange('client_type', e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={selectClass}
                   >
                     <option value="individual">Individual</option>
                     <option value="family">Family</option>
@@ -641,13 +582,11 @@ export default function NewClientPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Client Source
-                  </label>
+                  <label className={labelClass}>Client Source</label>
                   <select
                     value={formData.client_source}
                     onChange={(e) => handleInputChange('client_source', e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={selectClass}
                   >
                     <option value="">Select source...</option>
                     <option value="website">Website</option>
@@ -662,64 +601,62 @@ export default function NewClientPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer mb-4">
+              <div className="pt-3 border-t border-gray-100">
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-yellow-50 transition-colors">
                   <input
                     type="checkbox"
                     checked={formData.vip_status}
                     onChange={(e) => handleInputChange('vip_status', e.target.checked)}
-                    className="w-5 h-5 text-yellow-600 rounded"
+                    className="w-3.5 h-3.5 text-yellow-500 rounded border-gray-300"
                   />
-                  <Star className="w-5 h-5 text-yellow-500" />
-                  <span className="text-sm font-medium">Mark as VIP Client</span>
+                  <Star className="w-4 h-4 text-yellow-500" />
+                  <span className="text-xs font-medium text-gray-700">Mark as VIP Client</span>
                 </label>
               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold mb-3">Marketing Preferences</h3>
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
+              <div className="pt-4 border-t border-gray-100">
+                <h3 className="text-xs font-semibold text-gray-700 mb-3">Marketing Preferences</h3>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                     <input
                       type="checkbox"
                       checked={formData.marketing_consent}
                       onChange={(e) => handleInputChange('marketing_consent', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
+                      className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                     />
-                    <span className="text-sm">Marketing communications consent</span>
+                    <span className="text-xs text-gray-700">Marketing communications consent</span>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                     <input
                       type="checkbox"
                       checked={formData.newsletter_subscribed}
                       onChange={(e) => handleInputChange('newsletter_subscribed', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
+                      className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                     />
-                    <span className="text-sm">Subscribe to newsletter</span>
+                    <span className="text-xs text-gray-700">Subscribe to newsletter</span>
                   </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                     <input
                       type="checkbox"
                       checked={formData.sms_consent}
                       onChange={(e) => handleInputChange('sms_consent', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
+                      className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                     />
-                    <span className="text-sm">SMS notifications consent</span>
+                    <span className="text-xs text-gray-700">SMS notifications consent</span>
                   </label>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Internal Notes
-                </label>
+              <div className="pt-4 border-t border-gray-100">
+                <label className={labelClass}>Internal Notes</label>
                 <textarea
-                  rows={4}
+                  rows={3}
                   value={formData.internal_notes}
                   onChange={(e) => handleInputChange('internal_notes', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Private notes about this client (not visible to client)..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  placeholder="Private notes about this client..."
                 />
               </div>
             </div>
@@ -727,22 +664,22 @@ export default function NewClientPage() {
         )}
 
         {/* Navigation Buttons */}
-        <div className="flex items-center justify-between mt-8">
+        <div className="flex items-center justify-between mt-5">
           {currentStep > 1 ? (
             <button
               type="button"
               onClick={() => setCurrentStep(currentStep - 1)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-3.5 h-3.5" />
               Previous
             </button>
           ) : (
             <Link
               href="/clients"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
             >
-              <X className="w-5 h-5" />
+              <X className="w-3.5 h-3.5" />
               Cancel
             </Link>
           )}
@@ -751,25 +688,25 @@ export default function NewClientPage() {
             <button
               type="button"
               onClick={() => setCurrentStep(currentStep + 1)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors shadow-sm"
             >
               Next
-              <ArrowLeft className="w-5 h-5 rotate-180" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           ) : (
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></div>
                   Creating...
                 </>
               ) : (
                 <>
-                  <Save className="w-5 h-5" />
+                  <Save className="w-3.5 h-3.5" />
                   Create Client
                 </>
               )}

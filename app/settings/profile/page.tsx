@@ -115,18 +115,18 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F7F5]">
-      {/* ⭐ COMPACT HEADER - Dark Olive */}
-      <header className="bg-[#3d4f3d] border-b border-[#2d3d2d]">
+    <div className="min-h-screen bg-gray-50/50">
+      {/* ⭐ CLEAN HEADER - White with subtle border */}
+      <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-white">Profile Settings</h1>
-              <p className="text-xs text-gray-300 mt-0.5">Manage your account and preferences</p>
+              <h1 className="text-lg font-semibold text-gray-900">Profile Settings</h1>
+              <p className="text-xs text-gray-500 mt-0.5">Manage your account and preferences</p>
             </div>
             <Link 
               href="/" 
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#3d4f3d] bg-white rounded-md hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Back to Dashboard
@@ -139,18 +139,18 @@ export default function ProfilePage() {
       <div className="p-6">
         <div className="max-w-4xl mx-auto space-y-4">
           
-          {/* ⭐ PROFILE CARD - Compact Design */}
-          <div className="bg-white rounded-lg border border-[#E2E4E1] overflow-hidden">
-            {/* Avatar Section - Darker olive header */}
-            <div className="bg-[#4a5d4a] p-5">
+          {/* ⭐ PROFILE CARD - White with shadow */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            {/* Avatar Section - Light gray background */}
+            <div className="bg-gray-50 border-b border-gray-200 p-5">
               <div className="flex items-center gap-4">
                 <div className="relative">
-                  <div className="w-20 h-20 rounded-full bg-white p-0.5">
+                  <div className="w-20 h-20 rounded-full bg-white border-2 border-gray-200 shadow-sm p-0.5">
                     {profileData.avatar ? (
                       <img src={profileData.avatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
                     ) : (
-                      <div className="w-full h-full rounded-full bg-[#e8ede8] flex items-center justify-center">
-                        <User className="w-10 h-10 text-[#4a5d4a]" />
+                      <div className="w-full h-full rounded-full bg-gray-100 flex items-center justify-center">
+                        <User className="w-10 h-10 text-gray-400" />
                       </div>
                     )}
                   </div>
@@ -158,28 +158,28 @@ export default function ProfilePage() {
                     htmlFor="avatar-upload"
                     className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
                   >
-                    <Camera className="w-3.5 h-3.5 text-[#4a5d4a]" />
+                    <Camera className="w-3.5 h-3.5 text-primary-600" />
                     <input id="avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
                   </label>
                 </div>
                 
-                <div className="text-white">
-                  <h2 className="text-base font-semibold">{profileData.name}</h2>
-                  <p className="text-xs text-gray-300">{profileData.role}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{profileData.company}</p>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">{profileData.name}</h2>
+                  <p className="text-xs text-primary-600 font-medium">{profileData.role}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{profileData.company}</p>
                 </div>
               </div>
             </div>
 
             {/* ⭐ COMPACT TABS */}
-            <div className="border-b border-[#E2E4E1]">
+            <div className="border-b border-gray-200">
               <div className="flex">
                 <button
                   onClick={() => setActiveTab('profile')}
                   className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-all ${
                     activeTab === 'profile'
-                      ? 'text-[#4a5d4a] border-b-2 border-[#4a5d4a] bg-[#f0f4f0]'
-                      : 'text-gray-500 hover:text-[#4a5d4a] hover:bg-gray-50'
+                      ? 'text-primary-600 border-b-2 border-primary-600'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                   }`}
                 >
                   <User className="w-3.5 h-3.5" />
@@ -189,8 +189,8 @@ export default function ProfilePage() {
                   onClick={() => setActiveTab('password')}
                   className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-all ${
                     activeTab === 'password'
-                      ? 'text-[#4a5d4a] border-b-2 border-[#4a5d4a] bg-[#f0f4f0]'
-                      : 'text-gray-500 hover:text-[#4a5d4a] hover:bg-gray-50'
+                      ? 'text-primary-600 border-b-2 border-primary-600'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                   }`}
                 >
                   <Lock className="w-3.5 h-3.5" />
@@ -199,7 +199,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ⭐ TAB CONTENT - Tighter Spacing */}
+            {/* ⭐ TAB CONTENT */}
             <div className="p-5">
               {activeTab === 'profile' && (
                 <form onSubmit={handleSaveProfile}>
@@ -207,7 +207,7 @@ export default function ProfilePage() {
                     {/* Personal Information */}
                     <div>
                       <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-1.5">
-                        <User className="w-4 h-4 text-[#4a5d4a]" />
+                        <User className="w-4 h-4 text-primary-600" />
                         Personal Information
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -219,7 +219,7 @@ export default function ProfilePage() {
                             value={profileData.name}
                             onChange={handleProfileChange}
                             required
-                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                           />
                         </div>
                         <div>
@@ -232,7 +232,7 @@ export default function ProfilePage() {
                               value={profileData.email}
                               onChange={handleProfileChange}
                               required
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                             />
                           </div>
                         </div>
@@ -245,7 +245,7 @@ export default function ProfilePage() {
                               name="phone"
                               value={profileData.phone}
                               onChange={handleProfileChange}
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                             />
                           </div>
                         </div>
@@ -256,7 +256,7 @@ export default function ProfilePage() {
                             name="role"
                             value={profileData.role}
                             onChange={handleProfileChange}
-                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                           />
                         </div>
                       </div>
@@ -265,7 +265,7 @@ export default function ProfilePage() {
                     {/* Company Information */}
                     <div className="pt-4 border-t border-gray-100">
                       <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-1.5">
-                        <Building2 className="w-4 h-4 text-[#4a5d4a]" />
+                        <Building2 className="w-4 h-4 text-primary-600" />
                         Company Information
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -276,7 +276,7 @@ export default function ProfilePage() {
                             name="company"
                             value={profileData.company}
                             onChange={handleProfileChange}
-                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                           />
                         </div>
                         <div>
@@ -288,7 +288,7 @@ export default function ProfilePage() {
                               name="website"
                               value={profileData.website}
                               onChange={handleProfileChange}
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                             />
                           </div>
                         </div>
@@ -299,7 +299,7 @@ export default function ProfilePage() {
                             name="address"
                             value={profileData.address}
                             onChange={handleProfileChange}
-                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                           />
                         </div>
                         <div>
@@ -311,7 +311,7 @@ export default function ProfilePage() {
                               name="city"
                               value={profileData.city}
                               onChange={handleProfileChange}
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                             />
                           </div>
                         </div>
@@ -322,7 +322,7 @@ export default function ProfilePage() {
                             name="country"
                             value={profileData.country}
                             onChange={handleProfileChange}
-                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                           />
                         </div>
                       </div>
@@ -333,7 +333,7 @@ export default function ProfilePage() {
                       <button
                         type="submit"
                         disabled={loading}
-                        className="px-4 py-2 text-xs font-medium text-white bg-[#4a5d4a] rounded-md hover:bg-[#3d4f3d] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        className="px-4 py-2 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                       >
                         <Save className="w-3.5 h-3.5" />
                         {loading ? 'Saving...' : 'Save Changes'}
@@ -348,7 +348,7 @@ export default function ProfilePage() {
                   <div className="space-y-4 max-w-md">
                     <div>
                       <h3 className="text-sm font-semibold text-gray-800 mb-2 flex items-center gap-1.5">
-                        <Lock className="w-4 h-4 text-[#4a5d4a]" />
+                        <Lock className="w-4 h-4 text-primary-600" />
                         Change Password
                       </h3>
                       <p className="text-xs text-gray-500 mb-4">
@@ -363,7 +363,7 @@ export default function ProfilePage() {
                         value={passwordData.currentPassword}
                         onChange={handlePasswordChange}
                         required
-                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                         placeholder="Enter current password"
                       />
                     </div>
@@ -376,7 +376,7 @@ export default function ProfilePage() {
                         onChange={handlePasswordChange}
                         required
                         minLength={8}
-                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                         placeholder="Enter new password"
                       />
                     </div>
@@ -389,7 +389,7 @@ export default function ProfilePage() {
                         onChange={handlePasswordChange}
                         required
                         minLength={8}
-                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-[#4a5d4a] focus:border-[#4a5d4a] outline-none"
+                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                         placeholder="Confirm new password"
                       />
                     </div>
@@ -397,7 +397,7 @@ export default function ProfilePage() {
                       <button
                         type="submit"
                         disabled={loading}
-                        className="px-4 py-2 text-xs font-medium text-white bg-[#4a5d4a] rounded-md hover:bg-[#3d4f3d] transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        className="px-4 py-2 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                       >
                         <Lock className="w-3.5 h-3.5" />
                         {loading ? 'Changing...' : 'Change Password'}
@@ -409,10 +409,10 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* ⭐ BOTTOM CARDS - Compact 2-Column */}
+          {/* ⭐ BOTTOM CARDS - White with shadow */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Account Activity */}
-            <div className="bg-white rounded-lg border border-[#E2E4E1] p-4">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
               <h3 className="text-sm font-semibold text-gray-800 mb-3">Account Activity</h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between py-1.5 border-b border-gray-100">
@@ -435,11 +435,11 @@ export default function ProfilePage() {
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-white rounded-lg border border-[#E2E4E1] p-4">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
               <h3 className="text-sm font-semibold text-gray-800 mb-3">Quick Actions</h3>
               <div className="space-y-2">
                 <Link href="/clients/new" className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-50 transition-colors group">
-                  <div className="w-8 h-8 bg-blue-50 rounded-md flex items-center justify-center group-hover:bg-blue-100">
+                  <div className="w-8 h-8 bg-blue-50 rounded-md flex items-center justify-center group-hover:bg-blue-100 border border-blue-100">
                     <User className="w-4 h-4 text-blue-600" />
                   </div>
                   <div>
@@ -448,7 +448,7 @@ export default function ProfilePage() {
                   </div>
                 </Link>
                 <Link href="/itineraries" className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-50 transition-colors group">
-                  <div className="w-8 h-8 bg-green-50 rounded-md flex items-center justify-center group-hover:bg-green-100">
+                  <div className="w-8 h-8 bg-green-50 rounded-md flex items-center justify-center group-hover:bg-green-100 border border-green-100">
                     <MapPin className="w-4 h-4 text-green-600" />
                   </div>
                   <div>
@@ -457,7 +457,7 @@ export default function ProfilePage() {
                   </div>
                 </Link>
                 <Link href="/resources" className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-50 transition-colors group">
-                  <div className="w-8 h-8 bg-purple-50 rounded-md flex items-center justify-center group-hover:bg-purple-100">
+                  <div className="w-8 h-8 bg-purple-50 rounded-md flex items-center justify-center group-hover:bg-purple-100 border border-purple-100">
                     <Building2 className="w-4 h-4 text-purple-600" />
                   </div>
                   <div>
@@ -469,8 +469,8 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* ⭐ DANGER ZONE - Compact */}
-          <div className="bg-white rounded-lg border border-red-200 p-4">
+          {/* ⭐ DANGER ZONE - White with red accent border */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-l-4 border-l-red-500">
             <h3 className="text-sm font-semibold text-red-600 mb-3">Danger Zone</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -478,7 +478,7 @@ export default function ProfilePage() {
                   <p className="text-xs font-medium text-gray-700">Deactivate Account</p>
                   <p className="text-[10px] text-gray-400">Temporarily disable your account</p>
                 </div>
-                <button className="px-3 py-1.5 text-xs font-medium border border-red-200 text-red-600 rounded-md hover:bg-red-50 transition-colors">
+                <button className="px-3 py-1.5 text-xs font-medium border border-red-200 text-red-600 rounded-md hover:bg-red-50 transition-colors shadow-sm">
                   Deactivate
                 </button>
               </div>
@@ -488,7 +488,7 @@ export default function ProfilePage() {
                     <p className="text-xs font-medium text-gray-700">Delete Account</p>
                     <p className="text-[10px] text-gray-400">Permanently delete your account and all data</p>
                   </div>
-                  <button className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors">
+                  <button className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors shadow-sm">
                     Delete
                   </button>
                 </div>
