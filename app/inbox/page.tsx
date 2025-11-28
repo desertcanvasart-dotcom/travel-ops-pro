@@ -9,6 +9,11 @@ import Underline from '@tiptap/extension-underline'
 import TiptapLink from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { 
+  const [customLabels, setCustomLabels] = useState<any[]>([])
+const [showLabelModal, setShowLabelModal] = useState(false)
+const [showMoveMenu, setShowMoveMenu] = useState<string | null>(null)
+const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
+
   Mail, 
   Inbox, 
   Send, 
@@ -101,6 +106,7 @@ export default function InboxPage() {
   useEffect(() => {
     if (user) {
       checkConnectionAndFetchEmails()
+      fetchLabels()
     }
   }, [user])
 
@@ -140,6 +146,19 @@ export default function InboxPage() {
       
       const currentFolder = targetFolder || folder
       let folderQuery = query || ''
+
+      const fetchLabels = async () => {
+        if (!user) return
+        try {
+          const response = await fetch(`/api/gmail/labels?userId=${user.id}`)
+          const data = await response.json()
+          if (data.labels) {
+            setCustomLabels(data.labels.filter((l: any) => l.type === 'user'))
+          }
+        } catch (err) {
+          console.error('Error fetching labels:', err)
+        }
+      }
       
       // Use proper Gmail search queries
       if (currentFolder === 'sent') {
@@ -199,6 +218,71 @@ export default function InboxPage() {
     })
   }
 
+  const handleEmailAction = async (
+    action: string, 
+    messageIds?: string[], 
+    labelId?: string
+  ) => {
+    if (!user) return
+    
+    const ids = messageIds || (selectedEmail ? [selectedEmail.id] : Array.from(selectedEmails))
+    if (ids.length === 0) return
+  
+    setActionLoading(true)
+    try {
+      const response = await fetch('/api/gmail/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, messageIds: ids, action, labelId }),
+      })
+  
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+  
+      // Refresh emails after action
+      await fetchEmails()
+      setSelectedEmail(null)
+      setSelectedEmails(new Set())
+      setShowMoveMenu(null)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+  
+  const handleDelete = () => handleEmailAction('delete')
+  const handleArchive = () => handleEmailAction('archive')
+  const handleMarkRead = () => handleEmailAction('markRead')
+  const handleMarkUnread = () => handleEmailAction('markUnread')
+  const handleStarEmail = () => handleEmailAction('star')
+  const handleUnstarEmail = () => handleEmailAction('unstar')
+  const handleMoveToLabel = (labelId: string) => {
+    handleEmailAction('move', undefined, labelId)
+  }
+  
+  const toggleEmailSelection = (emailId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedEmails(prev => {
+      const next = new Set(prev)
+      if (next.has(emailId)) {
+        next.delete(emailId)
+      } else {
+        next.add(emailId)
+      }
+      return next
+    })
+  }
+  
+  const selectAllEmails = () => {
+    if (selectedEmails.size === filteredEmails.length) {
+      setSelectedEmails(new Set())
+    } else {
+      setSelectedEmails(new Set(filteredEmails.map(e => e.id)))
+    }
+  }
+  
+  const decodeHtmlEntities = (text: string) => {
   const decodeHtmlEntities = (text: string) => {
     return text
       .replace(/&#39;/g, "'")
@@ -401,82 +485,278 @@ export default function InboxPage() {
       )}
 
       <div className="flex-1 flex overflow-hidden pr-4">
-        {/* Folders Sidebar */}
-        <div className={`bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300 ${isFolderCollapsed ? 'w-12' : 'w-40'}`}>
-          <div className="p-2 flex flex-col h-full">
-            <button
-              onClick={() => setIsFolderCollapsed(!isFolderCollapsed)}
-              className="mb-2 p-1.5 hover:bg-gray-100 rounded-md transition-colors self-end"
-            >
-              {isFolderCollapsed ? (
-                <ChevronRight className="w-4 h-4 text-gray-500" />
-              ) : (
-                <ChevronLeft className="w-4 h-4 text-gray-500" />
+        {/* Folders Sidebar - Collapsible */}
+<div className={`bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300 ${isFolderCollapsed ? 'w-12' : 'w-48'}`}>
+  <div className="p-2 flex flex-col h-full">
+    {/* Collapse Toggle */}
+    <button
+      onClick={() => setIsFolderCollapsed(!isFolderCollapsed)}
+      className="mb-2 p-1.5 hover:bg-gray-100 rounded-md transition-colors self-end"
+    >
+      {isFolderCollapsed ? (
+        <ChevronRight className="w-4 h-4 text-gray-500" />
+      ) : (
+        <ChevronLeft className="w-4 h-4 text-gray-500" />
+      )}
+    </button>
+
+    {/* System Folders */}
+    <nav className="space-y-1">
+      {[
+        { id: 'inbox' as FolderType, label: 'Inbox', icon: Inbox, count: unreadCount },
+        { id: 'sent' as FolderType, label: 'Sent', icon: Send, count: 0 },
+        { id: 'drafts' as FolderType, label: 'Drafts', icon: File, count: 0 },
+      ].map((item) => (
+        <button
+          key={item.id}
+          onClick={() => setFolder(item.id)}
+          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
+            folder === item.id
+              ? 'bg-primary-50 text-primary-700 font-medium'
+              : 'text-gray-600 hover:bg-gray-50'
+          } ${isFolderCollapsed ? 'justify-center' : ''}`}
+          title={isFolderCollapsed ? item.label : ''}
+        >
+          <item.icon className={`w-4 h-4 flex-shrink-0 ${folder === item.id ? 'text-primary-600' : 'text-gray-400'}`} />
+          {!isFolderCollapsed && (
+            <>
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.id === 'inbox' && item.count > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  folder === item.id ? 'bg-primary-200 text-primary-800' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {item.count}
+                </span>
               )}
+            </>
+          )}
+        </button>
+      ))}
+    </nav>
+
+    {/* Custom Labels/Folders */}
+    {!isFolderCollapsed && customLabels.length > 0 && (
+      <div className="mt-4 pt-3 border-t border-gray-200">
+        <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+          Folders
+        </p>
+        <nav className="space-y-0.5">
+          {customLabels.map((label) => (
+            <button
+              key={label.id}
+              onClick={() => {
+                // You can extend FolderType or handle custom label selection
+                fetchEmails(`label:${label.name}`)
+              }}
+              className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <Tag className="w-3.5 h-3.5 text-gray-400" />
+              <span className="flex-1 text-left truncate">{label.name}</span>
             </button>
+          ))}
+        </nav>
+      </div>
+    )}
 
-            <nav className="space-y-1">
-              {[
-                { id: 'inbox' as FolderType, label: 'Inbox', icon: Inbox, count: unreadCount },
-                { id: 'sent' as FolderType, label: 'Sent', icon: Send, count: 0 },
-                { id: 'drafts' as FolderType, label: 'Drafts', icon: File, count: 0 },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setFolder(item.id)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
-                    folder === item.id
-                      ? 'bg-primary-50 text-primary-700 font-medium'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  } ${isFolderCollapsed ? 'justify-center' : ''}`}
-                  title={isFolderCollapsed ? item.label : ''}
-                >
-                  <item.icon className={`w-4 h-4 flex-shrink-0 ${folder === item.id ? 'text-primary-600' : 'text-gray-400'}`} />
-                  {!isFolderCollapsed && (
-                    <>
-                      <span className="flex-1 text-left">{item.label}</span>
-                      {item.id === 'inbox' && item.count > 0 && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                          folder === item.id ? 'bg-primary-200 text-primary-800' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {item.count}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </button>
-              ))}
-            </nav>
+    {/* Create New Folder Button */}
+    {!isFolderCollapsed && (
+      <button
+        onClick={() => setShowLabelModal(true)}
+        className="mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+      >
+        <FolderPlus className="w-4 h-4" />
+        <span>New Folder</span>
+      </button>
+    )}
 
-            {!isFolderCollapsed && (
-              <div className="mt-4 pt-3 border-t border-gray-200">
-                <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Filters</p>
-                <nav className="space-y-0.5">
-                  {[
-                    { id: 'all' as FilterType, label: 'All Mail' },
-                    { id: 'unread' as FilterType, label: 'Unread' },
-                    { id: 'starred' as FilterType, label: 'Starred' },
-                  ].map((item) => (
+    {/* Filters */}
+    {!isFolderCollapsed && (
+      <div className="mt-4 pt-3 border-t border-gray-200">
+        <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Filters</p>
+        <nav className="space-y-0.5">
+          {[
+            { id: 'all' as FilterType, label: 'All Mail' },
+            { id: 'unread' as FilterType, label: 'Unread' },
+            { id: 'starred' as FilterType, label: 'Starred' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setFilter(item.id)}
+              className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
+                filter === item.id
+                  ? 'bg-gray-100 text-gray-900 font-medium'
+                  : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+    )}
+  </div>
+</div>
+        
+  
+  {/* ADD: Bulk Actions Bar */}
+  {filteredEmails.length > 0 && (
+    <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-200">
+      <button
+        onClick={selectAllEmails}
+        className="p-1 hover:bg-gray-100 rounded transition-colors"
+        title={selectedEmails.size === filteredEmails.length ? 'Deselect all' : 'Select all'}
+      >
+        {selectedEmails.size === filteredEmails.length && selectedEmails.size > 0 ? (
+          <CheckSquare className="w-4 h-4 text-primary-600" />
+        ) : (
+          <Square className="w-4 h-4 text-gray-400" />
+        )}
+      </button>
+      
+      {selectedEmails.size > 0 && (
+        <>
+          <span className="text-xs text-gray-500">
+            {selectedEmails.size} selected
+          </span>
+          <div className="flex items-center gap-1 ml-2">
+            <button
+              onClick={handleArchive}
+              disabled={actionLoading}
+              className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+              title="Archive"
+            >
+              <Archive className="w-4 h-4 text-gray-500" />
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={actionLoading}
+              className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+              title="Delete"
+            >
+              <Trash2 className="w-4 h-4 text-gray-500" />
+            </button>
+            <button
+              onClick={handleMarkRead}
+              disabled={actionLoading}
+              className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+              title="Mark as read"
+            >
+              <MailOpen className="w-4 h-4 text-gray-500" />
+            </button>
+            
+            {/* Move to Folder Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMoveMenu(showMoveMenu ? null : 'bulk')}
+                disabled={actionLoading || customLabels.length === 0}
+                className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                title="Move to folder"
+              >
+                <Move className="w-4 h-4 text-gray-500" />
+              </button>
+              {showMoveMenu === 'bulk' && (
+                <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                  {customLabels.map((label) => (
                     <button
-                      key={item.id}
-                      onClick={() => setFilter(item.id)}
-                      className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
-                        filter === item.id
-                          ? 'bg-gray-100 text-gray-900 font-medium'
-                          : 'text-gray-500 hover:bg-gray-50'
-                      }`}
+                      key={label.id}
+                      onClick={() => handleMoveToLabel(label.id)}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
                     >
-                      {item.label}
+                      <Tag className="w-3.5 h-3.5 text-gray-400" />
+                      {label.name}
                     </button>
                   ))}
-                </nav>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </>
+      )}
+    </div>
+  )}
 
-        {/* Email List */}
-        <div className={`${selectedEmail ? 'w-2/5' : 'flex-1'} bg-white border-r border-gray-200 overflow-y-auto`}>
+
+       {/* Email List */}
+       <div className={`${selectedEmail ? 'w-2/5' : 'flex-1'} bg-white border-r border-gray-200 overflow-y-auto`}>
+          
+          {/* Bulk Actions Bar */}
+          {filteredEmails.length > 0 && (
+            <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-200">
+              <button
+                onClick={selectAllEmails}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                title={selectedEmails.size === filteredEmails.length ? 'Deselect all' : 'Select all'}
+              >
+                {selectedEmails.size === filteredEmails.length && selectedEmails.size > 0 ? (
+                  <CheckSquare className="w-4 h-4 text-primary-600" />
+                ) : (
+                  <Square className="w-4 h-4 text-gray-400" />
+                )}
+              </button>
+              
+              {selectedEmails.size > 0 && (
+                <>
+                  <span className="text-xs text-gray-500">
+                    {selectedEmails.size} selected
+                  </span>
+                  <div className="flex items-center gap-1 ml-2">
+                    <button
+                      onClick={handleArchive}
+                      disabled={actionLoading}
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                      title="Archive"
+                    >
+                      <Archive className="w-4 h-4 text-gray-500" />
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      disabled={actionLoading}
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4 text-gray-500" />
+                    </button>
+                    <button
+                      onClick={handleMarkRead}
+                      disabled={actionLoading}
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                      title="Mark as read"
+                    >
+                      <MailOpen className="w-4 h-4 text-gray-500" />
+                    </button>
+                    
+                    {/* Move to Folder Dropdown */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowMoveMenu(showMoveMenu ? null : 'bulk')}
+                        disabled={actionLoading || customLabels.length === 0}
+                        className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                        title="Move to folder"
+                      >
+                        <Move className="w-4 h-4 text-gray-500" />
+                      </button>
+                      {showMoveMenu === 'bulk' && (
+                        <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                          {customLabels.map((label) => (
+                            <button
+                              key={label.id}
+                              onClick={() => handleMoveToLabel(label.id)}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Tag className="w-3.5 h-3.5 text-gray-400" />
+                              {label.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Email List Content */}
           {filteredEmails.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-gray-500">
               <div className="text-center">
@@ -497,7 +777,7 @@ export default function InboxPage() {
             <div>
               {Object.entries(groupedEmails).map(([group, groupEmails]) => (
                 <div key={group}>
-                  <div className="sticky top-0 px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                  <div className="sticky top-[41px] px-3 py-1.5 bg-gray-50 border-b border-gray-100">
                     <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{group}</span>
                   </div>
                   {groupEmails.map((email) => {
@@ -505,6 +785,7 @@ export default function InboxPage() {
                     const displayEmail = getDisplayEmail(email)
                     const isSentByMe = folder === 'sent' || isFromMe(email)
                     const isStarred = starredEmails.has(email.id)
+                    const isSelected = selectedEmails.has(email.id)
                     
                     return (
                       <div
@@ -513,16 +794,32 @@ export default function InboxPage() {
                         className={`group px-3 py-2.5 border-b border-gray-100 cursor-pointer transition-colors ${
                           selectedEmail?.id === email.id
                             ? 'bg-primary-50'
+                            : isSelected
+                            ? 'bg-blue-50'
                             : email.isUnread && !isSentByMe
                             ? 'bg-blue-50/50 hover:bg-blue-50'
                             : 'hover:bg-gray-50'
                         }`}
                       >
                         <div className="flex items-start gap-2.5">
+                          {/* Checkbox */}
+                          <button
+                            onClick={(e) => toggleEmailSelection(email.id, e)}
+                            className="mt-0.5 p-0.5 hover:bg-gray-200 rounded transition-colors"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-primary-600" />
+                            ) : (
+                              <Square className="w-4 h-4 text-gray-300 group-hover:text-gray-400" />
+                            )}
+                          </button>
+
+                          {/* Avatar */}
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-medium ${getAvatarColor(displayEmail)}`}>
                             {getInitials(displayName)}
                           </div>
                           
+                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2 mb-0.5">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -570,30 +867,81 @@ export default function InboxPage() {
             </div>
           )}
         </div>
-
-        {/* Email Detail Panel */}
-        {selectedEmail && (
-          <div className="flex-1 bg-white overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Archive">
-                    <Archive className="w-4 h-4 text-gray-500" />
-                  </button>
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="Delete">
-                    <Trash2 className="w-4 h-4 text-gray-500" />
-                  </button>
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="More">
-                    <MoreHorizontal className="w-4 h-4 text-gray-500" />
-                  </button>
+{/* Email Detail Panel */}
+{selectedEmail && (
+  <div className="flex-1 bg-white overflow-y-auto">
+    <div className="p-6">
+      {/* Actions Bar */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={handleArchive}
+            disabled={actionLoading}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+            title="Archive"
+          >
+            <Archive className="w-4 h-4 text-gray-500" />
+          </button>
+          <button 
+            onClick={handleDelete}
+            disabled={actionLoading}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4 text-gray-500" />
+          </button>
+          <button 
+            onClick={() => selectedEmail.isUnread ? handleMarkRead() : handleMarkUnread()}
+            disabled={actionLoading}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+            title={selectedEmail.isUnread ? 'Mark as read' : 'Mark as unread'}
+          >
+            {selectedEmail.isUnread ? (
+              <MailOpen className="w-4 h-4 text-gray-500" />
+            ) : (
+              <Mail className="w-4 h-4 text-gray-500" />
+            )}
+          </button>
+          
+          {/* Move to Folder */}
+          {customLabels.length > 0 && (
+            <div className="relative">
+              <button 
+                onClick={() => setShowMoveMenu(showMoveMenu === 'detail' ? null : 'detail')}
+                disabled={actionLoading}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+                title="Move to folder"
+              >
+                <Move className="w-4 h-4 text-gray-500" />
+              </button>
+              {showMoveMenu === 'detail' && (
+                <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                  {customLabels.map((label) => (
+                    <button
+                      key={label.id}
+                      onClick={() => handleMoveToLabel(label.id)}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Tag className="w-3.5 h-3.5 text-gray-400" />
+                      {label.name}
+                    </button>
+                  ))}
                 </div>
-                <button
-                  onClick={() => setSelectedEmail(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
+              )}
+            </div>
+          )}
+          
+          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="More">
+            <MoreHorizontal className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        <button
+          onClick={() => setSelectedEmail(null)}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <X className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
 
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 {decodeHtmlEntities(selectedEmail.subject || '(No subject)')}
@@ -663,8 +1011,57 @@ export default function InboxPage() {
           }}
         />
       )}
+       {/* 1. Create Label Modal */}
+       {showLabelModal && (
+        <CreateLabelModal
+          onClose={() => setShowLabelModal(false)}
+          userId={user?.id || ''}
+          onCreated={() => {
+            setShowLabelModal(false)
+            fetchLabels()
+          }}
+        />
+      )}
+
+      {/* 2. Click outside to close move menu */}
+      {showMoveMenu && (
+        <div 
+          className="fixed inset-0 z-10" 
+          onClick={() => setShowMoveMenu(null)}
+        />
+      )}
+
     </div>
   )
+}
+{/* Compose Modal */}
+{showCompose && (
+  <ComposeModal
+    // ... existing props ...
+  />
+)}
+
+{/* ADD: Create Label Modal */}
+{showLabelModal && (
+  <CreateLabelModal
+    onClose={() => setShowLabelModal(false)}
+    userId={user?.id || ''}
+    onCreated={() => {
+      setShowLabelModal(false)
+      fetchLabels()
+    }}
+  />
+)}
+
+{/* ADD: Click outside to close move menu */}
+{showMoveMenu && (
+  <div 
+    className="fixed inset-0 z-10" 
+    onClick={() => setShowMoveMenu(null)}
+  />
+)}
+</div>
+)
 }
 
 // Toolbar Button Component
