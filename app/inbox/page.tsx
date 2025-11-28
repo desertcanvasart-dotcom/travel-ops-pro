@@ -308,7 +308,6 @@ export default function InboxPage() {
   }
   
   const decodeHtmlEntities = (text: string) => {
-  const decodeHtmlEntities = (text: string) => {
     return text
       .replace(/&#39;/g, "'")
       .replace(/&amp;/g, "&")
@@ -1036,6 +1035,7 @@ export default function InboxPage() {
           }}
         />
       )}
+
        {/* 1. Create Label Modal */}
        {showLabelModal && (
         <CreateLabelModal
@@ -1058,35 +1058,6 @@ export default function InboxPage() {
 
     </div>
   )
-}
-{/* Compose Modal */}
-{showCompose && (
-  <ComposeModal
-    // ... existing props ...
-  />
-)}
-
-{/* ADD: Create Label Modal */}
-{showLabelModal && (
-  <CreateLabelModal
-    onClose={() => setShowLabelModal(false)}
-    userId={user?.id || ''}
-    onCreated={() => {
-      setShowLabelModal(false)
-      fetchLabels()
-    }}
-  />
-)}
-
-{/* ADD: Click outside to close move menu */}
-{showMoveMenu && (
-  <div 
-    className="fixed inset-0 z-10" 
-    onClick={() => setShowMoveMenu(null)}
-  />
-)}
-</div>
-)
 }
 
 // Toolbar Button Component
@@ -1481,6 +1452,94 @@ function ComposeModal({
         .ProseMirror li { margin: 0.25rem 0; }
         .ProseMirror a { color: #4a5d4a; text-decoration: underline; }
       `}</style>
+    </div>
+  )
+}
+// Create Label Modal Component
+function CreateLabelModal({ 
+  onClose, 
+  userId, 
+  onCreated 
+}: { 
+  onClose: () => void
+  userId: string
+  onCreated: () => void
+}) {
+  const [name, setName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleCreate = async () => {
+    if (!name.trim()) return
+    
+    setCreating(true)
+    setError(null)
+    
+    try {
+      const response = await fetch('/api/gmail/labels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, name: name.trim() }),
+      })
+      
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+      
+      onCreated()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">Create New Folder</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        
+        <div className="p-5">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
+              {error}
+            </div>
+          )}
+          
+          <label className="block text-xs font-medium text-gray-600 mb-1">
+            Folder Name
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g., Important Clients"
+            className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            autoFocus
+          />
+        </div>
+        
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleCreate} 
+            disabled={creating || !name.trim()}
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+          >
+            {creating ? 'Creating...' : 'Create Folder'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
