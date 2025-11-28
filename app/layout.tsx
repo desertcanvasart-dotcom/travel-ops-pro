@@ -1,6 +1,8 @@
+
 'use client'
 
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Inter } from "next/font/google"
 import "./globals.css"
 import Sidebar from "@/components/Sidebar"
@@ -10,34 +12,40 @@ const inter = Inter({ subsets: ["latin"] })
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const pathname = usePathname()
   
+  // Pages that should NOT show the sidebar (public pages)
+  const publicPages = ['/', '/login', '/signup', '/forgot-password', '/reset-password']
+  const isPublicPage = publicPages.includes(pathname)
+
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-gray-50`}>
+      <body className={inter.className}>
         <AuthProvider>
-          <div className="flex h-screen overflow-hidden">
-            {/* Sidebar Navigation */}
-            <Sidebar 
-              isCollapsed={isCollapsed}
-              setIsCollapsed={setIsCollapsed}
-            />
-            
-            {/* Main Content Area */}
-            <main className={`
-              flex-1 overflow-y-auto transition-all duration-300 ease-in-out
-              ${isCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
-            `}>
-              <div className="min-h-screen">
-                {children}
-              </div>
+          {isPublicPage ? (
+            // Public pages - no sidebar
+            <main className="min-h-screen">
+              {children}
             </main>
-          </div>
+          ) : (
+            // App pages - with sidebar
+            <div className="flex h-screen overflow-hidden bg-gray-50">
+              <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+              <main 
+                className={`flex-1 overflow-y-auto transition-all duration-300 ${
+                  isCollapsed ? 'lg:ml-16' : 'lg:ml-56'
+                }`}
+              >
+                {children}
+              </main>
+            </div>
+          )}
         </AuthProvider>
       </body>
     </html>
-  );
+  )
 }
