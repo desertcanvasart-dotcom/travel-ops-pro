@@ -79,12 +79,11 @@ export default function HomePage() {
             </span>
             
             <h1 className="text-3xl lg:text-4xl xl:text-5xl font-bold text-gray-900 leading-tight">
-              Autoura – From WhatsApp Chat to Final Trip Plan in Under Two Minutes
+              Autoura – From WhatsApp or Email to Final Price in Under Two Minutes.
             </h1>
             
             <p className="text-base lg:text-lg text-gray-600 leading-relaxed">
-            Autoura instantly reads your conversation with any customer — in any language — and converts it into a complete travel program with full pricing, itinerary, logistics, hotels, vehicles, guides, and profit margins.
-            No spreadsheets. No manual calculations. No wasted time. Just send, convert, book.            </p>
+            Autoura reads the entire conversation — WhatsApp or email — any length, any language — and generates a full itinerary with final pricing in seconds.         </p>
 
             <div className="flex flex-wrap gap-3">
               <Link 
