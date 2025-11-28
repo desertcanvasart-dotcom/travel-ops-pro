@@ -27,7 +27,8 @@ import {
   Plane,
   BellRing,
   Coins,
-  LogOut
+  LogOut,
+  Mail
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -50,7 +51,7 @@ const navigation: NavSection[] = [
   {
     title: 'Main',
     items: [
-      { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { label: 'Analytics', href: '/analytics', icon: TrendingUp },
     ]
   },
@@ -65,6 +66,7 @@ const navigation: NavSection[] = [
   {
     title: 'Sales',
     items: [
+      { label: 'Inbox', href: '/inbox', icon: Mail },
       { label: 'WhatsApp Parser', href: '/whatsapp-parser', icon: MessageSquare },
       { label: 'Payments', href: '/payments', icon: DollarSign }, 
       { label: 'Calendar', href: '/calendar', icon: Calendar },
@@ -89,6 +91,7 @@ const navigation: NavSection[] = [
     title: 'Settings',
     items: [
       { label: 'Profile', href: '/settings/profile', icon: Settings },
+      { label: 'Email', href: '/settings/email', icon: Mail },
     ]
   }
 ]
@@ -139,7 +142,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       >
         {/* Logo Header */}
         <div className="flex items-center justify-between h-14 px-3 border-b border-gray-200 flex-shrink-0">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/dashboard" className="flex items-center gap-2">
             <div className="w-7 h-7 flex-shrink-0">
               <img
                 src="/autoura-logo.png"
@@ -186,7 +189,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 {section.items.map((item) => {
                   const Icon = item.icon
                   const isActive = pathname === item.href || 
-                    (item.href !== '/' && pathname.startsWith(item.href))
+                    (item.href !== '/dashboard' && pathname.startsWith(item.href))
 
                   return (
                     <Link
