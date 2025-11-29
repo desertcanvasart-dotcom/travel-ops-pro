@@ -40,6 +40,7 @@ import {
   Square,
   Bell,
   Users, 
+  Building2, 
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
@@ -1192,7 +1193,10 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-function ComposeModal({
+// UPDATED: Compose Modal Component with CLIENT + PARTNER template integration
+// Replace your existing ComposeModal in app/inbox/page.tsx with this version
+
+function ComposeModal({ 
   onClose, 
   userId, 
   replyTo,
@@ -1229,13 +1233,21 @@ function ComposeModal({
   const [showPlaceholderModal, setShowPlaceholderModal] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null)
   const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({})
-  const [selectedClientId, setSelectedClientId] = useState<string>('')
   
-  // NEW: State for CRM data
+  // CLIENT state
+  const [selectedClientId, setSelectedClientId] = useState<string>('')
   const [loadingCRMData, setLoadingCRMData] = useState(false)
   const [clientItineraries, setClientItineraries] = useState<any[]>([])
   const [selectedItineraryId, setSelectedItineraryId] = useState<string>('')
   const [crmPlaceholderData, setCrmPlaceholderData] = useState<Record<string, string>>({})
+  
+  // PARTNER state
+  const [activeTab, setActiveTab] = useState<'client' | 'partner'>('client')
+  const [partners, setPartners] = useState<any[]>([])
+  const [selectedPartnerType, setSelectedPartnerType] = useState<string>('')
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>('')
+  const [loadingPartnerData, setLoadingPartnerData] = useState(false)
+  const [partnerPlaceholderData, setPartnerPlaceholderData] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1263,7 +1275,66 @@ function ComposeModal({
     if (userId) fetchData()
   }, [userId])
 
-  // NEW: Fetch CRM data when client is selected
+  // Fetch partners when type changes
+  const fetchPartners = async (type: string) => {
+    if (!type) {
+      setPartners([])
+      return
+    }
+
+    setLoadingPartnerData(true)
+    try {
+      const response = await fetch(`/api/partners?type=${type}`)
+      const data = await response.json()
+      setPartners(data.partners || [])
+    } catch (err) {
+      console.error('Error fetching partners:', err)
+    } finally {
+      setLoadingPartnerData(false)
+    }
+  }
+
+  // Fetch partner template data
+  const fetchPartnerTemplateData = async (partnerId: string, type: string) => {
+    if (!partnerId || !type) return
+
+    setLoadingPartnerData(true)
+    try {
+      const response = await fetch(`/api/partners/${partnerId}/template-data?type=${type}`)
+      const data = await response.json()
+      
+      if (data.placeholderData) {
+        setPartnerPlaceholderData(data.placeholderData)
+        
+        // Auto-fill "To" field with partner email
+        if (data.placeholderData.partner_email) {
+          setTo(data.placeholderData.partner_email)
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching partner template data:', err)
+    } finally {
+      setLoadingPartnerData(false)
+    }
+  }
+
+  // Handle partner type change
+  const handlePartnerTypeChange = (type: string) => {
+    setSelectedPartnerType(type)
+    setSelectedPartnerId('')
+    setPartnerPlaceholderData({})
+    fetchPartners(type)
+  }
+
+  // Handle partner selection
+  const handlePartnerChange = (partnerId: string) => {
+    setSelectedPartnerId(partnerId)
+    if (partnerId && selectedPartnerType) {
+      fetchPartnerTemplateData(partnerId, selectedPartnerType)
+    }
+  }
+
+  // CLIENT functions (existing)
   const fetchClientCRMData = async (clientId: string) => {
     if (!clientId) {
       setClientItineraries([])
@@ -1282,18 +1353,14 @@ function ComposeModal({
         return
       }
 
-      // Set available itineraries for this client
       setClientItineraries(data.allItineraries || [])
       
-      // Auto-select the latest itinerary if available
       if (data.latestItinerary) {
         setSelectedItineraryId(data.latestItinerary.id)
       }
       
-      // Set placeholder data from CRM
       setCrmPlaceholderData(data.placeholderData || {})
       
-      // Also set the "To" field to client's email
       const client = clients.find(c => c.id === clientId)
       if (client?.email) {
         setTo(client.email)
@@ -1306,7 +1373,6 @@ function ComposeModal({
     }
   }
 
-  // NEW: Fetch updated data when itinerary selection changes
   const fetchItineraryData = async (clientId: string, itineraryId: string) => {
     if (!clientId || !itineraryId) return
 
@@ -1327,14 +1393,12 @@ function ComposeModal({
     }
   }
 
-  // Handle client selection change
   const handleClientChange = (clientId: string) => {
     setSelectedClientId(clientId)
     setSelectedItineraryId('')
     fetchClientCRMData(clientId)
   }
 
-  // Handle itinerary selection change
   const handleItineraryChange = (itineraryId: string) => {
     setSelectedItineraryId(itineraryId)
     if (selectedClientId && itineraryId) {
@@ -1381,33 +1445,35 @@ function ComposeModal({
     setShowSignatureDropdown(false)
   }
 
-  // useTemplate now shows placeholder modal with CRM data
   const useTemplate = (template: EmailTemplate) => {
     const placeholders = getPlaceholders(template.content + ' ' + template.subject)
     
     if (placeholders.length > 0) {
-      // Has placeholders - show modal to fill them
       setSelectedTemplate(template)
       setPlaceholderValues({})
-      // Reset client selection if not already selected
       if (!selectedClientId) {
         setCrmPlaceholderData({})
       }
+      if (!selectedPartnerId) {
+        setPartnerPlaceholderData({})
+      }
       setShowPlaceholderModal(true)
     } else {
-      // No placeholders - use directly
       setSubject(template.subject)
       setBody(template.content)
     }
     setShowTemplateDropdown(false)
   }
 
-  // Apply template with CRM data
   const applyTemplateWithPlaceholders = () => {
     if (!selectedTemplate) return
 
-    // Merge CRM data with any manual overrides
-    const finalData = { ...crmPlaceholderData, ...placeholderValues }
+    // Merge data: CRM client data + Partner data + manual overrides
+    const finalData = { 
+      ...crmPlaceholderData, 
+      ...partnerPlaceholderData,
+      ...placeholderValues 
+    }
 
     const processedSubject = replacePlaceholders(selectedTemplate.subject, finalData)
     const processedContent = replacePlaceholders(selectedTemplate.content, finalData)
@@ -1698,7 +1764,7 @@ function ComposeModal({
         />
       )}
 
-      {/* Placeholder Modal with CRM Data Integration */}
+      {/* Placeholder Modal with CLIENT + PARTNER tabs */}
       {showPlaceholderModal && selectedTemplate && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/30" onClick={() => setShowPlaceholderModal(false)} />
@@ -1711,71 +1777,97 @@ function ComposeModal({
             </div>
             
             <div className="p-5 overflow-y-auto flex-1 space-y-4">
-              {/* Client selector */}
-              <div className="p-4 bg-primary-50 rounded-lg border border-primary-100">
-                <p className="text-xs font-semibold text-primary-800 mb-3 flex items-center gap-2">
+              {/* Tab selector */}
+              <div className="flex border border-gray-200 rounded-lg p-1 bg-gray-50">
+                <button
+                  onClick={() => setActiveTab('client')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                    activeTab === 'client' 
+                      ? 'bg-white text-primary-700 shadow-sm' 
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
                   <Users className="w-4 h-4" />
-                  Load from CRM
-                </p>
-                
-                <div className="space-y-3">
-                  {/* Client Dropdown */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Select Client
-                    </label>
-                    <select
-                      value={selectedClientId}
-                      onChange={(e) => handleClientChange(e.target.value)}
-                      className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
-                    >
-                      <option value="">-- Select a client --</option>
-                      {clients.map(client => (
-                        <option key={client.id} value={client.id}>
-                          {client.name} ({client.email})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  Client
+                </button>
+                <button
+                  onClick={() => setActiveTab('partner')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                    activeTab === 'partner' 
+                      ? 'bg-white text-primary-700 shadow-sm' 
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Building2 className="w-4 h-4" />
+                  Partner
+                </button>
+              </div>
 
-                  {/* Itinerary Dropdown (shows when client selected) */}
-                  {selectedClientId && clientItineraries.length > 0 && (
+              {/* CLIENT TAB */}
+              {activeTab === 'client' && (
+                <div className="p-4 bg-primary-50 rounded-lg border border-primary-100">
+                  <p className="text-xs font-semibold text-primary-800 mb-3 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Load Client from CRM
+                  </p>
+                  
+                  <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Select Trip/Itinerary
+                        Select Client
                       </label>
                       <select
-                        value={selectedItineraryId}
-                        onChange={(e) => handleItineraryChange(e.target.value)}
+                        value={selectedClientId}
+                        onChange={(e) => handleClientChange(e.target.value)}
                         className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
                       >
-                        <option value="">-- Select an itinerary --</option>
-                        {clientItineraries.map((itin: any) => (
-                          <option key={itin.id} value={itin.id}>
-                            {itin.itinerary_code} - {itin.trip_name} ({itin.start_date})
+                        <option value="">-- Select a client --</option>
+                        {clients.map(client => (
+                          <option key={client.id} value={client.id}>
+                            {client.name} ({client.email})
                           </option>
                         ))}
                       </select>
                     </div>
-                  )}
 
-                  {selectedClientId && clientItineraries.length === 0 && !loadingCRMData && (
-                    <p className="text-xs text-gray-500 italic">No itineraries found for this client</p>
-                  )}
+                    {selectedClientId && clientItineraries.length > 0 && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Select Trip/Itinerary
+                        </label>
+                        <select
+                          value={selectedItineraryId}
+                          onChange={(e) => handleItineraryChange(e.target.value)}
+                          className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+                        >
+                          <option value="">-- Select an itinerary --</option>
+                          {clientItineraries.map((itin: any) => (
+                            <option key={itin.id} value={itin.id}>
+                              {itin.itinerary_code} - {itin.trip_name} ({itin.start_date})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-                  {loadingCRMData && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Loading CRM data...
-                    </div>
-                  )}
+                    {selectedClientId && clientItineraries.length === 0 && !loadingCRMData && (
+                      <p className="text-xs text-gray-500 italic">No itineraries found for this client</p>
+                    )}
+
+                    {loadingCRMData && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Loading CRM data...
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Show loaded CRM values */}
-              {selectedClientId && Object.keys(crmPlaceholderData).length > 0 && (
+              {/* Show loaded CLIENT values */}
+              {activeTab === 'client' && selectedClientId && Object.keys(crmPlaceholderData).length > 0 && (
                 <div className="p-3 bg-green-50 rounded-lg border border-green-100">
-                  <p className="text-xs font-medium text-green-800 mb-2">✓ Data loaded from CRM:</p>
+                  <p className="text-xs font-medium text-green-800 mb-2">✓ Client data loaded:</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     {crmPlaceholderData.client_name && (
                       <div><span className="text-gray-500">Client:</span> {crmPlaceholderData.client_name}</div>
@@ -1791,6 +1883,93 @@ function ComposeModal({
                     )}
                     {crmPlaceholderData.trip_dates && (
                       <div className="col-span-2"><span className="text-gray-500">Dates:</span> {crmPlaceholderData.trip_dates}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* PARTNER TAB */}
+              {activeTab === 'partner' && (
+                <div className="p-4 bg-amber-50 rounded-lg border border-amber-100">
+                  <p className="text-xs font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                    <Building2 className="w-4 h-4" />
+                    Load Partner from Resources
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Partner Type
+                      </label>
+                      <select
+                        value={selectedPartnerType}
+                        onChange={(e) => handlePartnerTypeChange(e.target.value)}
+                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                      >
+                        <option value="">-- Select type --</option>
+                        <option value="hotel">🏨 Hotels</option>
+                        <option value="guide">🧭 Tour Guides</option>
+                        <option value="restaurant">🍽️ Restaurants</option>
+                        <option value="airport_staff">✈️ Airport Staff</option>
+                      </select>
+                    </div>
+
+                    {selectedPartnerType && partners.length > 0 && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Select Partner
+                        </label>
+                        <select
+                          value={selectedPartnerId}
+                          onChange={(e) => handlePartnerChange(e.target.value)}
+                          className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                        >
+                          <option value="">-- Select partner --</option>
+                          {partners.map((partner: any) => (
+                            <option key={partner.id} value={partner.id}>
+                              {partner.name} {partner.city ? `(${partner.city})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {selectedPartnerType && partners.length === 0 && !loadingPartnerData && (
+                      <p className="text-xs text-gray-500 italic">No {selectedPartnerType}s found</p>
+                    )}
+
+                    {loadingPartnerData && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Loading partner data...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Show loaded PARTNER values */}
+              {activeTab === 'partner' && selectedPartnerId && Object.keys(partnerPlaceholderData).length > 0 && (
+                <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+                  <p className="text-xs font-medium text-green-800 mb-2">✓ Partner data loaded:</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    {partnerPlaceholderData.partner_name && (
+                      <div><span className="text-gray-500">Name:</span> {partnerPlaceholderData.partner_name}</div>
+                    )}
+                    {partnerPlaceholderData.partner_type && (
+                      <div><span className="text-gray-500">Type:</span> {partnerPlaceholderData.partner_type}</div>
+                    )}
+                    {partnerPlaceholderData.contact_person && (
+                      <div><span className="text-gray-500">Contact:</span> {partnerPlaceholderData.contact_person}</div>
+                    )}
+                    {partnerPlaceholderData.partner_email && (
+                      <div><span className="text-gray-500">Email:</span> {partnerPlaceholderData.partner_email}</div>
+                    )}
+                    {partnerPlaceholderData.partner_phone && (
+                      <div><span className="text-gray-500">Phone:</span> {partnerPlaceholderData.partner_phone}</div>
+                    )}
+                    {partnerPlaceholderData.partner_city && (
+                      <div><span className="text-gray-500">City:</span> {partnerPlaceholderData.partner_city}</div>
                     )}
                   </div>
                 </div>
@@ -1813,12 +1992,16 @@ function ComposeModal({
                         ...prev,
                         [placeholder]: e.target.value
                       }))}
-                      placeholder={crmPlaceholderData[placeholder] || `Enter ${placeholder.replace(/_/g, ' ')}`}
+                      placeholder={
+                        crmPlaceholderData[placeholder] || 
+                        partnerPlaceholderData[placeholder] || 
+                        `Enter ${placeholder.replace(/_/g, ' ')}`
+                      }
                       className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                     />
-                    {crmPlaceholderData[placeholder] && !placeholderValues[placeholder] && (
+                    {(crmPlaceholderData[placeholder] || partnerPlaceholderData[placeholder]) && !placeholderValues[placeholder] && (
                       <p className="text-[10px] text-gray-400 mt-0.5">
-                        Will use: {crmPlaceholderData[placeholder]}
+                        Will use: {crmPlaceholderData[placeholder] || partnerPlaceholderData[placeholder]}
                       </p>
                     )}
                   </div>
@@ -1835,7 +2018,7 @@ function ComposeModal({
               </button>
               <button 
                 onClick={applyTemplateWithPlaceholders}
-                disabled={loadingCRMData}
+                disabled={loadingCRMData || loadingPartnerData}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
               >
                 Apply Template
@@ -1847,7 +2030,6 @@ function ComposeModal({
     </div>
   )
 }
-
 // Create Label Modal Component
 function CreateLabelModal({ 
   onClose, 
