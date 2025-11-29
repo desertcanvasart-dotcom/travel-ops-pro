@@ -7,7 +7,7 @@ import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
 import TextStyle from '@tiptap/extension-text-style'
-import Color from '@tiptap/extension-color'
+import { Color } from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
 import FontFamily from '@tiptap/extension-font-family'
 import { Extension } from '@tiptap/core'
@@ -34,16 +34,6 @@ import {
   X
 } from 'lucide-react'
 
-// Extend the Commands interface for TypeScript
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    fontSize: {
-      setFontSize: (fontSize: string) => ReturnType
-      unsetFontSize: () => ReturnType
-    }
-  }
-}
-
 // Custom FontSize extension
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -61,7 +51,7 @@ const FontSize = Extension.create({
         attributes: {
           fontSize: {
             default: null,
-            parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+            parseHTML: element => element.style.fontSize || null,
             renderHTML: attributes => {
               if (!attributes.fontSize) {
                 return {}
@@ -80,8 +70,8 @@ const FontSize = Extension.create({
     return {
       setFontSize:
         (fontSize: string) =>
-        ({ chain }) => {
-          return chain().setMark('textStyle', { fontSize }).run()
+        ({ commands }) => {
+          return commands.setMark('textStyle', { fontSize })
         },
       unsetFontSize:
         () =>
@@ -95,18 +85,28 @@ const FontSize = Extension.create({
   },
 })
 
+// Extend the Commands interface for TypeScript
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    fontSize: {
+      setFontSize: (fontSize: string) => ReturnType
+      unsetFontSize: () => ReturnType
+    }
+  }
+}
+
 // Font families available
 const FONT_FAMILIES = [
   { name: 'Default', value: '' },
-  { name: 'Arial', value: 'Arial, sans-serif' },
-  { name: 'Times New Roman', value: 'Times New Roman, serif' },
-  { name: 'Georgia', value: 'Georgia, serif' },
-  { name: 'Verdana', value: 'Verdana, sans-serif' },
-  { name: 'Courier New', value: 'Courier New, monospace' },
-  { name: 'Trebuchet MS', value: 'Trebuchet MS, sans-serif' },
-  { name: 'Comic Sans MS', value: 'Comic Sans MS, cursive' },
-  { name: 'Impact', value: 'Impact, sans-serif' },
-  { name: 'Tahoma', value: 'Tahoma, sans-serif' },
+  { name: 'Arial', value: 'Arial' },
+  { name: 'Times New Roman', value: 'Times New Roman' },
+  { name: 'Georgia', value: 'Georgia' },
+  { name: 'Verdana', value: 'Verdana' },
+  { name: 'Courier New', value: 'Courier New' },
+  { name: 'Trebuchet MS', value: 'Trebuchet MS' },
+  { name: 'Comic Sans MS', value: 'Comic Sans MS' },
+  { name: 'Impact', value: 'Impact' },
+  { name: 'Tahoma', value: 'Tahoma' },
 ]
 
 // Font sizes available
@@ -446,26 +446,6 @@ function EditorToolbar({ editor }: { editor: Editor }) {
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [showHtmlModal, setShowHtmlModal] = useState(false)
 
-  const getCurrentFontFamily = useCallback(() => {
-    const attrs = editor.getAttributes('textStyle')
-    return attrs.fontFamily || ''
-  }, [editor])
-
-  const getCurrentFontSize = useCallback(() => {
-    const attrs = editor.getAttributes('textStyle')
-    return attrs.fontSize || '14px'
-  }, [editor])
-
-  const getCurrentColor = useCallback(() => {
-    const attrs = editor.getAttributes('textStyle')
-    return attrs.color || '#000000'
-  }, [editor])
-
-  const getCurrentHighlight = useCallback(() => {
-    const attrs = editor.getAttributes('highlight')
-    return attrs.color || ''
-  }, [editor])
-
   const setLink = useCallback((url: string) => {
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
@@ -474,13 +454,25 @@ function EditorToolbar({ editor }: { editor: Editor }) {
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }, [editor])
 
+  // Get current font family
+  const currentFontFamily = editor.getAttributes('textStyle').fontFamily || ''
+  
+  // Get current font size
+  const currentFontSize = editor.getAttributes('textStyle').fontSize || '14px'
+  
+  // Get current color
+  const currentColor = editor.getAttributes('textStyle').color || '#000000'
+  
+  // Get current highlight
+  const currentHighlight = editor.getAttributes('highlight').color || ''
+
   return (
     <>
       <div className="flex flex-wrap items-center gap-0.5 p-2 border-b border-gray-200 bg-gray-50/50">
         {/* Font Family */}
         <Dropdown
           label="Font"
-          value={getCurrentFontFamily()}
+          value={currentFontFamily}
           options={FONT_FAMILIES}
           onChange={(value) => {
             if (value) {
@@ -495,7 +487,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         {/* Font Size */}
         <Dropdown
           label="Size"
-          value={getCurrentFontSize()}
+          value={currentFontSize}
           options={FONT_SIZES}
           onChange={(value) => {
             editor.chain().focus().setFontSize(value).run()
@@ -534,7 +526,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         {/* Text Color */}
         <ColorPicker
           colors={COLORS}
-          value={getCurrentColor()}
+          value={currentColor}
           onChange={(color) => {
             editor.chain().focus().setColor(color).run()
           }}
@@ -545,7 +537,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         {/* Highlight Color */}
         <ColorPicker
           colors={HIGHLIGHT_COLORS}
-          value={getCurrentHighlight()}
+          value={currentHighlight}
           onChange={(color) => {
             if (color) {
               editor.chain().focus().toggleHighlight({ color }).run()
@@ -680,9 +672,9 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
+      // StarterKit WITHOUT link (we add it separately to avoid duplicate)
       StarterKit.configure({
         heading: false,
-        // Ensure lists are enabled
         bulletList: {
           keepMarks: true,
           keepAttributes: false,
@@ -692,25 +684,38 @@ export default function RichTextEditor({
           keepAttributes: false,
         },
       }),
+      // Add Underline
       Underline,
+      // Add Link separately
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
           class: 'text-primary-600 underline',
         },
       }),
+      // Placeholder
       Placeholder.configure({
         placeholder,
       }),
+      // Text alignment
       TextAlign.configure({
         types: ['paragraph', 'heading'],
       }),
+      // IMPORTANT: TextStyle MUST be added for Color, FontFamily, FontSize to work
       TextStyle,
-      Color,
+      // Color (depends on TextStyle)
+      Color.configure({
+        types: ['textStyle'],
+      }),
+      // Highlight
       Highlight.configure({
         multicolor: true,
       }),
-      FontFamily,
+      // FontFamily (depends on TextStyle)
+      FontFamily.configure({
+        types: ['textStyle'],
+      }),
+      // Custom FontSize (depends on TextStyle)
       FontSize,
     ],
     content,
@@ -723,8 +728,6 @@ export default function RichTextEditor({
         style: `min-height: ${minHeight}; max-height: ${maxHeight}; overflow-y: auto; padding: 12px;`,
       },
     },
-    // Ensure immediate mode for proper updates
-    immediatelyRender: false,
   })
 
   // Update content when prop changes (for signatures/templates)
@@ -751,6 +754,12 @@ export default function RichTextEditor({
       <EditorToolbar editor={editor} />
       <EditorContent editor={editor} />
       <style jsx global>{`
+        .ProseMirror {
+          outline: none;
+        }
+        .ProseMirror p {
+          margin: 0.25rem 0;
+        }
         .ProseMirror ul {
           list-style-type: disc;
           padding-left: 1.5rem;
@@ -767,9 +776,6 @@ export default function RichTextEditor({
         .ProseMirror li p {
           margin: 0;
         }
-        .ProseMirror p {
-          margin: 0.25rem 0;
-        }
         .ProseMirror a {
           color: #4f7942;
           text-decoration: underline;
@@ -777,9 +783,6 @@ export default function RichTextEditor({
         .ProseMirror mark {
           border-radius: 0.25rem;
           padding: 0.125rem 0;
-        }
-        .ProseMirror:focus {
-          outline: none;
         }
         .ProseMirror p.is-editor-empty:first-child::before {
           color: #9ca3af;
