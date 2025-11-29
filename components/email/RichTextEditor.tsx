@@ -34,6 +34,16 @@ import {
   X
 } from 'lucide-react'
 
+// Extend the Commands interface for TypeScript
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    fontSize: {
+      setFontSize: (fontSize: string) => ReturnType
+      unsetFontSize: () => ReturnType
+    }
+  }
+}
+
 // Custom FontSize extension
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -68,17 +78,19 @@ const FontSize = Extension.create({
 
   addCommands() {
     return {
-      setFontSize: (fontSize: string) => ({ chain }: { chain: any }) => {
-        return chain()
-          .setMark('textStyle', { fontSize })
-          .run()
-      },
-      unsetFontSize: () => ({ chain }: { chain: any }) => {
-        return chain()
-          .setMark('textStyle', { fontSize: null })
-          .removeEmptyTextStyle()
-          .run()
-      },
+      setFontSize:
+        (fontSize: string) =>
+        ({ chain }) => {
+          return chain().setMark('textStyle', { fontSize }).run()
+        },
+      unsetFontSize:
+        () =>
+        ({ chain }) => {
+          return chain()
+            .setMark('textStyle', { fontSize: null })
+            .removeEmptyTextStyle()
+            .run()
+        },
     }
   },
 })
@@ -141,7 +153,6 @@ interface RichTextEditorProps {
   minHeight?: string
   maxHeight?: string
   className?: string
-  showHtmlToggle?: boolean
 }
 
 // Dropdown component for font family and size
@@ -182,7 +193,7 @@ function Dropdown({
           <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[140px] max-h-[200px] overflow-y-auto">
             {options.map((option) => (
               <button
-                key={option.value}
+                key={option.value || 'default'}
                 type="button"
                 onClick={() => {
                   onChange(option.value)
@@ -435,25 +446,25 @@ function EditorToolbar({ editor }: { editor: Editor }) {
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [showHtmlModal, setShowHtmlModal] = useState(false)
 
-  const getCurrentFontFamily = () => {
+  const getCurrentFontFamily = useCallback(() => {
     const attrs = editor.getAttributes('textStyle')
     return attrs.fontFamily || ''
-  }
+  }, [editor])
 
-  const getCurrentFontSize = () => {
+  const getCurrentFontSize = useCallback(() => {
     const attrs = editor.getAttributes('textStyle')
     return attrs.fontSize || '14px'
-  }
+  }, [editor])
 
-  const getCurrentColor = () => {
+  const getCurrentColor = useCallback(() => {
     const attrs = editor.getAttributes('textStyle')
     return attrs.color || '#000000'
-  }
+  }, [editor])
 
-  const getCurrentHighlight = () => {
+  const getCurrentHighlight = useCallback(() => {
     const attrs = editor.getAttributes('highlight')
     return attrs.color || ''
-  }
+  }, [editor])
 
   const setLink = useCallback((url: string) => {
     if (url === '') {
@@ -487,7 +498,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
           value={getCurrentFontSize()}
           options={FONT_SIZES}
           onChange={(value) => {
-            (editor.chain().focus() as any).setFontSize(value).run()
+            editor.chain().focus().setFontSize(value).run()
           }}
         />
 
@@ -670,7 +681,16 @@ export default function RichTextEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: false, // Disable heading for email context
+        heading: false,
+        // Ensure lists are enabled
+        bulletList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+        orderedList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
       }),
       Underline,
       Link.configure({
@@ -703,6 +723,8 @@ export default function RichTextEditor({
         style: `min-height: ${minHeight}; max-height: ${maxHeight}; overflow-y: auto; padding: 12px;`,
       },
     },
+    // Ensure immediate mode for proper updates
+    immediatelyRender: false,
   })
 
   // Update content when prop changes (for signatures/templates)
@@ -728,11 +750,50 @@ export default function RichTextEditor({
     <div className={`border border-gray-200 rounded-lg overflow-hidden bg-white ${className}`}>
       <EditorToolbar editor={editor} />
       <EditorContent editor={editor} />
+      <style jsx global>{`
+        .ProseMirror ul {
+          list-style-type: disc;
+          padding-left: 1.5rem;
+          margin: 0.5rem 0;
+        }
+        .ProseMirror ol {
+          list-style-type: decimal;
+          padding-left: 1.5rem;
+          margin: 0.5rem 0;
+        }
+        .ProseMirror li {
+          margin: 0.25rem 0;
+        }
+        .ProseMirror li p {
+          margin: 0;
+        }
+        .ProseMirror p {
+          margin: 0.25rem 0;
+        }
+        .ProseMirror a {
+          color: #4f7942;
+          text-decoration: underline;
+        }
+        .ProseMirror mark {
+          border-radius: 0.25rem;
+          padding: 0.125rem 0;
+        }
+        .ProseMirror:focus {
+          outline: none;
+        }
+        .ProseMirror p.is-editor-empty:first-child::before {
+          color: #9ca3af;
+          content: attr(data-placeholder);
+          float: left;
+          height: 0;
+          pointer-events: none;
+        }
+      `}</style>
     </div>
   )
 }
 
-// Export a simpler version for signatures (less toolbar options)
+// Export a simpler version for signatures
 export function SignatureEditor({
   content,
   onChange,

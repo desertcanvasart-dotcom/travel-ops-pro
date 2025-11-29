@@ -1,14 +1,10 @@
 'use client'
 
-import { useState, useEffect, Suspense, useCallback } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
-import TiptapLink from '@tiptap/extension-link'
-import Placeholder from '@tiptap/extension-placeholder'
+import RichTextEditor, { SignatureEditor, TemplateEditor } from '@/components/email/RichTextEditor'
 import { 
   Mail, 
   ArrowLeft, 
@@ -22,13 +18,7 @@ import {
   Trash2,
   FileText,
   Signature,
-  X,
-  Bold,
-  Italic,
-  Underline as UnderlineIcon,
-  List,
-  ListOrdered,
-  Link as LinkIcon
+  X
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
@@ -488,7 +478,7 @@ function EmailSettingsContent() {
   )
 }
 
-// Signature Modal
+// Signature Modal - Now using RichTextEditor
 function SignatureModal({
   signature,
   userId,
@@ -501,33 +491,19 @@ function SignatureModal({
   onSaved: () => void
 }) {
   const [name, setName] = useState(signature?.name || '')
+  const [content, setContent] = useState(signature?.content || '')
   const [isDefault, setIsDefault] = useState(signature?.is_default || false)
   const [saving, setSaving] = useState(false)
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: false }),
-      Underline,
-      TiptapLink.configure({ openOnClick: false }),
-      Placeholder.configure({ placeholder: 'Write your signature...' }),
-    ],
-    content: signature?.content || '',
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[120px] px-3 py-2',
-      },
-    },
-  })
-
   const handleSave = async () => {
-    if (!name || !editor?.getHTML()) return
+    if (!name || !content) return
     
     setSaving(true)
     try {
       const method = signature ? 'PUT' : 'POST'
       const body = signature
-        ? { id: signature.id, userId, name, content: editor.getHTML(), isDefault }
-        : { userId, name, content: editor.getHTML(), isDefault }
+        ? { id: signature.id, userId, name, content, isDefault }
+        : { userId, name, content, isDefault }
 
       await fetch('/api/email/signatures', {
         method,
@@ -544,7 +520,7 @@ function SignatureModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">
             {signature ? 'Edit Signature' : 'New Signature'}
@@ -554,7 +530,7 @@ function SignatureModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
             <input
@@ -568,32 +544,11 @@ function SignatureModal({
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Content</label>
-            <div className="border border-gray-200 rounded-md overflow-hidden">
-              <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
-                <button
-                  type="button"
-                  onClick={() => editor?.chain().focus().toggleBold().run()}
-                  className={`p-1 rounded ${editor?.isActive('bold') ? 'bg-gray-200' : 'hover:bg-gray-200'}`}
-                >
-                  <Bold className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor?.chain().focus().toggleItalic().run()}
-                  className={`p-1 rounded ${editor?.isActive('italic') ? 'bg-gray-200' : 'hover:bg-gray-200'}`}
-                >
-                  <Italic className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor?.chain().focus().toggleUnderline().run()}
-                  className={`p-1 rounded ${editor?.isActive('underline') ? 'bg-gray-200' : 'hover:bg-gray-200'}`}
-                >
-                  <UnderlineIcon className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <EditorContent editor={editor} />
-            </div>
+            <SignatureEditor
+              content={content}
+              onChange={setContent}
+              placeholder="Write your signature..."
+            />
           </div>
 
           <label className="flex items-center gap-2">
@@ -616,7 +571,7 @@ function SignatureModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !name}
+            disabled={saving || !name || !content}
             className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save'}
@@ -627,7 +582,7 @@ function SignatureModal({
   )
 }
 
-// Template Modal
+// Template Modal - Now using RichTextEditor
 function TemplateModal({
   template,
   userId,
@@ -641,33 +596,19 @@ function TemplateModal({
 }) {
   const [name, setName] = useState(template?.name || '')
   const [subject, setSubject] = useState(template?.subject || '')
+  const [content, setContent] = useState(template?.content || '')
   const [category, setCategory] = useState(template?.category || 'general')
   const [saving, setSaving] = useState(false)
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: false }),
-      Underline,
-      TiptapLink.configure({ openOnClick: false }),
-      Placeholder.configure({ placeholder: 'Write your template content...' }),
-    ],
-    content: template?.content || '',
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[150px] px-3 py-2',
-      },
-    },
-  })
-
   const handleSave = async () => {
-    if (!name || !subject || !editor?.getHTML()) return
+    if (!name || !subject || !content) return
     
     setSaving(true)
     try {
       const method = template ? 'PUT' : 'POST'
       const body = template
-        ? { id: template.id, userId, name, subject, content: editor.getHTML(), category }
-        : { userId, name, subject, content: editor.getHTML(), category }
+        ? { id: template.id, userId, name, subject, content, category }
+        : { userId, name, subject, content, category }
 
       await fetch('/api/email/templates', {
         method,
@@ -686,7 +627,7 @@ function TemplateModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">
             {template ? 'Edit Template' : 'New Template'}
@@ -696,7 +637,7 @@ function TemplateModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
@@ -737,40 +678,11 @@ function TemplateModal({
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Content</label>
-            <div className="border border-gray-200 rounded-md overflow-hidden">
-              <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
-                <button
-                  type="button"
-                  onClick={() => editor?.chain().focus().toggleBold().run()}
-                  className={`p-1 rounded ${editor?.isActive('bold') ? 'bg-gray-200' : 'hover:bg-gray-200'}`}
-                >
-                  <Bold className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor?.chain().focus().toggleItalic().run()}
-                  className={`p-1 rounded ${editor?.isActive('italic') ? 'bg-gray-200' : 'hover:bg-gray-200'}`}
-                >
-                  <Italic className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => editor?.chain().focus().toggleUnderline().run()}
-                  className={`p-1 rounded ${editor?.isActive('underline') ? 'bg-gray-200' : 'hover:bg-gray-200'}`}
-                >
-                  <UnderlineIcon className="w-3.5 h-3.5" />
-                </button>
-                <div className="w-px h-4 bg-gray-200 mx-1" />
-                <button
-                  type="button"
-                  onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                  className={`p-1 rounded ${editor?.isActive('bulletList') ? 'bg-gray-200' : 'hover:bg-gray-200'}`}
-                >
-                  <List className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <EditorContent editor={editor} />
-            </div>
+            <TemplateEditor
+              content={content}
+              onChange={setContent}
+              placeholder="Write your template content..."
+            />
             <p className="text-[10px] text-gray-400 mt-1">
               Tip: Use placeholders like {"{{client_name}}"}, {"{{dates}}"}, {"{{total}}"} for dynamic content
             </p>
@@ -786,7 +698,7 @@ function TemplateModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !name || !subject}
+            disabled={saving || !name || !subject || !content}
             className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save'}
