@@ -10,18 +10,12 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
     const search = searchParams.get('search')
     const limit = parseInt(searchParams.get('limit') || '50')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
-    }
 
     let query = supabase
       .from('clients')
       .select('id, first_name, last_name, email, phone, status')
-      .eq('user_id', userId)
       .order('first_name', { ascending: true })
       .limit(limit)
 
