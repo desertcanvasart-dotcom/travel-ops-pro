@@ -1,15 +1,17 @@
 'use client'
 
-import { useEditor, EditorContent } from '@tiptap/react'
+import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
-import TiptapLink from '@tiptap/extension-link'
+import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
+import TextAlign from '@tiptap/extension-text-align'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
-import TextAlign from '@tiptap/extension-text-align'
-import { useCallback, useState } from 'react'
+import FontFamily from '@tiptap/extension-font-family'
+import { Extension } from '@tiptap/core'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Bold,
   Italic,
@@ -22,393 +24,389 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  AlignJustify,
+  Type,
   Palette,
   Highlighter,
-  Type,
+  Code,
   ChevronDown,
-  Code
+  Check,
+  X
 } from 'lucide-react'
 
+// Custom FontSize extension
+const FontSize = Extension.create({
+  name: 'fontSize',
+
+  addOptions() {
+    return {
+      types: ['textStyle'],
+    }
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: element => element.style.fontSize?.replace(/['"]+/g, ''),
+            renderHTML: attributes => {
+              if (!attributes.fontSize) {
+                return {}
+              }
+              return {
+                style: `font-size: ${attributes.fontSize}`,
+              }
+            },
+          },
+        },
+      },
+    ]
+  },
+
+  addCommands() {
+    return {
+      setFontSize: (fontSize: string) => ({ chain }: { chain: any }) => {
+        return chain()
+          .setMark('textStyle', { fontSize })
+          .run()
+      },
+      unsetFontSize: () => ({ chain }: { chain: any }) => {
+        return chain()
+          .setMark('textStyle', { fontSize: null })
+          .removeEmptyTextStyle()
+          .run()
+      },
+    }
+  },
+})
+
+// Font families available
+const FONT_FAMILIES = [
+  { name: 'Default', value: '' },
+  { name: 'Arial', value: 'Arial, sans-serif' },
+  { name: 'Times New Roman', value: 'Times New Roman, serif' },
+  { name: 'Georgia', value: 'Georgia, serif' },
+  { name: 'Verdana', value: 'Verdana, sans-serif' },
+  { name: 'Courier New', value: 'Courier New, monospace' },
+  { name: 'Trebuchet MS', value: 'Trebuchet MS, sans-serif' },
+  { name: 'Comic Sans MS', value: 'Comic Sans MS, cursive' },
+  { name: 'Impact', value: 'Impact, sans-serif' },
+  { name: 'Tahoma', value: 'Tahoma, sans-serif' },
+]
+
+// Font sizes available
+const FONT_SIZES = [
+  { name: 'Small', value: '12px' },
+  { name: 'Normal', value: '14px' },
+  { name: 'Medium', value: '16px' },
+  { name: 'Large', value: '18px' },
+  { name: 'X-Large', value: '24px' },
+  { name: 'XX-Large', value: '32px' },
+]
+
+// Common colors for text and highlight
+const COLORS = [
+  { name: 'Black', value: '#000000' },
+  { name: 'Dark Gray', value: '#4B5563' },
+  { name: 'Gray', value: '#9CA3AF' },
+  { name: 'Red', value: '#EF4444' },
+  { name: 'Orange', value: '#F97316' },
+  { name: 'Yellow', value: '#EAB308' },
+  { name: 'Green', value: '#22C55E' },
+  { name: 'Teal', value: '#14B8A6' },
+  { name: 'Blue', value: '#3B82F6' },
+  { name: 'Indigo', value: '#6366F1' },
+  { name: 'Purple', value: '#A855F7' },
+  { name: 'Pink', value: '#EC4899' },
+]
+
+const HIGHLIGHT_COLORS = [
+  { name: 'None', value: '' },
+  { name: 'Yellow', value: '#FEF08A' },
+  { name: 'Green', value: '#BBF7D0' },
+  { name: 'Blue', value: '#BFDBFE' },
+  { name: 'Pink', value: '#FBCFE8' },
+  { name: 'Purple', value: '#E9D5FF' },
+  { name: 'Orange', value: '#FED7AA' },
+  { name: 'Gray', value: '#E5E7EB' },
+]
+
 interface RichTextEditorProps {
-  content?: string
-  onChange?: (html: string) => void
+  content: string
+  onChange: (html: string) => void
   placeholder?: string
   minHeight?: string
+  maxHeight?: string
+  className?: string
+  showHtmlToggle?: boolean
 }
 
-const fontFamilies = [
-  { label: 'Default', value: '' },
-  { label: 'Arial', value: 'Arial, sans-serif' },
-  { label: 'Georgia', value: 'Georgia, serif' },
-  { label: 'Times New Roman', value: 'Times New Roman, serif' },
-  { label: 'Courier New', value: 'Courier New, monospace' },
-  { label: 'Verdana', value: 'Verdana, sans-serif' },
-  { label: 'Trebuchet MS', value: 'Trebuchet MS, sans-serif' },
-]
-
-const fontSizes = [
-  { label: 'Small', value: '12px' },
-  { label: 'Normal', value: '14px' },
-  { label: 'Medium', value: '16px' },
-  { label: 'Large', value: '18px' },
-  { label: 'X-Large', value: '24px' },
-  { label: 'XX-Large', value: '32px' },
-]
-
-const textColors = [
-  '#000000', '#374151', '#6B7280', '#9CA3AF',
-  '#EF4444', '#F97316', '#F59E0B', '#EAB308',
-  '#22C55E', '#14B8A6', '#06B6D4', '#3B82F6',
-  '#6366F1', '#8B5CF6', '#A855F7', '#EC4899',
-]
-
-const highlightColors = [
-  '#FEF08A', '#FDE68A', '#FECACA', '#FED7AA',
-  '#D9F99D', '#A7F3D0', '#A5F3FC', '#BFDBFE',
-  '#DDD6FE', '#FBCFE8', '#E5E7EB', '#FFFFFF',
-]
-
-export default function RichTextEditor({ 
-  content = '', 
+// Dropdown component for font family and size
+function Dropdown({ 
+  label, 
+  value, 
+  options, 
   onChange,
-  placeholder = 'Write something...',
-  minHeight = '200px'
-}: RichTextEditorProps) {
-  const [showFontDropdown, setShowFontDropdown] = useState(false)
-  const [showSizeDropdown, setShowSizeDropdown] = useState(false)
-  const [showColorPicker, setShowColorPicker] = useState(false)
-  const [showHighlightPicker, setShowHighlightPicker] = useState(false)
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: false }),
-      Underline,
-      TiptapLink.configure({
-        openOnClick: false,
-        HTMLAttributes: { class: 'text-primary-600 underline' },
-      }),
-      Placeholder.configure({ placeholder }),
-      TextStyle,
-      Color,
-      Highlight.configure({ multicolor: true }),
-      TextAlign.configure({ types: ['paragraph'] }),
-    ],
-    content,
-    onUpdate: ({ editor }) => {
-      onChange?.(editor.getHTML())
-    },
-    editorProps: {
-      attributes: {
-        class: `prose prose-sm max-w-none focus:outline-none px-4 py-3`,
-        style: `min-height: ${minHeight}`,
-      },
-    },
-  })
-
-  const setLink = useCallback(() => {
-    if (!editor) return
-    const previousUrl = editor.getAttributes('link').href
-    const url = window.prompt('URL', previousUrl)
-    if (url === null) return
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      return
-    }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-  }, [editor])
-
-  const setFontFamily = (fontFamily: string) => {
-    if (!editor) return
-    if (fontFamily) {
-      editor.chain().focus().setMark('textStyle', { fontFamily }).run()
-    } else {
-      editor.chain().focus().unsetMark('textStyle').run()
-    }
-    setShowFontDropdown(false)
-  }
-
-  const setFontSize = (fontSize: string) => {
-    if (!editor) return
-    editor.chain().focus().setMark('textStyle', { fontSize }).run()
-    setShowSizeDropdown(false)
-  }
-
-  const setTextColor = (color: string) => {
-    if (!editor) return
-    editor.chain().focus().setColor(color).run()
-    setShowColorPicker(false)
-  }
-
-  const setHighlightColor = (color: string) => {
-    if (!editor) return
-    editor.chain().focus().setHighlight({ color }).run()
-    setShowHighlightPicker(false)
-  }
-
-  if (!editor) return null
+  icon: Icon
+}: { 
+  label: string
+  value: string
+  options: { name: string; value: string }[]
+  onChange: (value: string) => void
+  icon?: React.ComponentType<{ className?: string }>
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const selectedOption = options.find(o => o.value === value) || options[0]
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 bg-gray-50/80">
-        {/* Font Family */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowFontDropdown(!showFontDropdown)}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
-          >
-            <Type className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Font</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showFontDropdown && (
-            <div className="absolute left-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-              {fontFamilies.map((font) => (
-                <button
-                  key={font.value}
-                  onClick={() => setFontFamily(font.value)}
-                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50"
-                  style={{ fontFamily: font.value || 'inherit' }}
-                >
-                  {font.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Font Size */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowSizeDropdown(!showSizeDropdown)}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200 rounded transition-colors"
-          >
-            <span className="text-[10px] font-bold">A</span>
-            <span className="text-xs font-bold">A</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showSizeDropdown && (
-            <div className="absolute left-0 top-full mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-              {fontSizes.map((size) => (
-                <button
-                  key={size.value}
-                  onClick={() => setFontSize(size.value)}
-                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50"
-                >
-                  {size.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="w-px h-5 bg-gray-200 mx-1" />
-
-        {/* Basic Formatting */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          isActive={editor.isActive('bold')}
-          title="Bold"
-        >
-          <Bold className="w-4 h-4" />
-        </ToolbarButton>
-        
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          isActive={editor.isActive('italic')}
-          title="Italic"
-        >
-          <Italic className="w-4 h-4" />
-        </ToolbarButton>
-        
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          isActive={editor.isActive('underline')}
-          title="Underline"
-        >
-          <UnderlineIcon className="w-4 h-4" />
-        </ToolbarButton>
-
-        <div className="w-px h-5 bg-gray-200 mx-1" />
-
-        {/* Text Color */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowColorPicker(!showColorPicker)}
-            className="p-1.5 rounded hover:bg-gray-200 transition-colors"
-            title="Text Color"
-          >
-            <Palette className="w-4 h-4 text-gray-600" />
-          </button>
-          {showColorPicker && (
-            <div className="absolute left-0 top-full mt-1 p-2 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
-              <div className="grid grid-cols-4 gap-1">
-                {textColors.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => setTextColor(color)}
-                    className="w-6 h-6 rounded border border-gray-200 hover:scale-110 transition-transform"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Highlight Color */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowHighlightPicker(!showHighlightPicker)}
-            className="p-1.5 rounded hover:bg-gray-200 transition-colors"
-            title="Highlight"
-          >
-            <Highlighter className="w-4 h-4 text-gray-600" />
-          </button>
-          {showHighlightPicker && (
-            <div className="absolute left-0 top-full mt-1 p-2 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
-              <div className="grid grid-cols-4 gap-1">
-                {highlightColors.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => setHighlightColor(color)}
-                    className="w-6 h-6 rounded border border-gray-200 hover:scale-110 transition-transform"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="w-px h-5 bg-gray-200 mx-1" />
-
-        {/* Alignment */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().setTextAlign('left').run()}
-          isActive={editor.isActive({ textAlign: 'left' })}
-          title="Align Left"
-        >
-          <AlignLeft className="w-4 h-4" />
-        </ToolbarButton>
-        
-        <ToolbarButton
-          onClick={() => editor.chain().focus().setTextAlign('center').run()}
-          isActive={editor.isActive({ textAlign: 'center' })}
-          title="Align Center"
-        >
-          <AlignCenter className="w-4 h-4" />
-        </ToolbarButton>
-        
-        <ToolbarButton
-          onClick={() => editor.chain().focus().setTextAlign('right').run()}
-          isActive={editor.isActive({ textAlign: 'right' })}
-          title="Align Right"
-        >
-          <AlignRight className="w-4 h-4" />
-        </ToolbarButton>
-
-        <div className="w-px h-5 bg-gray-200 mx-1" />
-
-        {/* Lists */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          isActive={editor.isActive('bulletList')}
-          title="Bullet List"
-        >
-          <List className="w-4 h-4" />
-        </ToolbarButton>
-        
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          isActive={editor.isActive('orderedList')}
-          title="Numbered List"
-        >
-          <ListOrdered className="w-4 h-4" />
-        </ToolbarButton>
-
-        <div className="w-px h-5 bg-gray-200 mx-1" />
-
-        {/* Link */}
-        <ToolbarButton
-          onClick={setLink}
-          isActive={editor.isActive('link')}
-          title="Add Link"
-        >
-          <LinkIcon className="w-4 h-4" />
-        </ToolbarButton>
-
-        <div className="w-px h-5 bg-gray-200 mx-1" />
-
-        {/* Undo/Redo */}
-        <ToolbarButton
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
-          title="Undo"
-        >
-          <Undo className="w-4 h-4" />
-        </ToolbarButton>
-        
-        <ToolbarButton
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
-          title="Redo"
-        >
-          <Redo className="w-4 h-4" />
-        </ToolbarButton>
-      </div>
-
-      {/* Editor Content */}
-      <EditorContent editor={editor} />
-
-      {/* Click outside to close dropdowns */}
-      {(showFontDropdown || showSizeDropdown || showColorPicker || showHighlightPicker) && (
-        <div 
-          className="fixed inset-0 z-10" 
-          onClick={() => {
-            setShowFontDropdown(false)
-            setShowSizeDropdown(false)
-            setShowColorPicker(false)
-            setShowHighlightPicker(false)
-          }}
-        />
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded border border-gray-200 min-w-[90px]"
+      >
+        {Icon && <Icon className="w-3 h-3" />}
+        <span className="truncate flex-1 text-left">{selectedOption.name}</span>
+        <ChevronDown className="w-3 h-3 flex-shrink-0" />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setIsOpen(false)}
+          />
+          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[140px] max-h-[200px] overflow-y-auto">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  onChange(option.value)
+                  setIsOpen(false)
+                }}
+                className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 flex items-center gap-2"
+                style={label === 'Font' ? { fontFamily: option.value || 'inherit' } : {}}
+              >
+                {option.value === value && <Check className="w-3 h-3 text-primary-600" />}
+                {option.value !== value && <span className="w-3" />}
+                {option.name}
+              </button>
+            ))}
+          </div>
+        </>
       )}
-
-      <style jsx global>{`
-        .ProseMirror p.is-editor-empty:first-child::before {
-          color: #9ca3af;
-          content: attr(data-placeholder);
-          float: left;
-          height: 0;
-          pointer-events: none;
-        }
-        .ProseMirror:focus { outline: none; }
-        .ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; }
-        .ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; }
-        .ProseMirror li { margin: 0.25rem 0; }
-        .ProseMirror a { color: #4a5d4a; text-decoration: underline; }
-        .ProseMirror mark { padding: 0.125rem 0; }
-      `}</style>
     </div>
   )
 }
 
-function ToolbarButton({ 
-  onClick, 
-  isActive = false, 
-  disabled = false,
-  children,
-  title
+// Color picker dropdown
+function ColorPicker({
+  colors,
+  value,
+  onChange,
+  icon: Icon,
+  label
+}: {
+  colors: { name: string; value: string }[]
+  value: string
+  onChange: (value: string) => void
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+        title={label}
+      >
+        <Icon className="w-4 h-4" />
+        <div 
+          className="w-3 h-1 rounded-sm" 
+          style={{ backgroundColor: value || '#000000' }}
+        />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setIsOpen(false)}
+          />
+          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2">
+            <div className="grid grid-cols-4 gap-1">
+              {colors.map((color) => (
+                <button
+                  key={color.value || 'none'}
+                  type="button"
+                  onClick={() => {
+                    onChange(color.value)
+                    setIsOpen(false)
+                  }}
+                  className={`w-6 h-6 rounded border ${
+                    color.value === value 
+                      ? 'ring-2 ring-primary-500 ring-offset-1' 
+                      : 'border-gray-200 hover:border-gray-400'
+                  }`}
+                  style={{ backgroundColor: color.value || '#ffffff' }}
+                  title={color.name}
+                >
+                  {!color.value && (
+                    <X className="w-4 h-4 text-gray-400 mx-auto" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Link modal component
+function LinkModal({ 
+  isOpen, 
+  onClose, 
+  onSubmit, 
+  initialUrl 
 }: { 
+  isOpen: boolean
+  onClose: () => void
+  onSubmit: (url: string) => void
+  initialUrl: string
+}) {
+  const [url, setUrl] = useState(initialUrl)
+
+  useEffect(() => {
+    setUrl(initialUrl)
+  }, [initialUrl])
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/20" onClick={onClose} />
+      <div className="relative bg-white rounded-lg shadow-lg p-4 w-[360px]">
+        <h3 className="text-sm font-medium text-gray-900 mb-3">Insert Link</h3>
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://example.com"
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          autoFocus
+        />
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onSubmit(url)
+              onClose()
+            }}
+            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            Insert
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// HTML editor modal
+function HtmlEditorModal({
+  isOpen,
+  onClose,
+  html,
+  onSave
+}: {
+  isOpen: boolean
+  onClose: () => void
+  html: string
+  onSave: (html: string) => void
+}) {
+  const [editedHtml, setEditedHtml] = useState(html)
+
+  useEffect(() => {
+    setEditedHtml(html)
+  }, [html])
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="text-lg font-medium text-gray-900">Edit HTML Source</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-gray-400 hover:text-gray-600 rounded"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 p-4 overflow-hidden">
+          <textarea
+            value={editedHtml}
+            onChange={(e) => setEditedHtml(e.target.value)}
+            className="w-full h-full min-h-[300px] px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+            spellCheck={false}
+          />
+        </div>
+        <div className="flex justify-end gap-2 p-4 border-t">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onSave(editedHtml)
+              onClose()
+            }}
+            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            Apply Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Toolbar button component
+function ToolbarButton({
+  onClick,
+  isActive,
+  disabled,
+  title,
+  children
+}: {
   onClick: () => void
   isActive?: boolean
   disabled?: boolean
-  children: React.ReactNode
   title: string
+  children: React.ReactNode
 }) {
   return (
     <button
@@ -419,14 +417,359 @@ function ToolbarButton({
       className={`p-1.5 rounded transition-colors ${
         isActive 
           ? 'bg-primary-100 text-primary-700' 
-          : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
-      } disabled:opacity-50 disabled:cursor-not-allowed`}
+          : 'text-gray-600 hover:bg-gray-100'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       {children}
     </button>
   )
 }
 
-// Export editor hook for external use
-export { useEditor }
-export type { RichTextEditorProps }
+// Toolbar divider
+function ToolbarDivider() {
+  return <div className="w-px h-6 bg-gray-200 mx-1" />
+}
+
+// Main toolbar component
+function EditorToolbar({ editor }: { editor: Editor }) {
+  const [showLinkModal, setShowLinkModal] = useState(false)
+  const [showHtmlModal, setShowHtmlModal] = useState(false)
+
+  const getCurrentFontFamily = () => {
+    const attrs = editor.getAttributes('textStyle')
+    return attrs.fontFamily || ''
+  }
+
+  const getCurrentFontSize = () => {
+    const attrs = editor.getAttributes('textStyle')
+    return attrs.fontSize || '14px'
+  }
+
+  const getCurrentColor = () => {
+    const attrs = editor.getAttributes('textStyle')
+    return attrs.color || '#000000'
+  }
+
+  const getCurrentHighlight = () => {
+    const attrs = editor.getAttributes('highlight')
+    return attrs.color || ''
+  }
+
+  const setLink = useCallback((url: string) => {
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+      return
+    }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }, [editor])
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-0.5 p-2 border-b border-gray-200 bg-gray-50/50">
+        {/* Font Family */}
+        <Dropdown
+          label="Font"
+          value={getCurrentFontFamily()}
+          options={FONT_FAMILIES}
+          onChange={(value) => {
+            if (value) {
+              editor.chain().focus().setFontFamily(value).run()
+            } else {
+              editor.chain().focus().unsetFontFamily().run()
+            }
+          }}
+          icon={Type}
+        />
+
+        {/* Font Size */}
+        <Dropdown
+          label="Size"
+          value={getCurrentFontSize()}
+          options={FONT_SIZES}
+          onChange={(value) => {
+            (editor.chain().focus() as any).setFontSize(value).run()
+          }}
+        />
+
+        <ToolbarDivider />
+
+        {/* Basic Formatting */}
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          isActive={editor.isActive('bold')}
+          title="Bold (Ctrl+B)"
+        >
+          <Bold className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          isActive={editor.isActive('italic')}
+          title="Italic (Ctrl+I)"
+        >
+          <Italic className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          isActive={editor.isActive('underline')}
+          title="Underline (Ctrl+U)"
+        >
+          <UnderlineIcon className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        {/* Text Color */}
+        <ColorPicker
+          colors={COLORS}
+          value={getCurrentColor()}
+          onChange={(color) => {
+            editor.chain().focus().setColor(color).run()
+          }}
+          icon={Palette}
+          label="Text Color"
+        />
+
+        {/* Highlight Color */}
+        <ColorPicker
+          colors={HIGHLIGHT_COLORS}
+          value={getCurrentHighlight()}
+          onChange={(color) => {
+            if (color) {
+              editor.chain().focus().toggleHighlight({ color }).run()
+            } else {
+              editor.chain().focus().unsetHighlight().run()
+            }
+          }}
+          icon={Highlighter}
+          label="Highlight Color"
+        />
+
+        <ToolbarDivider />
+
+        {/* Alignment */}
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setTextAlign('left').run()}
+          isActive={editor.isActive({ textAlign: 'left' })}
+          title="Align Left"
+        >
+          <AlignLeft className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setTextAlign('center').run()}
+          isActive={editor.isActive({ textAlign: 'center' })}
+          title="Align Center"
+        >
+          <AlignCenter className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setTextAlign('right').run()}
+          isActive={editor.isActive({ textAlign: 'right' })}
+          title="Align Right"
+        >
+          <AlignRight className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+          isActive={editor.isActive({ textAlign: 'justify' })}
+          title="Justify"
+        >
+          <AlignJustify className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        {/* Lists */}
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          isActive={editor.isActive('bulletList')}
+          title="Bullet List"
+        >
+          <List className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          isActive={editor.isActive('orderedList')}
+          title="Numbered List"
+        >
+          <ListOrdered className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        {/* Link */}
+        <ToolbarButton
+          onClick={() => setShowLinkModal(true)}
+          isActive={editor.isActive('link')}
+          title="Insert Link"
+        >
+          <LinkIcon className="w-4 h-4" />
+        </ToolbarButton>
+
+        {/* HTML Source */}
+        <ToolbarButton
+          onClick={() => setShowHtmlModal(true)}
+          title="Edit HTML Source"
+        >
+          <Code className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
+        {/* Undo/Redo */}
+        <ToolbarButton
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editor.can().undo()}
+          title="Undo (Ctrl+Z)"
+        >
+          <Undo className="w-4 h-4" />
+        </ToolbarButton>
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editor.can().redo()}
+          title="Redo (Ctrl+Y)"
+        >
+          <Redo className="w-4 h-4" />
+        </ToolbarButton>
+      </div>
+
+      {/* Link Modal */}
+      <LinkModal
+        isOpen={showLinkModal}
+        onClose={() => setShowLinkModal(false)}
+        onSubmit={setLink}
+        initialUrl={editor.getAttributes('link').href || ''}
+      />
+
+      {/* HTML Editor Modal */}
+      <HtmlEditorModal
+        isOpen={showHtmlModal}
+        onClose={() => setShowHtmlModal(false)}
+        html={editor.getHTML()}
+        onSave={(html) => editor.commands.setContent(html)}
+      />
+    </>
+  )
+}
+
+// Main RichTextEditor component
+export default function RichTextEditor({
+  content,
+  onChange,
+  placeholder = 'Start typing...',
+  minHeight = '200px',
+  maxHeight = '400px',
+  className = ''
+}: RichTextEditorProps) {
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: false, // Disable heading for email context
+      }),
+      Underline,
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-primary-600 underline',
+        },
+      }),
+      Placeholder.configure({
+        placeholder,
+      }),
+      TextAlign.configure({
+        types: ['paragraph', 'heading'],
+      }),
+      TextStyle,
+      Color,
+      Highlight.configure({
+        multicolor: true,
+      }),
+      FontFamily,
+      FontSize,
+    ],
+    content,
+    onUpdate: ({ editor }) => {
+      onChange(editor.getHTML())
+    },
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm max-w-none focus:outline-none',
+        style: `min-height: ${minHeight}; max-height: ${maxHeight}; overflow-y: auto; padding: 12px;`,
+      },
+    },
+  })
+
+  // Update content when prop changes (for signatures/templates)
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content)
+    }
+  }, [content, editor])
+
+  if (!editor) {
+    return (
+      <div className={`border border-gray-200 rounded-lg ${className}`}>
+        <div className="h-10 bg-gray-50/50 border-b border-gray-200 animate-pulse" />
+        <div style={{ minHeight }} className="p-3 animate-pulse">
+          <div className="h-4 bg-gray-100 rounded w-3/4 mb-2" />
+          <div className="h-4 bg-gray-100 rounded w-1/2" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`border border-gray-200 rounded-lg overflow-hidden bg-white ${className}`}>
+      <EditorToolbar editor={editor} />
+      <EditorContent editor={editor} />
+    </div>
+  )
+}
+
+// Export a simpler version for signatures (less toolbar options)
+export function SignatureEditor({
+  content,
+  onChange,
+  placeholder = 'Create your email signature...'
+}: {
+  content: string
+  onChange: (html: string) => void
+  placeholder?: string
+}) {
+  return (
+    <RichTextEditor
+      content={content}
+      onChange={onChange}
+      placeholder={placeholder}
+      minHeight="150px"
+      maxHeight="300px"
+    />
+  )
+}
+
+// Export a version for templates
+export function TemplateEditor({
+  content,
+  onChange,
+  placeholder = 'Create your email template...'
+}: {
+  content: string
+  onChange: (html: string) => void
+  placeholder?: string
+}) {
+  return (
+    <RichTextEditor
+      content={content}
+      onChange={onChange}
+      placeholder={placeholder}
+      minHeight="250px"
+      maxHeight="500px"
+    />
+  )
+}

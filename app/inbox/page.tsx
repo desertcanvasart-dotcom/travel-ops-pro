@@ -3,11 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
-import TiptapLink from '@tiptap/extension-link'
-import Placeholder from '@tiptap/extension-placeholder'
+import RichTextEditor from '@/components/email/RichTextEditor'
 import { 
   Mail, 
   Inbox, 
@@ -25,14 +21,6 @@ import {
   Trash2,
   Archive,
   MoreHorizontal,
-  Bold,
-  Italic,
-  Underline as UnderlineIcon,
-  List,
-  ListOrdered,
-  Link as LinkIcon,
-  Undo,
-  Redo,
   Minus,
   Image,
   FileText,
@@ -91,14 +79,6 @@ interface GmailLabel {
     backgroundColor: string
     textColor: string
   }
-}
-
-interface EmailTemplate {
-  id: string
-  name: string
-  subject: string
-  content: string
-  category: string
 }
 
 type FilterType = 'all' | 'unread' | 'starred'
@@ -184,16 +164,12 @@ export default function InboxPage() {
       
       const currentFolder = targetFolder || folder
       let folderQuery = query || ''
-      
-      // Use proper Gmail search queries
+
       if (currentFolder === 'sent') {
-        // "from:me" gets all emails sent by the user
         folderQuery = 'from:me ' + folderQuery
       } else if (currentFolder === 'drafts') {
         folderQuery = 'in:drafts ' + folderQuery
       } else {
-        // Inbox: exclude sent emails by using "in:inbox -from:me" for received only
-        // Or just "in:inbox" to show all inbox items
         folderQuery = 'in:inbox -from:me ' + folderQuery
       }
       
@@ -264,7 +240,6 @@ export default function InboxPage() {
       const data = await response.json()
       if (data.error) throw new Error(data.error)
   
-      // Refresh emails after action
       await fetchEmails()
       setSelectedEmail(null)
       setSelectedEmails(new Set())
@@ -509,199 +484,112 @@ export default function InboxPage() {
       )}
 
       <div className="flex-1 flex overflow-hidden pr-4">
-        {/* Folders Sidebar - Collapsible */}
-<div className={`bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300 ${isFolderCollapsed ? 'w-12' : 'w-48'}`}>
-  <div className="p-2 flex flex-col h-full">
-    {/* Collapse Toggle */}
-    <button
-      onClick={() => setIsFolderCollapsed(!isFolderCollapsed)}
-      className="mb-2 p-1.5 hover:bg-gray-100 rounded-md transition-colors self-end"
-    >
-      {isFolderCollapsed ? (
-        <ChevronRight className="w-4 h-4 text-gray-500" />
-      ) : (
-        <ChevronLeft className="w-4 h-4 text-gray-500" />
-      )}
-    </button>
-
-    {/* System Folders */}
-    <nav className="space-y-1">
-      {[
-        { id: 'inbox' as FolderType, label: 'Inbox', icon: Inbox, count: unreadCount },
-        { id: 'sent' as FolderType, label: 'Sent', icon: Send, count: 0 },
-        { id: 'drafts' as FolderType, label: 'Drafts', icon: File, count: 0 },
-      ].map((item) => (
-        <button
-          key={item.id}
-          onClick={() => setFolder(item.id)}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
-            folder === item.id
-              ? 'bg-primary-50 text-primary-700 font-medium'
-              : 'text-gray-600 hover:bg-gray-50'
-          } ${isFolderCollapsed ? 'justify-center' : ''}`}
-          title={isFolderCollapsed ? item.label : ''}
-        >
-          <item.icon className={`w-4 h-4 flex-shrink-0 ${folder === item.id ? 'text-primary-600' : 'text-gray-400'}`} />
-          {!isFolderCollapsed && (
-            <>
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.id === 'inbox' && item.count > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                  folder === item.id ? 'bg-primary-200 text-primary-800' : 'bg-gray-100 text-gray-600'
-                }`}>
-                  {item.count}
-                </span>
+        {/* Folders Sidebar */}
+        <div className={`bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-300 ${isFolderCollapsed ? 'w-12' : 'w-48'}`}>
+          <div className="p-2 flex flex-col h-full">
+            <button
+              onClick={() => setIsFolderCollapsed(!isFolderCollapsed)}
+              className="mb-2 p-1.5 hover:bg-gray-100 rounded-md transition-colors self-end"
+            >
+              {isFolderCollapsed ? (
+                <ChevronRight className="w-4 h-4 text-gray-500" />
+              ) : (
+                <ChevronLeft className="w-4 h-4 text-gray-500" />
               )}
-            </>
-          )}
-        </button>
-      ))}
-    </nav>
+            </button>
 
-    {/* Custom Labels/Folders */}
-    {!isFolderCollapsed && customLabels.length > 0 && (
-      <div className="mt-4 pt-3 border-t border-gray-200">
-        <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-          Folders
-        </p>
-        <nav className="space-y-0.5">
-          {customLabels.map((label) => (
-            <button
-              key={label.id}
-              onClick={() => {
-                // You can extend FolderType or handle custom label selection
-                fetchEmails(`label:${label.name}`)
-              }}
-              className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              <Tag className="w-3.5 h-3.5 text-gray-400" />
-              <span className="flex-1 text-left truncate">{label.name}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-    )}
+            <nav className="space-y-1">
+              {[
+                { id: 'inbox' as FolderType, label: 'Inbox', icon: Inbox, count: unreadCount },
+                { id: 'sent' as FolderType, label: 'Sent', icon: Send, count: 0 },
+                { id: 'drafts' as FolderType, label: 'Drafts', icon: File, count: 0 },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setFolder(item.id)}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
+                    folder === item.id
+                      ? 'bg-primary-50 text-primary-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  } ${isFolderCollapsed ? 'justify-center' : ''}`}
+                  title={isFolderCollapsed ? item.label : ''}
+                >
+                  <item.icon className={`w-4 h-4 flex-shrink-0 ${folder === item.id ? 'text-primary-600' : 'text-gray-400'}`} />
+                  {!isFolderCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {item.id === 'inbox' && item.count > 0 && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                          folder === item.id ? 'bg-primary-200 text-primary-800' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {item.count}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
+              ))}
+            </nav>
 
-    {/* Create New Folder Button */}
-    {!isFolderCollapsed && (
-      <button
-        onClick={() => setShowLabelModal(true)}
-        className="mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
-      >
-        <FolderPlus className="w-4 h-4" />
-        <span>New Folder</span>
-      </button>
-    )}
-
-    {/* Filters */}
-    {!isFolderCollapsed && (
-      <div className="mt-4 pt-3 border-t border-gray-200">
-        <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Filters</p>
-        <nav className="space-y-0.5">
-          {[
-            { id: 'all' as FilterType, label: 'All Mail' },
-            { id: 'unread' as FilterType, label: 'Unread' },
-            { id: 'starred' as FilterType, label: 'Starred' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setFilter(item.id)}
-              className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
-                filter === item.id
-                  ? 'bg-gray-100 text-gray-900 font-medium'
-                  : 'text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </div>
-    )}
-  </div>
-</div>
-        
-  
-  {/* ADD: Bulk Actions Bar */}
-  {filteredEmails.length > 0 && (
-    <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-200">
-      <button
-        onClick={selectAllEmails}
-        className="p-1 hover:bg-gray-100 rounded transition-colors"
-        title={selectedEmails.size === filteredEmails.length ? 'Deselect all' : 'Select all'}
-      >
-        {selectedEmails.size === filteredEmails.length && selectedEmails.size > 0 ? (
-          <CheckSquare className="w-4 h-4 text-primary-600" />
-        ) : (
-          <Square className="w-4 h-4 text-gray-400" />
-        )}
-      </button>
-      
-      {selectedEmails.size > 0 && (
-        <>
-          <span className="text-xs text-gray-500">
-            {selectedEmails.size} selected
-          </span>
-          <div className="flex items-center gap-1 ml-2">
-            <button
-              onClick={handleArchive}
-              disabled={actionLoading}
-              className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-              title="Archive"
-            >
-              <Archive className="w-4 h-4 text-gray-500" />
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={actionLoading}
-              className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-              title="Delete"
-            >
-              <Trash2 className="w-4 h-4 text-gray-500" />
-            </button>
-            <button
-              onClick={handleMarkRead}
-              disabled={actionLoading}
-              className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-              title="Mark as read"
-            >
-              <MailOpen className="w-4 h-4 text-gray-500" />
-            </button>
-            
-            {/* Move to Folder Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowMoveMenu(showMoveMenu ? null : 'bulk')}
-                disabled={actionLoading || customLabels.length === 0}
-                className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                title="Move to folder"
-              >
-                <Move className="w-4 h-4 text-gray-500" />
-              </button>
-              {showMoveMenu === 'bulk' && (
-                <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+            {!isFolderCollapsed && customLabels.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                  Folders
+                </p>
+                <nav className="space-y-0.5">
                   {customLabels.map((label) => (
                     <button
                       key={label.id}
-                      onClick={() => handleMoveToLabel(label.id)}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+                      onClick={() => fetchEmails(`label:${label.name}`)}
+                      className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors"
                     >
                       <Tag className="w-3.5 h-3.5 text-gray-400" />
-                      {label.name}
+                      <span className="flex-1 text-left truncate">{label.name}</span>
                     </button>
                   ))}
-                </div>
-              )}
-            </div>
+                </nav>
+              </div>
+            )}
+
+            {!isFolderCollapsed && (
+              <button
+                onClick={() => setShowLabelModal(true)}
+                className="mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+              >
+                <FolderPlus className="w-4 h-4" />
+                <span>New Folder</span>
+              </button>
+            )}
+
+            {!isFolderCollapsed && (
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Filters</p>
+                <nav className="space-y-0.5">
+                  {[
+                    { id: 'all' as FilterType, label: 'All Mail' },
+                    { id: 'unread' as FilterType, label: 'Unread' },
+                    { id: 'starred' as FilterType, label: 'Starred' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setFilter(item.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
+                        filter === item.id
+                          ? 'bg-gray-100 text-gray-900 font-medium'
+                          : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            )}
           </div>
-        </>
-      )}
-    </div>
-  )}
+        </div>
 
-
-       {/* Email List */}
-       <div className={`${selectedEmail ? 'w-2/5' : 'flex-1'} bg-white border-r border-gray-200 overflow-y-auto`}>
+        {/* Email List */}
+        <div className={`${selectedEmail ? 'w-2/5' : 'flex-1'} bg-white border-r border-gray-200 overflow-y-auto`}>
           
           {/* Bulk Actions Bar */}
           {filteredEmails.length > 0 && (
@@ -749,7 +637,6 @@ export default function InboxPage() {
                       <MailOpen className="w-4 h-4 text-gray-500" />
                     </button>
                     
-                    {/* Move to Folder Dropdown */}
                     <div className="relative">
                       <button
                         onClick={() => setShowMoveMenu(showMoveMenu ? null : 'bulk')}
@@ -826,7 +713,6 @@ export default function InboxPage() {
                         }`}
                       >
                         <div className="flex items-start gap-2.5">
-                          {/* Checkbox */}
                           <button
                             onClick={(e) => toggleEmailSelection(email.id, e)}
                             className="mt-0.5 p-0.5 hover:bg-gray-200 rounded transition-colors"
@@ -838,12 +724,10 @@ export default function InboxPage() {
                             )}
                           </button>
 
-                          {/* Avatar */}
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-medium ${getAvatarColor(displayEmail)}`}>
                             {getInitials(displayName)}
                           </div>
                           
-                          {/* Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2 mb-0.5">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -891,81 +775,80 @@ export default function InboxPage() {
             </div>
           )}
         </div>
-{/* Email Detail Panel */}
-{selectedEmail && (
-  <div className="flex-1 bg-white overflow-y-auto">
-    <div className="p-6">
-      {/* Actions Bar */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-1">
-          <button 
-            onClick={handleArchive}
-            disabled={actionLoading}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-            title="Archive"
-          >
-            <Archive className="w-4 h-4 text-gray-500" />
-          </button>
-          <button 
-            onClick={handleDelete}
-            disabled={actionLoading}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-            title="Delete"
-          >
-            <Trash2 className="w-4 h-4 text-gray-500" />
-          </button>
-          <button 
-            onClick={() => selectedEmail.isUnread ? handleMarkRead() : handleMarkUnread()}
-            disabled={actionLoading}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-            title={selectedEmail.isUnread ? 'Mark as read' : 'Mark as unread'}
-          >
-            {selectedEmail.isUnread ? (
-              <MailOpen className="w-4 h-4 text-gray-500" />
-            ) : (
-              <Mail className="w-4 h-4 text-gray-500" />
-            )}
-          </button>
-          
-          {/* Move to Folder */}
-          {customLabels.length > 0 && (
-            <div className="relative">
-              <button 
-                onClick={() => setShowMoveMenu(showMoveMenu === 'detail' ? null : 'detail')}
-                disabled={actionLoading}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-                title="Move to folder"
-              >
-                <Move className="w-4 h-4 text-gray-500" />
-              </button>
-              {showMoveMenu === 'detail' && (
-                <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                  {customLabels.map((label) => (
-                    <button
-                      key={label.id}
-                      onClick={() => handleMoveToLabel(label.id)}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Tag className="w-3.5 h-3.5 text-gray-400" />
-                      {label.name}
-                    </button>
-                  ))}
+
+        {/* Email Detail Panel */}
+        {selectedEmail && (
+          <div className="flex-1 bg-white overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={handleArchive}
+                    disabled={actionLoading}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+                    title="Archive"
+                  >
+                    <Archive className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <button 
+                    onClick={handleDelete}
+                    disabled={actionLoading}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <button 
+                    onClick={() => selectedEmail.isUnread ? handleMarkRead() : handleMarkUnread()}
+                    disabled={actionLoading}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+                    title={selectedEmail.isUnread ? 'Mark as read' : 'Mark as unread'}
+                  >
+                    {selectedEmail.isUnread ? (
+                      <MailOpen className="w-4 h-4 text-gray-500" />
+                    ) : (
+                      <Mail className="w-4 h-4 text-gray-500" />
+                    )}
+                  </button>
+                  
+                  {customLabels.length > 0 && (
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowMoveMenu(showMoveMenu === 'detail' ? null : 'detail')}
+                        disabled={actionLoading}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
+                        title="Move to folder"
+                      >
+                        <Move className="w-4 h-4 text-gray-500" />
+                      </button>
+                      {showMoveMenu === 'detail' && (
+                        <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                          {customLabels.map((label) => (
+                            <button
+                              key={label.id}
+                              onClick={() => handleMoveToLabel(label.id)}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Tag className="w-3.5 h-3.5 text-gray-400" />
+                              {label.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="More">
+                    <MoreHorizontal className="w-4 h-4 text-gray-500" />
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
-          
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="More">
-            <MoreHorizontal className="w-4 h-4 text-gray-500" />
-          </button>
-        </div>
-        <button
-          onClick={() => setSelectedEmail(null)}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <X className="w-4 h-4 text-gray-500" />
-        </button>
-      </div>
+                <button
+                  onClick={() => setSelectedEmail(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
 
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 {decodeHtmlEntities(selectedEmail.subject || '(No subject)')}
@@ -1036,8 +919,8 @@ export default function InboxPage() {
         />
       )}
 
-       {/* 1. Create Label Modal */}
-       {showLabelModal && (
+      {/* Create Label Modal */}
+      {showLabelModal && (
         <CreateLabelModal
           onClose={() => setShowLabelModal(false)}
           userId={user?.id || ''}
@@ -1048,49 +931,18 @@ export default function InboxPage() {
         />
       )}
 
-      {/* 2. Click outside to close move menu */}
+      {/* Click outside to close move menu */}
       {showMoveMenu && (
         <div 
           className="fixed inset-0 z-10" 
           onClick={() => setShowMoveMenu(null)}
         />
       )}
-
     </div>
   )
 }
 
-// Toolbar Button Component
-function ToolbarButton({ 
-  onClick, 
-  isActive = false, 
-  disabled = false,
-  children,
-  title
-}: { 
-  onClick: () => void
-  isActive?: boolean
-  disabled?: boolean
-  children: React.ReactNode
-  title: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={`p-1.5 rounded transition-colors ${
-        isActive 
-          ? 'bg-primary-100 text-primary-700' 
-          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-      } disabled:opacity-50 disabled:cursor-not-allowed`}
-    >
-      {children}
-    </button>
-  )
-}
-
+// Helper functions
 function getFileIcon(mimeType: string) {
   if (mimeType.startsWith('image/')) return FileImage
   if (mimeType.includes('pdf')) return FileText
@@ -1104,7 +956,7 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-// Compose Modal
+// Compose Modal Component
 function ComposeModal({ 
   onClose, 
   userId, 
@@ -1126,6 +978,7 @@ function ComposeModal({
 
   const [to, setTo] = useState(replyTo ? extractEmailAddr(replyTo.from) : '')
   const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : '')
+  const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -1134,24 +987,6 @@ function ComposeModal({
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [showSignatureDropdown, setShowSignatureDropdown] = useState(false)
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false)
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: false }),
-      Underline,
-      TiptapLink.configure({
-        openOnClick: false,
-        HTMLAttributes: { class: 'text-primary-600 underline' },
-      }),
-      Placeholder.configure({ placeholder: 'Write your message...' }),
-    ],
-    content: '',
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] px-4 py-3',
-      },
-    },
-  })
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1168,10 +1003,8 @@ function ComposeModal({
         if (tempData.templates) setTemplates(tempData.templates)
         
         const defaultSig = sigData.signatures?.find((s: EmailSignature) => s.is_default)
-        if (defaultSig && editor) {
-          setTimeout(() => {
-            editor.commands.setContent(`<p></p><br/>${defaultSig.content}`)
-          }, 100)
+        if (defaultSig) {
+          setBody(`<p></p><br/>${defaultSig.content}`)
         }
       } catch (err) {
         console.error('Error fetching signatures/templates:', err)
@@ -1179,19 +1012,7 @@ function ComposeModal({
     }
     
     if (userId) fetchData()
-  }, [userId, editor])
-
-  const setLink = useCallback(() => {
-    if (!editor) return
-    const previousUrl = editor.getAttributes('link').href
-    const url = window.prompt('URL', previousUrl)
-    if (url === null) return
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      return
-    }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-  }, [editor])
+  }, [userId])
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -1228,22 +1049,18 @@ function ComposeModal({
   }
 
   const insertSignature = (signature: EmailSignature) => {
-    if (!editor) return
-    const currentContent = editor.getHTML()
-    editor.commands.setContent(`${currentContent}<br/>${signature.content}`)
+    setBody(prev => `${prev}<br/>${signature.content}`)
     setShowSignatureDropdown(false)
   }
 
   const useTemplate = (template: EmailTemplate) => {
     setSubject(template.subject)
-    if (editor) {
-      editor.commands.setContent(template.content)
-    }
+    setBody(template.content)
     setShowTemplateDropdown(false)
   }
 
   const handleSend = async () => {
-    if (!to || !subject || !editor?.getHTML()) {
+    if (!to || !subject || !body) {
       setError('Please fill in all fields')
       return
     }
@@ -1259,7 +1076,7 @@ function ComposeModal({
           userId,
           to,
           subject,
-          body: editor.getHTML(),
+          body,
           threadId: replyTo?.threadId,
           attachments: attachments.length > 0 ? attachments : undefined,
         }),
@@ -1285,6 +1102,7 @@ function ComposeModal({
         isExpanded ? 'sm:max-w-4xl sm:h-[85vh]' : 'sm:max-w-2xl'
       } max-h-[95vh] flex flex-col`}>
         
+        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">
             {replyTo ? 'Reply' : 'New Message'}
@@ -1306,6 +1124,7 @@ function ComposeModal({
           </div>
         </div>
 
+        {/* Error */}
         {error && (
           <div className="mx-5 mt-3 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -1316,6 +1135,7 @@ function ComposeModal({
           </div>
         )}
 
+        {/* Form */}
         <div className="flex-1 overflow-y-auto flex flex-col">
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">To</label>
@@ -1339,76 +1159,103 @@ function ComposeModal({
             />
           </div>
 
-          <div className="flex items-center gap-0.5 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
-            <ToolbarButton onClick={() => editor?.chain().focus().toggleBold().run()} isActive={editor?.isActive('bold') || false} title="Bold"><Bold className="w-4 h-4" /></ToolbarButton>
-            <ToolbarButton onClick={() => editor?.chain().focus().toggleItalic().run()} isActive={editor?.isActive('italic') || false} title="Italic"><Italic className="w-4 h-4" /></ToolbarButton>
-            <ToolbarButton onClick={() => editor?.chain().focus().toggleUnderline().run()} isActive={editor?.isActive('underline') || false} title="Underline"><UnderlineIcon className="w-4 h-4" /></ToolbarButton>
-            <div className="w-px h-5 bg-gray-200 mx-1" />
-            <ToolbarButton onClick={() => editor?.chain().focus().toggleBulletList().run()} isActive={editor?.isActive('bulletList') || false} title="Bullet List"><List className="w-4 h-4" /></ToolbarButton>
-            <ToolbarButton onClick={() => editor?.chain().focus().toggleOrderedList().run()} isActive={editor?.isActive('orderedList') || false} title="Numbered List"><ListOrdered className="w-4 h-4" /></ToolbarButton>
-            <div className="w-px h-5 bg-gray-200 mx-1" />
-            <ToolbarButton onClick={setLink} isActive={editor?.isActive('link') || false} title="Add Link"><LinkIcon className="w-4 h-4" /></ToolbarButton>
-            <div className="w-px h-5 bg-gray-200 mx-1" />
-            <ToolbarButton onClick={() => editor?.chain().focus().undo().run()} disabled={!editor?.can().undo()} title="Undo"><Undo className="w-4 h-4" /></ToolbarButton>
-            <ToolbarButton onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()} title="Redo"><Redo className="w-4 h-4" /></ToolbarButton>
-
-            <div className="ml-auto flex items-center gap-1">
-              {templates.length > 0 && (
-                <div className="relative">
-                  <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors">
-                    <FileText className="w-3.5 h-3.5" />Templates
-                  </button>
-                  {showTemplateDropdown && (
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                      {templates.map((template) => (
-                        <button key={template.id} onClick={() => useTemplate(template)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">
-                          <span className="font-medium text-gray-900">{template.name}</span>
-                          <span className="block text-gray-500 truncate">{template.subject}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {signatures.length > 0 && (
-                <div className="relative">
-                  <button onClick={() => setShowSignatureDropdown(!showSignatureDropdown)} className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors">
-                    <Signature className="w-3.5 h-3.5" />Signatures
-                  </button>
-                  {showSignatureDropdown && (
-                    <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                      {signatures.map((sig) => (
-                        <button key={sig.id} onClick={() => insertSignature(sig)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center justify-between">
-                          <span className="font-medium text-gray-900">{sig.name}</span>
-                          {sig.is_default && <span className="text-[10px] px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded">Default</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+          {/* Templates & Signatures */}
+          <div className="flex items-center justify-end gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
+            {templates.length > 0 && (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} 
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Templates
+                </button>
+                {showTemplateDropdown && (
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                    {templates.map((template) => (
+                      <button 
+                        key={template.id} 
+                        onClick={() => useTemplate(template)} 
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50"
+                      >
+                        <span className="font-medium text-gray-900">{template.name}</span>
+                        <span className="block text-gray-500 truncate">{template.subject}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {signatures.length > 0 && (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowSignatureDropdown(!showSignatureDropdown)} 
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                >
+                  <Signature className="w-3.5 h-3.5" />
+                  Signatures
+                </button>
+                {showSignatureDropdown && (
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                    {signatures.map((sig) => (
+                      <button 
+                        key={sig.id} 
+                        onClick={() => insertSignature(sig)} 
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <span className="font-medium text-gray-900">{sig.name}</span>
+                        {sig.is_default && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded">
+                            Default
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
-            <EditorContent editor={editor} className="h-full" />
+          {/* Rich Text Editor */}
+          <div className="flex-1 p-4">
+            <RichTextEditor
+              content={body}
+              onChange={setBody}
+              placeholder="Write your message..."
+              minHeight={isExpanded ? '350px' : '200px'}
+              maxHeight={isExpanded ? '500px' : '300px'}
+            />
           </div>
 
+          {/* Attachments */}
           {attachments.length > 0 && (
             <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-              <p className="text-xs font-medium text-gray-600 mb-2">Attachments ({attachments.length})</p>
+              <p className="text-xs font-medium text-gray-600 mb-2">
+                Attachments ({attachments.length})
+              </p>
               <div className="flex flex-wrap gap-2">
                 {attachments.map((file, index) => {
                   const FileIcon = getFileIcon(file.mimeType)
                   return (
-                    <div key={index} className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200">
+                    <div 
+                      key={index} 
+                      className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200"
+                    >
                       <FileIcon className="w-4 h-4 text-gray-400" />
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-gray-700 truncate max-w-[150px]">{file.filename}</p>
-                        <p className="text-[10px] text-gray-500">{formatFileSize(file.size)}</p>
+                        <p className="text-xs font-medium text-gray-700 truncate max-w-[150px]">
+                          {file.filename}
+                        </p>
+                        <p className="text-[10px] text-gray-500">
+                          {formatFileSize(file.size)}
+                        </p>
                       </div>
-                      <button onClick={() => removeAttachment(index)} className="p-1 hover:bg-gray-100 rounded">
+                      <button 
+                        onClick={() => removeAttachment(index)} 
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
                         <X className="w-3 h-3 text-gray-400" />
                       </button>
                     </div>
@@ -1419,42 +1266,82 @@ function ComposeModal({
           )}
         </div>
 
+        {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 bg-gray-50/80">
           <div className="flex items-center gap-1">
-            <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar" />
-            <input ref={imageInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" accept="image/*" />
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Attach file">
+            <input 
+              ref={fileInputRef} 
+              type="file" 
+              multiple 
+              onChange={handleFileSelect} 
+              className="hidden" 
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar" 
+            />
+            <input 
+              ref={imageInputRef} 
+              type="file" 
+              multiple 
+              onChange={handleFileSelect} 
+              className="hidden" 
+              accept="image/*" 
+            />
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
+              title="Attach file"
+            >
               <Paperclip className="w-4 h-4 text-gray-500" />
             </button>
-            <button onClick={() => imageInputRef.current?.click()} className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Insert image">
+            <button 
+              onClick={() => imageInputRef.current?.click()} 
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors" 
+              title="Insert image"
+            >
               <Image className="w-4 h-4 text-gray-500" />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">Discard</button>
-            <button onClick={handleSend} disabled={sending} className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm">
-              {sending ? <><Loader2 className="w-4 h-4 animate-spin" />Sending...</> : <><Send className="w-4 h-4" />Send</>}
+            <button 
+              onClick={onClose} 
+              className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Discard
+            </button>
+            <button 
+              onClick={handleSend} 
+              disabled={sending} 
+              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors shadow-sm"
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Send
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
 
+      {/* Click outside to close dropdowns */}
       {(showSignatureDropdown || showTemplateDropdown) && (
-        <div className="fixed inset-0 z-0" onClick={() => { setShowSignatureDropdown(false); setShowTemplateDropdown(false) }} />
+        <div 
+          className="fixed inset-0 z-0" 
+          onClick={() => { 
+            setShowSignatureDropdown(false)
+            setShowTemplateDropdown(false) 
+          }} 
+        />
       )}
-
-      <style jsx global>{`
-        .ProseMirror p.is-editor-empty:first-child::before { color: #9ca3af; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }
-        .ProseMirror { min-height: 200px; }
-        .ProseMirror:focus { outline: none; }
-        .ProseMirror ul { list-style-type: disc; padding-left: 1.5rem; }
-        .ProseMirror ol { list-style-type: decimal; padding-left: 1.5rem; }
-        .ProseMirror li { margin: 0.25rem 0; }
-        .ProseMirror a { color: #4a5d4a; text-decoration: underline; }
-      `}</style>
     </div>
   )
 }
+
 // Create Label Modal Component
 function CreateLabelModal({ 
   onClose, 
