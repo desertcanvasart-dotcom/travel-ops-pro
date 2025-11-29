@@ -65,8 +65,11 @@ export async function middleware(request: NextRequest) {
     (route !== '/' && request.nextUrl.pathname.startsWith(route))
   )
 
+  // Allow all API routes (they handle their own auth)
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
+
   // If user is not logged in and trying to access protected route
-  if (!user && !isPublicRoute) {
+  if (!user && !isPublicRoute && !isApiRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
