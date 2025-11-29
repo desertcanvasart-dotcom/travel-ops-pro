@@ -11,7 +11,7 @@ import { Color } from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
 import FontFamily from '@tiptap/extension-font-family'
 import { Extension } from '@tiptap/core'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Bold,
   Italic,
@@ -155,28 +155,65 @@ interface RichTextEditorProps {
   className?: string
 }
 
-// Dropdown component for font family and size
+// Dropdown component for font family and size - FIXED VERSION
 function Dropdown({ 
   label, 
   value, 
   options, 
   onChange,
-  icon: Icon
+  icon: Icon,
+  editor
 }: { 
   label: string
   value: string
   options: { name: string; value: string }[]
   onChange: (value: string) => void
   icon?: React.ComponentType<{ className?: string }>
+  editor: Editor
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const selectedOption = options.find(o => o.value === value) || options[0]
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen])
+
+  const handleSelect = (optionValue: string) => {
+    // Store selection before closing
+    const selection = editor.state.selection
+    
+    // Close dropdown first
+    setIsOpen(false)
+    
+    // Then apply the change with a small delay to ensure focus is maintained
+    setTimeout(() => {
+      editor.chain().focus().run()
+      onChange(optionValue)
+    }, 10)
+  }
+
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onMouseDown={(e) => {
+          e.preventDefault() // Prevent editor blur
+          setIsOpen(!isOpen)
+        }}
         className="flex items-center gap-1 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded border border-gray-200 min-w-[90px]"
       >
         {Icon && <Icon className="w-3 h-3" />}
@@ -185,56 +222,83 @@ function Dropdown({
       </button>
       
       {isOpen && (
-        <>
-          <div 
-            className="fixed inset-0 z-10" 
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[140px] max-h-[200px] overflow-y-auto">
-            {options.map((option) => (
-              <button
-                key={option.value || 'default'}
-                type="button"
-                onClick={() => {
-                  onChange(option.value)
-                  setIsOpen(false)
-                }}
-                className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 flex items-center gap-2"
-                style={label === 'Font' ? { fontFamily: option.value || 'inherit' } : {}}
-              >
-                {option.value === value && <Check className="w-3 h-3 text-primary-600" />}
-                {option.value !== value && <span className="w-3" />}
-                {option.name}
-              </button>
-            ))}
-          </div>
-        </>
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[140px] max-h-[200px] overflow-y-auto">
+          {options.map((option) => (
+            <button
+              key={option.value || 'default'}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault() // Prevent editor blur
+                e.stopPropagation()
+                handleSelect(option.value)
+              }}
+              className="w-full px-3 py-1.5 text-left text-xs hover:bg-gray-100 flex items-center gap-2"
+              style={label === 'Font' ? { fontFamily: option.value || 'inherit' } : {}}
+            >
+              {option.value === value && <Check className="w-3 h-3 text-primary-600" />}
+              {option.value !== value && <span className="w-3" />}
+              {option.name}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
 }
 
-// Color picker dropdown
+// Color picker dropdown - FIXED VERSION
 function ColorPicker({
   colors,
   value,
   onChange,
   icon: Icon,
-  label
+  label,
+  editor
 }: {
   colors: { name: string; value: string }[]
   value: string
   onChange: (value: string) => void
   icon: React.ComponentType<{ className?: string }>
   label: string
+  editor: Editor
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen])
+
+  const handleSelect = (colorValue: string) => {
+    setIsOpen(false)
+    
+    setTimeout(() => {
+      editor.chain().focus().run()
+      onChange(colorValue)
+    }, 10)
+  }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={pickerRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onMouseDown={(e) => {
+          e.preventDefault()
+          setIsOpen(!isOpen)
+        }}
         className="flex items-center gap-1 p-1.5 text-gray-600 hover:bg-gray-100 rounded"
         title={label}
       >
@@ -246,37 +310,32 @@ function ColorPicker({
       </button>
       
       {isOpen && (
-        <>
-          <div 
-            className="fixed inset-0 z-10" 
-            onClick={() => setIsOpen(false)}
-          />
-          <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2">
-            <div className="grid grid-cols-4 gap-1">
-              {colors.map((color) => (
-                <button
-                  key={color.value || 'none'}
-                  type="button"
-                  onClick={() => {
-                    onChange(color.value)
-                    setIsOpen(false)
-                  }}
-                  className={`w-6 h-6 rounded border ${
-                    color.value === value 
-                      ? 'ring-2 ring-primary-500 ring-offset-1' 
-                      : 'border-gray-200 hover:border-gray-400'
-                  }`}
-                  style={{ backgroundColor: color.value || '#ffffff' }}
-                  title={color.name}
-                >
-                  {!color.value && (
-                    <X className="w-4 h-4 text-gray-400 mx-auto" />
-                  )}
-                </button>
-              ))}
-            </div>
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-2">
+          <div className="grid grid-cols-4 gap-1">
+            {colors.map((color) => (
+              <button
+                key={color.value || 'none'}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleSelect(color.value)
+                }}
+                className={`w-6 h-6 rounded border ${
+                  color.value === value 
+                    ? 'ring-2 ring-primary-500 ring-offset-1' 
+                    : 'border-gray-200 hover:border-gray-400'
+                }`}
+                style={{ backgroundColor: color.value || '#ffffff' }}
+                title={color.name}
+              >
+                {!color.value && (
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                )}
+              </button>
+            ))}
           </div>
-        </>
+        </div>
       )}
     </div>
   )
@@ -422,7 +481,10 @@ function ToolbarButton({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onMouseDown={(e) => {
+        e.preventDefault() // Prevent editor blur
+        onClick()
+      }}
       disabled={disabled}
       title={title}
       className={`p-1.5 rounded transition-colors ${
@@ -482,6 +544,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
             }
           }}
           icon={Type}
+          editor={editor}
         />
 
         {/* Font Size */}
@@ -492,6 +555,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
           onChange={(value) => {
             editor.chain().focus().setFontSize(value).run()
           }}
+          editor={editor}
         />
 
         <ToolbarDivider />
@@ -532,6 +596,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
           }}
           icon={Palette}
           label="Text Color"
+          editor={editor}
         />
 
         {/* Highlight Color */}
@@ -547,6 +612,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
           }}
           icon={Highlighter}
           label="Highlight Color"
+          editor={editor}
         />
 
         <ToolbarDivider />
@@ -672,7 +738,6 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
-      // StarterKit WITHOUT link (we add it separately to avoid duplicate)
       StarterKit.configure({
         heading: false,
         bulletList: {
@@ -684,38 +749,30 @@ export default function RichTextEditor({
           keepAttributes: false,
         },
       }),
-      // Add Underline
       Underline,
-      // Add Link separately
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
           class: 'text-primary-600 underline',
         },
       }),
-      // Placeholder
       Placeholder.configure({
         placeholder,
       }),
-      // Text alignment
       TextAlign.configure({
         types: ['paragraph', 'heading'],
       }),
       // IMPORTANT: TextStyle MUST be added for Color, FontFamily, FontSize to work
       TextStyle,
-      // Color (depends on TextStyle)
       Color.configure({
         types: ['textStyle'],
       }),
-      // Highlight
       Highlight.configure({
         multicolor: true,
       }),
-      // FontFamily (depends on TextStyle)
       FontFamily.configure({
         types: ['textStyle'],
       }),
-      // Custom FontSize (depends on TextStyle)
       FontSize,
     ],
     content,
