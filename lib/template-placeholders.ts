@@ -1,128 +1,100 @@
-/**
- * Template Placeholder Utilities
- * 
- * Replaces placeholders like {{client_name}}, {{dates}}, {{total}} with actual values
- */
+// lib/template-placeholders.ts
+// Utility functions for template placeholder replacement
 
-export interface PlaceholderData {
-  // Client information
-  client_name?: string
-  client_first_name?: string
-  client_last_name?: string
-  client_email?: string
-  client_phone?: string
-  
-  // Trip information
-  trip_name?: string
-  trip_dates?: string
-  start_date?: string
-  end_date?: string
-  duration?: string
-  num_travelers?: number
-  destinations?: string
-  
-  // Pricing
-  total?: string | number
-  subtotal?: string | number
-  deposit?: string | number
-  balance?: string | number
-  currency?: string
-  
-  // Booking
-  booking_ref?: string
-  booking_id?: string
-  confirmation_number?: string
-  
-  // Company
-  company_name?: string
-  agent_name?: string
-  agent_email?: string
-  agent_phone?: string
-  
-  // Custom fields (dynamic)
-  [key: string]: string | number | undefined
+/**
+ * Extract all {{placeholder}} patterns from text
+ */
+export function getPlaceholders(text: string): string[] {
+  const regex = /\{\{\s*(\w+)\s*\}\}/g
+  const matches: string[] = []
+  let match
+
+  while ((match = regex.exec(text)) !== null) {
+    if (!matches.includes(match[1])) {
+      matches.push(match[1])
+    }
+  }
+
+  return matches
 }
 
 /**
- * Replace all placeholders in a template with actual values
- * 
- * @param template - The template string with {{placeholders}}
- * @param data - Object containing placeholder values
- * @param options - Optional configuration
- * @returns The template with placeholders replaced
+ * Replace all {{placeholder}} with actual values
  */
 export function replacePlaceholders(
-  template: string,
-  data: PlaceholderData,
-  options: {
-    preserveUnmatched?: boolean  // Keep {{placeholder}} if no value provided
-    defaultValue?: string        // Default value for unmatched placeholders
-    formatCurrency?: boolean     // Auto-format currency values
-    currencySymbol?: string      // Currency symbol to use
-  } = {}
+  text: string,
+  data: Record<string, string | undefined>
 ): string {
-  const {
-    preserveUnmatched = false,
-    defaultValue = '',
-    formatCurrency = true,
-    currencySymbol = '$'
-  } = options
-
-  // Regex to match {{placeholder}} or {{ placeholder }} (with optional spaces)
-  const placeholderRegex = /\{\{\s*(\w+)\s*\}\}/g
-
-  return template.replace(placeholderRegex, (match, key) => {
-    const value = data[key]
-
-    // No value found
-    if (value === undefined || value === null) {
-      return preserveUnmatched ? match : defaultValue
-    }
-
-    // Format currency values
-    if (formatCurrency && isCurrencyField(key) && typeof value === 'number') {
-      return formatCurrencyValue(value, currencySymbol)
-    }
-
-    return String(value)
+  return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
+    return data[key] !== undefined ? data[key]! : match
   })
 }
 
 /**
- * Get list of all placeholders in a template
+ * Format currency based on currency code
  */
-export function getPlaceholders(template: string): string[] {
-  const placeholderRegex = /\{\{\s*(\w+)\s*\}\}/g
-  const placeholders: string[] = []
-  let match
-
-  while ((match = placeholderRegex.exec(template)) !== null) {
-    if (!placeholders.includes(match[1])) {
-      placeholders.push(match[1])
-    }
+function formatCurrency(amount: number | string | undefined, currency: string = 'EUR'): string {
+  if (amount === undefined || amount === null) return ''
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount
+  if (isNaN(num)) return ''
+  
+  const symbols: Record<string, string> = {
+    EUR: '€',
+    USD: '$',
+    GBP: '£',
+    EGP: 'EGP ',
   }
-
-  return placeholders
+  
+  const symbol = symbols[currency] || `${currency} `
+  return `${symbol}${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 }
 
 /**
- * Validate that all required placeholders have values
+ * Format date in a readable format
  */
-export function validatePlaceholders(
-  template: string,
-  data: PlaceholderData
-): { valid: boolean; missing: string[] } {
-  const placeholders = getPlaceholders(template)
-  const missing = placeholders.filter(p => !data[p])
-
-  return {
-    valid: missing.length === 0,
-    missing
-  }
+function formatDate(date: string | Date | undefined): string {
+  if (!date) return ''
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { 
+    month: 'long', 
+    day: 'numeric', 
+    year: 'numeric' 
+  })
 }
 
 /**
- * Build placeholder data from client and booking objects
+ * Format date range
+ */
+function formatDateRange(startDate: string | Date | undefined, endDate: string | Date | undefined): string {
+  if (!startDate || !endDate) return ''
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return ''
+  
+  const startMonth = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const endFormatted = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  
+  return `${startMonth} - ${endFormatted}`
+}
+
+/**
+ * Format payment status for display
+ */
+function formatPaymentStatus(status: string | undefined): string {
+  if (!status) return ''
+  const statusMap: Record<string, string> = {
+    'not_paid': 'Not Paid',
+    'deposit_paid': 'Deposit Paid',
+    'partial_paid': 'Partially Paid',
+    'fully_paid': 'Fully Paid',
+    'overdue': 'Overdue',
+  }
+  return statusMap[status] || status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+/**
+ * Build placeholder data from client and trip info
  */
 export function buildPlaceholderData(
   client?: {
@@ -130,154 +102,106 @@ export function buildPlaceholderData(
     email?: string
     phone?: string
   },
-  booking?: {
-    id?: string
-    ref?: string
-    tripName?: string
+  trip?: {
+    name?: string
     startDate?: string | Date
     endDate?: string | Date
-    travelers?: number
-    total?: number
-    deposit?: number
+    totalDays?: number
+    numAdults?: number
+    numChildren?: number
+    totalCost?: number
+    depositAmount?: number
+    balanceDue?: number
+    totalPaid?: number
     currency?: string
+    paymentStatus?: string
+    itineraryCode?: string
   },
   company?: {
     name?: string
     agentName?: string
-    agentEmail?: string
-    agentPhone?: string
+    email?: string
+    phone?: string
   }
-): PlaceholderData {
-  const data: PlaceholderData = {}
+): Record<string, string> {
+  const data: Record<string, string> = {}
+  const currency = trip?.currency || 'EUR'
 
   // Client data
-  if (client) {
+  if (client?.name) {
     data.client_name = client.name
-    if (client.name) {
-      const parts = client.name.split(' ')
-      data.client_first_name = parts[0]
-      data.client_last_name = parts.slice(1).join(' ')
-    }
-    data.client_email = client.email
-    data.client_phone = client.phone
+    data.client_first_name = client.name.split(' ')[0]
+  }
+  if (client?.email) data.client_email = client.email
+  if (client?.phone) data.client_phone = client.phone
+
+  // Trip data
+  if (trip?.name) data.trip_name = trip.name
+  if (trip?.itineraryCode) {
+    data.itinerary_code = trip.itineraryCode
+    data.booking_ref = trip.itineraryCode
+    data.confirmation_number = trip.itineraryCode
+  }
+  if (trip?.startDate) data.start_date = formatDate(trip.startDate)
+  if (trip?.endDate) data.end_date = formatDate(trip.endDate)
+  if (trip?.startDate && trip?.endDate) {
+    data.trip_dates = formatDateRange(trip.startDate, trip.endDate)
+  }
+  if (trip?.totalDays) data.total_days = `${trip.totalDays} days`
+  if (trip?.numAdults !== undefined) data.num_adults = trip.numAdults.toString()
+  if (trip?.numChildren !== undefined) data.num_children = trip.numChildren.toString()
+  if (trip?.numAdults !== undefined && trip?.numChildren !== undefined) {
+    data.total_travelers = (trip.numAdults + trip.numChildren).toString()
   }
 
-  // Booking data
-  if (booking) {
-    data.booking_id = booking.id
-    data.booking_ref = booking.ref
-    data.confirmation_number = booking.ref || booking.id
-    data.trip_name = booking.tripName
-    data.num_travelers = booking.travelers
-    data.total = booking.total
-    data.deposit = booking.deposit
-    data.currency = booking.currency || 'USD'
-
-    if (booking.total && booking.deposit) {
-      data.balance = booking.total - booking.deposit
-    }
-
-    // Format dates
-    if (booking.startDate) {
-      const start = new Date(booking.startDate)
-      data.start_date = formatDate(start)
-    }
-    if (booking.endDate) {
-      const end = new Date(booking.endDate)
-      data.end_date = formatDate(end)
-    }
-    if (booking.startDate && booking.endDate) {
-      const start = new Date(booking.startDate)
-      const end = new Date(booking.endDate)
-      data.trip_dates = `${formatDate(start)} - ${formatDate(end)}`
-      
-      const diffTime = Math.abs(end.getTime() - start.getTime())
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      data.duration = `${diffDays} days`
-    }
-  }
+  // Financial data
+  if (trip?.totalCost !== undefined) data.total = formatCurrency(trip.totalCost, currency)
+  if (trip?.depositAmount !== undefined) data.deposit = formatCurrency(trip.depositAmount, currency)
+  if (trip?.balanceDue !== undefined) data.balance = formatCurrency(trip.balanceDue, currency)
+  if (trip?.totalPaid !== undefined) data.total_paid = formatCurrency(trip.totalPaid, currency)
+  if (trip?.currency) data.currency = trip.currency
+  if (trip?.paymentStatus) data.payment_status = formatPaymentStatus(trip.paymentStatus)
 
   // Company data
-  if (company) {
-    data.company_name = company.name
-    data.agent_name = company.agentName
-    data.agent_email = company.agentEmail
-    data.agent_phone = company.agentPhone
+  if (company?.name) data.company_name = company.name
+  if (company?.agentName) data.agent_name = company.agentName
+  if (company?.email) data.company_email = company.email
+  if (company?.phone) data.company_phone = company.phone
+
+  // Dynamic dates
+  data.today = formatDate(new Date())
+  
+  // Calculate due dates
+  const today = new Date()
+  const depositDue = new Date(today)
+  depositDue.setDate(depositDue.getDate() + 7)
+  data.deposit_due_date = formatDate(depositDue)
+  
+  if (trip?.startDate) {
+    const startDate = new Date(trip.startDate)
+    const finalPaymentDue = new Date(startDate)
+    finalPaymentDue.setDate(finalPaymentDue.getDate() - 14)
+    data.final_payment_due = formatDate(finalPaymentDue)
   }
 
   return data
 }
 
-// Helper functions
-
-function isCurrencyField(key: string): boolean {
-  const currencyFields = ['total', 'subtotal', 'deposit', 'balance', 'price', 'amount', 'cost', 'fee']
-  return currencyFields.some(f => key.toLowerCase().includes(f))
-}
-
-function formatCurrencyValue(value: number, symbol: string): string {
-  return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
-}
-
-/**
- * Available placeholder reference (for UI display)
- */
+// Placeholder reference for documentation
 export const PLACEHOLDER_REFERENCE = [
-  {
-    category: 'Client',
-    placeholders: [
-      { key: 'client_name', description: 'Full client name' },
-      { key: 'client_first_name', description: 'Client first name' },
-      { key: 'client_last_name', description: 'Client last name' },
-      { key: 'client_email', description: 'Client email address' },
-      { key: 'client_phone', description: 'Client phone number' },
-    ]
-  },
-  {
-    category: 'Trip',
-    placeholders: [
-      { key: 'trip_name', description: 'Name of the trip/tour' },
-      { key: 'trip_dates', description: 'Trip date range (e.g., "Jan 15 - Jan 22, 2025")' },
-      { key: 'start_date', description: 'Trip start date' },
-      { key: 'end_date', description: 'Trip end date' },
-      { key: 'duration', description: 'Trip duration (e.g., "7 days")' },
-      { key: 'num_travelers', description: 'Number of travelers' },
-      { key: 'destinations', description: 'Destinations/locations' },
-    ]
-  },
-  {
-    category: 'Pricing',
-    placeholders: [
-      { key: 'total', description: 'Total price' },
-      { key: 'subtotal', description: 'Subtotal before extras' },
-      { key: 'deposit', description: 'Deposit amount' },
-      { key: 'balance', description: 'Balance due' },
-      { key: 'currency', description: 'Currency code (e.g., "USD")' },
-    ]
-  },
-  {
-    category: 'Booking',
-    placeholders: [
-      { key: 'booking_ref', description: 'Booking reference number' },
-      { key: 'booking_id', description: 'Booking ID' },
-      { key: 'confirmation_number', description: 'Confirmation number' },
-    ]
-  },
-  {
-    category: 'Company',
-    placeholders: [
-      { key: 'company_name', description: 'Your company name' },
-      { key: 'agent_name', description: 'Agent/staff name' },
-      { key: 'agent_email', description: 'Agent email' },
-      { key: 'agent_phone', description: 'Agent phone' },
-    ]
-  },
+  { key: 'client_name', label: 'Full Name', example: 'John Smith' },
+  { key: 'client_first_name', label: 'First Name', example: 'John' },
+  { key: 'client_email', label: 'Email', example: 'john@example.com' },
+  { key: 'client_phone', label: 'Phone', example: '+1 234 567 8900' },
+  { key: 'trip_name', label: 'Trip Name', example: 'Cairo & Luxor Adventure' },
+  { key: 'itinerary_code', label: 'Booking Reference', example: 'EGY-2024-001' },
+  { key: 'start_date', label: 'Start Date', example: 'January 15, 2025' },
+  { key: 'end_date', label: 'End Date', example: 'January 22, 2025' },
+  { key: 'trip_dates', label: 'Date Range', example: 'Jan 15 - Jan 22, 2025' },
+  { key: 'total_days', label: 'Duration', example: '7 days' },
+  { key: 'total', label: 'Total Cost', example: '€3,500' },
+  { key: 'deposit', label: 'Deposit Amount', example: '€1,050' },
+  { key: 'balance', label: 'Balance Due', example: '€2,450' },
+  { key: 'company_name', label: 'Company Name', example: 'Travel2Egypt' },
+  { key: 'agent_name', label: 'Agent Name', example: 'Islam' },
 ]

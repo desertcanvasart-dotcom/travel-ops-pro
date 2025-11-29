@@ -1140,9 +1140,8 @@ export default function InboxPage() {
           </div>
         )}
       </div>
-
-      {/* Compose Modal */}
-      {showCompose && (
+{/* Compose Modal */}
+{showCompose && (
         <ComposeModal
           onClose={() => setShowCompose(false)}
           userId={user?.id || ''}
@@ -1192,8 +1191,7 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-// UPDATED: Compose Modal Component with template placeholder support
-function ComposeModal({ 
+function ComposeModal({
   onClose, 
   userId, 
   replyTo,
@@ -1226,11 +1224,17 @@ function ComposeModal({
   const [showSignatureDropdown, setShowSignatureDropdown] = useState(false)
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false)
   
-  // NEW: State for template placeholder modal
+  // State for template placeholder modal
   const [showPlaceholderModal, setShowPlaceholderModal] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null)
   const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({})
   const [selectedClientId, setSelectedClientId] = useState<string>('')
+  
+  // NEW: State for CRM data
+  const [loadingCRMData, setLoadingCRMData] = useState(false)
+  const [clientItineraries, setClientItineraries] = useState<any[]>([])
+  const [selectedItineraryId, setSelectedItineraryId] = useState<string>('')
+  const [crmPlaceholderData, setCrmPlaceholderData] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1257,6 +1261,85 @@ function ComposeModal({
     
     if (userId) fetchData()
   }, [userId])
+
+  // NEW: Fetch CRM data when client is selected
+  const fetchClientCRMData = async (clientId: string) => {
+    if (!clientId) {
+      setClientItineraries([])
+      setSelectedItineraryId('')
+      setCrmPlaceholderData({})
+      return
+    }
+
+    setLoadingCRMData(true)
+    try {
+      const response = await fetch(`/api/clients/${clientId}/template-data?userId=${userId}`)
+      const data = await response.json()
+      
+      if (data.error) {
+        console.error('Error fetching CRM data:', data.error)
+        return
+      }
+
+      // Set available itineraries for this client
+      setClientItineraries(data.allItineraries || [])
+      
+      // Auto-select the latest itinerary if available
+      if (data.latestItinerary) {
+        setSelectedItineraryId(data.latestItinerary.id)
+      }
+      
+      // Set placeholder data from CRM
+      setCrmPlaceholderData(data.placeholderData || {})
+      
+      // Also set the "To" field to client's email
+      const client = clients.find(c => c.id === clientId)
+      if (client?.email) {
+        setTo(client.email)
+      }
+
+    } catch (err) {
+      console.error('Error fetching client CRM data:', err)
+    } finally {
+      setLoadingCRMData(false)
+    }
+  }
+
+  // NEW: Fetch updated data when itinerary selection changes
+  const fetchItineraryData = async (clientId: string, itineraryId: string) => {
+    if (!clientId || !itineraryId) return
+
+    setLoadingCRMData(true)
+    try {
+      const response = await fetch(
+        `/api/clients/${clientId}/template-data?userId=${userId}&itineraryId=${itineraryId}`
+      )
+      const data = await response.json()
+      
+      if (data.placeholderData) {
+        setCrmPlaceholderData(data.placeholderData)
+      }
+    } catch (err) {
+      console.error('Error fetching itinerary data:', err)
+    } finally {
+      setLoadingCRMData(false)
+    }
+  }
+
+  // Handle client selection change
+  const handleClientChange = (clientId: string) => {
+    setSelectedClientId(clientId)
+    setSelectedItineraryId('')
+    fetchClientCRMData(clientId)
+  }
+
+  // Handle itinerary selection change
+  const handleItineraryChange = (itineraryId: string) => {
+    setSelectedItineraryId(itineraryId)
+    if (selectedClientId && itineraryId) {
+      fetchItineraryData(selectedClientId, itineraryId)
+    }
+  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -1297,7 +1380,7 @@ function ComposeModal({
     setShowSignatureDropdown(false)
   }
 
-  // UPDATED: useTemplate now checks for placeholders
+  // useTemplate now shows placeholder modal with CRM data
   const useTemplate = (template: EmailTemplate) => {
     const placeholders = getPlaceholders(template.content + ' ' + template.subject)
     
@@ -1305,7 +1388,10 @@ function ComposeModal({
       // Has placeholders - show modal to fill them
       setSelectedTemplate(template)
       setPlaceholderValues({})
-      setSelectedClientId('')
+      // Reset client selection if not already selected
+      if (!selectedClientId) {
+        setCrmPlaceholderData({})
+      }
       setShowPlaceholderModal(true)
     } else {
       // No placeholders - use directly
@@ -1315,28 +1401,15 @@ function ComposeModal({
     setShowTemplateDropdown(false)
   }
 
-  // NEW: Apply template with placeholder values
+  // Apply template with CRM data
   const applyTemplateWithPlaceholders = () => {
     if (!selectedTemplate) return
 
-    let data: Record<string, string> = { ...placeholderValues }
+    // Merge CRM data with any manual overrides
+    const finalData = { ...crmPlaceholderData, ...placeholderValues }
 
-    // If client selected, build placeholder data from client
-    if (selectedClientId) {
-      const client = clients.find(c => c.id === selectedClientId)
-      if (client) {
-        const clientData = buildPlaceholderData(
-          { name: client.name, email: client.email, phone: client.phone },
-          undefined,
-          { name: 'Travel2Egypt', agentName: 'Islam' }
-        )
-        // Merge client data with manual values (manual takes precedence)
-        data = { ...clientData, ...placeholderValues }
-      }
-    }
-
-    const processedSubject = replacePlaceholders(selectedTemplate.subject, data)
-    const processedContent = replacePlaceholders(selectedTemplate.content, data)
+    const processedSubject = replacePlaceholders(selectedTemplate.subject, finalData)
+    const processedContent = replacePlaceholders(selectedTemplate.content, finalData)
 
     setSubject(processedSubject)
     setBody(processedContent)
@@ -1624,13 +1697,13 @@ function ComposeModal({
         />
       )}
 
-      {/* NEW: Placeholder Modal */}
+      {/* Placeholder Modal with CRM Data Integration */}
       {showPlaceholderModal && selectedTemplate && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/30" onClick={() => setShowPlaceholderModal(false)} />
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900">Fill Template Placeholders</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Fill Template: {selectedTemplate.name}</h3>
               <button onClick={() => setShowPlaceholderModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
@@ -1638,27 +1711,95 @@ function ComposeModal({
             
             <div className="p-5 overflow-y-auto flex-1 space-y-4">
               {/* Client selector */}
-              {clients.length > 0 && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Select Client (auto-fills client fields)
-                  </label>
-                  <select
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                  >
-                    <option value="">-- Select a client --</option>
-                    {clients.map(client => (
-                      <option key={client.id} value={client.id}>{client.name} ({client.email})</option>
-                    ))}
-                  </select>
+              <div className="p-4 bg-primary-50 rounded-lg border border-primary-100">
+                <p className="text-xs font-semibold text-primary-800 mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Load from CRM
+                </p>
+                
+                <div className="space-y-3">
+                  {/* Client Dropdown */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Select Client
+                    </label>
+                    <select
+                      value={selectedClientId}
+                      onChange={(e) => handleClientChange(e.target.value)}
+                      className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+                    >
+                      <option value="">-- Select a client --</option>
+                      {clients.map(client => (
+                        <option key={client.id} value={client.id}>
+                          {client.name} ({client.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Itinerary Dropdown (shows when client selected) */}
+                  {selectedClientId && clientItineraries.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Select Trip/Itinerary
+                      </label>
+                      <select
+                        value={selectedItineraryId}
+                        onChange={(e) => handleItineraryChange(e.target.value)}
+                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+                      >
+                        <option value="">-- Select an itinerary --</option>
+                        {clientItineraries.map((itin: any) => (
+                          <option key={itin.id} value={itin.id}>
+                            {itin.itinerary_code} - {itin.trip_name} ({itin.start_date})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {selectedClientId && clientItineraries.length === 0 && !loadingCRMData && (
+                    <p className="text-xs text-gray-500 italic">No itineraries found for this client</p>
+                  )}
+
+                  {loadingCRMData && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Loading CRM data...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Show loaded CRM values */}
+              {selectedClientId && Object.keys(crmPlaceholderData).length > 0 && (
+                <div className="p-3 bg-green-50 rounded-lg border border-green-100">
+                  <p className="text-xs font-medium text-green-800 mb-2">✓ Data loaded from CRM:</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    {crmPlaceholderData.client_name && (
+                      <div><span className="text-gray-500">Client:</span> {crmPlaceholderData.client_name}</div>
+                    )}
+                    {crmPlaceholderData.trip_name && (
+                      <div><span className="text-gray-500">Trip:</span> {crmPlaceholderData.trip_name}</div>
+                    )}
+                    {crmPlaceholderData.total && (
+                      <div><span className="text-gray-500">Total:</span> {crmPlaceholderData.total}</div>
+                    )}
+                    {crmPlaceholderData.deposit && (
+                      <div><span className="text-gray-500">Deposit:</span> {crmPlaceholderData.deposit}</div>
+                    )}
+                    {crmPlaceholderData.trip_dates && (
+                      <div className="col-span-2"><span className="text-gray-500">Dates:</span> {crmPlaceholderData.trip_dates}</div>
+                    )}
+                  </div>
                 </div>
               )}
-              
-              {/* Placeholder fields */}
+
+              {/* Manual override fields */}
               <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs font-medium text-gray-500 mb-3">Or fill manually:</p>
+                <p className="text-xs font-medium text-gray-500 mb-3">
+                  Override values (optional):
+                </p>
                 {getPlaceholders(selectedTemplate.content + ' ' + selectedTemplate.subject).map(placeholder => (
                   <div key={placeholder} className="mb-3">
                     <label className="block text-xs font-medium text-gray-600 mb-1 capitalize">
@@ -1671,9 +1812,14 @@ function ComposeModal({
                         ...prev,
                         [placeholder]: e.target.value
                       }))}
+                      placeholder={crmPlaceholderData[placeholder] || `Enter ${placeholder.replace(/_/g, ' ')}`}
                       className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                      placeholder={`Enter ${placeholder.replace(/_/g, ' ')}`}
                     />
+                    {crmPlaceholderData[placeholder] && !placeholderValues[placeholder] && (
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        Will use: {crmPlaceholderData[placeholder]}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1688,7 +1834,8 @@ function ComposeModal({
               </button>
               <button 
                 onClick={applyTemplateWithPlaceholders}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                disabled={loadingCRMData}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
               >
                 Apply Template
               </button>
