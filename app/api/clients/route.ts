@@ -20,14 +20,13 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('clients')
-      .select('id, name, email, phone, status')
+      .select('id, first_name, last_name, email, phone, status')
       .eq('user_id', userId)
-      .order('name', { ascending: true })
+      .order('first_name', { ascending: true })
       .limit(limit)
 
-    // If search query provided, filter by name or email
     if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`)
+      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`)
     }
 
     const { data: clients, error } = await query
@@ -36,7 +35,16 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
-    return NextResponse.json({ clients: clients || [] })
+    // Transform to include combined name field
+    const transformedClients = (clients || []).map(client => ({
+      id: client.id,
+      name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
+      email: client.email,
+      phone: client.phone,
+      status: client.status
+    }))
+
+    return NextResponse.json({ clients: transformedClients })
 
   } catch (error: any) {
     console.error('Error fetching clients:', error)
