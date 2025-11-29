@@ -22,16 +22,23 @@ export async function GET(
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
     }
 
-    // Fetch client data
+    // Fetch client data - using first_name, last_name instead of name
     const { data: client, error: clientError } = await supabase
       .from('clients')
-      .select('id, name, email, phone')
+      .select('id, first_name, last_name, email, phone')
       .eq('id', clientId)
-      .eq('user_id', userId)
       .single()
 
     if (clientError || !client) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    }
+
+    // Transform client to have combined name
+    const clientWithName = {
+      id: client.id,
+      name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
+      email: client.email,
+      phone: client.phone
     }
 
     // Fetch itinerary - either specific one or latest for this client
@@ -56,7 +63,6 @@ export async function GET(
         payment_status,
         status
       `)
-      .eq('user_id', userId)
       .eq('client_id', clientId)
 
     if (itineraryId) {
@@ -76,16 +82,15 @@ export async function GET(
     const { data: allItineraries } = await supabase
       .from('itineraries')
       .select('id, itinerary_code, trip_name, start_date, status, total_cost')
-      .eq('user_id', userId)
       .eq('client_id', clientId)
       .order('created_at', { ascending: false })
       .limit(10)
 
     // Build the placeholder data
-    const placeholderData = buildPlaceholderData(client, latestItinerary)
+    const placeholderData = buildPlaceholderData(clientWithName, latestItinerary)
 
     return NextResponse.json({
-      client,
+      client: clientWithName,
       latestItinerary,
       allItineraries: allItineraries || [],
       placeholderData,
@@ -99,16 +104,16 @@ export async function GET(
 
 // Helper function to build placeholder data
 function buildPlaceholderData(
-  client: { name: string; email: string; phone?: string },
+  client: { name: string; email: string; phone?: string | null },
   itinerary?: any
 ): Record<string, string> {
   const data: Record<string, string> = {}
   const currency = itinerary?.currency || 'EUR'
 
   // Client data
-  data.client_name = client.name
-  data.client_first_name = client.name.split(' ')[0]
-  data.client_email = client.email
+  data.client_name = client.name || ''
+  data.client_first_name = client.name ? client.name.split(' ')[0] : ''
+  data.client_email = client.email || ''
   if (client.phone) data.client_phone = client.phone
 
   // Trip data (if itinerary exists)
