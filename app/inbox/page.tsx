@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
 import RichTextEditor from '@/components/email/RichTextEditor'
+// NEW IMPORTS FOR GMAIL ENHANCEMENTS
+import AttachmentList, { AttachmentIndicator } from '@/components/AttachmentList'
+import ClientLinkButton from '@/components/ClientLinkButton'
+import { useEmailPolling, useEmailCache } from '@/lib/use-email-polling'
+import { replacePlaceholders, buildPlaceholderData, getPlaceholders } from '@/lib/template-placeholders'
 import { 
   Mail, 
   Inbox, 
@@ -32,10 +37,12 @@ import {
   MailOpen,
   Move,
   CheckSquare,
-  Square
+  Square,
+  Bell
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
+// UPDATED: Email interface with attachments
 interface Email {
   id: string
   threadId: string
@@ -47,6 +54,13 @@ interface Email {
   body: string
   isUnread: boolean
   labelIds?: string[]
+  // NEW: Attachments support
+  attachments?: Array<{
+    id: string
+    filename: string
+    mimeType: string
+    size: number
+  }>
 }
 
 interface Attachment {
@@ -81,6 +95,14 @@ interface GmailLabel {
   }
 }
 
+// NEW: Client interface for template placeholders
+interface Client {
+  id: string
+  name: string
+  email: string
+  phone?: string
+}
+
 type FilterType = 'all' | 'unread' | 'starred'
 type FolderType = 'inbox' | 'sent' | 'drafts'
 
@@ -105,13 +127,65 @@ export default function InboxPage() {
   const [showMoveMenu, setShowMoveMenu] = useState<string | null>(null)
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState(false)
+
+  // NEW: State for polling notifications
+  const [showNewEmailBanner, setShowNewEmailBanner] = useState(false)
+  const [newEmailCount, setNewEmailCount] = useState(0)
+
+  // NEW: State for clients (for template placeholders)
+  const [clients, setClients] = useState<Client[]>([])
   
   const supabase = createClient()
+
+  // NEW: Email polling hook for real-time updates
+  const {
+    isPolling,
+    unreadCount,
+    newEmailCount: polledNewCount,
+    refresh: pollRefresh,
+    clearNewEmailCount,
+    historyId
+  } = useEmailPolling({
+    userId: user?.id || null,
+    enabled: isConnected && !!user,
+    interval: 30000, // Poll every 30 seconds
+    onNewEmails: (newEmails) => {
+      console.log('New emails received:', newEmails.length)
+      setNewEmailCount(prev => prev + newEmails.length)
+      setShowNewEmailBanner(true)
+      
+      // Add new emails to the list if we're in inbox
+      if (folder === 'inbox') {
+        setEmails(prev => {
+          const newIds = new Set(newEmails.map(e => e.id))
+          const filtered = prev.filter(e => !newIds.has(e.id))
+          return [...newEmails.map(e => ({
+            ...e,
+            body: '',
+            attachments: []
+          } as Email)), ...filtered]
+        })
+      }
+    },
+    onDeletedEmails: (deletedIds) => {
+      setEmails(prev => prev.filter(e => !deletedIds.includes(e.id)))
+      if (selectedEmail && deletedIds.includes(selectedEmail.id)) {
+        setSelectedEmail(null)
+      }
+    },
+    onNeedRefresh: () => {
+      fetchEmails()
+    }
+  })
+
+  // NEW: Email caching hook
+  const { getCached, cache, updateCached, removeCached, isCacheReady } = useEmailCache(user?.id || null)
 
   useEffect(() => {
     if (user) {
       checkConnectionAndFetchEmails()
       fetchLabels()
+      fetchClients() // NEW: Fetch clients for template placeholders
     }
   }, [user])
 
@@ -152,22 +226,64 @@ export default function InboxPage() {
     }
   }
 
+  // NEW: Fetch clients for template placeholder replacement
+  const fetchClients = async () => {
+    if (!user) return
+    try {
+      const response = await fetch(`/api/clients?userId=${user.id}&limit=100`)
+      const data = await response.json()
+      if (data.clients) {
+        setClients(data.clients)
+      }
+    } catch (err) {
+      console.error('Error fetching clients:', err)
+    }
+  }
+
+  // UPDATED: fetchEmails with caching and attachment parsing
   const fetchEmails = async (query?: string, targetFolder?: FolderType) => {
     if (!user) return
     
     setRefreshing(true)
+    const currentFolder = targetFolder || folder
+
+    try {
+      // TRY CACHE FIRST (if no search query)
+      if (!query && isCacheReady) {
+        const cached = await getCached(currentFolder, { limit: 50 })
+        if (cached.fromCache && !cached.isStale) {
+          console.log('Using cached emails for', currentFolder)
+          setEmails(cached.emails as Email[])
+          setRefreshing(false)
+          // Still fetch fresh in background
+          fetchFreshEmails(query, currentFolder, true)
+          return
+        }
+      }
+      
+      await fetchFreshEmails(query, currentFolder, false)
+    } catch (err: any) {
+      setError(err.message)
+      setRefreshing(false)
+    }
+  }
+
+  // NEW: Helper function to fetch fresh emails from API
+  const fetchFreshEmails = async (query?: string, currentFolder?: FolderType, isBackground = false) => {
+    if (!user) return
+    
     try {
       const params = new URLSearchParams({
         userId: user.id,
         maxResults: '50',
       })
       
-      const currentFolder = targetFolder || folder
+      const folderToUse = currentFolder || folder
       let folderQuery = query || ''
 
-      if (currentFolder === 'sent') {
+      if (folderToUse === 'sent') {
         folderQuery = 'from:me ' + folderQuery
-      } else if (currentFolder === 'drafts') {
+      } else if (folderToUse === 'drafts') {
         folderQuery = 'in:drafts ' + folderQuery
       } else {
         folderQuery = 'in:inbox -from:me ' + folderQuery
@@ -182,13 +298,72 @@ export default function InboxPage() {
         throw new Error(data.error)
       }
 
-      setEmails(data.messages || [])
+      // PARSE ATTACHMENTS from each email
+      const emailsWithAttachments = (data.messages || []).map((email: any) => ({
+        ...email,
+        attachments: parseAttachments(email)
+      }))
+
+      setEmails(emailsWithAttachments)
+      
+      // Update starred set
+      const starred = new Set<string>()
+      emailsWithAttachments.forEach((email: Email) => {
+        if (email.labelIds?.includes('STARRED')) {
+          starred.add(email.id)
+        }
+      })
+      setStarredEmails(starred)
+      
+      // CACHE THE RESULTS
+      if (isCacheReady && !query) {
+        await cache(folderToUse, emailsWithAttachments, historyId || undefined)
+      }
+
       setError(null)
     } catch (err: any) {
-      setError(err.message)
+      if (!isBackground) {
+        setError(err.message)
+      }
     } finally {
-      setRefreshing(false)
+      if (!isBackground) {
+        setRefreshing(false)
+      }
     }
+  }
+
+  // NEW: Helper to parse attachments from Gmail API response
+  const parseAttachments = (email: any): Email['attachments'] => {
+    const attachments: Email['attachments'] = []
+    
+    const processPart = (part: any) => {
+      if (part.filename && part.body?.attachmentId) {
+        attachments.push({
+          id: part.body.attachmentId,
+          filename: part.filename,
+          mimeType: part.mimeType || 'application/octet-stream',
+          size: part.body.size || 0
+        })
+      }
+      if (part.parts) {
+        part.parts.forEach(processPart)
+      }
+    }
+    
+    // Check different possible locations for parts
+    if (email.payload?.parts) {
+      email.payload.parts.forEach(processPart)
+    } else if (email.parts) {
+      email.parts.forEach(processPart)
+    }
+    
+    return attachments
+  }
+
+  // NEW: Helper to extract email address from "Name <email>" format
+  const extractEmailAddress = (fromString: string): string => {
+    const match = fromString.match(/<(.+)>/)
+    return match ? match[1] : fromString
   }
 
   useEffect(() => {
@@ -203,6 +378,9 @@ export default function InboxPage() {
   }
 
   const handleRefresh = () => {
+    setShowNewEmailBanner(false)
+    setNewEmailCount(0)
+    clearNewEmailCount()
     fetchEmails(searchQuery)
   }
 
@@ -239,6 +417,21 @@ export default function InboxPage() {
   
       const data = await response.json()
       if (data.error) throw new Error(data.error)
+
+      // UPDATE CACHE after action
+      if (isCacheReady) {
+        if (action === 'delete' || action === 'archive') {
+          await removeCached(ids)
+        } else if (action === 'markRead') {
+          for (const id of ids) {
+            await updateCached(id, { isUnread: false })
+          }
+        } else if (action === 'markUnread') {
+          for (const id of ids) {
+            await updateCached(id, { isUnread: true })
+          }
+        }
+      }
   
       await fetchEmails()
       setSelectedEmail(null)
@@ -291,55 +484,94 @@ export default function InboxPage() {
       .replace(/&quot;/g, '"')
   }
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
+  // Filtering and Grouping Logic
+  const filteredEmails = emails.filter(email => {
+    if (filter === 'unread') return email.isUnread
+    if (filter === 'starred') return starredEmails.has(email.id)
+    return true
+  })
+
+  const groupEmailsByDate = (emails: Email[]) => {
+    const groups: Record<string, Email[]> = {}
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const weekAgo = new Date(today)
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    emails.forEach(email => {
+      const emailDate = new Date(email.date)
+      emailDate.setHours(0, 0, 0, 0)
+      
+      let group: string
+      if (emailDate.getTime() === today.getTime()) {
+        group = 'Today'
+      } else if (emailDate.getTime() === yesterday.getTime()) {
+        group = 'Yesterday'
+      } else if (emailDate > weekAgo) {
+        group = 'This Week'
+      } else {
+        group = 'Earlier'
+      }
+
+      if (!groups[group]) groups[group] = []
+      groups[group].push(email)
+    })
+
+    return groups
+  }
+
+  const groupedEmails = groupEmailsByDate(filteredEmails)
+
+  // Helper functions
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
     const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    const diff = now.getTime() - date.getTime()
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
     
-    if (diffDays === 0) {
+    if (days === 0) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    } else if (diffDays === 1) {
+    } else if (days === 1) {
       return 'Yesterday'
-    } else if (diffDays < 7) {
+    } else if (days < 7) {
       return date.toLocaleDateString([], { weekday: 'short' })
     } else {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
     }
   }
 
-  const getDateGroup = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return 'This Week'
-    if (diffDays < 30) return 'This Month'
-    return 'Earlier'
+  const extractName = (emailString: string) => {
+    const match = emailString.match(/^"?([^"<]+)"?\s*</)
+    return match ? match[1].trim() : emailString.split('@')[0]
   }
 
-  const extractName = (from: string) => {
-    const match = from.match(/^([^<]+)/)
-    return match ? match[1].trim().replace(/"/g, '') : from
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
   }
 
-  const extractEmailAddress = (from: string) => {
-    const match = from.match(/<(.+)>/)
-    return match ? match[1].toLowerCase() : from.toLowerCase()
+  const getAvatarColor = (email: string) => {
+    const colors = [
+      'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500',
+      'bg-pink-500', 'bg-indigo-500', 'bg-red-500', 'bg-teal-500'
+    ]
+    const hash = email.split('').reduce((a, b) => a + b.charCodeAt(0), 0)
+    return colors[hash % colors.length]
   }
 
   const isFromMe = (email: Email) => {
-    const fromEmail = extractEmailAddress(email.from)
-    return fromEmail === connectedEmail.toLowerCase()
+    return connectedEmail && email.from.toLowerCase().includes(connectedEmail.toLowerCase())
   }
 
   const getDisplayName = (email: Email) => {
     if (folder === 'sent' || isFromMe(email)) {
-      const toName = extractName(email.to)
-      return toName || email.to
+      return extractName(email.to)
     }
     return extractName(email.from)
   }
@@ -351,65 +583,26 @@ export default function InboxPage() {
     return email.from
   }
 
-  const getInitials = (name: string) => {
-    const cleanName = name.replace(/<[^>]+>/g, '').trim()
-    const parts = cleanName.split(' ')
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase()
-    }
-    return cleanName.substring(0, 2).toUpperCase()
-  }
-
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
-      'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-red-500'
-    ]
-    const cleanName = name.replace(/<[^>]+>/g, '').trim()
-    const index = cleanName.charCodeAt(0) % colors.length
-    return colors[index]
-  }
-
-  const filteredEmails = emails.filter(email => {
-    if (filter === 'unread') return email.isUnread
-    if (filter === 'starred') return starredEmails.has(email.id)
-    return true
-  })
-
-  const groupedEmails = filteredEmails.reduce((groups, email) => {
-    const group = getDateGroup(email.date)
-    if (!groups[group]) groups[group] = []
-    groups[group].push(email)
-    return groups
-  }, {} as Record<string, Email[]>)
-
-  const unreadCount = emails.filter(e => e.isUnread).length
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading your inbox...</p>
-        </div>
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
       </div>
     )
   }
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-8 bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="w-16 h-16 rounded-full bg-primary-50 flex items-center justify-center mx-auto mb-4">
-            <Mail className="w-8 h-8 text-primary-600" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Connect Your Email</h2>
-          <p className="text-sm text-gray-600 mb-6">
-            Connect your Gmail account to view and send emails directly from Autoura.
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center max-w-md">
+          <Mail className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Connect Your Gmail</h2>
+          <p className="text-gray-500 mb-6">
+            Connect your Gmail account to send and receive emails directly from Autoura.
           </p>
           <Link
             href="/settings/email"
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
           >
             <Mail className="w-4 h-4" />
             Connect Gmail
@@ -420,19 +613,21 @@ export default function InboxPage() {
   }
 
   return (
-    <div className="h-screen bg-gray-50/50 flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm flex-shrink-0 z-10">
-        <div className="px-4 py-3 pr-6">
+    <div className="h-screen flex flex-col bg-gray-50/50">
+      <header className="bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                {folder === 'inbox' && <Inbox className="w-5 h-5 text-primary-600" />}
-                {folder === 'sent' && <Send className="w-5 h-5 text-primary-600" />}
-                {folder === 'drafts' && <File className="w-5 h-5 text-primary-600" />}
-                {folder === 'inbox' ? 'Inbox' : folder === 'sent' ? 'Sent' : 'Drafts'}
-                {folder === 'inbox' && unreadCount > 0 && (
-                  <span className="px-2 py-0.5 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
+                <Mail className="w-5 h-5 text-primary-600" />
+                Inbox
+                {/* NEW: Polling indicator */}
+                {isPolling && (
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Checking for new emails..." />
+                )}
+                {/* NEW: Unread count badge */}
+                {unreadCount > 0 && (
+                  <span className="text-xs px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full">
                     {unreadCount}
                   </span>
                 )}
@@ -473,8 +668,26 @@ export default function InboxPage() {
         </div>
       </header>
 
+      {/* NEW: New Email Notification Banner */}
+      {showNewEmailBanner && newEmailCount > 0 && (
+        <div className="bg-primary-50 border-b border-primary-100 px-4 py-2 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-primary-600" />
+            <span className="text-sm text-primary-700">
+              {newEmailCount} new email{newEmailCount > 1 ? 's' : ''} received
+            </span>
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+          >
+            Refresh to view
+          </button>
+        </div>
+      )}
+
       {error && (
-        <div className="mx-4 mr-6 mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="mx-4 mr-6 mt-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 flex-shrink-0">
           <AlertCircle className="w-4 h-4" />
           <span className="text-sm">{error}</span>
           <button onClick={() => setError(null)} className="ml-auto">
@@ -741,6 +954,10 @@ export default function InboxPage() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {/* NEW: Attachment indicator in email list */}
+                                {email.attachments && email.attachments.length > 0 && (
+                                  <AttachmentIndicator count={email.attachments.length} />
+                                )}
                                 <button
                                   onClick={(e) => toggleStar(email.id, e)}
                                   className={`p-0.5 rounded transition-colors ${
@@ -874,7 +1091,16 @@ export default function InboxPage() {
                       {getInitials(extractName(selectedEmail.from))}
                     </div>
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">{extractName(selectedEmail.from)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">{extractName(selectedEmail.from)}</p>
+                        {/* NEW: Client Link Button */}
+                        <ClientLinkButton
+                          userId={user!.id}
+                          messageId={selectedEmail.id}
+                          threadId={selectedEmail.threadId}
+                          fromEmail={extractEmailAddress(selectedEmail.from)}
+                        />
+                      </div>
                       <p className="text-xs text-gray-500">{extractEmailAddress(selectedEmail.from)}</p>
                     </div>
                   </>
@@ -891,6 +1117,15 @@ export default function InboxPage() {
                 className="prose prose-sm max-w-none text-gray-700"
                 dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
               />
+
+              {/* NEW: Attachment List */}
+              {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
+                <AttachmentList
+                  attachments={selectedEmail.attachments}
+                  messageId={selectedEmail.id}
+                  userId={user!.id}
+                />
+              )}
 
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <button
@@ -916,6 +1151,7 @@ export default function InboxPage() {
             setShowCompose(false)
             fetchEmails()
           }}
+          clients={clients}
         />
       )}
 
@@ -956,17 +1192,19 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-// Compose Modal Component
+// UPDATED: Compose Modal Component with template placeholder support
 function ComposeModal({ 
   onClose, 
   userId, 
   replyTo,
-  onSent 
+  onSent,
+  clients = []
 }: { 
   onClose: () => void
   userId: string
   replyTo?: Email | null
   onSent: () => void
+  clients?: Client[]
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -987,6 +1225,12 @@ function ComposeModal({
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [showSignatureDropdown, setShowSignatureDropdown] = useState(false)
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false)
+  
+  // NEW: State for template placeholder modal
+  const [showPlaceholderModal, setShowPlaceholderModal] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null)
+  const [placeholderValues, setPlaceholderValues] = useState<Record<string, string>>({})
+  const [selectedClientId, setSelectedClientId] = useState<string>('')
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1053,10 +1297,51 @@ function ComposeModal({
     setShowSignatureDropdown(false)
   }
 
+  // UPDATED: useTemplate now checks for placeholders
   const useTemplate = (template: EmailTemplate) => {
-    setSubject(template.subject)
-    setBody(template.content)
+    const placeholders = getPlaceholders(template.content + ' ' + template.subject)
+    
+    if (placeholders.length > 0) {
+      // Has placeholders - show modal to fill them
+      setSelectedTemplate(template)
+      setPlaceholderValues({})
+      setSelectedClientId('')
+      setShowPlaceholderModal(true)
+    } else {
+      // No placeholders - use directly
+      setSubject(template.subject)
+      setBody(template.content)
+    }
     setShowTemplateDropdown(false)
+  }
+
+  // NEW: Apply template with placeholder values
+  const applyTemplateWithPlaceholders = () => {
+    if (!selectedTemplate) return
+
+    let data: Record<string, string> = { ...placeholderValues }
+
+    // If client selected, build placeholder data from client
+    if (selectedClientId) {
+      const client = clients.find(c => c.id === selectedClientId)
+      if (client) {
+        const clientData = buildPlaceholderData(
+          { name: client.name, email: client.email, phone: client.phone },
+          undefined,
+          { name: 'Travel2Egypt', agentName: 'Islam' }
+        )
+        // Merge client data with manual values (manual takes precedence)
+        data = { ...clientData, ...placeholderValues }
+      }
+    }
+
+    const processedSubject = replacePlaceholders(selectedTemplate.subject, data)
+    const processedContent = replacePlaceholders(selectedTemplate.content, data)
+
+    setSubject(processedSubject)
+    setBody(processedContent)
+    setShowPlaceholderModal(false)
+    setSelectedTemplate(null)
   }
 
   const handleSend = async () => {
@@ -1337,6 +1622,79 @@ function ComposeModal({
             setShowTemplateDropdown(false) 
           }} 
         />
+      )}
+
+      {/* NEW: Placeholder Modal */}
+      {showPlaceholderModal && selectedTemplate && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/30" onClick={() => setShowPlaceholderModal(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">Fill Template Placeholders</h3>
+              <button onClick={() => setShowPlaceholderModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              {/* Client selector */}
+              {clients.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Select Client (auto-fills client fields)
+                  </label>
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => setSelectedClientId(e.target.value)}
+                    className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  >
+                    <option value="">-- Select a client --</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>{client.name} ({client.email})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              {/* Placeholder fields */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-medium text-gray-500 mb-3">Or fill manually:</p>
+                {getPlaceholders(selectedTemplate.content + ' ' + selectedTemplate.subject).map(placeholder => (
+                  <div key={placeholder} className="mb-3">
+                    <label className="block text-xs font-medium text-gray-600 mb-1 capitalize">
+                      {placeholder.replace(/_/g, ' ')}
+                    </label>
+                    <input
+                      type="text"
+                      value={placeholderValues[placeholder] || ''}
+                      onChange={(e) => setPlaceholderValues(prev => ({
+                        ...prev,
+                        [placeholder]: e.target.value
+                      }))}
+                      className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                      placeholder={`Enter ${placeholder.replace(/_/g, ' ')}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowPlaceholderModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={applyTemplateWithPlaceholders}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                Apply Template
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
