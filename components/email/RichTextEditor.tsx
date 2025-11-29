@@ -2,11 +2,12 @@
 
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
-import Link from '@tiptap/extension-link'
+import UnderlineExtension from '@tiptap/extension-underline'
+import LinkExtension from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
-import TextStyle from '@tiptap/extension-text-style'
+// CRITICAL FIX: TextStyle is a NAMED export, not a default export
+import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
 import Highlight from '@tiptap/extension-highlight'
 import FontFamily from '@tiptap/extension-font-family'
@@ -155,7 +156,7 @@ interface RichTextEditorProps {
   className?: string
 }
 
-// Dropdown component for font family and size - FIXED VERSION
+// Dropdown component for font family and size
 function Dropdown({ 
   label, 
   value, 
@@ -175,7 +176,6 @@ function Dropdown({
   const dropdownRef = useRef<HTMLDivElement>(null)
   const selectedOption = options.find(o => o.value === value) || options[0]
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -193,17 +193,15 @@ function Dropdown({
   }, [isOpen])
 
   const handleSelect = (optionValue: string) => {
-    // Store selection before closing
-    const selection = editor.state.selection
-    
-    // Close dropdown first
     setIsOpen(false)
     
-    // Then apply the change with a small delay to ensure focus is maintained
-    setTimeout(() => {
-      editor.chain().focus().run()
-      onChange(optionValue)
-    }, 10)
+    // Use requestAnimationFrame + setTimeout for reliable focus restoration
+    requestAnimationFrame(() => {
+      editor.commands.focus()
+      setTimeout(() => {
+        onChange(optionValue)
+      }, 10)
+    })
   }
 
   return (
@@ -211,7 +209,8 @@ function Dropdown({
       <button
         type="button"
         onMouseDown={(e) => {
-          e.preventDefault() // Prevent editor blur
+          e.preventDefault()
+          e.stopPropagation()
           setIsOpen(!isOpen)
         }}
         className="flex items-center gap-1 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded border border-gray-200 min-w-[90px]"
@@ -222,13 +221,17 @@ function Dropdown({
       </button>
       
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[140px] max-h-[200px] overflow-y-auto">
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] min-w-[140px] max-h-[200px] overflow-y-auto">
           {options.map((option) => (
             <button
               key={option.value || 'default'}
               type="button"
               onMouseDown={(e) => {
-                e.preventDefault() // Prevent editor blur
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+              onClick={(e) => {
+                e.preventDefault()
                 e.stopPropagation()
                 handleSelect(option.value)
               }}
@@ -246,7 +249,7 @@ function Dropdown({
   )
 }
 
-// Color picker dropdown - FIXED VERSION
+// Color picker dropdown
 function ColorPicker({
   colors,
   value,
@@ -265,7 +268,6 @@ function ColorPicker({
   const [isOpen, setIsOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
@@ -285,10 +287,12 @@ function ColorPicker({
   const handleSelect = (colorValue: string) => {
     setIsOpen(false)
     
-    setTimeout(() => {
-      editor.chain().focus().run()
-      onChange(colorValue)
-    }, 10)
+    requestAnimationFrame(() => {
+      editor.commands.focus()
+      setTimeout(() => {
+        onChange(colorValue)
+      }, 10)
+    })
   }
 
   return (
@@ -297,6 +301,7 @@ function ColorPicker({
         type="button"
         onMouseDown={(e) => {
           e.preventDefault()
+          e.stopPropagation()
           setIsOpen(!isOpen)
         }}
         className="flex items-center gap-1 p-1.5 text-gray-600 hover:bg-gray-100 rounded"
@@ -310,13 +315,17 @@ function ColorPicker({
       </button>
       
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-2">
+        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] p-2">
           <div className="grid grid-cols-4 gap-1">
             {colors.map((color) => (
               <button
                 key={color.value || 'none'}
                 type="button"
                 onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
                   handleSelect(color.value)
@@ -482,7 +491,7 @@ function ToolbarButton({
     <button
       type="button"
       onMouseDown={(e) => {
-        e.preventDefault() // Prevent editor blur
+        e.preventDefault()
         onClick()
       }}
       disabled={disabled}
@@ -516,16 +525,10 @@ function EditorToolbar({ editor }: { editor: Editor }) {
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }, [editor])
 
-  // Get current font family
+  // Get current values with safe fallbacks
   const currentFontFamily = editor.getAttributes('textStyle').fontFamily || ''
-  
-  // Get current font size
   const currentFontSize = editor.getAttributes('textStyle').fontSize || '14px'
-  
-  // Get current color
   const currentColor = editor.getAttributes('textStyle').color || '#000000'
-  
-  // Get current highlight
   const currentHighlight = editor.getAttributes('highlight').color || ''
 
   return (
@@ -727,7 +730,10 @@ function EditorToolbar({ editor }: { editor: Editor }) {
   )
 }
 
-// Main RichTextEditor component
+// ============================================================================
+// MAIN RICH TEXT EDITOR COMPONENT
+// ============================================================================
+
 export default function RichTextEditor({
   content,
   onChange,
@@ -738,6 +744,7 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
   const editor = useEditor({
     extensions: [
+      // 1. StarterKit provides basic functionality
       StarterKit.configure({
         heading: false,
         bulletList: {
@@ -749,30 +756,48 @@ export default function RichTextEditor({
           keepAttributes: false,
         },
       }),
-      Underline,
-      Link.configure({
+      
+      // 2. Underline extension (renamed import to avoid conflict)
+      UnderlineExtension,
+      
+      // 3. Link extension (renamed import to avoid conflict)
+      LinkExtension.configure({
         openOnClick: false,
         HTMLAttributes: {
           class: 'text-primary-600 underline',
         },
       }),
+      
+      // 4. Placeholder
       Placeholder.configure({
         placeholder,
       }),
+      
+      // 5. Text alignment
       TextAlign.configure({
         types: ['paragraph', 'heading'],
       }),
-      // IMPORTANT: TextStyle MUST be added for Color, FontFamily, FontSize to work
+      
+      // 6. CRITICAL: TextStyle MUST be added BEFORE Color, FontFamily, FontSize
+      // This creates the 'textStyle' mark that the others depend on
       TextStyle,
+      
+      // 7. Color (depends on TextStyle)
       Color.configure({
         types: ['textStyle'],
       }),
+      
+      // 8. Highlight (multicolor)
       Highlight.configure({
         multicolor: true,
       }),
+      
+      // 9. FontFamily (depends on TextStyle)
       FontFamily.configure({
         types: ['textStyle'],
       }),
+      
+      // 10. Custom FontSize extension (depends on TextStyle)
       FontSize,
     ],
     content,
