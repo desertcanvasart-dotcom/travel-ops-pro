@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft, Save, ChevronDown, ChevronRight, Trash2, User, Plane, Calendar, Users, FileText } from 'lucide-react'
 
 interface Itinerary {
   id: string
@@ -221,17 +222,30 @@ export default function EditItineraryPage() {
       entrance: '🎫',
       meal: '🍽️',
       activity: '🎭',
-      service_fee: '💼'
+      service_fee: '💼',
+      tips: '💰',
+      supplies: '📦'
     }
     return icons[type] || '📋'
   }
 
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      draft: 'bg-gray-50 text-gray-600 border-gray-200',
+      sent: 'bg-primary-50 text-primary-600 border-primary-200',
+      confirmed: 'bg-green-50 text-green-600 border-green-200',
+      completed: 'bg-purple-50 text-purple-600 border-purple-200',
+      cancelled: 'bg-red-50 text-red-600 border-red-200'
+    }
+    return styles[status] || styles.draft
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Loading itinerary...</p>
+          <div className="w-10 h-10 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Loading itinerary...</p>
         </div>
       </div>
     )
@@ -239,15 +253,16 @@ export default function EditItineraryPage() {
 
   if (error || !itinerary) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center">
-        <div className="text-center bg-white p-8 rounded-xl shadow-lg">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-red-500 text-2xl">⚠️</span>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+          <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-red-500">⚠️</span>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Error</h2>
-          <p className="text-red-600 mb-4">{error}</p>
-          <Link href="/itineraries" className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-            ← Back to List
+          <h2 className="text-base font-semibold text-gray-900 mb-1">Error</h2>
+          <p className="text-sm text-red-600 mb-4">{error}</p>
+          <Link href="/itineraries" className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 text-sm transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+            Back to List
           </Link>
         </div>
       </div>
@@ -255,117 +270,128 @@ export default function EditItineraryPage() {
   }
 
   const totalCost = calculateTotal()
+  const totalServices = days.reduce((sum, day) => sum + day.services.length, 0)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-8 shadow-lg">
-        <div className="container mx-auto px-4">
+    <div className="min-h-screen bg-gray-50">
+      {/* Compact Header */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-lg">
-                <span className="text-blue-600 text-xl font-bold">T2E</span>
-              </div>
+            <div className="flex items-center gap-3">
+              <Link 
+                href={`/itineraries/${itinerary.id}`}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Cancel"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </Link>
               <div>
-                <h1 className="text-3xl font-bold">Edit Itinerary</h1>
-                <p className="text-blue-100 text-sm">{itinerary.itinerary_code}</p>
+                <h1 className="text-lg font-semibold text-gray-900">Edit Itinerary</h1>
+                <p className="text-xs text-gray-500">
+                  <span className="font-mono text-primary-600">{itinerary.itinerary_code}</span>
+                </p>
               </div>
             </div>
             <Link 
               href={`/itineraries/${itinerary.id}`}
-              className="bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors font-medium shadow-md"
+              className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
             >
-              ← Cancel
+              Cancel
             </Link>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-4 space-y-4">
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
-            <p className="text-red-700">{error}</p>
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
-        {/* Client Information */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <span>👤</span>
-            Client Information
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Client Information - Compact Card */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-6 h-6 bg-primary-50 rounded flex items-center justify-center">
+              <User className="w-3.5 h-3.5 text-primary-600" />
+            </div>
+            <h2 className="text-sm font-semibold text-gray-900">Client Information</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Client Name</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Client Name</label>
               <input
                 type="text"
                 value={itinerary.client_name}
                 onChange={(e) => handleItineraryChange('client_name', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
               <input
                 type="email"
                 value={itinerary.client_email}
                 onChange={(e) => handleItineraryChange('client_email', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
               <input
                 type="tel"
                 value={itinerary.client_phone || ''}
                 onChange={(e) => handleItineraryChange('client_phone', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
             </div>
           </div>
         </div>
 
-        {/* Trip Details */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <span>✈️</span>
-            Trip Details
-          </h2>
-          <div className="grid grid-cols-1 gap-6">
+        {/* Trip Details - Compact Card */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-6 h-6 bg-blue-50 rounded flex items-center justify-center">
+              <Plane className="w-3.5 h-3.5 text-blue-600" />
+            </div>
+            <h2 className="text-sm font-semibold text-gray-900">Trip Details</h2>
+          </div>
+          <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Trip Name</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Trip Name</label>
               <input
                 type="text"
                 value={itinerary.trip_name}
                 onChange={(e) => handleItineraryChange('trip_name', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
                 <input
                   type="date"
                   value={itinerary.start_date}
                   onChange={(e) => handleItineraryChange('start_date', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
                 <input
                   type="date"
                   value={itinerary.end_date}
                   onChange={(e) => handleItineraryChange('end_date', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
                 <select
                   value={itinerary.status}
                   onChange={(e) => handleItineraryChange('status', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 >
                   <option value="draft">Draft</option>
                   <option value="sent">Sent</option>
@@ -374,159 +400,167 @@ export default function EditItineraryPage() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Adults</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Adults</label>
                 <input
                   type="number"
                   min="1"
                   value={itinerary.num_adults}
                   onChange={(e) => handleItineraryChange('num_adults', parseInt(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Children</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Children</label>
                 <input
                   type="number"
                   min="0"
                   value={itinerary.num_children}
                   onChange={(e) => handleItineraryChange('num_children', parseInt(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
               <textarea
                 value={itinerary.notes || ''}
                 onChange={(e) => handleItineraryChange('notes', e.target.value)}
-                rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                rows={2}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors resize-none"
               />
             </div>
           </div>
         </div>
 
-        {/* Days and Services */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <span>📋</span>
-            Daily Itinerary & Services
-          </h2>
+        {/* Days and Services - Compact Card */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-6 h-6 bg-purple-50 rounded flex items-center justify-center">
+              <Calendar className="w-3.5 h-3.5 text-purple-600" />
+            </div>
+            <h2 className="text-sm font-semibold text-gray-900">Daily Itinerary & Services</h2>
+          </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {days.map((day) => (
               <div key={day.id} className="border border-gray-200 rounded-lg overflow-hidden">
                 {/* Day Header */}
                 <button
                   onClick={() => toggleDay(day.day_number)}
-                  className="w-full px-6 py-4 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
+                  className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-primary-600 text-white rounded-lg flex items-center justify-center font-semibold text-sm">
                       {day.day_number}
                     </div>
                     <div className="text-left">
-                      <h3 className="font-bold text-gray-900">{day.title}</h3>
-                      <p className="text-sm text-gray-500">{day.city}</p>
+                      <h3 className="text-sm font-semibold text-gray-900">{day.title}</h3>
+                      <p className="text-xs text-gray-500">{day.city}</p>
                     </div>
                   </div>
-                  <span className="text-xl text-gray-400">
-                    {expandedDays.has(day.day_number) ? '▼' : '▶'}
-                  </span>
+                  {expandedDays.has(day.day_number) ? (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  )}
                 </button>
 
                 {/* Day Content */}
                 {expandedDays.has(day.day_number) && (
-                  <div className="p-6 space-y-6">
+                  <div className="p-4 space-y-4">
                     {/* Day Details */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Day Title</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Day Title</label>
                         <input
                           type="text"
                           value={day.title}
                           onChange={(e) => handleDayChange(day.id, 'title', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
                         <input
                           type="text"
                           value={day.city}
                           onChange={(e) => handleDayChange(day.id, 'city', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
                       <textarea
                         value={day.description}
                         onChange={(e) => handleDayChange(day.id, 'description', e.target.value)}
                         rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors resize-none"
                       />
                     </div>
 
                     {/* Services */}
                     <div>
-                      <h4 className="font-semibold text-gray-900 mb-3">Services</h4>
-                      <div className="space-y-3">
+                      <h4 className="text-xs font-semibold text-gray-700 mb-2">Services</h4>
+                      <div className="space-y-2">
                         {day.services.map((service) => (
-                          <div key={service.id} className="p-4 bg-gray-50 rounded-lg">
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl">{getServiceIcon(service.service_type)}</span>
+                          <div key={service.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{getServiceIcon(service.service_type)}</span>
                                 <div>
-                                  <p className="font-medium text-gray-900">{service.service_name}</p>
-                                  <p className="text-sm text-gray-500 capitalize">{service.service_type.replace('_', ' ')}</p>
+                                  <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
+                                  <p className="text-xs text-gray-500 capitalize">{service.service_type.replace('_', ' ')}</p>
                                 </div>
                               </div>
                               <button
                                 onClick={() => handleRemoveService(day.id, service.id)}
-                                className="text-red-600 hover:text-red-700 px-3 py-1 rounded hover:bg-red-50 transition-colors"
+                                className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors"
                               >
-                                🗑️ Remove
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Remove</span>
                               </button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                               <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
                                 <input
                                   type="number"
                                   min="1"
                                   value={service.quantity}
                                   onChange={(e) => handleServiceChange(day.id, service.id, 'quantity', parseInt(e.target.value))}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 text-sm"
+                                  className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Rate (EUR)</label>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Rate (EUR)</label>
                                 <input
                                   type="number"
                                   step="0.01"
                                   value={service.rate_eur}
                                   onChange={(e) => handleServiceChange(day.id, service.id, 'rate_eur', parseFloat(e.target.value))}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 text-sm"
+                                  className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Total (with markup)</label>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Total (with markup)</label>
                                 <input
                                   type="text"
                                   value={`€${service.total_cost.toFixed(2)}`}
                                   disabled
-                                  className="w-full px-3 py-2 border border-gray-300 rounded bg-green-50 text-green-700 font-bold text-sm"
+                                  className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg bg-primary-50 text-primary-700 font-semibold"
                                 />
                               </div>
                             </div>
                           </div>
                         ))}
+                        {day.services.length === 0 && (
+                          <p className="text-xs text-gray-400 text-center py-4">No services added for this day</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -536,47 +570,66 @@ export default function EditItineraryPage() {
           </div>
         </div>
 
-        {/* Total Cost Summary */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-lg p-8 text-white mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 text-sm mb-1">Total Cost (with 25% markup)</p>
-              <p className="text-4xl font-bold">{itinerary.currency} {totalCost.toFixed(2)}</p>
-              <p className="text-blue-100 text-sm mt-2">
-                Per person: {itinerary.currency} {(totalCost / (itinerary.num_adults + itinerary.num_children)).toFixed(2)}
-              </p>
+        {/* Total Cost Summary - Compact Stats Row (Matching Vehicles page style) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-primary-600">💰</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
             </div>
-            <div className="text-right">
-              <p className="text-blue-100 text-sm">Total Services</p>
-              <p className="text-3xl font-bold">{days.reduce((sum, day) => sum + day.services.length, 0)}</p>
+            <p className="text-xl font-bold text-gray-900">{itinerary.currency} {totalCost.toFixed(2)}</p>
+            <p className="text-xs text-gray-500">Total Cost (25% markup)</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-blue-600">👤</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
             </div>
+            <p className="text-xl font-bold text-gray-900">{itinerary.currency} {(totalCost / (itinerary.num_adults + itinerary.num_children)).toFixed(2)}</p>
+            <p className="text-xs text-gray-500">Per Person</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-purple-600">📋</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            </div>
+            <p className="text-xl font-bold text-gray-900">{totalServices}</p>
+            <p className="text-xs text-gray-500">Total Services</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-orange-600">📅</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+            </div>
+            <p className="text-xl font-bold text-gray-900">{days.length}</p>
+            <p className="text-xs text-gray-500">Days</p>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-4">
+        {/* Action Buttons - Compact */}
+        <div className="flex items-center justify-end gap-3 pt-2 pb-4">
           <Link
             href={`/itineraries/${itinerary.id}`}
-            className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+            className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
           >
             Cancel
           </Link>
           <button
             onClick={handleSave}
             disabled={saving}
-            className={`px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold flex items-center gap-2 ${
+            className={`px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-2 ${
               saving ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           >
             {saving ? (
               <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Saving...
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Saving...</span>
               </>
             ) : (
               <>
-                <span>💾</span>
-                Save Changes
+                <Save className="w-4 h-4" />
+                <span>Save Changes</span>
               </>
             )}
           </button>
