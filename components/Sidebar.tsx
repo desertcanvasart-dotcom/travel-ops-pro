@@ -29,7 +29,8 @@ import {
   Coins,
   LogOut,
   Mail,
-  Ticket
+  Ticket,
+  Contact
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -57,10 +58,11 @@ const navigation: NavSection[] = [
     ]
   },
   {
-    title: 'Clients',
+    title: 'Clients & Partners',
     items: [
       { label: 'All Clients', href: '/clients', icon: Users },
       { label: 'Add Client', href: '/clients/new', icon: UserPlus },
+      { label: 'Contacts', href: '/contacts', icon: Contact },
       { label: 'Follow-ups', href: '/followups', icon: CheckSquare },
     ]
   },
@@ -68,6 +70,7 @@ const navigation: NavSection[] = [
     title: 'Sales',
     items: [
       { label: 'Inbox', href: '/inbox', icon: Mail },
+      { label: 'WhatsApp', href: '/settings/whatsapp', icon: MessageSquare },
       { label: 'WhatsApp Parser', href: '/whatsapp-parser', icon: MessageSquare },
       { label: 'Payments', href: '/payments', icon: DollarSign }, 
       { label: 'Calendar', href: '/calendar', icon: Calendar },
@@ -80,12 +83,12 @@ const navigation: NavSection[] = [
     items: [
       { label: 'Resources', href: '/resources', icon: Box },
       { label: 'Tour Guides', href: '/guides', icon: Users },       
-      { label: 'Vehicles', href: '/vehicles', icon: Truck },   
+      { label: 'Vehicles', href: '/vehicles', icon: Truck },
+      { label: 'Attractions', href: '/attractions', icon: Ticket },
       { label: 'Hotels', href: '/hotels', icon: Hotel },
       { label: 'Restaurants', href: '/restaurants', icon: UtensilsCrossed },
       { label: 'Airport Staff', href: '/airport-staff', icon: Plane },
       { label: 'Hotel Staff', href: '/hotel-staff', icon: BellRing },
-      { label: 'Attractions', href: '/attractions', icon: Ticket },
       { label: 'Rates Management', href: '/rates', icon: Coins },
     ]
   },
