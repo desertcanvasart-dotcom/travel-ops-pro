@@ -41,7 +41,7 @@ interface UseEmailPollingOptions {
 export function useEmailPolling({
   userId,
   enabled = true,
-  interval = 30000, // 30 seconds default
+  interval: 120000, // Poll every 2 minutes
   onNewEmails,
   onDeletedEmails,
   onLabelChanges,
