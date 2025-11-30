@@ -167,15 +167,84 @@ function parseEmailMessage(message: any) {
 
   // Get email body
   let body = ''
-  if (message.payload?.body?.data) {
-    body = Buffer.from(message.payload.body.data, 'base64').toString('utf-8')
-  } else if (message.payload?.parts) {
-    const textPart = message.payload.parts.find(
-      (p: any) => p.mimeType === 'text/html' || p.mimeType === 'text/plain'
-    )
-    if (textPart?.body?.data) {
-      body = Buffer.from(textPart.body.data, 'base64').toString('utf-8')
+  
+  // Helper to extract body from parts recursively
+  const extractBody = (payload: any): string => {
+    // Direct body data
+    if (payload.body?.data) {
+      const mimeType = payload.mimeType || ''
+      if (mimeType === 'text/html') {
+        return Buffer.from(payload.body.data, 'base64').toString('utf-8')
+      }
+      if (mimeType === 'text/plain') {
+        return `<pre style="white-space: pre-wrap; font-family: inherit;">${Buffer.from(payload.body.data, 'base64').toString('utf-8')}</pre>`
+      }
     }
+    
+    // Check parts (multipart emails)
+    if (payload.parts) {
+      // First try to find HTML part
+      for (const part of payload.parts) {
+        if (part.mimeType === 'text/html' && part.body?.data) {
+          return Buffer.from(part.body.data, 'base64').toString('utf-8')
+        }
+        // Recurse into nested multipart
+        if (part.mimeType?.startsWith('multipart/')) {
+          const nested = extractBody(part)
+          if (nested) return nested
+        }
+      }
+      // Fallback to plain text
+      for (const part of payload.parts) {
+        if (part.mimeType === 'text/plain' && part.body?.data) {
+          return `<pre style="white-space: pre-wrap; font-family: inherit;">${Buffer.from(part.body.data, 'base64').toString('utf-8')}</pre>`
+        }
+      }
+      // Try nested parts
+      for (const part of payload.parts) {
+        if (part.parts) {
+          const nested = extractBody(part)
+          if (nested) return nested
+        }
+      }
+    }
+    
+    return ''
+  }
+
+  if (message.payload) {
+    body = extractBody(message.payload)
+  }
+
+  // Extract attachments
+  const attachments: Array<{
+    id: string
+    filename: string
+    mimeType: string
+    size: number
+  }> = []
+
+  const extractAttachments = (payload: any) => {
+    // Check if this part is an attachment (has filename AND attachmentId)
+    if (payload.filename && payload.filename.length > 0 && payload.body?.attachmentId) {
+      attachments.push({
+        id: payload.body.attachmentId,
+        filename: payload.filename,
+        mimeType: payload.mimeType || 'application/octet-stream',
+        size: payload.body.size || 0
+      })
+    }
+    
+    // Recurse into parts
+    if (payload.parts) {
+      for (const part of payload.parts) {
+        extractAttachments(part)
+      }
+    }
+  }
+
+  if (message.payload) {
+    extractAttachments(message.payload)
   }
 
   return {
@@ -189,5 +258,6 @@ function parseEmailMessage(message: any) {
     body,
     labelIds: message.labelIds || [],
     isUnread: message.labelIds?.includes('UNREAD') || false,
+    attachments,
   }
 }

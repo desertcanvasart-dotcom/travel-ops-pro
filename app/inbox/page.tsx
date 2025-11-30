@@ -41,6 +41,8 @@ import {
   Bell,
   Users, 
   Building2, 
+  Expand, 
+  Maximize2,
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
@@ -113,6 +115,7 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true)
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
+  const [showExpandedEmail, setShowExpandedEmail] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [connectedEmail, setConnectedEmail] = useState<string>('')
@@ -301,12 +304,7 @@ export default function InboxPage() {
       }
 
       // PARSE ATTACHMENTS from each email
-      const emailsWithAttachments = (data.messages || []).map((email: any) => ({
-        ...email,
-        attachments: parseAttachments(email)
-      }))
-
-      setEmails(emailsWithAttachments)
+      setEmails(data.messages || [])
       
       // Update starred set
       const starred = new Set<string>()
@@ -1061,12 +1059,22 @@ export default function InboxPage() {
                     <MoreHorizontal className="w-4 h-4 text-gray-500" />
                   </button>
                 </div>
-                <button
-                  onClick={() => setSelectedEmail(null)}
+                <div className="flex items-center gap-1">
+                   {/* Expand Button */}
+                 <button
+                  onClick={() => setShowExpandedEmail(true)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
+                  title="Expand email"
+                   >
+                 <Maximize2 className="w-4 h-4 text-gray-500" />
+                 </button>
+                     <button
+                   onClick={() => setSelectedEmail(null)}
+                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                     <X className="w-4 h-4 text-gray-500" />
+                      </button>
+                   </div>
               </div>
 
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
