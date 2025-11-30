@@ -308,7 +308,7 @@ export default function InboxPage() {
       
       // Update starred set
       const starred = new Set<string>()
-      emailsWithAttachments.forEach((email: Email) => {
+      data.messages.forEach((email: Email) => {
         if (email.labelIds?.includes('STARRED')) {
           starred.add(email.id)
         }
@@ -317,7 +317,7 @@ export default function InboxPage() {
       
       // CACHE THE RESULTS
       if (isCacheReady && !query) {
-        await cache(folderToUse, emailsWithAttachments, historyId || undefined)
+        await cache(folderToUse, data.messages, historyId || undefined)
       }
 
       setError(null)
