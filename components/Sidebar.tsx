@@ -83,7 +83,7 @@ const navigation: NavSection[] = [
     items: [
       { label: 'Resources', href: '/resources', icon: Box },
       { label: 'Tour Guides', href: '/guides', icon: Users },       
-      { label: 'Vehicles', href: '/vehicles', icon: Truck },
+      { label: 'Transportation', href: '/transportation', icon: Truck },
       { label: 'Attractions', href: '/attractions', icon: Ticket },
       { label: 'Hotels', href: '/hotels', icon: Hotel },
       { label: 'Restaurants', href: '/restaurants', icon: UtensilsCrossed },
