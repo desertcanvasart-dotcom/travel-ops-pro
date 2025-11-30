@@ -28,7 +28,8 @@ import {
   BellRing,
   Coins,
   LogOut,
-  Mail
+  Mail,
+  Ticket
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -84,6 +85,7 @@ const navigation: NavSection[] = [
       { label: 'Restaurants', href: '/restaurants', icon: UtensilsCrossed },
       { label: 'Airport Staff', href: '/airport-staff', icon: Plane },
       { label: 'Hotel Staff', href: '/hotel-staff', icon: BellRing },
+      { label: 'Attractions', href: '/attractions', icon: Ticket },
       { label: 'Rates Management', href: '/rates', icon: Coins },
     ]
   },
