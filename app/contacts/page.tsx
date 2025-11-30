@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { 
   Search, 
@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   Plus,
   Download,
+  Upload,
   X,
   Edit,
   Trash2,
@@ -24,7 +25,11 @@ import {
   MapPin,
   AlertCircle,
   ChevronDown,
-  Eye
+  Eye,
+  FileSpreadsheet,
+  ArrowRight,
+  HelpCircle,
+  CheckCircle2
 } from 'lucide-react'
 
 // Types
@@ -180,6 +185,9 @@ export default function ContactsPage() {
   
   // Dropdown menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  
+  // Import modal state
+  const [showImportModal, setShowImportModal] = useState(false)
 
   useEffect(() => {
     fetchAllContacts()
@@ -566,6 +574,13 @@ export default function ContactsPage() {
               <p className="text-sm text-gray-500">Manage all your clients and partners in one place</p>
             </div>
             <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setShowImportModal(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                <Upload className="w-4 h-4" />
+                Import
+              </button>
               <button 
                 onClick={handleExport}
                 className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
@@ -1189,6 +1204,693 @@ export default function ContactsPage() {
           </div>
         </div>
       )}
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportComplete={() => {
+          fetchAllContacts()
+        }}
+        supabase={supabase}
+      />
+    </div>
+  )
+}
+
+// ============================================================================
+// IMPORT MODAL COMPONENT
+// ============================================================================
+
+interface ImportField {
+  key: string
+  label: string
+  required: boolean
+  type: 'text' | 'email' | 'number' | 'array'
+}
+
+interface ImportResult {
+  success: number
+  failed: number
+  errors: { row: number; message: string }[]
+}
+
+const IMPORT_FIELDS: Record<ContactType, ImportField[]> = {
+  hotel: [
+    { key: 'name', label: 'Hotel Name', required: true, type: 'text' },
+    { key: 'property_type', label: 'Property Type', required: false, type: 'text' },
+    { key: 'star_rating', label: 'Star Rating', required: false, type: 'number' },
+    { key: 'city', label: 'City', required: false, type: 'text' },
+    { key: 'address', label: 'Address', required: false, type: 'text' },
+    { key: 'contact_person', label: 'Contact Person', required: false, type: 'text' },
+    { key: 'email', label: 'Email', required: false, type: 'email' },
+    { key: 'phone', label: 'Phone', required: false, type: 'text' },
+    { key: 'whatsapp', label: 'WhatsApp', required: false, type: 'text' },
+    { key: 'notes', label: 'Notes', required: false, type: 'text' },
+  ],
+  guide: [
+    { key: 'name', label: 'Full Name', required: true, type: 'text' },
+    { key: 'email', label: 'Email', required: false, type: 'email' },
+    { key: 'phone', label: 'Phone', required: false, type: 'text' },
+    { key: 'languages', label: 'Languages', required: false, type: 'array' },
+    { key: 'specialties', label: 'Specialties', required: false, type: 'array' },
+    { key: 'daily_rate', label: 'Daily Rate', required: false, type: 'number' },
+    { key: 'hourly_rate', label: 'Hourly Rate', required: false, type: 'number' },
+    { key: 'address', label: 'Address', required: false, type: 'text' },
+    { key: 'notes', label: 'Notes', required: false, type: 'text' },
+  ],
+  restaurant: [
+    { key: 'name', label: 'Restaurant Name', required: true, type: 'text' },
+    { key: 'restaurant_type', label: 'Restaurant Type', required: false, type: 'text' },
+    { key: 'cuisine_type', label: 'Cuisine Type', required: false, type: 'text' },
+    { key: 'city', label: 'City', required: false, type: 'text' },
+    { key: 'address', label: 'Address', required: false, type: 'text' },
+    { key: 'contact_person', label: 'Contact Person', required: false, type: 'text' },
+    { key: 'email', label: 'Email', required: false, type: 'email' },
+    { key: 'phone', label: 'Phone', required: false, type: 'text' },
+    { key: 'whatsapp', label: 'WhatsApp', required: false, type: 'text' },
+    { key: 'capacity', label: 'Capacity', required: false, type: 'number' },
+    { key: 'notes', label: 'Notes', required: false, type: 'text' },
+  ],
+  airport_staff: [
+    { key: 'name', label: 'Full Name', required: true, type: 'text' },
+    { key: 'role', label: 'Role', required: false, type: 'text' },
+    { key: 'airport_location', label: 'Airport Location', required: false, type: 'text' },
+    { key: 'email', label: 'Email', required: false, type: 'email' },
+    { key: 'phone', label: 'Phone', required: false, type: 'text' },
+    { key: 'whatsapp', label: 'WhatsApp', required: false, type: 'text' },
+    { key: 'languages', label: 'Languages', required: false, type: 'array' },
+    { key: 'shift_times', label: 'Shift Times', required: false, type: 'text' },
+    { key: 'notes', label: 'Notes', required: false, type: 'text' },
+  ],
+  client: [
+    { key: 'first_name', label: 'First Name', required: true, type: 'text' },
+    { key: 'last_name', label: 'Last Name', required: true, type: 'text' },
+    { key: 'email', label: 'Email', required: false, type: 'email' },
+    { key: 'phone', label: 'Phone', required: false, type: 'text' },
+    { key: 'nationality', label: 'Nationality', required: false, type: 'text' },
+    { key: 'status', label: 'Status', required: false, type: 'text' },
+    { key: 'preferred_language', label: 'Preferred Language', required: false, type: 'text' },
+    { key: 'internal_notes', label: 'Notes', required: false, type: 'text' },
+  ],
+}
+
+const IMPORT_TYPE_CONFIG: Record<ContactType, { icon: any; label: string; color: string }> = {
+  hotel: { icon: Building2, label: 'Hotels', color: 'bg-blue-100 text-blue-700' },
+  guide: { icon: Compass, label: 'Tour Guides', color: 'bg-green-100 text-green-700' },
+  restaurant: { icon: Utensils, label: 'Restaurants', color: 'bg-orange-100 text-orange-700' },
+  airport_staff: { icon: Plane, label: 'Airport Staff', color: 'bg-purple-100 text-purple-700' },
+  client: { icon: Users, label: 'Clients', color: 'bg-primary-100 text-primary-700' },
+}
+
+interface ImportModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onImportComplete: () => void
+  supabase: any
+}
+
+function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModalProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  const [step, setStep] = useState<'type' | 'upload' | 'mapping' | 'preview' | 'result'>('type')
+  const [contactType, setContactType] = useState<ContactType>('hotel')
+  const [file, setFile] = useState<File | null>(null)
+  const [csvData, setCsvData] = useState<string[][]>([])
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([])
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({})
+  const [importing, setImporting] = useState(false)
+  const [result, setResult] = useState<ImportResult | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+
+  const resetState = () => {
+    setStep('type')
+    setFile(null)
+    setCsvData([])
+    setCsvHeaders([])
+    setColumnMapping({})
+    setResult(null)
+    setImportError(null)
+  }
+
+  const handleClose = () => {
+    resetState()
+    onClose()
+  }
+
+  const parseCSV = (text: string): string[][] => {
+    const lines = text.split('\n').filter(line => line.trim())
+    return lines.map(line => {
+      const result: string[] = []
+      let current = ''
+      let inQuotes = false
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i]
+        if (char === '"') {
+          inQuotes = !inQuotes
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim())
+          current = ''
+        } else {
+          current += char
+        }
+      }
+      result.push(current.trim())
+      return result
+    })
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFile = e.target.files?.[0]
+    if (!uploadedFile) return
+
+    setImportError(null)
+    setFile(uploadedFile)
+
+    try {
+      const text = await uploadedFile.text()
+      const parsed = parseCSV(text)
+      
+      if (parsed.length < 2) {
+        setImportError('File must contain at least a header row and one data row')
+        return
+      }
+
+      const headers = parsed[0]
+      const data = parsed.slice(1)
+      
+      setCsvHeaders(headers)
+      setCsvData(data)
+      
+      const autoMapping: Record<string, string> = {}
+      const fields = IMPORT_FIELDS[contactType]
+      
+      headers.forEach((header, index) => {
+        const normalizedHeader = header.toLowerCase().replace(/[^a-z0-9]/g, '_')
+        const matchedField = fields.find(f => 
+          f.key === normalizedHeader || 
+          f.label.toLowerCase().replace(/[^a-z0-9]/g, '_') === normalizedHeader ||
+          f.key.includes(normalizedHeader) ||
+          normalizedHeader.includes(f.key)
+        )
+        if (matchedField) {
+          autoMapping[matchedField.key] = index.toString()
+        }
+      })
+      
+      setColumnMapping(autoMapping)
+      setStep('mapping')
+    } catch (err: any) {
+      setImportError('Failed to parse file: ' + err.message)
+    }
+  }
+
+  const downloadTemplate = () => {
+    const fields = IMPORT_FIELDS[contactType]
+    const headers = fields.map(f => f.label)
+    
+    const exampleRow = fields.map(f => {
+      switch (f.key) {
+        case 'name': return 'Example Name'
+        case 'first_name': return 'John'
+        case 'last_name': return 'Doe'
+        case 'email': return 'example@email.com'
+        case 'phone': return '+20 123 456 7890'
+        case 'city': return 'Cairo'
+        case 'languages': return 'English, Arabic'
+        case 'specialties': return 'Pyramids, Luxor'
+        case 'star_rating': return '5'
+        case 'daily_rate': return '100'
+        case 'status': return 'active'
+        default: return ''
+      }
+    })
+    
+    const csv = [headers.join(','), exampleRow.join(',')].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${contactType}_import_template.csv`
+    a.click()
+  }
+
+  const isValidEmail = (email: string): boolean => {
+    return !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  }
+
+  const processRowData = (row: string[], fields: ImportField[]): Record<string, any> => {
+    const data: Record<string, any> = {}
+    
+    fields.forEach(field => {
+      const columnIndex = columnMapping[field.key]
+      if (columnIndex !== undefined && columnIndex !== '') {
+        let value = row[parseInt(columnIndex)]?.trim() || ''
+        
+        if (field.type === 'number' && value) {
+          data[field.key] = parseFloat(value) || null
+        } else if (field.type === 'array' && value) {
+          data[field.key] = value.split(',').map(v => v.trim()).filter(Boolean)
+        } else if (value) {
+          data[field.key] = value
+        }
+      }
+    })
+    
+    return data
+  }
+
+  const validateRow = (data: Record<string, any>, fields: ImportField[], rowIndex: number): string | null => {
+    for (const field of fields) {
+      if (field.required && !data[field.key]) {
+        return `Row ${rowIndex + 1}: Missing required field "${field.label}"`
+      }
+      if (field.type === 'email' && data[field.key] && !isValidEmail(data[field.key])) {
+        return `Row ${rowIndex + 1}: Invalid email format for "${field.label}"`
+      }
+    }
+    return null
+  }
+
+  const handleImport = async () => {
+    setImporting(true)
+    setImportError(null)
+    
+    const fields = IMPORT_FIELDS[contactType]
+    const tableName = TABLE_NAMES[contactType]
+    const results: ImportResult = { success: 0, failed: 0, errors: [] }
+    
+    try {
+      const rowsToInsert: Record<string, any>[] = []
+      
+      for (let i = 0; i < csvData.length; i++) {
+        const row = csvData[i]
+        const data = processRowData(row, fields)
+        
+        if (contactType !== 'client') {
+          data.is_active = true
+        }
+        
+        const validationError = validateRow(data, fields, i)
+        if (validationError) {
+          results.failed++
+          results.errors.push({ row: i + 2, message: validationError })
+          continue
+        }
+        
+        const hasRequiredData = fields.filter(f => f.required).every(f => data[f.key])
+        if (!hasRequiredData) {
+          results.failed++
+          results.errors.push({ row: i + 2, message: 'Missing required fields' })
+          continue
+        }
+        
+        rowsToInsert.push(data)
+      }
+      
+      const chunkSize = 50
+      for (let i = 0; i < rowsToInsert.length; i += chunkSize) {
+        const chunk = rowsToInsert.slice(i, i + chunkSize)
+        
+        const { error: insertError } = await supabase
+          .from(tableName)
+          .insert(chunk)
+        
+        if (insertError) {
+          for (const row of chunk) {
+            const { error: singleError } = await supabase
+              .from(tableName)
+              .insert(row)
+            
+            if (singleError) {
+              results.failed++
+              results.errors.push({ 
+                row: rowsToInsert.indexOf(row) + 2, 
+                message: singleError.message 
+              })
+            } else {
+              results.success++
+            }
+          }
+        } else {
+          results.success += chunk.length
+        }
+      }
+      
+      setResult(results)
+      setStep('result')
+      
+      if (results.success > 0) {
+        onImportComplete()
+      }
+    } catch (err: any) {
+      setImportError('Import failed: ' + err.message)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const getPreviewData = () => {
+    const fields = IMPORT_FIELDS[contactType]
+    return csvData.slice(0, 5).map(row => processRowData(row, fields))
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+              <Upload className="w-5 h-5 text-primary-600" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Import Contacts</h3>
+              <p className="text-xs text-gray-500">
+                {step === 'type' && 'Step 1: Select contact type'}
+                {step === 'upload' && 'Step 2: Upload your file'}
+                {step === 'mapping' && 'Step 3: Map columns'}
+                {step === 'preview' && 'Step 4: Preview & import'}
+                {step === 'result' && 'Import complete'}
+              </p>
+            </div>
+          </div>
+          <button onClick={handleClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {importError && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {importError}
+              <button onClick={() => setImportError(null)} className="ml-auto">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {step === 'type' && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">What type of contacts do you want to import?</p>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {Object.entries(IMPORT_TYPE_CONFIG).map(([key, config]) => {
+                  const Icon = config.icon
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setContactType(key as ContactType)}
+                      className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${
+                        contactType === key 
+                          ? 'border-primary-500 bg-primary-50' 
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 rounded-lg ${config.color} flex items-center justify-center`}>
+                        <Icon className="w-6 h-6" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">{config.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <button
+                  onClick={downloadTemplate}
+                  className="inline-flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700"
+                >
+                  <Download className="w-4 h-4" />
+                  Download {IMPORT_TYPE_CONFIG[contactType].label} template CSV
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 'upload' && (
+            <div className="space-y-4">
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-400 hover:bg-primary-50/50 transition-colors cursor-pointer"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.txt"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-700">Click to upload or drag and drop</p>
+                <p className="text-xs text-gray-500 mt-1">CSV file (comma-separated)</p>
+              </div>
+
+              {file && (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <FileSpreadsheet className="w-5 h-5 text-gray-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 truncate">{file.name}</p>
+                    <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button onClick={() => { setFile(null); setCsvData([]); setCsvHeaders([]) }} className="p-1 hover:bg-gray-200 rounded">
+                    <X className="w-4 h-4 text-gray-400" />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+                <HelpCircle className="w-4 h-4 text-blue-600 mt-0.5" />
+                <div className="text-xs text-blue-700">
+                  <p className="font-medium mb-1">Tips for successful import:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    <li>First row should be column headers</li>
+                    <li>Use comma (,) as separator</li>
+                    <li>For arrays (languages, specialties), separate with commas</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'mapping' && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Map your CSV columns to the database fields. Found {csvData.length} rows to import.
+              </p>
+
+              <div className="space-y-3">
+                {IMPORT_FIELDS[contactType].map(field => (
+                  <div key={field.key} className="flex items-center gap-3">
+                    <div className="w-1/3">
+                      <label className="text-sm font-medium text-gray-700">
+                        {field.label}
+                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                      </label>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-gray-400" />
+                    <select
+                      value={columnMapping[field.key] || ''}
+                      onChange={(e) => setColumnMapping(prev => ({ ...prev, [field.key]: e.target.value }))}
+                      className="flex-1 h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+                    >
+                      <option value="">-- Skip this field --</option>
+                      {csvHeaders.map((header, index) => (
+                        <option key={index} value={index.toString()}>{header}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-500 mb-2">Sample data from your file:</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        {csvHeaders.map((header, i) => (
+                          <th key={i} className="px-2 py-1.5 text-left font-medium text-gray-600 border border-gray-200">{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {csvData.slice(0, 3).map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) => (
+                            <td key={j} className="px-2 py-1.5 text-gray-700 border border-gray-200 truncate max-w-[150px]">{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'preview' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  Ready to import <strong>{csvData.length}</strong> {IMPORT_TYPE_CONFIG[contactType].label.toLowerCase()}
+                </p>
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${IMPORT_TYPE_CONFIG[contactType].color}`}>
+                  {IMPORT_TYPE_CONFIG[contactType].label}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      {IMPORT_FIELDS[contactType].filter(f => columnMapping[f.key]).map(field => (
+                        <th key={field.key} className="px-3 py-2 text-left font-medium text-gray-600">{field.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getPreviewData().map((row, i) => (
+                      <tr key={i} className="border-t border-gray-100">
+                        {IMPORT_FIELDS[contactType].filter(f => columnMapping[f.key]).map(field => (
+                          <td key={field.key} className="px-3 py-2 text-gray-700">
+                            {Array.isArray(row[field.key]) ? row[field.key].join(', ') : row[field.key] || '-'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {csvData.length > 5 && (
+                <p className="text-xs text-gray-500 text-center">Showing 5 of {csvData.length} rows</p>
+              )}
+            </div>
+          )}
+
+          {step === 'result' && result && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-center py-6">
+                {result.success > 0 ? (
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle2 className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900">Import Complete!</h4>
+                    <p className="text-sm text-gray-500 mt-1">Successfully imported {result.success} contacts</p>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <AlertCircle className="w-8 h-8 text-red-600" />
+                    </div>
+                    <h4 className="text-lg font-semibold text-gray-900">Import Failed</h4>
+                    <p className="text-sm text-gray-500 mt-1">No contacts were imported</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-green-50 rounded-lg text-center">
+                  <p className="text-2xl font-bold text-green-700">{result.success}</p>
+                  <p className="text-xs text-green-600">Successful</p>
+                </div>
+                <div className="p-4 bg-red-50 rounded-lg text-center">
+                  <p className="text-2xl font-bold text-red-700">{result.failed}</p>
+                  <p className="text-xs text-red-600">Failed</p>
+                </div>
+              </div>
+
+              {result.errors.length > 0 && (
+                <div className="border border-red-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-red-50 border-b border-red-200">
+                    <p className="text-xs font-medium text-red-700">Errors ({result.errors.length})</p>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto">
+                    {result.errors.slice(0, 10).map((err, i) => (
+                      <div key={i} className="px-3 py-2 text-xs text-red-600 border-b border-red-100 last:border-0">{err.message}</div>
+                    ))}
+                    {result.errors.length > 10 && (
+                      <div className="px-3 py-2 text-xs text-red-500 bg-red-50">And {result.errors.length - 10} more errors...</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50">
+          <div>
+            {step !== 'type' && step !== 'result' && (
+              <button
+                onClick={() => {
+                  if (step === 'upload') setStep('type')
+                  if (step === 'mapping') setStep('upload')
+                  if (step === 'preview') setStep('mapping')
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Back
+              </button>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {step === 'result' ? (
+              <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors">
+                Done
+              </button>
+            ) : (
+              <>
+                <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">
+                  Cancel
+                </button>
+                
+                {step === 'type' && (
+                  <button onClick={() => setStep('upload')} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors">
+                    Continue
+                  </button>
+                )}
+                
+                {step === 'mapping' && (
+                  <button
+                    onClick={() => setStep('preview')}
+                    disabled={!IMPORT_FIELDS[contactType].filter(f => f.required).every(f => columnMapping[f.key])}
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Preview
+                  </button>
+                )}
+                
+                {step === 'preview' && (
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                  >
+                    {importing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Importing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        Import {csvData.length} Contacts
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
