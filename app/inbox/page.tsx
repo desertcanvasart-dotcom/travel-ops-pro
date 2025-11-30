@@ -153,7 +153,7 @@ export default function InboxPage() {
   } = useEmailPolling({
     userId: user?.id || null,
     enabled: isConnected && !!user,
-    interval: 30000, // Poll every 30 seconds
+    interval: 120000, // Poll every 2 minutes
     onNewEmails: (newEmails) => {
       console.log('New emails received:', newEmails.length)
       setNewEmailCount(prev => prev + newEmails.length)
@@ -621,10 +621,11 @@ export default function InboxPage() {
               <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Mail className="w-5 h-5 text-primary-600" />
                 Inbox
-                {/* NEW: Polling indicator */}
-                {isPolling && (
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Checking for new emails..." />
-                )}
+                {/* NEW: Polling indicator - hidden
+               {isPolling && (
+             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Checking for new emails..." />
+               )}
+                */}
                 {/* NEW: Unread count badge */}
                 {unreadCount > 0 && (
                   <span className="text-xs px-2 py-0.5 bg-primary-100 text-primary-700 rounded-full">
