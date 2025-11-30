@@ -1150,6 +1150,136 @@ export default function InboxPage() {
           </div>
         )}
       </div>
+      {/* Expanded Email Modal */}
+{showExpandedEmail && selectedEmail && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      {/* Modal Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium ${
+            folder === 'sent' || isFromMe(selectedEmail) 
+              ? getAvatarColor(selectedEmail.to) 
+              : getAvatarColor(selectedEmail.from)
+          }`}>
+            {folder === 'sent' || isFromMe(selectedEmail) 
+              ? getInitials(extractName(selectedEmail.to))
+              : getInitials(extractName(selectedEmail.from))
+            }
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              {(folder === 'sent' || isFromMe(selectedEmail)) && (
+                <span className="text-xs px-2 py-0.5 bg-primary-100 text-primary-700 rounded font-medium">Sent</span>
+              )}
+              <p className="font-medium text-gray-900">
+                {folder === 'sent' || isFromMe(selectedEmail) 
+                  ? `To: ${extractName(selectedEmail.to)}`
+                  : extractName(selectedEmail.from)
+                }
+              </p>
+              {!(folder === 'sent' || isFromMe(selectedEmail)) && (
+                <ClientLinkButton
+                  userId={user!.id}
+                  messageId={selectedEmail.id}
+                  threadId={selectedEmail.threadId}
+                  fromEmail={extractEmailAddress(selectedEmail.from)}
+                />
+              )}
+            </div>
+            <p className="text-xs text-gray-500">
+              {folder === 'sent' || isFromMe(selectedEmail)
+                ? extractEmailAddress(selectedEmail.to)
+                : extractEmailAddress(selectedEmail.from)
+              }
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">
+            {new Date(selectedEmail.date).toLocaleString()}
+          </span>
+          <button
+            onClick={() => setShowExpandedEmail(false)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+      </div>
+
+      {/* Modal Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 py-4">
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">
+            {decodeHtmlEntities(selectedEmail.subject || '(No subject)')}
+          </h2>
+          
+          <div 
+            className="prose prose-sm max-w-none text-gray-700"
+            dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
+          />
+
+          {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <AttachmentList
+                attachments={selectedEmail.attachments}
+                messageId={selectedEmail.id}
+                userId={user!.id}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal Footer */}
+      <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0 rounded-b-2xl">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleArchive}
+            disabled={actionLoading}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50" 
+            title="Archive"
+          >
+            <Archive className="w-4 h-4 text-gray-500" />
+          </button>
+          <button 
+            onClick={handleDelete}
+            disabled={actionLoading}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50" 
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4 text-gray-500" />
+          </button>
+          <button 
+            onClick={() => selectedEmail.isUnread ? handleMarkRead() : handleMarkUnread()}
+            disabled={actionLoading}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50" 
+            title={selectedEmail.isUnread ? 'Mark as read' : 'Mark as unread'}
+          >
+            {selectedEmail.isUnread ? (
+              <MailOpen className="w-4 h-4 text-gray-500" />
+            ) : (
+              <Mail className="w-4 h-4 text-gray-500" />
+            )}
+          </button>
+        </div>
+        
+        <button
+          onClick={() => {
+            setShowExpandedEmail(false)
+            setShowCompose(true)
+          }}
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
+        >
+          <Send className="w-4 h-4" />
+          {folder === 'sent' || isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 {/* Compose Modal */}
 {showCompose && (
         <ComposeModal

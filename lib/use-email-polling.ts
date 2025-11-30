@@ -145,7 +145,7 @@ export function useEmailPolling({
   // Manual refresh
   const refresh = useCallback(async () => {
     await poll()
-    await fetchUnreadCount()
+    // await fetchUnreadCount()
   }, [poll, fetchUnreadCount])
 
   // Set up polling interval
@@ -160,12 +160,12 @@ export function useEmailPolling({
 
     // Initial poll
     poll()
-    fetchUnreadCount()
+    // fetchUnreadCount()
 
     // Set up interval
     intervalRef.current = setInterval(() => {
       poll()
-      fetchUnreadCount()
+      // fetchUnreadCount()
     }, interval)
 
     return () => {
