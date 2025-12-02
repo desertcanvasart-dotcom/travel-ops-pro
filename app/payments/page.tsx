@@ -7,25 +7,28 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  Plus,
-  Search
+  Search,
+  FileText,
+  ExternalLink
 } from 'lucide-react'
 import Link from 'next/link'
 
 interface Payment {
   id: string
-  itinerary_id: string
-  itinerary_code: string
-  client_name: string
-  payment_type: string
+  invoice_id: string
   amount: number
   currency: string
   payment_method: string
-  payment_status: string
-  transaction_reference: string
   payment_date: string
-  due_date: string
-  notes: string
+  transaction_reference: string | null
+  notes: string | null
+  created_at: string
+  // Joined from invoice
+  invoice_number: string
+  client_name: string
+  client_email: string
+  invoice_total: number
+  invoice_status: string
 }
 
 interface PaymentStats {
@@ -46,25 +49,27 @@ export default function PaymentsPage() {
     thisMonthRevenue: 0
   })
   
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [methodFilter, setMethodFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     fetchPayments()
+    fetchStats()
   }, [])
 
   useEffect(() => {
     filterPayments()
-  }, [payments, statusFilter, searchQuery])
+  }, [payments, methodFilter, searchQuery])
 
   const fetchPayments = async () => {
     try {
       const response = await fetch('/api/payments')
       const data = await response.json()
       
-      if (data.success) {
-        setPayments(data.data)
-        calculateStats(data.data)
+      if (response.ok) {
+        // Handle both old format (data.success/data.data) and new format (direct array)
+        const paymentsData = data.success ? data.data : (Array.isArray(data) ? data : [])
+        setPayments(paymentsData)
       }
     } catch (error) {
       console.error('Error fetching payments:', error)
@@ -73,48 +78,60 @@ export default function PaymentsPage() {
     }
   }
 
-  const calculateStats = (paymentsData: Payment[]) => {
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    
-    // Count completed, deposit_received, and partially_paid as received
-    const receivedStatuses = ['completed', 'deposit_received', 'partially_paid']
-    
-    const totalReceived = paymentsData
-      .filter(p => receivedStatuses.includes(p.payment_status))
-      .reduce((sum, p) => sum + p.amount, 0)
-    
-    const pendingPayments = paymentsData
-      .filter(p => p.payment_status === 'pending')
-      .reduce((sum, p) => sum + p.amount, 0)
-    
-    const overduePayments = paymentsData
-      .filter(p => p.payment_status === 'pending' && p.due_date && new Date(p.due_date) < now)
-      .reduce((sum, p) => sum + p.amount, 0)
-    
-    const thisMonthRevenue = paymentsData
-      .filter(p => receivedStatuses.includes(p.payment_status) && p.payment_date && new Date(p.payment_date) >= startOfMonth)
-      .reduce((sum, p) => sum + p.amount, 0)
-  
-    setStats({
-      totalReceived,
-      pendingPayments,
-      overduePayments,
-      thisMonthRevenue
-    })
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/invoices')
+      if (response.ok) {
+        const invoices = await response.json()
+        
+        const now = new Date()
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+        
+        // Total received from all invoices
+        const totalReceived = invoices.reduce((sum: number, inv: any) => sum + Number(inv.amount_paid || 0), 0)
+        
+        // Pending = balance due on sent/partial invoices
+        const pendingPayments = invoices
+          .filter((inv: any) => ['sent', 'partial', 'viewed'].includes(inv.status))
+          .reduce((sum: number, inv: any) => sum + Number(inv.balance_due || 0), 0)
+        
+        // Overdue
+        const overduePayments = invoices
+          .filter((inv: any) => {
+            if (inv.status === 'paid' || inv.status === 'cancelled') return false
+            if (!inv.due_date) return false
+            return new Date(inv.due_date) < now && Number(inv.balance_due) > 0
+          })
+          .reduce((sum: number, inv: any) => sum + Number(inv.balance_due || 0), 0)
+        
+        // This month - sum of payments made this month
+        const thisMonthRevenue = payments
+          .filter(p => p.payment_date && new Date(p.payment_date) >= startOfMonth)
+          .reduce((sum, p) => sum + Number(p.amount), 0)
+        
+        setStats({
+          totalReceived,
+          pendingPayments,
+          overduePayments,
+          thisMonthRevenue
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
   }
 
   const filterPayments = () => {
     let filtered = payments
 
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(p => p.payment_status === statusFilter)
+    if (methodFilter !== 'all') {
+      filtered = filtered.filter(p => p.payment_method === methodFilter)
     }
 
     if (searchQuery) {
       filtered = filtered.filter(p =>
         p.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.itinerary_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.transaction_reference?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     }
@@ -122,24 +139,22 @@ export default function PaymentsPage() {
     setFilteredPayments(filtered)
   }
 
-  const getStatusColor = (status: string) => {
-    const colors: any = {
-      completed: 'bg-success/10 text-success',
-      pending: 'bg-orange-100 text-orange-700',
-      failed: 'bg-danger/10 text-danger',
-      refunded: 'bg-gray-100 text-gray-700'
+  const getMethodLabel = (method: string) => {
+    const labels: Record<string, string> = {
+      bank_transfer: 'Bank Transfer',
+      credit_card: 'Credit Card',
+      cash: 'Cash',
+      paypal: 'PayPal',
+      wise: 'Wise',
+      airwallex: 'Airwallex',
+      stripe: 'Stripe'
     }
-    return colors[status] || 'bg-gray-100 text-gray-700'
+    return labels[method] || method
   }
 
-  const getPaymentTypeLabel = (type: string) => {
-    const labels: any = {
-      deposit: 'Deposit',
-      installment: 'Installment',
-      final: 'Final Payment',
-      full: 'Full Payment'
-    }
-    return labels[type] || type
+  const getCurrencySymbol = (currency: string) => {
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
+    return symbols[currency] || currency
   }
 
   if (loading) {
@@ -159,14 +174,14 @@ export default function PaymentsPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Payment Tracking</h1>
-          <p className="text-sm text-gray-600 mt-1">Manage payments and cash flow</p>
+          <p className="text-sm text-gray-600 mt-1">All payments received against invoices</p>
         </div>
         <Link
-          href="/payments/record"
+          href="/invoices"
           className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 flex items-center gap-2 font-medium"
         >
-          <Plus className="w-4 h-4" />
-          Record Payment
+          <FileText className="w-4 h-4" />
+          View Invoices
         </Link>
       </div>
 
@@ -175,34 +190,34 @@ export default function PaymentsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center gap-2 mb-2">
             <CheckCircle className="w-4 h-4 text-gray-400" />
-            <div className="w-1.5 h-1.5 rounded-full bg-success" />
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
           </div>
           <h3 className="text-xs text-gray-600 font-medium">Total Received</h3>
           <p className="text-2xl font-bold text-gray-900 mt-1">
             €{stats.totalReceived.toLocaleString()}
           </p>
-          <p className="text-xs text-gray-500 mt-1">All completed payments</p>
+          <p className="text-xs text-gray-500 mt-1">All time payments</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="w-4 h-4 text-gray-400" />
-            <div className="w-1.5 h-1.5 rounded-full bg-orange-600" />
+            <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
           </div>
           <h3 className="text-xs text-gray-600 font-medium">Pending Payments</h3>
           <p className="text-2xl font-bold text-gray-900 mt-1">
             €{stats.pendingPayments.toLocaleString()}
           </p>
-          <p className="text-xs text-gray-500 mt-1">Awaiting payment</p>
+          <p className="text-xs text-gray-500 mt-1">Outstanding balance</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center gap-2 mb-2">
             <AlertCircle className="w-4 h-4 text-gray-400" />
-            <div className="w-1.5 h-1.5 rounded-full bg-danger" />
+            <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
           </div>
           <h3 className="text-xs text-gray-600 font-medium">Overdue</h3>
-          <p className="text-2xl font-bold text-danger mt-1">
+          <p className="text-2xl font-bold text-red-600 mt-1">
             €{stats.overduePayments.toLocaleString()}
           </p>
           <p className="text-xs text-gray-500 mt-1">Past due date</p>
@@ -227,22 +242,25 @@ export default function PaymentsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by client, itinerary code, or reference..."
+            placeholder="Search by client, invoice #, or reference..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
         <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          value={methodFilter}
+          onChange={(e) => setMethodFilter(e.target.value)}
           className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
         >
-          <option value="all">All Status</option>
-          <option value="completed">Completed</option>
-          <option value="pending">Pending</option>
-          <option value="failed">Failed</option>
-          <option value="refunded">Refunded</option>
+          <option value="all">All Methods</option>
+          <option value="bank_transfer">Bank Transfer</option>
+          <option value="credit_card">Credit Card</option>
+          <option value="cash">Cash</option>
+          <option value="paypal">PayPal</option>
+          <option value="wise">Wise</option>
+          <option value="airwallex">Airwallex</option>
+          <option value="stripe">Stripe</option>
         </select>
       </div>
 
@@ -257,12 +275,11 @@ export default function PaymentsPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Itinerary</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Method</th>
-                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
                 <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -276,36 +293,38 @@ export default function PaymentsPage() {
                     }
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm font-medium text-gray-900">{payment.client_name}</div>
+                    <Link 
+                      href={`/invoices/${payment.invoice_id}`}
+                      className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      {payment.invoice_number}
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm font-mono text-primary-600">{payment.itinerary_code}</div>
+                    <div className="text-sm font-medium text-gray-900">{payment.client_name}</div>
+                    <div className="text-xs text-gray-500">{payment.client_email}</div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-sm font-bold text-green-600">
+                      {getCurrencySymbol(payment.currency)}{Number(payment.amount).toLocaleString()}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
-                      {getPaymentTypeLabel(payment.payment_type)}
+                      {getMethodLabel(payment.payment_method)}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-sm font-bold text-gray-900">
-                      {payment.currency} {payment.amount.toFixed(2)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                    {payment.payment_method?.replace('_', ' ') || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusColor(payment.payment_status)}`}>
-                      {payment.payment_status}
-                    </span>
+                  <td className="px-4 py-3 text-sm text-gray-600 font-mono">
+                    {payment.transaction_reference || '-'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 justify-center">
                       <Link
-                        href={`/payments/${payment.id}`}
-                        className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                        href={`/invoices/${payment.invoice_id}`}
+                        className="text-gray-400 hover:text-blue-600 transition-colors"
+                        title="View Invoice"
                       >
-                        View
+                        <ExternalLink className="w-4 h-4" />
                       </Link>
                     </div>
                   </td>
@@ -319,7 +338,12 @@ export default function PaymentsPage() {
           <div className="text-center py-8 text-gray-500">
             <DollarSign className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-base font-medium text-gray-900">No payments found</p>
-            <p className="mt-2 text-sm text-gray-600">Try adjusting your filters</p>
+            <p className="mt-2 text-sm text-gray-600">
+              Payments are recorded against invoices.{' '}
+              <Link href="/invoices" className="text-primary-600 hover:underline">
+                View invoices
+              </Link>
+            </p>
           </div>
         )}
       </div>

@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import ResourceAssignment from '@/app/components/ResourceAssignment'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
@@ -13,6 +13,7 @@ import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp }
 interface Itinerary {
   id: string
   itinerary_code: string
+  client_id?: string
   client_name: string
   client_email: string
   client_phone: string
@@ -59,8 +60,15 @@ interface DayWithServices extends ItineraryDay {
   services: Service[]
 }
 
+interface ExistingInvoice {
+  id: string
+  invoice_number: string
+  status: string
+}
+
 export default function ViewItineraryPage() {
   const params = useParams()
+  const router = useRouter()
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,10 +78,13 @@ export default function ViewItineraryPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [showSendModal, setShowSendModal] = useState(false)
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
+  const [generatingInvoice, setGeneratingInvoice] = useState(false)
+  const [existingInvoice, setExistingInvoice] = useState<ExistingInvoice | null>(null)
 
   useEffect(() => {
     if (params.id) {
       fetchItinerary()
+      checkExistingInvoice()
     }
   }, [params.id])
 
@@ -101,6 +112,79 @@ export default function ViewItineraryPage() {
     } catch (err) {
       setError('Error loading itinerary')
       setLoading(false)
+    }
+  }
+
+  const checkExistingInvoice = async () => {
+    try {
+      const response = await fetch(`/api/invoices?itineraryId=${params.id}`)
+      if (response.ok) {
+        const invoices = await response.json()
+        if (invoices && invoices.length > 0) {
+          setExistingInvoice(invoices[0])
+        }
+      }
+    } catch (error) {
+      console.error('Error checking existing invoice:', error)
+    }
+  }
+
+  const handleGenerateInvoice = async () => {
+    if (!itinerary) return
+
+    // If invoice exists, navigate to it
+    if (existingInvoice) {
+      router.push(`/invoices/${existingInvoice.id}`)
+      return
+    }
+
+    setGeneratingInvoice(true)
+    try {
+      // Build line items from days/services
+      const lineItems = []
+      
+      // Add main trip package
+      lineItems.push({
+        description: `${itinerary.trip_name} - ${itinerary.itinerary_code}`,
+        quantity: 1,
+        unit_price: itinerary.total_cost,
+        amount: itinerary.total_cost
+      })
+
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: itinerary.client_id || null,
+          itinerary_id: itinerary.id,
+          client_name: itinerary.client_name,
+          client_email: itinerary.client_email,
+          line_items: lineItems,
+          subtotal: itinerary.total_cost,
+          tax_rate: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          total_amount: itinerary.total_cost,
+          currency: itinerary.currency || 'EUR',
+          issue_date: new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          payment_terms: 'Payment due within 14 days',
+          notes: `Trip dates: ${new Date(itinerary.start_date).toLocaleDateString()} - ${new Date(itinerary.end_date).toLocaleDateString()}`
+        })
+      })
+
+      if (response.ok) {
+        const invoice = await response.json()
+        router.push(`/invoices/${invoice.id}`)
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to create invoice')
+      }
+    } catch (error) {
+      console.error('Error creating invoice:', error)
+      alert('Failed to create invoice')
+    } finally {
+      setGeneratingInvoice(false)
     }
   }
 
@@ -329,6 +413,28 @@ export default function ViewItineraryPage() {
                 <Send className="w-4 h-4" />
                 Send Quote
               </button>
+              <button
+                onClick={handleGenerateInvoice}
+                disabled={generatingInvoice}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1.5 transition-colors ${
+                  existingInvoice 
+                    ? 'bg-green-600 text-white hover:bg-green-700' 
+                    : 'bg-amber-600 text-white hover:bg-amber-700'
+                } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={existingInvoice ? `View ${existingInvoice.invoice_number}` : 'Generate Invoice'}
+              >
+                {generatingInvoice ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Creating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Receipt className="w-4 h-4" />
+                    {existingInvoice ? existingInvoice.invoice_number : 'Invoice'}
+                  </>
+                )}
+              </button>
               <Link
                 href={`/documents/contract/${itinerary.id}`}
                 className="px-3 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-1.5"
@@ -484,9 +590,19 @@ export default function ViewItineraryPage() {
               <p className="text-xl font-bold text-gray-900">
                 {itinerary.currency} {itinerary.total_cost.toFixed(2)}
               </p>
-              <span className={`inline-block mt-1 px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
-                {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
-              </span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
+                  {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
+                </span>
+                {existingInvoice && (
+                  <Link 
+                    href={`/invoices/${existingInvoice.id}`}
+                    className="inline-block px-2 py-0.5 rounded border text-xs font-medium bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                  >
+                    {existingInvoice.invoice_number}
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
           {itinerary.notes && (
