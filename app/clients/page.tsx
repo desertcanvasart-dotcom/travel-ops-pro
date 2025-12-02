@@ -29,10 +29,22 @@ interface ClientSummary {
   total_communications: number
 }
 
+interface DeleteModalState {
+  isOpen: boolean
+  clientId: string
+  clientName: string
+}
+
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<DeleteModalState>({
+    isOpen: false,
+    clientId: '',
+    clientName: ''
+  })
+  const [deleting, setDeleting] = useState(false)
   
   // Enhanced Filters
   const [filters, setFilters] = useState({
@@ -134,28 +146,41 @@ export default function ClientsPage() {
     }
   }
 
-  const deleteClient = async (clientId: string, clientName: string) => {
-    const confirmed = confirm(
-      `Are you sure you want to delete ${clientName}?\n\nThis will also delete:\n- All client notes\n- All communications history\n- All follow-ups\n- Client preferences\n\nThis action cannot be undone!`
-    )
+  const openDeleteModal = (clientId: string, clientName: string) => {
+    setDeleteModal({
+      isOpen: true,
+      clientId,
+      clientName
+    })
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModal({
+      isOpen: false,
+      clientId: '',
+      clientName: ''
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteModal.clientId) return
     
-    if (!confirmed) return
-  
     try {
-      setLoading(true)
+      setDeleting(true)
       const { error } = await supabase
         .from('clients')
         .delete()
-        .eq('id', clientId)
-  
+        .eq('id', deleteModal.clientId)
+
       if (error) throw error
-      alert('Client deleted successfully!')
+      
+      closeDeleteModal()
       fetchClients()
     } catch (error) {
       console.error('Error deleting client:', error)
       alert('Failed to delete client. Please try again.')
     } finally {
-      setLoading(false)
+      setDeleting(false)
     }
   }
 
@@ -230,6 +255,66 @@ export default function ClientsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Delete Confirmation Modal */}
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Client</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <p className="text-sm text-gray-700 mb-4">
+                Are you sure you want to delete <strong>{deleteModal.clientName}</strong>?
+              </p>
+              
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-red-800 font-medium mb-2">This will also delete:</p>
+                <ul className="text-sm text-red-700 space-y-1 ml-4 list-disc">
+                  <li>All client notes</li>
+                  <li>All communications history</li>
+                  <li>All follow-ups</li>
+                  <li>Client preferences</li>
+                </ul>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={closeDeleteModal}
+                  disabled={deleting}
+                  className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
+                >
+                  {deleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete Client
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -245,7 +330,7 @@ export default function ClientsPage() {
             </div>
             <Link
               href="/clients/new"
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
             >
               <UserPlus className="w-4 h-4" />
               New Client
@@ -258,7 +343,7 @@ export default function ClientsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
           {/* Total Clients */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-gray-400" />
@@ -270,7 +355,7 @@ export default function ClientsPage() {
           </div>
 
           {/* Active */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-gray-400" />
@@ -282,7 +367,7 @@ export default function ClientsPage() {
           </div>
 
           {/* VIP */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Star className="w-4 h-4 text-gray-400" />
@@ -294,7 +379,7 @@ export default function ClientsPage() {
           </div>
 
           {/* New This Month */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-gray-400" />
@@ -306,7 +391,7 @@ export default function ClientsPage() {
           </div>
 
           {/* Total Revenue */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-gray-400" />
@@ -323,7 +408,7 @@ export default function ClientsPage() {
         {/* Enhanced Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
           {/* Search Bar - Always Visible */}
-          <div className="p-3">
+          <div className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -332,12 +417,12 @@ export default function ClientsPage() {
                   placeholder="Search by name, email, phone, or client code..."
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
                 />
               </div>
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border transition-colors shadow-sm ${
                   showFilters || hasActiveFilters
                     ? 'bg-primary-50 border-primary-300 text-primary-700'
                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -346,7 +431,7 @@ export default function ClientsPage() {
                 <SlidersHorizontal className="w-4 h-4" />
                 Filters
                 {hasActiveFilters && (
-                  <span className="bg-primary-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="bg-primary-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                     {[filters.status !== 'all', filters.clientType !== 'all', filters.vipOnly, filters.dateFrom, filters.dateTo, filters.sortBy !== 'recent'].filter(Boolean).length}
                   </span>
                 )}
@@ -354,7 +439,7 @@ export default function ClientsPage() {
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
                   Clear
@@ -365,17 +450,17 @@ export default function ClientsPage() {
 
           {/* Advanced Filters - Collapsible */}
           {showFilters && (
-            <div className="px-3 pb-3 border-t border-gray-200 pt-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="px-4 pb-4 border-t border-gray-200 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Status Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Status
                   </label>
                   <select
                     value={filters.status}
                     onChange={(e) => handleFilterChange('status', e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Active</option>
@@ -387,13 +472,13 @@ export default function ClientsPage() {
 
                 {/* Client Type Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Client Type
                   </label>
                   <select
                     value={filters.clientType}
                     onChange={(e) => handleFilterChange('clientType', e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
                     <option value="all">All Types</option>
                     <option value="individual">Individual</option>
@@ -406,13 +491,13 @@ export default function ClientsPage() {
 
                 {/* Sort By */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Sort By
                   </label>
                   <select
                     value={filters.sortBy}
                     onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
                     <option value="recent">Most Recent</option>
                     <option value="oldest">Oldest First</option>
@@ -426,15 +511,15 @@ export default function ClientsPage() {
 
                 {/* VIP Toggle */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     VIP Clients
                   </label>
-                  <label className="flex items-center gap-2 px-2 py-1.5 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <label className="flex items-center gap-2 px-3 py-2.5 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 shadow-sm">
                     <input
                       type="checkbox"
                       checked={filters.vipOnly}
                       onChange={(e) => handleFilterChange('vipOnly', e.target.checked)}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
                     />
                     <Star className="w-4 h-4 text-yellow-500" />
                     <span className="text-sm text-gray-700">VIP Only</span>
@@ -443,20 +528,20 @@ export default function ClientsPage() {
               </div>
 
               {/* Date Range */}
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Member Since (From)
                   </label>
                   <input
                     type="date"
                     value={filters.dateFrom}
                     onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
                     Member Since (To)
                   </label>
                   <input
@@ -464,7 +549,7 @@ export default function ClientsPage() {
                     value={filters.dateTo}
                     onChange={(e) => handleFilterChange('dateTo', e.target.value)}
                     max={new Date().toISOString().split('T')[0]}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
                   />
                 </div>
               </div>
@@ -476,7 +561,7 @@ export default function ClientsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           {loading ? (
             <div className="p-8 text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
               <p className="mt-3 text-sm text-gray-600">Loading clients...</p>
             </div>
           ) : clients.length === 0 ? (
@@ -491,7 +576,7 @@ export default function ClientsPage() {
               {hasActiveFilters ? (
                 <button
                   onClick={clearFilters}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 shadow-sm"
                 >
                   <X className="w-4 h-4" />
                   Clear Filters
@@ -499,7 +584,7 @@ export default function ClientsPage() {
               ) : (
                 <Link
                   href="/clients/new"
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 shadow-sm"
                 >
                   <UserPlus className="w-4 h-4" />
                   Add First Client
@@ -511,25 +596,25 @@ export default function ClientsPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Client
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contact
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Type & Status
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Bookings
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Revenue
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Activity
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -539,7 +624,7 @@ export default function ClientsPage() {
                     <tr key={client.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                          <div className="flex-shrink-0 h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center">
                             <span className="text-primary-600 font-semibold text-xs">
                               {client.first_name[0]}{client.last_name[0]}
                             </span>
@@ -608,22 +693,21 @@ export default function ClientsPage() {
                         <div className="flex items-center gap-2">
                           <Link
                             href={`/clients/${client.id}`}
-                            className="text-primary-600 hover:text-primary-800"
+                            className="text-primary-600 hover:text-primary-800 font-medium"
                           >
                             View
                           </Link>
                           <span className="text-gray-300">|</span>
                           <Link
                             href={`/clients/${client.id}/edit`}
-                            className="text-gray-600 hover:text-gray-800"
+                            className="text-gray-600 hover:text-gray-800 font-medium"
                           >
                             Edit
                           </Link>
                           <span className="text-gray-300">|</span>
                           <button
-                            onClick={() => deleteClient(client.id, `${client.first_name} ${client.last_name}`)}
+                            onClick={() => openDeleteModal(client.id, `${client.first_name} ${client.last_name}`)}
                             className="text-red-600 hover:text-red-800 font-medium"
-                            title="Delete client"
                           >
                             Delete
                           </button>

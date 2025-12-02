@@ -60,6 +60,7 @@ interface Itinerary {
   id: string
   itinerary_code: string
   client_name: string
+  client_email: string
   total_cost: number
 }
 
@@ -144,10 +145,18 @@ export default function InvoicesContent() {
       const response = await fetch('/api/clients')
       if (response.ok) {
         const data = await response.json()
-        setClients(data.data || data || [])
+        const clientsData = data.success ? data.data : (Array.isArray(data) ? data : [])
+        // Map first_name + last_name to name
+        const mappedClients = (clientsData || []).map((c: any) => ({
+          id: c.id,
+          name: `${c.first_name || ''} ${c.last_name || ''}`.trim(),
+          email: c.email || ''
+        }))
+        setClients(mappedClients)
       }
     } catch (error) {
       console.error('Error fetching clients:', error)
+      setClients([])
     }
   }
 
@@ -156,10 +165,13 @@ export default function InvoicesContent() {
       const response = await fetch('/api/itineraries')
       if (response.ok) {
         const data = await response.json()
-        setItineraries(data.data || data || [])
+        // Handle both formats: { success, data } or direct array
+        const itinerariesData = data.success ? data.data : (Array.isArray(data) ? data : [])
+        setItineraries(itinerariesData || [])
       }
     } catch (error) {
       console.error('Error fetching itineraries:', error)
+      setItineraries([])
     }
   }
 
@@ -182,9 +194,18 @@ export default function InvoicesContent() {
   const handleItineraryChange = (itineraryId: string) => {
     const itinerary = itineraries.find(i => i.id === itineraryId)
     if (itinerary) {
+      // Find matching client or use itinerary's client info
+      const matchingClient = clients.find(c => 
+        c.name === itinerary.client_name || 
+        c.email === itinerary.client_email
+      )
+      
       setFormData(prev => ({
         ...prev,
         itinerary_id: itineraryId,
+        client_id: matchingClient?.id || prev.client_id,
+        client_name: itinerary.client_name || prev.client_name,
+        client_email: itinerary.client_email || prev.client_email,
         line_items: [{
           description: `Tour Package - ${itinerary.itinerary_code}`,
           quantity: 1,
@@ -193,6 +214,12 @@ export default function InvoicesContent() {
         }],
         subtotal: itinerary.total_cost,
         total_amount: itinerary.total_cost
+      }))
+    } else {
+      // Clear itinerary selection
+      setFormData(prev => ({
+        ...prev,
+        itinerary_id: ''
       }))
     }
   }
@@ -363,16 +390,21 @@ export default function InvoicesContent() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="p-6 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-blue-600" />
-          <h1 className="text-lg font-semibold text-gray-900">Invoices</h1>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-50 rounded-lg">
+            <FileText className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Invoices</h1>
+            <p className="text-sm text-gray-500">Manage client invoices and payments</p>
+          </div>
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#647C47] text-white text-sm rounded-md hover:bg-[#4f6238] transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors shadow-sm"
         >
           <Plus className="h-4 w-4" />
           New Invoice
@@ -380,54 +412,54 @@ export default function InvoicesContent() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-3">
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
+      <div className="grid grid-cols-5 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-gray-500">Total Invoices</span>
+            <span className="text-xs text-gray-500 font-medium">Total Invoices</span>
           </div>
-          <p className="text-xl font-semibold text-gray-900 mt-1">{totalInvoices}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">{totalInvoices}</p>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-            <span className="text-xs text-gray-500">Total Billed</span>
+            <span className="text-xs text-gray-500 font-medium">Total Billed</span>
           </div>
-          <p className="text-xl font-semibold text-gray-900 mt-1">€{totalRevenue.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">€{totalRevenue.toLocaleString()}</p>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            <span className="text-xs text-gray-500">Paid</span>
+            <span className="text-xs text-gray-500 font-medium">Paid</span>
           </div>
-          <p className="text-xl font-semibold text-green-600 mt-1">€{totalPaid.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-green-600 mt-2">€{totalPaid.toLocaleString()}</p>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-            <span className="text-xs text-gray-500">Outstanding</span>
+            <span className="text-xs text-gray-500 font-medium">Outstanding</span>
           </div>
-          <p className="text-xl font-semibold text-orange-600 mt-1">€{totalOutstanding.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-orange-600 mt-2">€{totalOutstanding.toLocaleString()}</p>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-red-500"></div>
-            <span className="text-xs text-gray-500">Overdue</span>
+            <span className="text-xs text-gray-500 font-medium">Overdue</span>
           </div>
-          <p className="text-xl font-semibold text-red-600 mt-1">€{overdueAmount.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-red-600 mt-2">€{overdueAmount.toLocaleString()}</p>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+      <div className="flex items-center gap-4 bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search invoices..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+            className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
           />
         </div>
 
@@ -435,7 +467,7 @@ export default function InvoicesContent() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
+            className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white shadow-sm cursor-pointer"
           >
             <option value="">All Status</option>
             <option value="draft">Draft</option>
@@ -445,12 +477,12 @@ export default function InvoicesContent() {
             <option value="overdue">Overdue</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
@@ -553,30 +585,30 @@ export default function InvoicesContent() {
 
       {/* Add Invoice Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-900">New Invoice</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
+              <h2 className="text-lg font-semibold text-gray-900">New Invoice</h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {/* Client & Itinerary Selection */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Client <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.client_id}
                     onChange={(e) => handleClientChange(e.target.value)}
                     required
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm bg-white"
                   >
                     <option value="">Select Client</option>
                     {clients.map(client => (
@@ -586,18 +618,18 @@ export default function InvoicesContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Link to Itinerary (Optional)
                   </label>
                   <select
                     value={formData.itinerary_id}
                     onChange={(e) => handleItineraryChange(e.target.value)}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm bg-white"
                   >
                     <option value="">No Itinerary</option>
                     {itineraries.map(it => (
                       <option key={it.id} value={it.id}>
-                        {it.itinerary_code} - €{it.total_cost}
+                        {it.itinerary_code} - {it.client_name} (€{it.total_cost})
                       </option>
                     ))}
                   </select>
@@ -605,13 +637,13 @@ export default function InvoicesContent() {
               </div>
 
               {/* Dates */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Currency</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
                   <select
                     value={formData.currency}
                     onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm bg-white"
                   >
                     <option value="EUR">EUR (€)</option>
                     <option value="USD">USD ($)</option>
@@ -619,89 +651,90 @@ export default function InvoicesContent() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Issue Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Issue Date</label>
                   <input
                     type="date"
                     value={formData.issue_date}
                     onChange={(e) => setFormData(prev => ({ ...prev, issue_date: e.target.value }))}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
                   <input
                     type="date"
                     value={formData.due_date}
                     onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                   />
                 </div>
               </div>
 
               {/* Line Items */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-gray-600">Line Items</label>
+                  <label className="text-sm font-medium text-gray-700">Line Items</label>
                   <button
                     type="button"
                     onClick={addLineItem}
-                    className="text-xs text-[#647C47] hover:text-[#4f6238] font-medium"
+                    className="text-sm text-[#647C47] hover:text-[#4f6238] font-medium flex items-center gap-1"
                   >
-                    + Add Item
+                    <Plus className="h-4 w-4" />
+                    Add Item
                   </button>
                 </div>
                 
-                <div className="border border-gray-200 rounded-md overflow-hidden">
+                <div className="border border-gray-300 rounded-lg overflow-hidden shadow-sm">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="text-left text-xs font-medium text-gray-500 px-3 py-2">Description</th>
-                        <th className="text-center text-xs font-medium text-gray-500 px-3 py-2 w-20">Qty</th>
-                        <th className="text-right text-xs font-medium text-gray-500 px-3 py-2 w-28">Unit Price</th>
-                        <th className="text-right text-xs font-medium text-gray-500 px-3 py-2 w-28">Amount</th>
-                        <th className="w-10"></th>
+                        <th className="text-left text-xs font-semibold text-gray-600 px-4 py-3">Description</th>
+                        <th className="text-center text-xs font-semibold text-gray-600 px-4 py-3 w-20">Qty</th>
+                        <th className="text-right text-xs font-semibold text-gray-600 px-4 py-3 w-32">Unit Price</th>
+                        <th className="text-right text-xs font-semibold text-gray-600 px-4 py-3 w-28">Amount</th>
+                        <th className="w-12"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-gray-200">
                       {formData.line_items.map((item, index) => (
-                        <tr key={index}>
-                          <td className="px-3 py-2">
+                        <tr key={index} className="bg-white">
+                          <td className="px-4 py-3">
                             <input
                               type="text"
                               value={item.description}
                               onChange={(e) => updateLineItem(index, 'description', e.target.value)}
                               placeholder="Item description"
-                              className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-4 py-3">
                             <input
                               type="number"
                               value={item.quantity}
                               onChange={(e) => updateLineItem(index, 'quantity', parseInt(e.target.value) || 1)}
                               min="1"
-                              className="w-full px-2 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                              className="w-full px-3 py-2 text-sm text-center border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-4 py-3">
                             <input
                               type="number"
                               value={item.unit_price}
                               onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
                               step="0.01"
                               min="0"
-                              className="w-full px-2 py-1 text-sm text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                              className="w-full px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                             />
                           </td>
-                          <td className="px-3 py-2 text-right text-sm font-medium text-gray-900">
+                          <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
                             €{item.amount.toFixed(2)}
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-3 py-3">
                             {formData.line_items.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() => removeLineItem(index)}
-                                className="text-gray-400 hover:text-red-500"
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -716,80 +749,80 @@ export default function InvoicesContent() {
 
               {/* Totals */}
               <div className="flex justify-end">
-                <div className="w-64 space-y-2">
+                <div className="w-72 bg-gray-50 rounded-lg p-4 space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Subtotal</span>
-                    <span className="font-medium">€{formData.subtotal.toFixed(2)}</span>
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-medium text-gray-900">€{formData.subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">Tax Rate (%)</span>
+                    <span className="text-gray-600">Tax Rate (%)</span>
                     <input
                       type="number"
                       value={formData.tax_rate}
                       onChange={(e) => updateTaxRate(parseFloat(e.target.value) || 0)}
                       step="0.1"
                       min="0"
-                      className="w-20 px-2 py-1 text-sm text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                      className="w-24 px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] shadow-sm"
                     />
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Tax Amount</span>
-                    <span>€{formData.tax_amount.toFixed(2)}</span>
+                    <span className="text-gray-600">Tax Amount</span>
+                    <span className="text-gray-900">€{formData.tax_amount.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">Discount</span>
+                    <span className="text-gray-600">Discount</span>
                     <input
                       type="number"
                       value={formData.discount_amount}
                       onChange={(e) => updateDiscount(parseFloat(e.target.value) || 0)}
                       step="0.01"
                       min="0"
-                      className="w-20 px-2 py-1 text-sm text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                      className="w-24 px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] shadow-sm"
                     />
                   </div>
-                  <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
+                  <div className="flex justify-between pt-3 border-t border-gray-200">
                     <span className="font-semibold text-gray-900">Total</span>
-                    <span className="font-bold text-lg text-gray-900">€{formData.total_amount.toFixed(2)}</span>
+                    <span className="font-bold text-xl text-gray-900">€{formData.total_amount.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Notes & Terms */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Payment Terms</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Terms</label>
                   <input
                     type="text"
                     value={formData.payment_terms}
                     onChange={(e) => setFormData(prev => ({ ...prev, payment_terms: e.target.value }))}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
                   <input
                     type="text"
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Additional notes..."
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                   />
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-1.5 text-sm bg-[#647C47] text-white rounded-md hover:bg-[#4f6238] transition-colors disabled:opacity-50"
+                  className="px-5 py-2.5 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50 shadow-sm"
                 >
                   {saving ? 'Creating...' : 'Create Invoice'}
                 </button>
