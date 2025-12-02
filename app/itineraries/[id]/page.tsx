@@ -9,6 +9,7 @@ import ResourceAssignment from '@/app/components/ResourceAssignment'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
+import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 
 interface Itinerary {
   id: string
@@ -140,22 +141,77 @@ export default function ViewItineraryPage() {
 
     setGeneratingInvoice(true)
     try {
-      // Build line items from days/services
-      const lineItems = []
+      // First, try to find matching client by email or name
+      let clientId = itinerary.client_id || null
       
-      // Add main trip package
-      lineItems.push({
+      if (!clientId) {
+        // Fetch clients and try to match
+        const clientsResponse = await fetch('/api/clients')
+        if (clientsResponse.ok) {
+          const clientsData = await clientsResponse.json()
+          const clients = clientsData.success ? clientsData.data : (Array.isArray(clientsData) ? clientsData : [])
+          
+          // Try to find matching client by email first, then by name
+          const matchingClient = clients.find((c: any) => {
+            const clientEmail = c.email?.toLowerCase()
+            const clientName = c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim()
+            
+            if (itinerary.client_email && clientEmail === itinerary.client_email.toLowerCase()) {
+              return true
+            }
+            if (clientName.toLowerCase() === itinerary.client_name?.toLowerCase()) {
+              return true
+            }
+            if (itinerary.client_phone && c.phone && c.phone.replace(/\D/g, '') === itinerary.client_phone.replace(/\D/g, '')) {
+              return true
+            }
+            return false
+          })
+          
+          if (matchingClient) {
+            clientId = matchingClient.id
+          }
+        }
+      }
+  
+      // If still no client found, create one automatically
+      if (!clientId && itinerary.client_name) {
+        const nameParts = itinerary.client_name.trim().split(' ')
+        const firstName = nameParts[0] || ''
+        const lastName = nameParts.slice(1).join(' ') || ''
+        
+        const createClientResponse = await fetch('/api/clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: firstName,
+            last_name: lastName,
+            email: itinerary.client_email || '',
+            phone: itinerary.client_phone || '',
+            status: 'active',
+            source: 'itinerary'
+          })
+        })
+        
+        if (createClientResponse.ok) {
+          const newClientData = await createClientResponse.json()
+          clientId = newClientData.data?.id || newClientData.id
+        }
+      }
+  
+      // Build line items from itinerary
+      const lineItems = [{
         description: `${itinerary.trip_name} - ${itinerary.itinerary_code}`,
         quantity: 1,
         unit_price: itinerary.total_cost,
         amount: itinerary.total_cost
-      })
-
+      }]
+  
       const response = await fetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          client_id: itinerary.client_id || null,
+          client_id: clientId,
           itinerary_id: itinerary.id,
           client_name: itinerary.client_name,
           client_email: itinerary.client_email,
@@ -172,7 +228,7 @@ export default function ViewItineraryPage() {
           notes: `Trip dates: ${new Date(itinerary.start_date).toLocaleDateString()} - ${new Date(itinerary.end_date).toLocaleDateString()}`
         })
       })
-
+  
       if (response.ok) {
         const invoice = await response.json()
         router.push(`/invoices/${invoice.id}`)
@@ -461,6 +517,11 @@ export default function ViewItineraryPage() {
                   </>
                 )}
               </button>
+              <AddExpenseFromItinerary 
+                itineraryId={itinerary.id}
+                itineraryCode={itinerary.itinerary_code}
+                clientName={itinerary.client_name}
+              />
               <Link 
                 href={`/itineraries/${itinerary.id}/edit`}
                 className="p-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"

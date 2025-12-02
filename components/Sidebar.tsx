@@ -30,7 +30,12 @@ import {
   LogOut,
   Mail,
   Ticket,
-  Contact
+  Contact,
+  Library,
+  Receipt,
+  Wallet,
+  BarChart3,
+  CreditCard
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -73,10 +78,28 @@ const navigation: NavSection[] = [
       { label: 'WhatsApp', href: '/settings/whatsapp', icon: MessageSquare },
       { label: 'WhatsApp Parser', href: '/whatsapp-parser', icon: MessageSquare },
       { label: 'Payments', href: '/payments', icon: DollarSign },
-      { label: 'Invoices', href: '/invoices', icon: FileText },
       { label: 'Calendar', href: '/calendar', icon: Calendar },
       { label: 'Itineraries', href: '/itineraries', icon: FileText },
+      { label: 'Packages', href: '/tours', icon: Library },
       { label: 'Tour Builder', href: '/tour-builder', icon: MapPin },
+    ]
+  },
+  {
+    title: 'Accounting',
+    items: [
+      { label: 'Invoices', href: '/invoices', icon: FileText },
+      { label: 'Expenses', href: '/expenses', icon: Receipt },
+      { label: 'Profit & Loss', href: '/profit-loss', icon: TrendingUp },
+      { label: 'Receivables', href: '/accounts-receivable', icon: Wallet },
+      { label: 'Payables', href: '/accounts-payable', icon: CreditCard },
+      { label: 'Reports', href: '/financial-reports', icon: BarChart3 },
+    ]
+  },
+  {
+    title: 'Task Management',
+    items: [
+      { label: 'Tasks', href: '/tasks', icon: CheckSquare },
+      { label: 'Team', href: '/team-members', icon: Users },
     ]
   },
   {

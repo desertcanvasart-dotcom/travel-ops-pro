@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Navigation from '../components/Navigation'
 
 interface TourOverview {
   template_code: string
@@ -61,30 +60,20 @@ export default function ToursBrowserPage() {
 
   const getTierBadge = (tier: string) => {
     const styles = {
-      budget: 'bg-green-100 text-green-800',
-      standard: 'bg-blue-100 text-blue-800',
-      luxury: 'bg-purple-100 text-purple-800'
+      budget: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+      standard: 'bg-blue-50 text-blue-700 border border-blue-200',
+      luxury: 'bg-amber-50 text-amber-700 border border-amber-200'
     }
-    return styles[tier as keyof typeof styles] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getTierIcon = (tier: string) => {
-    const icons = {
-      budget: '💰',
-      standard: '💎',
-      luxury: '👑'
-    }
-    return icons[tier as keyof typeof icons] || '📋'
+    return styles[tier as keyof typeof styles] || 'bg-gray-50 text-gray-700 border border-gray-200'
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-        <Navigation />
-        <div className="flex items-center justify-center h-screen">
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 text-lg">Loading tours...</p>
+            <div className="w-8 h-8 border-2 border-[#647C47] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-gray-500 text-sm">Loading tours...</p>
           </div>
         </div>
       </div>
@@ -93,187 +82,206 @@ export default function ToursBrowserPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-        <Navigation />
-        <div className="container mx-auto px-4 py-12 text-center">
-          <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded max-w-2xl mx-auto">
-            <h2 className="text-xl font-bold text-red-900 mb-2">Error Loading Tours</h2>
-            <p className="text-red-700">{error}</p>
-          </div>
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-md">
+          <p className="text-sm font-medium text-red-800 mb-1">Error Loading Tours</p>
+          <p className="text-sm text-red-600">{error}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      <Navigation />
-
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Tour Database Browser</h1>
-          <p className="text-gray-600">Explore available tours and pricing</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-6 rounded-xl shadow-md text-center">
-            <div className="text-3xl font-bold text-blue-600">{tours.length}</div>
-            <div className="text-gray-600 text-sm">Total Variations</div>
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-lg">
+            🗺️
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-md text-center">
-            <div className="text-3xl font-bold text-green-600">
-              {new Set(tours.map(t => t.template_code)).size}
-            </div>
-            <div className="text-gray-600 text-sm">Tour Templates</div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-md text-center">
-            <div className="text-3xl font-bold text-purple-600">{uniqueCategories.length}</div>
-            <div className="text-gray-600 text-sm">Categories</div>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-md text-center">
-            <div className="text-3xl font-bold text-orange-600">
-              €{Math.min(...tours.map(t => t.price_from || 999))}
-            </div>
-            <div className="text-gray-600 text-sm">Starting From</div>
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Tour Database</h1>
+            <p className="text-sm text-gray-500">Browse available tours and pricing</p>
           </div>
         </div>
+      </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Search Tours
-              </label>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by name or destination..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Price Tier
-              </label>
-              <select
-                value={filterTier}
-                onChange={(e) => setFilterTier(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-              >
-                <option value="all">All Tiers</option>
-                <option value="budget">💰 Budget</option>
-                <option value="standard">💎 Standard</option>
-                <option value="luxury">👑 Luxury</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Category
-              </label>
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-              >
-                <option value="all">All Categories</option>
-                {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">🎯</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
           </div>
-
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
-              Showing {filteredTours.length} of {tours.length} tours
-            </p>
-            <button
-              onClick={() => {
-                setSearchQuery('')
-                setFilterTier('all')
-                setFilterCategory('all')
-              }}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Clear Filters
-            </button>
-          </div>
+          <p className="text-xs text-gray-500 mb-1">Total Variations</p>
+          <p className="text-2xl font-semibold text-gray-900">{tours.length}</p>
         </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">📋</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+          </div>
+          <p className="text-xs text-gray-500 mb-1">Templates</p>
+          <p className="text-2xl font-semibold text-gray-900">
+            {new Set(tours.map(t => t.template_code)).size}
+          </p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">🏷️</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+          </div>
+          <p className="text-xs text-gray-500 mb-1">Categories</p>
+          <p className="text-2xl font-semibold text-gray-900">{uniqueCategories.length}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💶</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+          </div>
+          <p className="text-xs text-gray-500 mb-1">Starting From</p>
+          <p className="text-2xl font-semibold text-gray-900">
+            €{Math.min(...tours.map(t => t.price_from || 999))}
+          </p>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredTours.map((tour, idx) => (
-            <div key={idx} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-              <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-lg font-bold flex-1">{tour.template_name}</h3>
-                  {tour.is_featured && (
-                    <span className="ml-2 text-yellow-300">⭐</span>
-                  )}
-                </div>
-                <p className="text-blue-100 text-sm">{tour.destination_name}</p>
-              </div>
-
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getTierBadge(tour.tier)}`}>
-                    {getTierIcon(tour.tier)} {tour.tier.charAt(0).toUpperCase() + tour.tier.slice(1)}
-                  </span>
-                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
-                    {tour.group_type === 'private' ? '🔒 Private' : '👥 Shared'}
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-sm text-gray-600 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span>📅</span>
-                    <span>{tour.duration_days} {tour.duration_days === 1 ? 'day' : 'days'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span>👥</span>
-                    <span>{tour.min_pax}-{tour.max_pax} passengers</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span>🏷️</span>
-                    <span className="text-xs text-gray-500">{tour.category_name}</span>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500">Starting from</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        €{tour.price_from ? tour.price_from.toFixed(0) : 'N/A'}
-                      </p>
-                      <p className="text-xs text-gray-500">per person</p>
-                    </div>
-                    <Link 
-                      href={`/tours/${tour.variation_code}`}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                    >
-                      Details
-                    </Link>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500">
-                Code: {tour.variation_code}
-              </div>
-            </div>
+      {/* Search & Filters */}
+      <div className="flex flex-col md:flex-row gap-4 mb-4">
+        <div className="flex-1">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by name or destination..."
+            className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none"
+          />
+        </div>
+        <select
+          value={filterTier}
+          onChange={(e) => setFilterTier(e.target.value)}
+          className="px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white min-w-[150px]"
+        >
+          <option value="all">All Tiers</option>
+          <option value="budget">💰 Budget</option>
+          <option value="standard">💎 Standard</option>
+          <option value="luxury">👑 Luxury</option>
+        </select>
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className="px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white min-w-[180px]"
+        >
+          <option value="all">All Categories</option>
+          {uniqueCategories.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
           ))}
-        </div>
+        </select>
+      </div>
 
-        {filteredTours.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🔍</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No tours found</h3>
-            <p className="text-gray-600">Try adjusting your filters or search terms</p>
+      {/* Results Info */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-gray-500">
+          Showing <span className="font-medium text-gray-900">{filteredTours.length}</span> of {tours.length} tours
+        </p>
+        <button
+          onClick={() => {
+            setSearchQuery('')
+            setFilterTier('all')
+            setFilterCategory('all')
+          }}
+          className="text-sm text-[#647C47] hover:text-[#4a5c35] font-medium"
+        >
+          Clear Filters
+        </button>
+      </div>
+
+      {/* Tour Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredTours.map((tour, idx) => (
+          <div 
+            key={idx} 
+            className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-[#647C47] transition-colors"
+          >
+            {/* Card Header - WHITE background */}
+            <div className="p-4 border-b border-gray-100">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h3 className="text-sm font-semibold text-gray-900 leading-tight">{tour.template_name}</h3>
+                {tour.is_featured && (
+                  <span className="text-amber-500 text-xs">⭐</span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">{tour.destination_name}</p>
+            </div>
+
+            {/* Card Body */}
+            <div className="p-4">
+              {/* Badges */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`px-2 py-1 rounded text-xs font-medium ${getTierBadge(tour.tier)}`}>
+                  {tour.tier === 'budget' && '💰'} 
+                  {tour.tier === 'standard' && '💎'} 
+                  {tour.tier === 'luxury' && '👑'} {tour.tier.charAt(0).toUpperCase() + tour.tier.slice(1)}
+                </span>
+                <span className="px-2 py-1 bg-gray-50 text-gray-600 border border-gray-200 rounded text-xs">
+                  {tour.group_type === 'private' ? '🔒 Private' : '👥 Shared'}
+                </span>
+              </div>
+
+              {/* Tour Details */}
+              <div className="space-y-2 text-sm text-gray-600 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">📅</span>
+                  <span>{tour.duration_days} {tour.duration_days === 1 ? 'day' : 'days'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">👥</span>
+                  <span>{tour.min_pax}-{tour.max_pax} passengers</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">🏷️</span>
+                  <span className="text-gray-500 text-xs">{tour.category_name}</span>
+                </div>
+              </div>
+
+              {/* Price & Action */}
+              <div className="flex items-end justify-between pt-3 border-t border-gray-100">
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide">Starting from</p>
+                  <p className="text-xl font-semibold text-[#647C47]">
+                    €{tour.price_from ? tour.price_from.toFixed(0) : 'N/A'}
+                  </p>
+                  <p className="text-[10px] text-gray-400">per person</p>
+                </div>
+                <Link 
+                  href={`/tours/${tour.variation_code}`}
+                  className="bg-[#647C47] text-white px-4 py-2 rounded-lg hover:bg-[#4a5c35] transition-colors text-xs font-medium"
+                >
+                  Details
+                </Link>
+              </div>
+            </div>
+
+            {/* Card Footer */}
+            <div className="bg-gray-50 px-4 py-2 border-t border-gray-100">
+              <p className="text-[10px] text-gray-400 font-mono uppercase">{tour.variation_code}</p>
+            </div>
           </div>
-        )}
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {filteredTours.length === 0 && (
+        <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
+          <div className="text-4xl mb-3">🔍</div>
+          <h3 className="text-sm font-medium text-gray-900 mb-1">No tours found</h3>
+          <p className="text-xs text-gray-500">Try adjusting your filters or search terms</p>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="mt-8 text-center">
+        <p className="text-xs text-gray-400">© 2024 Autoura Operations System</p>
       </div>
     </div>
   )

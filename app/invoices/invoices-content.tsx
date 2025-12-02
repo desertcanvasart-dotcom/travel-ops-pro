@@ -145,14 +145,39 @@ export default function InvoicesContent() {
       const response = await fetch('/api/clients')
       if (response.ok) {
         const data = await response.json()
-        const clientsData = data.success ? data.data : (Array.isArray(data) ? data : [])
-        // Map first_name + last_name to name
-        const mappedClients = (clientsData || []).map((c: any) => ({
-          id: c.id,
-          name: `${c.first_name || ''} ${c.last_name || ''}`.trim(),
-          email: c.email || ''
-        }))
+        
+        // Handle multiple API response formats
+        let clientsData: any[] = []
+        if (data.success && Array.isArray(data.data)) {
+          clientsData = data.data
+        } else if (Array.isArray(data)) {
+          clientsData = data
+        } else if (data.clients && Array.isArray(data.clients)) {
+          clientsData = data.clients
+        }
+        
+        // Map clients - handle both name formats (name OR first_name + last_name)
+        const mappedClients = clientsData
+          .map((c: any) => {
+            // If client already has a 'name' field, use it
+            // Otherwise combine first_name + last_name
+            const clientName = c.name 
+              || `${c.first_name || ''} ${c.last_name || ''}`.trim() 
+              || c.full_name 
+              || 'Unknown Client'
+            
+            return {
+              id: c.id,
+              name: clientName,
+              email: c.email || ''
+            }
+          })
+          .filter((c: Client) => c.id && c.name) // Filter out invalid entries
+        
         setClients(mappedClients)
+      } else {
+        console.error('Failed to fetch clients:', response.status)
+        setClients([])
       }
     } catch (error) {
       console.error('Error fetching clients:', error)
@@ -612,9 +637,14 @@ export default function InvoicesContent() {
                   >
                     <option value="">Select Client</option>
                     {clients.map(client => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
+                      <option key={client.id} value={client.id}>
+                        {client.name} {client.email ? `(${client.email})` : ''}
+                      </option>
                     ))}
                   </select>
+                  {clients.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600">No clients found. Add clients first.</p>
+                  )}
                 </div>
 
                 <div>

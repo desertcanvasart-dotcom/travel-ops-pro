@@ -49,12 +49,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Validate required fields
-    if (!body.client_id || !body.client_name) {
-      return NextResponse.json(
-        { error: 'Client is required' },
-        { status: 400 }
-      )
-    }
+    if (!body.client_name) {
+        return NextResponse.json(
+          { error: 'Client name is required' },
+          { status: 400 }
+        )
+      }
 
     // Generate invoice number
     const { data: seqData, error: seqError } = await supabaseAdmin
