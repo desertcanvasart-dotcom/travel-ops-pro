@@ -9,6 +9,17 @@ import {
   Star, Bell, Heart, ArrowLeft, Save, X, ChevronRight
 } from 'lucide-react'
 
+const LEAD_SOURCES = [
+  { value: 'whatsapp', label: 'WhatsApp', icon: '💬' },
+  { value: 'email', label: 'Email', icon: '✉️' },
+  { value: 'website', label: 'Website', icon: '🌐' },
+  { value: 'referral', label: 'Referral', icon: '👥' },
+  { value: 'phone', label: 'Phone', icon: '📞' },
+  { value: 'social_media', label: 'Social Media', icon: '📱' },
+  { value: 'trade_show', label: 'Trade Show', icon: '🎪' },
+  { value: 'other', label: 'Other', icon: '➕' }
+]
+
 export default function NewClientPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -44,7 +55,7 @@ export default function NewClientPage() {
     agent_commission_rate: 0,
     client_type: 'individual' as 'individual' | 'family' | 'group' | 'corporate' | 'agent',
     vip_status: false,
-    client_source: '',
+    lead_source: '',
     marketing_consent: false,
     newsletter_subscribed: false,
     sms_consent: false,
@@ -582,21 +593,19 @@ export default function NewClientPage() {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Client Source</label>
+                  <label className={labelClass}>Lead Source *</label>
                   <select
-                    value={formData.client_source}
-                    onChange={(e) => handleInputChange('client_source', e.target.value)}
+                    value={formData.lead_source}
+                    onChange={(e) => handleInputChange('lead_source', e.target.value)}
                     className={selectClass}
+                    required
                   >
                     <option value="">Select source...</option>
-                    <option value="website">Website</option>
-                    <option value="referral">Referral</option>
-                    <option value="social_media">Social Media</option>
-                    <option value="travel_agent">Travel Agent</option>
-                    <option value="repeat_customer">Repeat Customer</option>
-                    <option value="walk_in">Walk-in</option>
-                    <option value="phone">Phone Inquiry</option>
-                    <option value="email">Email Inquiry</option>
+                    {LEAD_SOURCES.map(source => (
+                      <option key={source.value} value={source.value}>
+                        {source.icon} {source.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

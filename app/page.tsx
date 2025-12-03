@@ -14,7 +14,14 @@ import {
   Building,
   ArrowRight,
   Check,
-  Menu
+  Menu,
+  Receipt,
+  TrendingUp,
+  Wallet,
+  CreditCard,
+  BarChart3,
+  CheckSquare,
+  ClipboardList
 } from 'lucide-react'
 
 export default function HomePage() {
@@ -181,7 +188,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
             {
               icon: Layers,
@@ -194,9 +201,14 @@ export default function HomePage() {
               features: ['Auto-itineraries from WhatsApp messages', 'Auto-pricing based on your margins', 'Smart follow-up emails and reminders']
             },
             {
-              icon: Calendar,
-              title: 'Clarity across all tours',
-              features: ['Calendar of all active tours', 'Staff assignments and availability', 'Real-time info for each day']
+              icon: BarChart3,
+              title: 'Complete financial control',
+              features: ['Profit & loss per trip', 'Accounts receivable & payable', 'Tax summaries & commission reports']
+            },
+            {
+              icon: CheckSquare,
+              title: 'Task & team management',
+              features: ['Assign tasks to team members', 'Track what\'s overdue or due today', 'Link tasks to trips and clients']
             }
           ].map((benefit, i) => (
             <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
@@ -258,7 +270,114 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Feature Highlight 2 - Operations */}
+      {/* Feature Highlight 2 - Accounting */}
+      <section className="bg-white py-16">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div className="space-y-4">
+              <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">Know exactly how profitable each trip is</h2>
+              <p className="text-base text-gray-600">
+                Track every expense, invoice, and payment in one place. See profit margins per trip, aging reports for receivables and payables, and generate financial reports with one click.
+              </p>
+              <ul className="space-y-3">
+                {['Revenue vs costs breakdown per itinerary', 'Aging reports: 30/60/90 days overdue', 'Commission tracking for guides and drivers', 'Monthly & quarterly financial reports'].map((item, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#263A29]" />
+                    <span className="text-sm text-gray-700">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div className="bg-[#F7F7F4] rounded-2xl p-6 shadow-sm border border-gray-100">
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                        <TrendingUp className="w-4 h-4 text-green-600" />
+                      </div>
+                      <span className="text-xs text-gray-500">Revenue</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">€24,580</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+                        <Receipt className="w-4 h-4 text-red-600" />
+                      </div>
+                      <span className="text-xs text-gray-500">Expenses</span>
+                    </div>
+                    <p className="text-lg font-bold text-gray-900">€18,240</p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-500">Profit Margin</span>
+                    <span className="text-sm font-bold text-green-600">+25.8%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-green-500 rounded-full" style={{ width: '74%' }}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Highlight 3 - Task Management */}
+      <section className="max-w-7xl mx-auto px-6 lg:px-8 py-16">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div className="order-2 lg:order-1">
+            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-semibold text-gray-900">Today's Tasks</h4>
+                <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">3 due</span>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { title: 'Confirm hotel for Smith family', assignee: 'Ahmed', priority: 'high', done: false },
+                  { title: 'Send final itinerary to client', assignee: 'Sara', priority: 'medium', done: true },
+                  { title: 'Follow up on payment - INV-2025-042', assignee: 'Ahmed', priority: 'urgent', done: false },
+                ].map((task, i) => (
+                  <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border ${task.done ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200'}`}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${task.done ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}>
+                      {task.done && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="flex-1">
+                      <p className={`text-sm ${task.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{task.title}</p>
+                      <p className="text-xs text-gray-500">Assigned to {task.assignee}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                      task.priority === 'urgent' ? 'bg-red-100 text-red-600' :
+                      task.priority === 'high' ? 'bg-orange-100 text-orange-600' :
+                      'bg-blue-100 text-blue-600'
+                    }`}>
+                      {task.priority}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="order-1 lg:order-2 space-y-4">
+            <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">Keep your team aligned with task management</h2>
+            <p className="text-base text-gray-600">
+              Assign tasks to team members, track due dates, and link tasks to specific trips or clients. See what's overdue at a glance and never miss a follow-up.
+            </p>
+            <ul className="space-y-3">
+              {['Kanban board: To Do → In Progress → Done', 'Assign to any team member', 'Link tasks to itineraries, clients, or invoices', 'Quick filters: overdue, due today, this week'].map((item, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#263A29]" />
+                  <span className="text-sm text-gray-700">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Highlight 4 - Operations */}
       <section className="bg-white py-16">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -299,12 +418,18 @@ export default function HomePage() {
           <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Everything you need to run your travel operation</h2>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-6">
           {[
             { icon: Users, title: 'Client CRM & lead pipeline', desc: 'Track every inquiry from first contact to final payment. Never lose a lead in WhatsApp again.' },
             { icon: MessageSquare, title: 'WhatsApp & email migration', desc: 'Forward messages and they become organised records, automatically linked to the right tour or client.' },
             { icon: DollarSign, title: 'Smart pricing engine', desc: 'Set your margins once, then get instant quotes based on group size, season, and services.' },
-            { icon: FileText, title: 'Shared itineraries & PDFs', desc: 'Easily create a live link or branded PDF. They see the same layout as it shows within Autoura.' },
+            { icon: FileText, title: 'Invoicing & payments', desc: 'Create professional invoices, track payments, and see what\'s outstanding at a glance.' },
+            { icon: Receipt, title: 'Expense tracking', desc: 'Log expenses by category and supplier. Link costs to specific trips for accurate P&L.' },
+            { icon: TrendingUp, title: 'Profit & loss per trip', desc: 'See revenue vs costs for each itinerary. Know your margins before the trip even starts.' },
+            { icon: Wallet, title: 'Accounts receivable', desc: 'Track what clients owe you with aging reports. Send payment reminders with one click.' },
+            { icon: CreditCard, title: 'Accounts payable', desc: 'Track what you owe suppliers. Approve expenses and schedule payments.' },
+            { icon: BarChart3, title: 'Financial reports', desc: 'Monthly revenue, cash flow, tax summaries, and commission reports ready to export.' },
+            { icon: CheckSquare, title: 'Task management', desc: 'Create tasks, assign to team members, set due dates, and track completion.' },
             { icon: Database, title: 'Supplier & staff database', desc: 'Maintain your network of hotels, guides, drivers, and partners in one searchable place.' },
             { icon: Brain, title: 'Knowledge base & SOP templates', desc: 'Document your processes, train newcomers, and share best practices for your team.' }
           ].map((feature, i) => (
@@ -393,7 +518,7 @@ export default function HomePage() {
               <span className="text-3xl font-bold text-white">Custom</span>
             </div>
             <ul className="space-y-2 mb-6">
-              {['Unlimited tours & clients', 'Multi-user collaboration', 'Financial tracking & reporting', 'Automation & AI features', 'Knowledge base & SOPs', 'Priority support'].map((item, i) => (
+              {['Unlimited tours & clients', 'Full accounting & P&L', 'Task management & team', 'Multi-user collaboration', 'Financial reporting', 'Automation & AI features', 'Priority support'].map((item, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <CheckCircle className="w-4 h-4 text-[#D9E0CF] flex-shrink-0 mt-0.5" />
                   <span className="text-sm text-[#E9E3D2]">{item}</span>

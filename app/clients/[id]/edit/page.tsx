@@ -6,6 +6,17 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, Loader2, User, Mail, Phone, Globe, Building, Star, Tag } from 'lucide-react'
 
+const LEAD_SOURCES = [
+  { value: 'whatsapp', label: 'WhatsApp', icon: '💬' },
+  { value: 'email', label: 'Email', icon: '✉️' },
+  { value: 'website', label: 'Website', icon: '🌐' },
+  { value: 'referral', label: 'Referral', icon: '👥' },
+  { value: 'phone', label: 'Phone', icon: '📞' },
+  { value: 'social_media', label: 'Social Media', icon: '📱' },
+  { value: 'trade_show', label: 'Trade Show', icon: '🎪' },
+  { value: 'other', label: 'Other', icon: '➕' }
+]
+
 interface ClientFormData {
   first_name: string
   last_name: string
@@ -18,6 +29,7 @@ interface ClientFormData {
   client_type: string
   vip_status: boolean
   status: string
+  lead_source: string
   company_name: string
   internal_notes: string
   special_interests: string[]
@@ -46,6 +58,7 @@ export default function EditClientPage() {
     client_type: 'individual',
     vip_status: false,
     status: 'prospect',
+    lead_source: '',
     company_name: '',
     internal_notes: '',
     special_interests: [],
@@ -85,6 +98,7 @@ export default function EditClientPage() {
           client_type: data.client_type || 'individual',
           vip_status: data.vip_status || false,
           status: data.status || 'prospect',
+          lead_source: data.lead_source || '',
           company_name: data.company_name || '',
           internal_notes: data.internal_notes || '',
           special_interests: data.special_interests || [],
@@ -167,6 +181,7 @@ export default function EditClientPage() {
           client_type: formData.client_type,
           vip_status: formData.vip_status,
           status: formData.status,
+          lead_source: formData.lead_source || null,
           company_name: formData.company_name || null,
           internal_notes: formData.internal_notes || null,
           special_interests: formData.special_interests,
@@ -321,7 +336,7 @@ export default function EditClientPage() {
           {/* Classification */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-4">Classification</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Client Type
@@ -353,6 +368,24 @@ export default function EditClientPage() {
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                   <option value="blacklisted">Blacklisted</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Lead Source
+                </label>
+                <select
+                  name="lead_source"
+                  value={formData.lead_source}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
+                >
+                  <option value="">Select source...</option>
+                  {LEAD_SOURCES.map(source => (
+                    <option key={source.value} value={source.value}>
+                      {source.icon} {source.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -390,10 +423,8 @@ export default function EditClientPage() {
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
                   <option value="">Select...</option>
-                  <option value="ordinary">Ordinary</option>
-                  <option value="diplomatic">Diplomatic</option>
-                  <option value="official">Official</option>
-                  <option value="emergency">Emergency</option>
+                  <option value="euro_passport">Euro Passport</option>
+                  <option value="other_passport">Other Passport</option>
                 </select>
               </div>
               <div>
@@ -407,16 +438,16 @@ export default function EditClientPage() {
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
                   <option value="">Select...</option>
-                  <option value="english">English</option>
-                  <option value="arabic">Arabic</option>
-                  <option value="french">French</option>
-                  <option value="german">German</option>
-                  <option value="spanish">Spanish</option>
-                  <option value="italian">Italian</option>
-                  <option value="russian">Russian</option>
-                  <option value="chinese">Chinese</option>
-                  <option value="japanese">Japanese</option>
-                  <option value="korean">Korean</option>
+                  <option value="English">English</option>
+                  <option value="Arabic">Arabic</option>
+                  <option value="French">French</option>
+                  <option value="German">German</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="Italian">Italian</option>
+                  <option value="Russian">Russian</option>
+                  <option value="Chinese">Chinese</option>
+                  <option value="Japanese">Japanese</option>
+                  <option value="Korean">Korean</option>
                 </select>
               </div>
               <div>

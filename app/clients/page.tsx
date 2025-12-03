@@ -3,7 +3,7 @@
 import { 
   Users, UserPlus, Search, Filter, Star, TrendingUp, Calendar,
   Phone, Mail, MessageSquare, AlertCircle, CheckCircle, Clock,
-  Trash2, SlidersHorizontal, X
+  Trash2, SlidersHorizontal, X, Globe, Smartphone
 } from 'lucide-react'
 
 import { useState, useEffect } from 'react'
@@ -21,6 +21,7 @@ interface ClientSummary {
   client_type: string
   vip_status: boolean
   status: string
+  lead_source?: string
   total_bookings_count: number
   total_revenue_generated: number
   last_contacted_at?: string
@@ -34,6 +35,17 @@ interface DeleteModalState {
   clientId: string
   clientName: string
 }
+
+const LEAD_SOURCES = [
+  { value: 'whatsapp', label: 'WhatsApp', icon: '💬', color: 'bg-green-100 text-green-700' },
+  { value: 'email', label: 'Email', icon: '✉️', color: 'bg-blue-100 text-blue-700' },
+  { value: 'website', label: 'Website', icon: '🌐', color: 'bg-purple-100 text-purple-700' },
+  { value: 'referral', label: 'Referral', icon: '👥', color: 'bg-orange-100 text-orange-700' },
+  { value: 'phone', label: 'Phone', icon: '📞', color: 'bg-cyan-100 text-cyan-700' },
+  { value: 'social_media', label: 'Social Media', icon: '📱', color: 'bg-pink-100 text-pink-700' },
+  { value: 'trade_show', label: 'Trade Show', icon: '🎪', color: 'bg-amber-100 text-amber-700' },
+  { value: 'other', label: 'Other', icon: '➕', color: 'bg-gray-100 text-gray-700' }
+]
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientSummary[]>([])
@@ -51,6 +63,7 @@ export default function ClientsPage() {
     search: '',
     status: 'all',
     clientType: 'all',
+    leadSource: 'all',
     vipOnly: false,
     sortBy: 'recent',
     dateFrom: '',
@@ -93,6 +106,11 @@ export default function ClientsPage() {
       // Apply client type filter
       if (filters.clientType !== 'all') {
         query = query.eq('client_type', filters.clientType)
+      }
+
+      // Apply lead source filter
+      if (filters.leadSource !== 'all') {
+        query = query.eq('lead_source', filters.leadSource)
       }
 
       // Apply VIP filter
@@ -216,6 +234,7 @@ export default function ClientsPage() {
       search: '',
       status: 'all',
       clientType: 'all',
+      leadSource: 'all',
       vipOnly: false,
       sortBy: 'recent',
       dateFrom: '',
@@ -227,6 +246,7 @@ export default function ClientsPage() {
     filters.search || 
     filters.status !== 'all' || 
     filters.clientType !== 'all' || 
+    filters.leadSource !== 'all' ||
     filters.vipOnly || 
     filters.dateFrom || 
     filters.dateTo ||
@@ -251,6 +271,10 @@ export default function ClientsPage() {
       case 'agent': return 'bg-indigo-100 text-indigo-800'
       default: return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  const getLeadSourceConfig = (source: string | undefined) => {
+    return LEAD_SOURCES.find(s => s.value === source) || null
   }
 
   return (
@@ -432,7 +456,7 @@ export default function ClientsPage() {
                 Filters
                 {hasActiveFilters && (
                   <span className="bg-primary-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {[filters.status !== 'all', filters.clientType !== 'all', filters.vipOnly, filters.dateFrom, filters.dateTo, filters.sortBy !== 'recent'].filter(Boolean).length}
+                    {[filters.status !== 'all', filters.clientType !== 'all', filters.leadSource !== 'all', filters.vipOnly, filters.dateFrom, filters.dateTo, filters.sortBy !== 'recent'].filter(Boolean).length}
                   </span>
                 )}
               </button>
@@ -451,7 +475,7 @@ export default function ClientsPage() {
           {/* Advanced Filters - Collapsible */}
           {showFilters && (
             <div className="px-4 pb-4 border-t border-gray-200 pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 {/* Status Filter */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
@@ -486,6 +510,25 @@ export default function ClientsPage() {
                     <option value="corporate">Corporate</option>
                     <option value="agent">Travel Agent</option>
                     <option value="group">Group</option>
+                  </select>
+                </div>
+
+                {/* Lead Source Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                    Lead Source
+                  </label>
+                  <select
+                    value={filters.leadSource}
+                    onChange={(e) => handleFilterChange('leadSource', e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
+                  >
+                    <option value="all">All Sources</option>
+                    {LEAD_SOURCES.map(source => (
+                      <option key={source.value} value={source.value}>
+                        {source.icon} {source.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -606,13 +649,13 @@ export default function ClientsPage() {
                       Type & Status
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lead Source
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Bookings
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Revenue
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Activity
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -620,101 +663,95 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {clients.map((client) => (
-                    <tr key={client.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center">
-                            <span className="text-primary-600 font-semibold text-xs">
-                              {client.first_name[0]}{client.last_name[0]}
+                  {clients.map((client) => {
+                    const leadSourceConfig = getLeadSourceConfig(client.lead_source)
+                    return (
+                      <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center">
+                              <span className="text-primary-600 font-semibold text-xs">
+                                {client.first_name[0]}{client.last_name[0]}
+                              </span>
+                            </div>
+                            <div className="ml-3">
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  href={`/clients/${client.id}`}
+                                  className="text-sm font-medium text-gray-900 hover:text-primary-600"
+                                >
+                                  {client.first_name} {client.last_name}
+                                </Link>
+                                {client.vip_status && (
+                                  <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-500">{client.client_code}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{client.email}</div>
+                          {client.phone && (
+                            <div className="text-xs text-gray-500">{client.phone}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getTypeColor(client.client_type)}`}>
+                              {client.client_type}
+                            </span>
+                            <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
+                              {client.status}
                             </span>
                           </div>
-                          <div className="ml-3">
-                            <div className="flex items-center gap-2">
-                              <Link
-                                href={`/clients/${client.id}`}
-                                className="text-sm font-medium text-gray-900 hover:text-primary-600"
-                              >
-                                {client.first_name} {client.last_name}
-                              </Link>
-                              {client.vip_status && (
-                                <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500">{client.client_code}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{client.email}</div>
-                        {client.phone && (
-                          <div className="text-xs text-gray-500">{client.phone}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getTypeColor(client.client_type)}`}>
-                            {client.client_type}
-                          </span>
-                          <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
-                            {client.status}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        <div className="font-semibold">{client.total_bookings_count}</div>
-                        <div className="text-xs text-gray-500">bookings</div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <div className="font-semibold text-green-600">
-                          €{client.total_revenue_generated.toLocaleString()}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <div className="flex items-center gap-1">
-                            <MessageSquare className="w-3 h-3" />
-                            <span>{client.total_communications}</span>
-                          </div>
-                          {client.pending_followups > 0 && (
-                            <div className="flex items-center gap-1 text-orange-600">
-                              <Clock className="w-3 h-3" />
-                              <span>{client.pending_followups}</span>
-                            </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {leadSourceConfig ? (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${leadSourceConfig.color}`}>
+                              <span>{leadSourceConfig.icon}</span>
+                              {leadSourceConfig.label}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
                           )}
-                        </div>
-                        {client.last_contacted_at && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Last: {new Date(client.last_contacted_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          <div className="font-semibold">{client.total_bookings_count}</div>
+                          <div className="text-xs text-gray-500">bookings</div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <div className="font-semibold text-green-600">
+                            €{client.total_revenue_generated.toLocaleString()}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/clients/${client.id}`}
-                            className="text-primary-600 hover:text-primary-800 font-medium"
-                          >
-                            View
-                          </Link>
-                          <span className="text-gray-300">|</span>
-                          <Link
-                            href={`/clients/${client.id}/edit`}
-                            className="text-gray-600 hover:text-gray-800 font-medium"
-                          >
-                            Edit
-                          </Link>
-                          <span className="text-gray-300">|</span>
-                          <button
-                            onClick={() => openDeleteModal(client.id, `${client.first_name} ${client.last_name}`)}
-                            className="text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/clients/${client.id}`}
+                              className="text-primary-600 hover:text-primary-800 font-medium"
+                            >
+                              View
+                            </Link>
+                            <span className="text-gray-300">|</span>
+                            <Link
+                              href={`/clients/${client.id}/edit`}
+                              className="text-gray-600 hover:text-gray-800 font-medium"
+                            >
+                              Edit
+                            </Link>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              onClick={() => openDeleteModal(client.id, `${client.first_name} ${client.last_name}`)}
+                              className="text-red-600 hover:text-red-800 font-medium"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
