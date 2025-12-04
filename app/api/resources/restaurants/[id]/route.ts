@@ -55,6 +55,7 @@ export async function PUT(
 
     const updateData: any = {}
     
+    // Basic fields
     if (body.name !== undefined) updateData.name = body.name
     if (body.restaurant_type !== undefined) updateData.restaurant_type = body.restaurant_type
     if (body.cuisine_type !== undefined) updateData.cuisine_type = body.cuisine_type
@@ -69,6 +70,31 @@ export async function PUT(
     if (body.dietary_options !== undefined) updateData.dietary_options = body.dietary_options
     if (body.notes !== undefined) updateData.notes = body.notes
     if (body.is_active !== undefined) updateData.is_active = body.is_active
+
+    // Rate fields - EUR
+    if (body.rate_per_person_eur !== undefined) updateData.rate_per_person_eur = body.rate_per_person_eur || null
+    if (body.rate_breakfast_eur !== undefined) updateData.rate_breakfast_eur = body.rate_breakfast_eur || null
+    if (body.rate_lunch_eur !== undefined) updateData.rate_lunch_eur = body.rate_lunch_eur || null
+    if (body.rate_dinner_eur !== undefined) updateData.rate_dinner_eur = body.rate_dinner_eur || null
+
+    // Rate fields - Non-EUR
+    if (body.rate_per_person_non_eur !== undefined) updateData.rate_per_person_non_eur = body.rate_per_person_non_eur || null
+    if (body.rate_breakfast_non_eur !== undefined) updateData.rate_breakfast_non_eur = body.rate_breakfast_non_eur || null
+    if (body.rate_lunch_non_eur !== undefined) updateData.rate_lunch_non_eur = body.rate_lunch_non_eur || null
+    if (body.rate_dinner_non_eur !== undefined) updateData.rate_dinner_non_eur = body.rate_dinner_non_eur || null
+
+    // Inclusions
+    if (body.drinks_included !== undefined) updateData.drinks_included = body.drinks_included
+    if (body.tip_included !== undefined) updateData.tip_included = body.tip_included
+
+    // Discounts
+    if (body.child_discount_percent !== undefined) updateData.child_discount_percent = body.child_discount_percent
+    if (body.group_discount_percent !== undefined) updateData.group_discount_percent = body.group_discount_percent || null
+    if (body.group_min_size !== undefined) updateData.group_min_size = body.group_min_size
+
+    // Validity
+    if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
+    if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
 
     const { data, error } = await supabase
       .from('restaurant_contacts')

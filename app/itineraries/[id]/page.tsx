@@ -10,6 +10,7 @@ import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
+import ItineraryPL from '@/app/components/ItineraryPL'
 
 interface Itinerary {
   id: string
@@ -673,6 +674,16 @@ export default function ViewItineraryPage() {
             </div>
           )}
         </div>
+        {/* ⭐ PROFIT & LOSS ANALYSIS */}
+          {days.length > 0 && (
+            <ItineraryPL
+            itineraryId={itinerary.id}
+            totalCost={itinerary.total_cost}
+             currency={itinerary.currency}
+             marginPercent={25}
+             days={days}
+            />
+        )}
 
         {/* ⭐ WHATSAPP ACTIONS - Compact */}
         <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">

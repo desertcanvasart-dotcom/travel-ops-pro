@@ -1,62 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/app/supabase'
+import { 
+  calculatePricingFromRates, 
+  getFallbackRates,
+  PricingCalculation 
+} from '@/lib/rate-lookup-service'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
-// Simple pricing calculator for WhatsApp parser
-function calculateSimplePricing(params: {
-  num_adults: number
-  num_children: number
-  duration_days: number
-  city: string
-  language: string
-}) {
-  const totalPax = params.num_adults + params.num_children
-  
-  // Base rates per person per day
-  const vehiclePerDay = totalPax <= 3 ? 30 : totalPax <= 8 ? 50 : 80
-  const guidePerDay = 40
-  const entrancePerPerson = 15
-  const lunchPerPerson = 10
-  const waterPerPerson = 2
-  const tipsPerDay = 10
-  
-  const totalPerDay = vehiclePerDay + guidePerDay + tipsPerDay + 
-    (entrancePerPerson + lunchPerPerson + waterPerPerson) * totalPax
-  
-  const totalCost = totalPerDay * params.duration_days
-  const perPersonCost = totalCost / totalPax
-  
-  return {
-    success: true,
-    pricing: {
-      total_price: totalCost,
-      price_per_person: perPersonCost,
-      vehicle: {
-        selected: {
-          type: totalPax <= 3 ? 'Sedan' : totalPax <= 8 ? 'Minivan' : 'Bus',
-          capacity: totalPax <= 3 ? '1-3 pax' : totalPax <= 8 ? '4-8 pax' : '9+ pax',
-          service_code: 'TRANS-001'
-        }
-      },
-      breakdown: {
-        group_costs: {
-          vehicle: vehiclePerDay * params.duration_days,
-          guide: guidePerDay * params.duration_days,
-          tips: tipsPerDay * params.duration_days
-        },
-        per_person_costs: {
-          entrance_fees: entrancePerPerson * params.duration_days,
-          lunch: lunchPerPerson * params.duration_days,
-          water: waterPerPerson * params.duration_days
-        }
-      }
-    }
-  }
-}
+// Default margin percentage
+const DEFAULT_MARGIN_PERCENT = 25
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,18 +26,49 @@ export async function POST(request: NextRequest) {
       duration_days,
       num_adults,
       num_children,
-      language,
-      interests,
-      special_requests,
-      budget_level,
+      language = 'English',
+      interests = [],
+      special_requests = [],
+      budget_level = 'standard',
       hotel_name,
       hotel_location,
       city = 'Cairo',
       transportation_service = 'day_tour',
-      client_id = null  // ← ADDED: Accept client_id from WhatsApp parser
+      client_id = null,
+      nationality = null,
+      is_euro_passport = null,
+      include_lunch = true,
+      include_dinner = false,
+      include_accommodation = false,
+      attractions = [],
+      margin_percent = DEFAULT_MARGIN_PERCENT
     } = body
 
     console.log('🤖 Starting AI itinerary generation for:', client_name)
+    console.log(`💰 Margin: ${margin_percent}%`)
+
+    const supabase = createClient()
+    const totalPax = num_adults + num_children
+
+    // Determine EUR vs non-EUR passport
+    let isEuroPassport = is_euro_passport
+    if (isEuroPassport === null && nationality) {
+      const euCountries = [
+        'austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark',
+        'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland',
+        'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands',
+        'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden',
+        'norway', 'iceland', 'liechtenstein', 'switzerland'
+      ]
+      isEuroPassport = euCountries.some(c => 
+        nationality.toLowerCase().includes(c)
+      )
+    }
+    if (isEuroPassport === null) {
+      isEuroPassport = false
+    }
+
+    console.log(`🌍 Passport type: ${isEuroPassport ? 'EUR' : 'non-EUR'} (nationality: ${nationality || 'unknown'})`)
 
     const startDate = new Date(start_date)
     const endDate = new Date(startDate)
@@ -93,28 +80,69 @@ export async function POST(request: NextRequest) {
 
     console.log('📝 Generated itinerary code:', itinerary_code)
 
-    // ============================================
-    // STEP 1: CALCULATE PRICING (Using simple calculator)
-    // ============================================
-    console.log('💰 Calculating pricing...')
+    // Calculate pricing from real rates
+    console.log('💰 Looking up rates from database...')
     
-    const pricingData = calculateSimplePricing({
-      num_adults,
-      num_children,
-      duration_days,
-      city,
-      language: language || 'English'
-    })
+    let pricingData: PricingCalculation
+
+    try {
+      pricingData = await calculatePricingFromRates(supabase, {
+        city,
+        pax: totalPax,
+        language,
+        is_euro_passport: isEuroPassport,
+        duration_days,
+        num_adults,
+        num_children,
+        include_lunch,
+        include_dinner,
+        include_accommodation,
+        hotel_standard: budget_level as 'budget' | 'standard' | 'luxury',
+        attractions: attractions.length > 0 ? attractions : undefined,
+        include_tips: true,
+        include_water: true
+      })
+
+      if (!pricingData.success || pricingData.total_cost === 0) {
+        console.log('⚠️ No rates found in database, using fallback rates')
+        pricingData = getFallbackRates({
+          pax: totalPax,
+          duration_days,
+          language,
+          is_euro_passport: isEuroPassport
+        })
+      }
+    } catch (rateError) {
+      console.error('⚠️ Rate lookup failed, using fallback:', rateError)
+      pricingData = getFallbackRates({
+        pax: totalPax,
+        duration_days,
+        language,
+        is_euro_passport: isEuroPassport
+      })
+    }
+
+    // Calculate margin
+    const marginMultiplier = 1 + (margin_percent / 100)
+    const total_cost = pricingData.total_cost
+    const total_revenue = Math.round(total_cost * marginMultiplier * 100) / 100
+    const total_margin = total_revenue - total_cost
 
     console.log('✅ Pricing calculated:', {
-      per_person: pricingData.pricing.price_per_person,
-      total: pricingData.pricing.total_price,
-      vehicle: pricingData.pricing.vehicle.selected.type
+      cost: total_cost,
+      revenue: total_revenue,
+      margin: total_margin,
+      margin_percent: margin_percent,
+      vehicle: pricingData.breakdown.transportation.vehicle_type,
+      passport_type: isEuroPassport ? 'EUR' : 'non-EUR',
+      source: pricingData.rates_used.success ? 'DATABASE' : 'FALLBACK'
     })
 
-    // ============================================
-    // STEP 2: GENERATE ITINERARY CONTENT WITH AI
-    // ============================================
+    // Generate itinerary content with AI
+    const attractionsList = pricingData.rates_used.attractions.length > 0
+      ? pricingData.rates_used.attractions.map(a => a.name).join(', ')
+      : tour_requested
+
     const prompt = `You are an expert Egypt travel planner. Create a detailed ${duration_days}-day itinerary for a client.
 
 CLIENT DETAILS:
@@ -125,8 +153,11 @@ CLIENT DETAILS:
 - Travelers: ${num_adults} adults${num_children > 0 ? `, ${num_children} children` : ''}
 - Language: ${language}
 - City: ${city}
-- Vehicle: ${pricingData.pricing.vehicle.selected.type}
+- Vehicle: ${pricingData.breakdown.transportation.vehicle_type}
+- Budget level: ${budget_level}
+${attractionsList ? `- Sites to visit: ${attractionsList}` : ''}
 ${hotel_name ? `- Hotel: ${hotel_name} in ${hotel_location}` : ''}
+${interests.length > 0 ? `- Interests: ${interests.join(', ')}` : ''}
 ${special_requests.length > 0 ? `- Special requests: ${special_requests.join(', ')}` : ''}
 
 Create a day-by-day itinerary with realistic activities. Return JSON in this EXACT format:
@@ -145,7 +176,8 @@ Create a day-by-day itinerary with realistic activities. Return JSON in this EXA
 IMPORTANT: 
 - Return ONLY the JSON object with trip_name and days
 - Do NOT include services or pricing in the JSON
-- Focus on creating engaging day descriptions and activities`
+- Focus on creating engaging day descriptions and activities
+- Include specific site names and realistic timing`
 
     console.log('🤖 Generating itinerary content with OpenAI...')
 
@@ -182,15 +214,7 @@ IMPORTANT:
       days_count: itineraryData.days.length
     })
 
-    const supabase = createClient()
-
-    const total_cost = pricingData.pricing.total_price
-
-    console.log('💰 Total cost:', total_cost)
-
-    // ============================================
-    // STEP 3: INSERT ITINERARY
-    // ============================================
+    // Insert itinerary
     const { data: itinerary, error: itineraryError } = await supabase
       .from('itineraries')
       .insert({
@@ -205,11 +229,13 @@ IMPORTANT:
         num_adults,
         num_children,
         currency: 'EUR',
-        total_cost,
+        total_cost: total_revenue,
+        total_revenue: total_revenue,
+        margin_percent: margin_percent,
         status: 'draft',
         notes: special_requests.length > 0 ? special_requests.join('; ') : null,
         user_id: null,
-        client_id: client_id  // ← ADDED: Link to client if provided
+        client_id: client_id
       })
       .select()
       .single()
@@ -221,19 +247,16 @@ IMPORTANT:
 
     console.log('✅ Created itinerary:', itinerary.id)
 
-    // ============================================
-    // STEP 4: INSERT DAYS WITH ACCURATE SERVICES
-    // ============================================
-    const breakdown = pricingData.pricing.breakdown
-    const vehicle = pricingData.pricing.vehicle.selected
+    // Insert days with services
+    const breakdown = pricingData.breakdown
+    const ratesUsed = pricingData.rates_used
 
-    // Calculate daily costs
-    const vehicle_per_day = breakdown.group_costs.vehicle / duration_days
-    const guide_per_day = breakdown.group_costs.guide / duration_days
-    const tips_per_day = breakdown.group_costs.tips / duration_days
-    const entrance_per_person = breakdown.per_person_costs.entrance_fees / duration_days
-    const lunch_per_person = breakdown.per_person_costs.lunch / duration_days
-    const water_per_person = breakdown.per_person_costs.water / duration_days
+    const vehicle_per_day = breakdown.transportation.per_day
+    const guide_per_day = breakdown.guide.per_day
+    const tips_per_day = breakdown.tips.per_day
+    const entrance_per_person_per_day = breakdown.entrances.per_person / duration_days
+    const lunch_per_person_per_day = breakdown.meals.per_person_lunch / duration_days
+    const water_per_person_per_day = breakdown.water.per_person / duration_days
 
     for (const dayData of itineraryData.days) {
       console.log(`📅 Creating day ${dayData.day_number}...`)
@@ -262,65 +285,102 @@ IMPORTANT:
 
       console.log(`✅ Created day ${dayData.day_number}`)
 
-      // ============================================
-      // INSERT ACCURATE SERVICES FOR THIS DAY
-      // ============================================
-      const services = [
-        {
-          service_type: 'transportation',
-          service_code: vehicle.service_code,
-          service_name: `${vehicle.type} Transportation`,
-          quantity: 1,
-          rate_eur: vehicle_per_day,
-          total_cost: vehicle_per_day,
-          notes: `${vehicle.type} (${vehicle.capacity})`
-        },
-        {
-          service_type: 'guide',
-          service_code: `GUIDE-${language.substring(0,2).toUpperCase()}`,
-          service_name: `${language} Speaking Guide`,
-          quantity: 1,
-          rate_eur: guide_per_day,
-          total_cost: guide_per_day,
-          notes: `Professional ${language} guide`
-        },
-        {
-          service_type: 'tips',
-          service_code: 'DAILY-TIPS',
-          service_name: 'Daily Tips',
-          quantity: 1,
-          rate_eur: tips_per_day,
-          total_cost: tips_per_day,
-          notes: 'Driver and guide tips'
-        },
-        {
-          service_type: 'entrance',
-          service_code: 'ENTRANCE-FEES',
-          service_name: 'Entrance Fees',
-          quantity: num_adults + num_children,
-          rate_eur: entrance_per_person,
-          total_cost: entrance_per_person * (num_adults + num_children),
-          notes: 'Site entrance fees for all travelers'
-        },
-        {
+      const services = []
+      const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
+
+      // Transportation
+      const vehicleCost = vehicle_per_day
+      services.push({
+        service_type: 'transportation',
+        service_code: ratesUsed.vehicle?.id || 'TRANS-001',
+        service_name: `${breakdown.transportation.vehicle_type} Transportation`,
+        quantity: 1,
+        rate_eur: vehicleCost,
+        rate_non_eur: vehicleCost,
+        total_cost: vehicleCost,
+        client_price: withMargin(vehicleCost),
+        notes: `${breakdown.transportation.vehicle_type} from ${city}`,
+        resource_id: ratesUsed.vehicle?.id || null
+      })
+
+      // Guide
+      const guideCost = guide_per_day
+      services.push({
+        service_type: 'guide',
+        service_code: ratesUsed.guide?.id || `GUIDE-${language.substring(0,2).toUpperCase()}`,
+        service_name: `${language} Speaking Guide`,
+        quantity: 1,
+        rate_eur: guideCost,
+        rate_non_eur: guideCost,
+        total_cost: guideCost,
+        client_price: withMargin(guideCost),
+        notes: ratesUsed.guide?.name || `Professional ${language} guide`,
+        resource_id: ratesUsed.guide?.id || null
+      })
+
+      // Tips (no margin)
+      const tipsCost = tips_per_day
+      services.push({
+        service_type: 'tips',
+        service_code: 'DAILY-TIPS',
+        service_name: 'Daily Tips',
+        quantity: 1,
+        rate_eur: tipsCost,
+        rate_non_eur: tipsCost,
+        total_cost: tipsCost,
+        client_price: tipsCost,
+        notes: 'Driver and guide tips'
+      })
+
+      // Entrance Fees
+      const entranceCostPerPerson = entrance_per_person_per_day
+      const entranceTotalCost = entranceCostPerPerson * totalPax
+      services.push({
+        service_type: 'entrance',
+        service_code: 'ENTRANCE-FEES',
+        service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'} rates)`,
+        quantity: totalPax,
+        rate_eur: entranceCostPerPerson,
+        rate_non_eur: entranceCostPerPerson,
+        total_cost: entranceTotalCost,
+        client_price: withMargin(entranceTotalCost),
+        notes: ratesUsed.attractions.length > 0 
+          ? `Sites: ${ratesUsed.attractions.map(a => a.name).join(', ')}`
+          : 'Site entrance fees for all travelers'
+      })
+
+      // Lunch
+      if (include_lunch && lunch_per_person_per_day > 0) {
+        const lunchCostPerPerson = lunch_per_person_per_day
+        const lunchTotalCost = lunchCostPerPerson * totalPax
+        services.push({
           service_type: 'meal',
-          service_code: 'LUNCH',
+          service_code: ratesUsed.restaurant?.id || 'LUNCH',
           service_name: 'Lunch',
-          quantity: num_adults + num_children,
-          rate_eur: lunch_per_person,
-          total_cost: lunch_per_person * (num_adults + num_children),
-          notes: 'Lunch at local restaurant'
-        },
-        {
-          service_type: 'supplies',
-          service_code: 'WATER',
-          service_name: 'Water Bottles',
-          quantity: num_adults + num_children,
-          rate_eur: water_per_person,
-          total_cost: water_per_person * (num_adults + num_children),
-          notes: 'Bottled water throughout the day'
-        }
-      ]
+          quantity: totalPax,
+          rate_eur: lunchCostPerPerson,
+          rate_non_eur: lunchCostPerPerson,
+          total_cost: lunchTotalCost,
+          client_price: withMargin(lunchTotalCost),
+          notes: ratesUsed.restaurant?.name || 'Lunch at local restaurant',
+          resource_id: ratesUsed.restaurant?.id || null
+        })
+      }
+
+      // Water (no margin)
+      const waterCostPerPerson = water_per_person_per_day
+      const waterTotalCost = waterCostPerPerson * totalPax
+      services.push({
+        service_type: 'supplies',
+        service_code: 'WATER',
+        service_name: 'Water Bottles',
+        quantity: totalPax,
+        rate_eur: waterCostPerPerson,
+        rate_non_eur: waterCostPerPerson,
+        total_cost: waterTotalCost,
+        client_price: waterTotalCost,
+        notes: 'Bottled water throughout the day'
+      })
 
       for (const serviceData of services) {
         const { error: serviceError } = await supabase
@@ -332,8 +392,9 @@ IMPORTANT:
             service_name: serviceData.service_name,
             quantity: serviceData.quantity,
             rate_eur: serviceData.rate_eur,
-            rate_non_eur: 0,
+            rate_non_eur: serviceData.rate_non_eur || 0,
             total_cost: serviceData.total_cost,
+            client_price: serviceData.client_price,
             notes: serviceData.notes
           })
 
@@ -348,19 +409,61 @@ IMPORTANT:
 
     console.log('🎉 Itinerary generation completed successfully!')
 
-    // ============================================
-    // FIXED: Return both 'id' and 'itinerary_id'
-    // ============================================
     return NextResponse.json({
       success: true,
       data: {
-        id: itinerary.id,                      // ← FIXED: Frontend expects 'id'
-        itinerary_id: itinerary.id,            // ← Keep for backward compatibility
+        id: itinerary.id,
+        itinerary_id: itinerary.id,
         itinerary_code: itinerary.itinerary_code,
         trip_name: itinerary.trip_name,
-        total_cost: itinerary.total_cost,
+        supplier_cost: total_cost,
+        total_cost: total_revenue,
+        total_revenue: total_revenue,
+        margin: total_margin,
+        margin_percent: margin_percent,
+        per_person_cost: Math.round(total_revenue / totalPax * 100) / 100,
         total_days: itinerary.total_days,
-        pricing_breakdown: pricingData.pricing.breakdown
+        passport_type: isEuroPassport ? 'EUR' : 'non-EUR',
+        pricing_source: pricingData.rates_used.success ? 'database' : 'fallback',
+        pricing_breakdown: {
+          transportation: {
+            ...breakdown.transportation,
+            client_price: Math.round(breakdown.transportation.total * marginMultiplier * 100) / 100
+          },
+          guide: {
+            ...breakdown.guide,
+            client_price: Math.round(breakdown.guide.total * marginMultiplier * 100) / 100
+          },
+          entrances: {
+            ...breakdown.entrances,
+            client_price: Math.round(breakdown.entrances.total * marginMultiplier * 100) / 100
+          },
+          meals: {
+            ...breakdown.meals,
+            client_price: Math.round((breakdown.meals.lunch_total + breakdown.meals.dinner_total) * marginMultiplier * 100) / 100
+          },
+          tips: breakdown.tips,
+          water: breakdown.water
+        },
+        rates_used: {
+          vehicle: ratesUsed.vehicle ? {
+            type: ratesUsed.vehicle.vehicle_type,
+            rate: ratesUsed.vehicle.rate_per_day
+          } : null,
+          guide: ratesUsed.guide ? {
+            name: ratesUsed.guide.name,
+            rate: ratesUsed.guide.daily_rate_eur
+          } : null,
+          attractions: ratesUsed.attractions.map(a => ({
+            name: a.name,
+            fee_eur: a.entrance_fee_eur,
+            fee_non_eur: a.entrance_fee_non_eur
+          })),
+          restaurant: ratesUsed.restaurant ? {
+            name: ratesUsed.restaurant.name,
+            lunch_rate: ratesUsed.restaurant.lunch_rate_eur
+          } : null
+        }
       }
     })
 

@@ -3,6 +3,7 @@
 // ============================================
 // POST /api/whatsapp/webhook
 // Receives incoming WhatsApp messages from Twilio
+// Stores in conversation-based structure for chat UI
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,61 +17,132 @@ export async function POST(request: NextRequest) {
     const from = formData.get('From') as string // e.g., "whatsapp:+201234567890"
     const to = formData.get('To') as string // Your WhatsApp number
     const body = formData.get('Body') as string // Message text
-    const messageId = formData.get('MessageSid') as string
+    const messageSid = formData.get('MessageSid') as string
     const numMedia = parseInt(formData.get('NumMedia') as string) || 0
+    const mediaUrl = formData.get('MediaUrl0') as string || null
+    const mediaType = formData.get('MediaContentType0') as string || null
 
     console.log('📥 Received WhatsApp message:', {
       from,
       to,
-      messageId,
+      messageSid,
       body: body?.substring(0, 50) + '...',
       hasMedia: numMedia > 0
     })
 
     // Extract phone number (remove "whatsapp:" prefix)
     const phoneNumber = from.replace('whatsapp:', '')
+    const toNumber = to.replace('whatsapp:', '')
 
-    // Store message in database
     const supabase = createClient()
     
-    // Find or create client
+    // ============================================
+    // STEP 1: Find or create client
+    // ============================================
     let clientId = null
+    let clientName = null
+    
     const { data: existingClient } = await supabase
       .from('clients')
-      .select('id')
+      .select('id, full_name')
       .eq('phone', phoneNumber)
       .single()
 
     if (existingClient) {
       clientId = existingClient.id
+      clientName = existingClient.full_name
     }
 
-    // Store the incoming message
-    await supabase
+    // ============================================
+    // STEP 2: Find or create conversation
+    // ============================================
+    let conversationId = null
+    
+    const { data: existingConversation } = await supabase
+      .from('whatsapp_conversations')
+      .select('id')
+      .eq('phone_number', phoneNumber)
+      .single()
+
+    if (existingConversation) {
+      conversationId = existingConversation.id
+      
+      // Update conversation with client info if we found one and it wasn't linked
+      if (clientId) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ 
+            client_id: clientId, 
+            client_name: clientName,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', conversationId)
+          .is('client_id', null) // Only update if not already linked
+      }
+    } else {
+      // Create new conversation
+      const { data: newConversation, error: convError } = await supabase
+        .from('whatsapp_conversations')
+        .insert({
+          phone_number: phoneNumber,
+          client_id: clientId,
+          client_name: clientName,
+          status: 'active'
+        })
+        .select()
+        .single()
+
+      if (convError) {
+        console.error('❌ Error creating conversation:', convError)
+      } else {
+        conversationId = newConversation.id
+        console.log('✅ Created new conversation:', conversationId)
+      }
+    }
+
+    // ============================================
+    // STEP 3: Store the incoming message
+    // ============================================
+    const { error: msgError } = await supabase
       .from('whatsapp_messages')
       .insert({
-        message_id: messageId,
-        from_number: phoneNumber,
-        to_number: to.replace('whatsapp:', ''),
-        message_body: body,
-        num_media: numMedia,
+        conversation_id: conversationId,
+        message_sid: messageSid,
         direction: 'inbound',
-        client_id: clientId,
-        created_at: new Date().toISOString()
+        message_body: body,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        status: 'delivered',
+        sent_at: new Date().toISOString()
       })
 
-    // Check for keywords and auto-respond
+    if (msgError) {
+      console.error('❌ Error storing message:', msgError)
+    } else {
+      console.log('✅ Message stored successfully')
+    }
+
+    // ============================================
+    // STEP 4: Auto-respond to common queries
+    // ============================================
     const lowerBody = body?.toLowerCase() || ''
     
-    // Auto-respond to common queries
-    if (lowerBody.includes('booking') || lowerBody.includes('quote')) {
-      // Find recent itineraries for this phone number
-      const { data: itineraries } = await supabase
+    if (lowerBody.includes('booking') || lowerBody.includes('quote') || lowerBody.includes('reservation')) {
+      // Find recent itineraries for this client or phone number
+      let itineraryQuery = supabase
         .from('itineraries')
         .select('id, tour_name, start_date, status')
-        .eq('client_phone', phoneNumber)
         .order('created_at', { ascending: false })
         .limit(1)
+
+      // Search by client_id if available, otherwise try phone
+      if (clientId) {
+        itineraryQuery = itineraryQuery.eq('client_id', clientId)
+      } else {
+        itineraryQuery = itineraryQuery.eq('client_phone', phoneNumber)
+      }
+
+      const { data: itineraries } = await itineraryQuery
 
       if (itineraries && itineraries.length > 0) {
         const itinerary = itineraries[0]
@@ -84,10 +156,23 @@ export async function POST(request: NextRequest) {
           `Our team will respond to your inquiry shortly. For urgent matters, please call us directly.\n\n` +
           `Best regards,\n${businessName} Team`
 
-        // Note: To send auto-responses, you'd call your send message API here
-        // For now, we just log it
-        console.log('💬 Auto-response prepared:', autoResponse)
+        // TODO: Uncomment to enable auto-responses via Twilio
+        // await sendAutoResponse(phoneNumber, autoResponse, conversationId, supabase)
+        console.log('💬 Auto-response prepared (not sent):', autoResponse.substring(0, 100) + '...')
       }
+    }
+
+    // Check for greeting keywords
+    if (lowerBody.match(/^(hi|hello|hola|مرحبا|bonjour|hey)[\s!]?$/i)) {
+      const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+      const greetingResponse = `Hello! 👋 Welcome to ${businessName}.\n\n` +
+        `How can we help you today?\n\n` +
+        `• Type "booking" to check your reservation\n` +
+        `• Type "quote" to request a new quote\n` +
+        `• Or just tell us what you need!\n\n` +
+        `Our team typically responds within 30 minutes during business hours.`
+      
+      console.log('💬 Greeting prepared (not sent):', greetingResponse.substring(0, 100) + '...')
     }
 
     // Respond to Twilio with 200 OK
@@ -100,14 +185,55 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ============================================
+// HELPER: Send auto-response (uncomment to enable)
+// ============================================
+// async function sendAutoResponse(
+//   toPhone: string, 
+//   message: string, 
+//   conversationId: string,
+//   supabase: any
+// ) {
+//   try {
+//     const twilio = require('twilio')(
+//       process.env.TWILIO_ACCOUNT_SID,
+//       process.env.TWILIO_AUTH_TOKEN
+//     )
+//     
+//     const twilioMessage = await twilio.messages.create({
+//       body: message,
+//       from: process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886',
+//       to: `whatsapp:${toPhone}`
+//     })
+//     
+//     // Store outbound message
+//     await supabase.from('whatsapp_messages').insert({
+//       conversation_id: conversationId,
+//       message_sid: twilioMessage.sid,
+//       direction: 'outbound',
+//       message_body: message,
+//       status: twilioMessage.status,
+//       sent_at: new Date().toISOString()
+//     })
+//     
+//     console.log('✅ Auto-response sent:', twilioMessage.sid)
+//   } catch (error) {
+//     console.error('❌ Failed to send auto-response:', error)
+//   }
+// }
+
 // GET endpoint for webhook verification
 export async function GET(request: NextRequest) {
-  // Twilio doesn't need webhook verification like some other services,
-  // but we can provide a simple test endpoint
   return NextResponse.json({
     success: true,
     message: 'WhatsApp webhook endpoint is active',
-    webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`
+    webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`,
+    features: [
+      'Conversation-based message storage',
+      'Auto client matching',
+      'Keyword detection (booking, quote, greetings)',
+      'Media support'
+    ]
   })
 }
 
@@ -127,18 +253,30 @@ export async function GET(request: NextRequest) {
 //    - Run: ngrok http 3000
 //    - Use the https URL: https://abc123.ngrok.io/api/whatsapp/webhook
 // 
-// 4. Database table for storing messages:
-//    Create table whatsapp_messages (
-//      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-//      message_id VARCHAR(255) UNIQUE NOT NULL,
-//      from_number VARCHAR(50) NOT NULL,
-//      to_number VARCHAR(50) NOT NULL,
-//      message_body TEXT,
-//      num_media INTEGER DEFAULT 0,
-//      direction VARCHAR(20) CHECK (direction IN ('inbound', 'outbound')),
-//      client_id UUID REFERENCES clients(id),
-//      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-//    )
+// ============================================
+// DATABASE SCHEMA (NEW)
+// ============================================
+// 
+// whatsapp_conversations:
+//   - id UUID PRIMARY KEY
+//   - phone_number VARCHAR(50) UNIQUE
+//   - client_id UUID REFERENCES clients(id)
+//   - client_name VARCHAR(255)
+//   - last_message TEXT (auto-updated by trigger)
+//   - last_message_at TIMESTAMP (auto-updated by trigger)
+//   - unread_count INTEGER (auto-updated by trigger)
+//   - status VARCHAR(20): active, archived, blocked
+//
+// whatsapp_messages:
+//   - id UUID PRIMARY KEY
+//   - conversation_id UUID REFERENCES whatsapp_conversations(id)
+//   - message_sid VARCHAR(255) UNIQUE
+//   - direction: inbound, outbound
+//   - message_body TEXT
+//   - media_url TEXT
+//   - media_type VARCHAR(50)
+//   - status: queued, sent, delivered, read, failed
+//   - sent_at TIMESTAMP
 // 
 // ============================================
 // WEBHOOK PAYLOAD EXAMPLE
@@ -149,6 +287,8 @@ export async function GET(request: NextRequest) {
 //   "To": "whatsapp:+14155238886",
 //   "Body": "Hello, I have a question about my booking",
 //   "NumMedia": "0",
+//   "MediaUrl0": "https://...", (if media attached)
+//   "MediaContentType0": "image/jpeg", (if media attached)
 //   "FromCity": "Cairo",
 //   "FromCountry": "EG"
 // }

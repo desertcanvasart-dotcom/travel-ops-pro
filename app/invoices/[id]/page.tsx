@@ -17,8 +17,11 @@ import {
   CreditCard,
   CheckCircle,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Bell,
+  XCircle
 } from 'lucide-react'
+import { downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
 
 interface Invoice {
   id: string
@@ -66,6 +69,17 @@ interface Payment {
   created_at: string
 }
 
+interface ReminderHistory {
+  id: string
+  invoice_id: string
+  sent_at: string
+  reminder_type: string
+  recipient_email: string
+  subject: string
+  status: string
+  error_message: string | null
+}
+
 interface PaymentFormData {
   amount: number
   currency: string
@@ -95,14 +109,26 @@ const PAYMENT_METHODS = [
   { value: 'stripe', label: 'Stripe' },
 ]
 
+const REMINDER_TYPE_LABELS: Record<string, string> = {
+  before_due_7: '7 days before',
+  before_due_3: '3 days before',
+  on_due: 'On due date',
+  overdue_7: '7 days overdue',
+  overdue_14: '14 days overdue',
+  overdue_30: '30+ days overdue',
+  manual: 'Manual'
+}
+
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
+  const [reminders, setReminders] = useState<ReminderHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [savingPayment, setSavingPayment] = useState(false)
+  const [generatingPDF, setGeneratingPDF] = useState(false)
   const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
     amount: 0,
     currency: 'EUR',
@@ -115,6 +141,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     fetchInvoice()
     fetchPayments()
+    fetchReminders()
   }, [resolvedParams.id])
 
   const fetchInvoice = async () => {
@@ -145,6 +172,18 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch (error) {
       console.error('Error fetching payments:', error)
+    }
+  }
+
+  const fetchReminders = async () => {
+    try {
+      const response = await fetch(`/api/invoices/${resolvedParams.id}/reminder`)
+      if (response.ok) {
+        const data = await response.json()
+        setReminders(data.reminders || [])
+      }
+    } catch (error) {
+      console.error('Error fetching reminders:', error)
     }
   }
 
@@ -198,6 +237,20 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const handleDownloadPDF = () => {
+    if (!invoice) return
+    
+    setGeneratingPDF(true)
+    try {
+      downloadInvoicePDF(invoice)
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      alert('Failed to generate PDF. Please try again.')
+    } finally {
+      setGeneratingPDF(false)
+    }
+  }
+
   const handleDeletePayment = async (paymentId: string) => {
     if (!confirm('Are you sure you want to delete this payment?')) return
 
@@ -217,6 +270,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const getCurrencySymbol = (currency: string) => {
     const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
     return symbols[currency] || currency
+  }
+
+  const formatReminderDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 
   // Check if overdue
@@ -280,6 +342,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Download PDF Button */}
+          <button
+            onClick={handleDownloadPDF}
+            disabled={generatingPDF}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            {generatingPDF ? (
+              <>
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Download PDF
+              </>
+            )}
+          </button>
+          
           {invoice.status === 'draft' && (
             <button
               onClick={handleMarkAsSent}
@@ -465,6 +546,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 Record Payment
               </button>
             )}
+            
+            {/* Download PDF in sidebar too */}
+            <button
+              onClick={handleDownloadPDF}
+              disabled={generatingPDF}
+              className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              {generatingPDF ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </>
+              )}
+            </button>
           </div>
 
           {/* Payment History */}
@@ -503,6 +603,64 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Reminder History */}
+          <div className="bg-white rounded-lg border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Reminder History</h3>
+              <Link 
+                href="/reminders" 
+                className="text-xs text-[#647C47] hover:underline"
+              >
+                View All
+              </Link>
+            </div>
+            {reminders.length === 0 ? (
+              <div className="text-center py-6">
+                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <Bell className="h-5 w-5 text-gray-400" />
+                </div>
+                <p className="text-sm text-gray-500">No reminders sent</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reminders.map((reminder) => (
+                  <div key={reminder.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className={`p-1.5 rounded-lg ${reminder.status === 'sent' ? 'bg-green-100' : 'bg-red-100'}`}>
+                      {reminder.status === 'sent' ? (
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-red-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900">
+                          {REMINDER_TYPE_LABELS[reminder.reminder_type] || reminder.reminder_type}
+                        </p>
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                          reminder.status === 'sent' 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {reminder.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {formatReminderDate(reminder.sent_at)}
+                      </p>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">
+                        To: {reminder.recipient_email}
+                      </p>
+                      {reminder.error_message && (
+                        <p className="text-xs text-red-500 mt-1">{reminder.error_message}</p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const restaurantData = {
+      // Basic fields
       name: body.name,
       restaurant_type: body.restaurant_type || null,
       cuisine_type: body.cuisine_type || null,
@@ -81,7 +82,32 @@ export async function POST(request: NextRequest) {
       meal_types: body.meal_types || [],
       dietary_options: body.dietary_options || [],
       notes: body.notes || null,
-      is_active: body.is_active !== undefined ? body.is_active : true
+      is_active: body.is_active !== undefined ? body.is_active : true,
+
+      // Rate fields - EUR
+      rate_per_person_eur: body.rate_per_person_eur || null,
+      rate_breakfast_eur: body.rate_breakfast_eur || null,
+      rate_lunch_eur: body.rate_lunch_eur || null,
+      rate_dinner_eur: body.rate_dinner_eur || null,
+
+      // Rate fields - Non-EUR
+      rate_per_person_non_eur: body.rate_per_person_non_eur || null,
+      rate_breakfast_non_eur: body.rate_breakfast_non_eur || null,
+      rate_lunch_non_eur: body.rate_lunch_non_eur || null,
+      rate_dinner_non_eur: body.rate_dinner_non_eur || null,
+
+      // Inclusions
+      drinks_included: body.drinks_included || false,
+      tip_included: body.tip_included || false,
+
+      // Discounts
+      child_discount_percent: body.child_discount_percent !== undefined ? body.child_discount_percent : 50,
+      group_discount_percent: body.group_discount_percent || null,
+      group_min_size: body.group_min_size || 10,
+
+      // Validity
+      rate_valid_from: body.rate_valid_from || null,
+      rate_valid_to: body.rate_valid_to || null
     }
 
     const { data, error } = await supabase

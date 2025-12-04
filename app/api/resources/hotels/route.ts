@@ -5,13 +5,15 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabase = createClient(supabaseUrl, supabaseKey)
 
 // GET - List all hotels
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()  
-
     const { searchParams } = new URL(request.url)
     const city = searchParams.get('city')
     const isActive = searchParams.get('is_active')
@@ -57,7 +59,6 @@ export async function GET(request: NextRequest) {
 // POST - Create new hotel
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()  
     const body = await request.json()
 
     if (!body.name || !body.city) {
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hotelData = {
+      // Basic fields
       name: body.name,
       property_type: body.property_type || null,
       star_rating: body.star_rating || null,
@@ -80,7 +82,33 @@ export async function POST(request: NextRequest) {
       capacity: body.capacity || null,
       amenities: body.amenities || [],
       notes: body.notes || null,
-      is_active: body.is_active !== undefined ? body.is_active : true
+      is_active: body.is_active !== undefined ? body.is_active : true,
+
+      // Rate fields - EUR
+      rate_single_eur: body.rate_single_eur || null,
+      rate_double_eur: body.rate_double_eur || null,
+      rate_triple_eur: body.rate_triple_eur || null,
+      rate_suite_eur: body.rate_suite_eur || null,
+
+      // Rate fields - Non-EUR
+      rate_single_non_eur: body.rate_single_non_eur || null,
+      rate_double_non_eur: body.rate_double_non_eur || null,
+      rate_triple_non_eur: body.rate_triple_non_eur || null,
+      rate_suite_non_eur: body.rate_suite_non_eur || null,
+
+      // Seasonal pricing
+      high_season_markup_percent: body.high_season_markup_percent || null,
+      peak_season_markup_percent: body.peak_season_markup_percent || null,
+
+      // Meal plan
+      meal_plan: body.meal_plan || 'BB',
+      breakfast_included: body.breakfast_included !== undefined ? body.breakfast_included : true,
+      breakfast_rate_eur: body.breakfast_rate_eur || null,
+
+      // Validity
+      rate_valid_from: body.rate_valid_from || null,
+      rate_valid_to: body.rate_valid_to || null,
+      child_policy: body.child_policy || null
     }
 
     const { data, error } = await supabase

@@ -57,6 +57,7 @@ export async function PUT(
 
     const updateData: any = {}
     
+    // Basic fields
     if (body.name !== undefined) updateData.name = body.name
     if (body.property_type !== undefined) updateData.property_type = body.property_type
     if (body.star_rating !== undefined) updateData.star_rating = body.star_rating
@@ -70,6 +71,32 @@ export async function PUT(
     if (body.amenities !== undefined) updateData.amenities = body.amenities
     if (body.notes !== undefined) updateData.notes = body.notes
     if (body.is_active !== undefined) updateData.is_active = body.is_active
+
+    // Rate fields - EUR
+    if (body.rate_single_eur !== undefined) updateData.rate_single_eur = body.rate_single_eur || null
+    if (body.rate_double_eur !== undefined) updateData.rate_double_eur = body.rate_double_eur || null
+    if (body.rate_triple_eur !== undefined) updateData.rate_triple_eur = body.rate_triple_eur || null
+    if (body.rate_suite_eur !== undefined) updateData.rate_suite_eur = body.rate_suite_eur || null
+
+    // Rate fields - Non-EUR
+    if (body.rate_single_non_eur !== undefined) updateData.rate_single_non_eur = body.rate_single_non_eur || null
+    if (body.rate_double_non_eur !== undefined) updateData.rate_double_non_eur = body.rate_double_non_eur || null
+    if (body.rate_triple_non_eur !== undefined) updateData.rate_triple_non_eur = body.rate_triple_non_eur || null
+    if (body.rate_suite_non_eur !== undefined) updateData.rate_suite_non_eur = body.rate_suite_non_eur || null
+
+    // Seasonal pricing
+    if (body.high_season_markup_percent !== undefined) updateData.high_season_markup_percent = body.high_season_markup_percent || null
+    if (body.peak_season_markup_percent !== undefined) updateData.peak_season_markup_percent = body.peak_season_markup_percent || null
+
+    // Meal plan
+    if (body.meal_plan !== undefined) updateData.meal_plan = body.meal_plan || 'BB'
+    if (body.breakfast_included !== undefined) updateData.breakfast_included = body.breakfast_included
+    if (body.breakfast_rate_eur !== undefined) updateData.breakfast_rate_eur = body.breakfast_rate_eur || null
+
+    // Validity
+    if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
+    if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
+    if (body.child_policy !== undefined) updateData.child_policy = body.child_policy || null
 
     const { data, error } = await supabase
       .from('hotel_contacts')

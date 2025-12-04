@@ -65,7 +65,6 @@ export async function GET(
 
     // Format response
     const tourDetail = {
-      // Template info
       template_name: variation.tour_templates.template_name,
       template_code: variation.tour_templates.template_code,
       category_name: variation.tour_templates.tour_categories?.category_name || 'Uncategorized',
@@ -76,32 +75,20 @@ export async function GET(
       long_description: variation.tour_templates.long_description,
       highlights: variation.tour_templates.highlights || [],
       main_attractions: variation.tour_templates.main_attractions || [],
-
-      // Variation info
       variation_name: variation.variation_name,
       variation_code: variation.variation_code,
       tier: variation.tier,
       group_type: variation.group_type,
       min_pax: variation.min_pax,
       max_pax: variation.max_pax,
-      
-      // Details
       inclusions: variation.inclusions || [],
       exclusions: variation.exclusions || [],
       optional_extras: variation.optional_extras || [],
-      
-      // Guide & vehicle
       guide_type: variation.guide_type,
       guide_languages: variation.guide_languages || [],
       vehicle_type: variation.vehicle_type,
-      
-      // Pricing
       pricing: pricing || [],
-      
-      // Services
       services: services || [],
-      
-      // Daily itinerary
       daily_itinerary: dailyItinerary || []
     }
 

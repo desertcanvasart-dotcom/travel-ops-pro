@@ -8,8 +8,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import {
   CheckCircle, AlertCircle, Users, Calendar, MapPin,
   DollarSign, Languages, Loader2, MessageSquare, Sparkles,
-  User, Mail, Phone, Globe, ChevronRight, UserPlus
+  User, Mail, Phone, Globe, ChevronRight, UserPlus, ArrowLeft
 } from 'lucide-react'
+import Link from 'next/link'
 
 const supabase = createClient()
 
@@ -43,7 +44,7 @@ interface ExistingClient {
 }
 
 // Main export with Suspense wrapper
-export default function WhatsappParserContent() {
+export default function WhatsappParserPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -70,10 +71,14 @@ function WhatsAppParserContent() {
   const [existingClients, setExistingClients] = useState<ExistingClient[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [clientSaved, setClientSaved] = useState(false)
+  const [fromInbox, setFromInbox] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
   
   const router = useRouter() 
   const searchParams = useSearchParams()
   const preSelectedClientId = searchParams?.get('clientId')
+  const conversationParam = searchParams?.get('conversation')
+  const phoneParam = searchParams?.get('phone')
   
   const supabase = createClient()
 
@@ -88,6 +93,18 @@ Cliente: Mi nombre es Inmaculada Yurba Minguez
 Cliente: Mi email es inmayurba@yahoo.es
 Agente: Perfecto, ¿en qué hotel se alojan?
 Cliente: Gran Plaza`
+
+  // Load conversation from URL params (from WhatsApp Inbox)
+  useEffect(() => {
+    if (conversationParam) {
+      const decoded = decodeURIComponent(conversationParam)
+      setConversation(decoded)
+      setFromInbox(true)
+    }
+    if (phoneParam) {
+      setPhoneNumber(phoneParam)
+    }
+  }, [conversationParam, phoneParam])
 
   // Load client info when pre-selected from URL
   const loadClientInfo = async (clientId: string) => {
@@ -133,8 +150,8 @@ Cliente: Gran Plaza`
     setError(null)
     setExtractedData(null)
     setExistingClients([])
-    setSelectedClientId(null)
-    setClientSaved(false)
+    setSelectedClientId(preSelectedClientId || null)
+    setClientSaved(!!preSelectedClientId)
 
     try {
       const response = await fetch('/api/ai/parse-whatsapp', {
@@ -149,18 +166,26 @@ Cliente: Gran Plaza`
         throw new Error(result.error || 'Failed to analyze conversation')
       }
 
+      // If we have phone from inbox, add it to extracted data
+      if (phoneNumber && !result.data.client_phone) {
+        result.data.client_phone = phoneNumber
+      }
+
       setExtractedData(result.data)
 
       // Search for existing clients by email or phone
       if (result.data.client_email || result.data.client_phone) {
         const { data: clients } = await supabase
           .from('clients')
-          .select('id, client_code, full_name, email, phone')
+          .select('id, client_code, first_name, last_name, email, phone')
           .or(`email.eq.${result.data.client_email},phone.eq.${result.data.client_phone}`)
           .limit(5)
 
         if (clients && clients.length > 0) {
-          setExistingClients(clients)
+          setExistingClients(clients.map(c => ({
+            ...c,
+            full_name: `${c.first_name || ''} ${c.last_name || ''}`.trim()
+          })))
         }
       }
 
@@ -189,7 +214,7 @@ Cliente: Gran Plaza`
           first_name: firstName,
           last_name: lastName,
           email: extractedData.client_email || null,
-          phone: extractedData.client_phone || null,
+          phone: extractedData.client_phone || phoneNumber || null,
           nationality: extractedData.nationality || 'Unknown',
           status: 'prospect',
           client_type: extractedData.num_adults > 2 ? 'family' : 'individual',
@@ -225,6 +250,17 @@ Cliente: Gran Plaza`
             note_type: 'general',
             is_internal: true
           })
+
+        // Link client to WhatsApp conversation if we came from inbox
+        if (phoneNumber) {
+          await supabase
+            .from('whatsapp_conversations')
+            .update({ 
+              client_id: newClient.id,
+              client_name: `${firstName} ${lastName}`.trim()
+            })
+            .eq('phone_number', phoneNumber)
+        }
 
         setSelectedClientId(newClient.id)
         setClientSaved(true)
@@ -302,14 +338,40 @@ Cliente: Gran Plaza`
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4 mb-4">
           <div className="flex items-center gap-3 mb-3">
+            {fromInbox && (
+              <Link 
+                href="/whatsapp-inbox"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+            )}
             <div className="p-2 bg-primary-100 rounded-lg">
               <MessageSquare className="w-5 h-5 text-primary-600" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">AI WhatsApp Parser</h1>
-              <p className="text-xs text-gray-600">Paste conversation → AI extracts info → Generate itinerary → Save client</p>
+              <p className="text-xs text-gray-600">
+                {fromInbox 
+                  ? 'Conversation loaded from WhatsApp Inbox → Analyze → Generate itinerary'
+                  : 'Paste conversation → AI extracts info → Generate itinerary → Save client'
+                }
+              </p>
             </div>
           </div>
+
+          {/* From Inbox Banner */}
+          {fromInbox && (
+            <div className="bg-[#25D366]/10 border border-[#25D366]/30 rounded-lg p-3 mb-3">
+              <div className="flex items-center gap-2 text-[#25D366]">
+                <MessageSquare className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  Conversation loaded from WhatsApp Inbox
+                  {phoneNumber && <span className="text-gray-600 ml-2">({phoneNumber})</span>}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3">
@@ -347,12 +409,14 @@ Cliente: Gran Plaza`
             <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-base font-bold text-gray-900">WhatsApp Conversation</h2>
-                <button
-                  onClick={loadSample}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Load Sample
-                </button>
+                {!fromInbox && (
+                  <button
+                    onClick={loadSample}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Load Sample
+                  </button>
+                )}
               </div>
               {preSelectedClientId && clientSaved && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
@@ -444,7 +508,7 @@ Client: Maybe next month, around 10 days
                         <div className="text-xs text-gray-600">Phone</div>
                         <input
                           type="tel"
-                          value={extractedData.client_phone}
+                          value={extractedData.client_phone || phoneNumber || ''}
                           onChange={(e) => setExtractedData({ ...extractedData, client_phone: e.target.value })}
                           className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
                         />
@@ -630,13 +694,24 @@ Client: Maybe next month, around 10 days
                       </div>
                     </div>
                     
-                    <button
-                      onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
-                      className="w-full px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2"
-                    >
-                      View Itinerary
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
+                        className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2"
+                      >
+                        View Itinerary
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                      {fromInbox && (
+                        <Link
+                          href="/whatsapp-inbox"
+                          className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Back to Inbox
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 )}
               </>
