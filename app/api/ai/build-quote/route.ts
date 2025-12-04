@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/app/supabase'
-import { matchTourTemplate, getTemplateWithPricing } from '@/lib/services/tour-matcher-service'
-import { calculatePricingFromRates, getFallbackRates } from '@/lib/services/rate-lookup-service'
+import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
+import { calculatePricingFromRates, getFallbackRates } from '@/lib/rate-lookup-service'
 
 // ============================================
 // QUOTE BUILDER API
