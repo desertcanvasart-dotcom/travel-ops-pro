@@ -97,7 +97,10 @@ Cliente: Gran Plaza`
   // Load conversation from URL params (from WhatsApp Inbox)
   useEffect(() => {
     if (conversationParam) {
-      const decoded = decodeURIComponent(conversationParam)
+      const isBase64 = new URLSearchParams(window.location.search).get("encoded") === "base64"
+      const decoded = isBase64 
+        ? decodeURIComponent(escape(atob(conversationParam)))
+        : decodeURIComponent(conversationParam)
       setConversation(decoded)
       setFromInbox(true)
     }

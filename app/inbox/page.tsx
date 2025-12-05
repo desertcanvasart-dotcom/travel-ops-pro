@@ -43,6 +43,7 @@ import {
   Building2, 
   Expand, 
   Maximize2,
+  Sparkles,
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
@@ -365,7 +366,45 @@ export default function InboxPage() {
     const match = fromString.match(/<(.+)>/)
     return match ? match[1] : fromString
   }
+  const handleParseEmail = () => {
+    if (!selectedEmail) return
+    
+    const senderName = extractName(selectedEmail.from)
+    const bodyText = selectedEmail.body
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim()
+    
+    const conversationText = `From: ${senderName}
+Subject: ${selectedEmail.subject}
+Date: ${new Date(selectedEmail.date).toLocaleString()}
 
+${bodyText}`
+    
+    const senderEmail = extractEmailAddress(selectedEmail.from)
+    const matchedClient = clients.find(c => c.email?.toLowerCase() === senderEmail.toLowerCase())
+    
+    // Use base64 encoding to avoid URL issues with special characters
+    const encodedConversation = btoa(unescape(encodeURIComponent(conversationText)))
+    
+    const params = new URLSearchParams({ 
+      conversation: encodedConversation, 
+      source: 'email',
+      encoded: 'base64'
+    })
+    
+    if (matchedClient) params.set('clientId', matchedClient.id)
+    if (senderEmail) params.set('email', senderEmail)
+    
+    window.location.href = `/whatsapp-parser?${params.toString()}`
+  }
   useEffect(() => {
     if (isConnected) {
       fetchEmails(searchQuery, folder)
@@ -1056,6 +1095,14 @@ export default function InboxPage() {
                     </div>
                   )}
                   
+                  {/* Parse Email Button */}
+                  <button
+                    onClick={handleParseEmail}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Parse to Itinerary"
+                  >
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                  </button>
                   <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors" title="More">
                     <MoreHorizontal className="w-4 h-4 text-gray-500" />
                   </button>
@@ -1200,6 +1247,13 @@ export default function InboxPage() {
           <span className="text-xs text-gray-500">
             {new Date(selectedEmail.date).toLocaleString()}
           </span>
+          <button
+            onClick={handleParseEmail}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Parse to Itinerary"
+          >
+            <Sparkles className="w-5 h-5 text-purple-500" />
+          </button>
           <button
             onClick={() => setShowExpandedEmail(false)}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"

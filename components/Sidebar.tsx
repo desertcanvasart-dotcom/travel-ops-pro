@@ -77,8 +77,8 @@ const navigation: NavSection[] = [
     title: 'Sales',
     items: [
       { label: 'Inbox', href: '/inbox', icon: Mail },
-      { label: 'WhatsApp Inbox', href: '/whatsapp-inbox', icon: MessageSquare },
-      { label: 'WhatsApp Parser', href: '/whatsapp-parser', icon: MessageSquare },
+      { label: 'WhatsApp', href: '/whatsapp-inbox', icon: MessageSquare },
+      { label: 'Parser', href: '/whatsapp-parser', icon: MessageSquare },
       { label: 'Calendar', href: '/calendar', icon: Calendar },
       { label: 'Itineraries', href: '/itineraries', icon: FileText },
       { label: 'Packages', href: '/tours', icon: Library },

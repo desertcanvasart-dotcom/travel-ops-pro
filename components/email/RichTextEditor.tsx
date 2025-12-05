@@ -743,6 +743,7 @@ export default function RichTextEditor({
   className = ''
 }: RichTextEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       // 1. StarterKit provides basic functionality
       StarterKit.configure({
