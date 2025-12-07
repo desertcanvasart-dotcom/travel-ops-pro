@@ -114,8 +114,6 @@ export async function DELETE(
 
     console.log('🗑️ Deleting itinerary:', id)
 
-    const supabase = createClient()
-
     // First, delete all days and services associated with this itinerary
     // Delete services (they're linked to days)
     const { data: days } = await supabase
