@@ -381,7 +381,6 @@ export default function HotelsContent() {
       showToast('error', 'Failed to delete hotel')
     }
   }
-
   // Export to CSV
   const handleExportCSV = () => {
     const headers = [

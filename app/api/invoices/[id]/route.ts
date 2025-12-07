@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     const { data, error } = await supabaseAdmin
       .from('invoices')
@@ -36,7 +36,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     // Build update object with only provided fields
@@ -96,7 +96,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     // First delete related payments
     await supabaseAdmin

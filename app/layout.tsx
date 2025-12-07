@@ -1,12 +1,11 @@
-
 'use client'
-
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Inter } from "next/font/google"
 import "./globals.css"
 import Sidebar from "@/components/Sidebar"
 import { AuthProvider } from './contexts/AuthContext'
+import { ConfirmDialogProvider } from '@/components/ConfirmDialog'
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -26,24 +25,26 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-          {isPublicPage ? (
-            // Public pages - no sidebar
-            <main className="min-h-screen">
-              {children}
-            </main>
-          ) : (
-            // App pages - with sidebar
-            <div className="flex h-screen overflow-hidden bg-gray-50">
-              <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
-              <main 
-                className={`flex-1 overflow-y-auto transition-all duration-300 ${
-                  isCollapsed ? 'lg:ml-16' : 'lg:ml-56'
-                }`}
-              >
+          <ConfirmDialogProvider>
+            {isPublicPage ? (
+              // Public pages - no sidebar
+              <main className="min-h-screen">
                 {children}
               </main>
-            </div>
-          )}
+            ) : (
+              // App pages - with sidebar
+              <div className="flex h-screen overflow-hidden bg-gray-50">
+                <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+                <main 
+                  className={`flex-1 overflow-y-auto transition-all duration-300 ${
+                    isCollapsed ? 'lg:ml-16' : 'lg:ml-56'
+                  }`}
+                >
+                  {children}
+                </main>
+              </div>
+            )}
+          </ConfirmDialogProvider>
         </AuthProvider>
       </body>
     </html>

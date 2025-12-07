@@ -44,6 +44,7 @@ export async function GET(
     )
   }
 }
+
 // PUT - Used by EDIT page AND ResourceAssignment
 export async function PUT(
   request: Request,
@@ -71,7 +72,7 @@ export async function PUT(
     if (body.status !== undefined) updateData.status = body.status
     if (body.notes !== undefined) updateData.notes = body.notes
 
-    // ⭐ Resource fields - ADD THESE ⭐
+    // Resource fields
     if (body.assigned_guide_id !== undefined) updateData.assigned_guide_id = body.assigned_guide_id
     if (body.assigned_vehicle_id !== undefined) updateData.assigned_vehicle_id = body.assigned_vehicle_id
     if (body.guide_notes !== undefined) updateData.guide_notes = body.guide_notes
@@ -104,7 +105,8 @@ export async function PUT(
     )
   }
 }
-// DELETE - Delete an itinerary
+
+// DELETE - Delete an itinerary and all related data
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
@@ -114,8 +116,20 @@ export async function DELETE(
 
     console.log('🗑️ Deleting itinerary:', id)
 
-    // First, delete all days and services associated with this itinerary
-    // Delete services (they're linked to days)
+    // Check if itinerary has invoices
+    const { data: invoices } = await supabase
+      .from('invoices')
+      .select('id, invoice_number')
+      .eq('itinerary_id', id)
+
+    if (invoices && invoices.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: `Cannot delete itinerary. It has ${invoices.length} invoice(s) linked. Please delete the invoices first or unlink them from this itinerary.`
+      }, { status: 409 })
+    }
+
+    // Get all days for this itinerary
     const { data: days } = await supabase
       .from('itinerary_days')
       .select('id')
@@ -145,6 +159,15 @@ export async function DELETE(
 
     if (error) {
       console.error('❌ Error deleting itinerary:', error)
+      
+      // Check for foreign key constraint
+      if (error.code === '23503') {
+        return NextResponse.json({
+          success: false,
+          error: 'Cannot delete itinerary. It has linked records (invoices, payments, etc.). Please remove those first.'
+        }, { status: 409 })
+      }
+      
       throw error
     }
 

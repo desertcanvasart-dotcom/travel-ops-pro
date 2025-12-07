@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, FileText, Eye, Edit2, Trash2 } from 'lucide-react'
+import { Search, Plus, FileText, Eye, Edit2, Trash2, CheckCircle2, AlertCircle, X } from 'lucide-react'
 
 interface Itinerary {
   id: string
@@ -19,6 +19,11 @@ interface Itinerary {
   currency: string
   status: string
 }
+interface Toast {
+  id: string
+  type: 'success' | 'error' | 'info'
+  message: string
+}
 
 export default function ItinerariesPage() {
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
@@ -30,9 +35,22 @@ export default function ItinerariesPage() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
   const router = useRouter()
 
+  const [toasts, setToasts] = useState<Toast[]>([])
+
+const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+  const id = Date.now().toString()
+  setToasts(prev => [...prev, { id, type, message }])
+  setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
+}
+
   useEffect(() => {
     fetchItineraries()
   }, [])
+  interface Toast {
+  id: string
+  type: 'success' | 'error' | 'info'
+  message: string
+}
 
   useEffect(() => {
     filterItineraries()
@@ -88,7 +106,7 @@ export default function ItinerariesPage() {
         setItineraries(itineraries.filter(it => it.id !== id))
         setDeleteConfirm(null)
       } else {
-        alert('Failed to delete itinerary: ' + data.error)
+        showToast('error', data.error || 'Failed to delete itinerary')
       }
     } catch (error) {
       console.error('Error deleting itinerary:', error)
@@ -112,11 +130,11 @@ export default function ItinerariesPage() {
           it.id === id ? { ...it, status: newStatus } : it
         ))
       } else {
-        alert('Failed to update status: ' + data.error)
+        showToast('error', data.error || 'Failed to update status')
       }
     } catch (error) {
       console.error('Error updating status:', error)
-      alert('Failed to update status')
+      showToast('error', 'Failed to update status')
     } finally {
       setUpdatingStatus(null)
     }
@@ -391,7 +409,6 @@ export default function ItinerariesPage() {
             </tbody>
           </table>
         </div>
-
         {filteredItineraries.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -400,6 +417,38 @@ export default function ItinerariesPage() {
           </div>
         )}
       </div>
+{/* Toast Notifications */}
+{toasts.length > 0 && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 space-y-2">
+          {toasts.map(toast => (
+            <div
+              key={toast.id}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg ${
+                toast.type === 'success' ? 'bg-green-50 border-green-200' :
+                toast.type === 'error' ? 'bg-red-50 border-red-200' :
+                'bg-blue-50 border-blue-200'
+              }`}
+            >
+              {toast.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-red-600" />
+              )}
+              <span className={`text-sm font-medium ${
+                toast.type === 'success' ? 'text-green-800' :
+                toast.type === 'error' ? 'text-red-800' :
+                'text-blue-800'
+              }`}>{toast.message}</span>
+              <button 
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+                className="ml-2 hover:opacity-70"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
