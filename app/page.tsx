@@ -52,21 +52,17 @@ export default function HomePage() {
               <a href="#support" className="text-sm text-gray-600 hover:text-[#263A29] transition-colors">Support</a>
             </div>
 
-            {/* Auth Buttons */}
-            <div className="hidden md:flex items-center gap-3">
-              <Link 
-                href="/login" 
-                className="h-10 px-4 flex items-center text-sm font-medium text-[#263A29] border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Sign in
-              </Link>
-              <Link 
-                href="/signup" 
-                className="h-10 px-4 flex items-center text-sm font-medium text-white bg-[#263A29] rounded-lg hover:bg-[#1D2B20] transition-colors"
-              >
-                Sign up free
-              </Link>
-            </div>
+          {/* Demo Button */}
+<div className="hidden md:flex items-center">
+  <a 
+    href="https://calendly.com/autoura" 
+    target="_blank"
+    rel="noopener noreferrer"
+    className="h-10 px-6 flex items-center text-sm font-medium text-white bg-[#263A29] rounded-lg hover:bg-[#1D2B20] transition-colors"
+  >
+    Schedule a Demo
+  </a>
+</div>
 
             {/* Mobile Menu Button */}
             <button className="md:hidden text-[#263A29]">
