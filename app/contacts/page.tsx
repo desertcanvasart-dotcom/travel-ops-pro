@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   Search, 
@@ -9,7 +10,6 @@ import {
   Building2, 
   Users, 
   Utensils, 
-  Plane, 
   Compass,
   Star,
   Globe,
@@ -29,13 +29,28 @@ import {
   FileSpreadsheet,
   ArrowRight,
   HelpCircle,
-  CheckCircle2
+  CheckCircle2,
+  Car,
+  UserCog,
+  LayoutGrid,
+  List,
+  Table2,
+  ChevronUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react'
+
+type ViewMode = 'grid' | 'table' | 'list'
+type SortField = 'name' | 'type' | 'city' | 'email'
+type SortDirection = 'asc' | 'desc'
 
 // Types
 interface Contact {
   id: string
-  type: 'hotel' | 'guide' | 'restaurant' | 'airport_staff' | 'client'
+  type: 'accommodation' | 'guide' | 'restaurant' | 'transportation' | 'staff' | 'client'
   name: string
   subtype?: string
   city?: string
@@ -49,14 +64,14 @@ interface Contact {
   rawData?: any
 }
 
-type ContactType = 'hotel' | 'guide' | 'restaurant' | 'airport_staff' | 'client'
+type ContactType = 'accommodation' | 'guide' | 'restaurant' | 'transportation' | 'staff' | 'client'
 
 // Config
 const TYPE_CONFIG = {
-  hotel: { 
+  accommodation: { 
     icon: Building2, 
-    label: 'Hotels', 
-    singular: 'Hotel',
+    label: 'Accommodation', 
+    singular: 'Accommodation',
     color: 'bg-blue-100 text-blue-700',
     borderColor: 'border-blue-200',
     hoverColor: 'hover:bg-blue-50'
@@ -77,10 +92,18 @@ const TYPE_CONFIG = {
     borderColor: 'border-orange-200',
     hoverColor: 'hover:bg-orange-50'
   },
-  airport_staff: { 
-    icon: Plane, 
-    label: 'Airport Staff', 
-    singular: 'Airport Staff',
+  transportation: { 
+    icon: Car, 
+    label: 'Transportation', 
+    singular: 'Transportation',
+    color: 'bg-cyan-100 text-cyan-700',
+    borderColor: 'border-cyan-200',
+    hoverColor: 'hover:bg-cyan-50'
+  },
+  staff: { 
+    icon: UserCog, 
+    label: 'Staff', 
+    singular: 'Staff',
     color: 'bg-purple-100 text-purple-700',
     borderColor: 'border-purple-200',
     hoverColor: 'hover:bg-purple-50'
@@ -97,9 +120,9 @@ const TYPE_CONFIG = {
 
 // Form field configurations for each type
 const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string; required?: boolean; options?: string[] }[]> = {
-  hotel: [
-    { name: 'Hotel Name', key: 'name', type: 'text', required: true },
-    { name: 'Property Type', key: 'property_type', type: 'select', options: ['Hotel', 'Resort', 'Boutique Hotel', 'Guest House', 'Nile Cruise', 'Camp'] },
+  accommodation: [
+    { name: 'Property Name', key: 'name', type: 'text', required: true },
+    { name: 'Property Type', key: 'property_type', type: 'select', options: ['Hotel', 'Resort', 'Boutique Hotel', 'Guest House', 'Nile Cruise', 'Camp', 'Apartment', 'Villa'] },
     { name: 'Star Rating', key: 'star_rating', type: 'select', options: ['1', '2', '3', '4', '5'] },
     { name: 'City', key: 'city', type: 'text' },
     { name: 'Address', key: 'address', type: 'textarea' },
@@ -133,10 +156,23 @@ const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string
     { name: 'Capacity', key: 'capacity', type: 'number' },
     { name: 'Notes', key: 'notes', type: 'textarea' },
   ],
-  airport_staff: [
+  transportation: [
+    { name: 'Company/Driver Name', key: 'name', type: 'text', required: true },
+    { name: 'Service Type', key: 'service_type', type: 'select', options: ['Private Car', 'Van/Minibus', 'Coach/Bus', 'Limousine', 'Airport Transfer', 'Rail', 'Boat/Felucca'] },
+    { name: 'Vehicle Type', key: 'vehicle_type', type: 'text' },
+    { name: 'City/Region', key: 'city', type: 'text' },
+    { name: 'Contact Person', key: 'contact_person', type: 'text' },
+    { name: 'Email', key: 'email', type: 'email' },
+    { name: 'Phone', key: 'phone', type: 'tel' },
+    { name: 'WhatsApp', key: 'whatsapp', type: 'tel' },
+    { name: 'Capacity', key: 'capacity', type: 'number' },
+    { name: 'Daily Rate', key: 'daily_rate', type: 'number' },
+    { name: 'Notes', key: 'notes', type: 'textarea' },
+  ],
+  staff: [
     { name: 'Full Name', key: 'name', type: 'text', required: true },
-    { name: 'Role', key: 'role', type: 'select', options: ['Meet & Greet', 'Transfer Coordinator', 'VIP Assistant', 'Luggage Handler', 'Driver'] },
-    { name: 'Airport Location', key: 'airport_location', type: 'select', options: ['Cairo (CAI)', 'Luxor (LXR)', 'Aswan (ASW)', 'Hurghada (HRG)', 'Sharm El Sheikh (SSH)', 'Alexandria (HBE)'] },
+    { name: 'Role', key: 'role', type: 'select', options: ['Meet & Greet', 'Transfer Coordinator', 'VIP Assistant', 'Luggage Handler', 'Driver', 'Hotel Rep', 'Tour Leader', 'Office Staff'] },
+    { name: 'Location', key: 'airport_location', type: 'select', options: ['Cairo (CAI)', 'Luxor (LXR)', 'Aswan (ASW)', 'Hurghada (HRG)', 'Sharm El Sheikh (SSH)', 'Alexandria (HBE)', 'Office', 'Remote'] },
     { name: 'Email', key: 'email', type: 'email' },
     { name: 'Phone', key: 'phone', type: 'tel' },
     { name: 'WhatsApp', key: 'whatsapp', type: 'tel' },
@@ -158,19 +194,67 @@ const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string
 
 // Table name mapping
 const TABLE_NAMES: Record<ContactType, string> = {
-  hotel: 'hotel_contacts',
+  accommodation: 'hotel_contacts',
   guide: 'guides',
   restaurant: 'restaurant_contacts',
-  airport_staff: 'airport_staff',
+  transportation: 'transportation_contacts',
+  staff: 'airport_staff',
   client: 'clients',
 }
 
 export default function ContactsPage() {
   const supabase = createClient()
+  const router = useRouter()
+  
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // URL type parameter - read on client side only
   const [selectedType, setSelectedType] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [sortField, setSortField] = useState<SortField>('name')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(12)
+
+  // Read URL params on client side only (avoids hydration issues)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const typeParam = params.get('type')
+    const validTypes = ['all', 'accommodation', 'guide', 'restaurant', 'transportation', 'staff', 'client']
+    if (typeParam && validTypes.includes(typeParam)) {
+      setSelectedType(typeParam)
+    }
+  }, [])
+
+  // Listen for browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const typeParam = params.get('type')
+      const validTypes = ['all', 'accommodation', 'guide', 'restaurant', 'transportation', 'staff', 'client']
+      if (typeParam && validTypes.includes(typeParam)) {
+        setSelectedType(typeParam)
+      } else {
+        setSelectedType('all')
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  // Sync URL when type changes
+  const handleTypeChange = (type: string) => {
+    setSelectedType(type)
+    if (type === 'all') {
+      router.push('/contacts', { scroll: false })
+    } else {
+      router.push(`/contacts?type=${type}`, { scroll: false })
+    }
+  }
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false)
@@ -178,7 +262,7 @@ export default function ContactsPage() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
-  const [newContactType, setNewContactType] = useState<ContactType>('hotel')
+  const [newContactType, setNewContactType] = useState<ContactType>('accommodation')
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -198,7 +282,7 @@ export default function ContactsPage() {
     try {
       const allContacts: Contact[] = []
 
-      // Fetch hotels
+      // Fetch accommodation (hotels)
       const { data: hotels } = await supabase
         .from('hotel_contacts')
         .select('*')
@@ -208,7 +292,7 @@ export default function ContactsPage() {
       if (hotels) {
         allContacts.push(...hotels.map(h => ({
           id: h.id,
-          type: 'hotel' as const,
+          type: 'accommodation' as const,
           name: h.name,
           subtype: h.property_type,
           city: h.city,
@@ -272,17 +356,41 @@ export default function ContactsPage() {
         })))
       }
 
-      // Fetch airport staff
-      const { data: airportStaff } = await supabase
+      // Fetch transportation contacts
+      const { data: transportation } = await supabase
+        .from('transportation_contacts')
+        .select('*')
+        .eq('is_active', true)
+        .order('name')
+
+      if (transportation) {
+        allContacts.push(...transportation.map(t => ({
+          id: t.id,
+          type: 'transportation' as const,
+          name: t.name,
+          subtype: t.service_type,
+          city: t.city,
+          contact_person: t.contact_person,
+          phone: t.phone,
+          email: t.email,
+          whatsapp: t.whatsapp,
+          notes: t.notes,
+          extra: { vehicle_type: t.vehicle_type, capacity: t.capacity, daily_rate: t.daily_rate },
+          rawData: t
+        })))
+      }
+
+      // Fetch staff (formerly airport_staff)
+      const { data: staff } = await supabase
         .from('airport_staff')
         .select('*')
         .eq('is_active', true)
         .order('name')
 
-      if (airportStaff) {
-        allContacts.push(...airportStaff.map(a => ({
+      if (staff) {
+        allContacts.push(...staff.map(a => ({
           id: a.id,
-          type: 'airport_staff' as const,
+          type: 'staff' as const,
           name: a.name,
           subtype: a.role,
           city: a.airport_location,
@@ -325,26 +433,120 @@ export default function ContactsPage() {
     }
   }
 
-  // Filter contacts
-  const filteredContacts = contacts.filter(contact => {
-    const matchesType = selectedType === 'all' || contact.type === selectedType
-    const matchesSearch = !searchQuery || 
-      contact.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.contact_person?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.phone?.includes(searchQuery)
+  // Filter and sort contacts
+  const filteredContacts = contacts
+    .filter(contact => {
+      const matchesType = selectedType === 'all' || contact.type === selectedType
+      const matchesSearch = !searchQuery || 
+        contact.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.contact_person?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.phone?.includes(searchQuery)
+      
+      return matchesType && matchesSearch
+    })
+    .sort((a, b) => {
+      let aVal = ''
+      let bVal = ''
+      
+      switch (sortField) {
+        case 'name':
+          aVal = a.name?.toLowerCase() || ''
+          bVal = b.name?.toLowerCase() || ''
+          break
+        case 'type':
+          aVal = a.type
+          bVal = b.type
+          break
+        case 'city':
+          aVal = a.city?.toLowerCase() || ''
+          bVal = b.city?.toLowerCase() || ''
+          break
+        case 'email':
+          aVal = a.email?.toLowerCase() || ''
+          bVal = b.email?.toLowerCase() || ''
+          break
+      }
+      
+      if (sortDirection === 'asc') {
+        return aVal.localeCompare(bVal)
+      }
+      return bVal.localeCompare(aVal)
+    })
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredContacts.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedContacts = filteredContacts.slice(startIndex, endIndex)
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, selectedType, itemsPerPage])
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = []
+    const maxVisiblePages = 5
     
-    return matchesType && matchesSearch
-  })
+    if (totalPages <= maxVisiblePages + 2) {
+      // Show all pages
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i)
+      }
+    } else {
+      // Show first, last, and pages around current
+      pages.push(1)
+      
+      if (currentPage > 3) {
+        pages.push('...')
+      }
+      
+      const start = Math.max(2, currentPage - 1)
+      const end = Math.min(totalPages - 1, currentPage + 1)
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+      
+      if (currentPage < totalPages - 2) {
+        pages.push('...')
+      }
+      
+      pages.push(totalPages)
+    }
+    
+    return pages
+  }
+
+  // Toggle sort
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  // Sort icon helper
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+    return sortDirection === 'asc' 
+      ? <ChevronUp className="w-3.5 h-3.5 text-primary-600" />
+      : <ChevronDown className="w-3.5 h-3.5 text-primary-600" />
+  }
 
   // Stats
   const stats = {
     all: contacts.length,
-    hotel: contacts.filter(c => c.type === 'hotel').length,
+    accommodation: contacts.filter(c => c.type === 'accommodation').length,
     guide: contacts.filter(c => c.type === 'guide').length,
     restaurant: contacts.filter(c => c.type === 'restaurant').length,
-    airport_staff: contacts.filter(c => c.type === 'airport_staff').length,
+    transportation: contacts.filter(c => c.type === 'transportation').length,
+    staff: contacts.filter(c => c.type === 'staff').length,
     client: contacts.filter(c => c.type === 'client').length,
   }
 
@@ -352,7 +554,9 @@ export default function ContactsPage() {
   const handleAdd = () => {
     setFormData({})
     setError(null)
-    setNewContactType(selectedType !== 'all' ? selectedType as ContactType : 'hotel')
+    // Default to current filter type, or accommodation if viewing all
+    const defaultType = selectedType !== 'all' ? selectedType as ContactType : 'accommodation'
+    setNewContactType(defaultType)
     setShowAddModal(true)
   }
 
@@ -394,7 +598,7 @@ export default function ContactsPage() {
         }
       }
       
-      if (newContactType === 'airport_staff') {
+      if (newContactType === 'staff') {
         if (formData.languages && typeof formData.languages === 'string') {
           insertData.languages = formData.languages.split(',').map((l: string) => l.trim())
         }
@@ -436,7 +640,7 @@ export default function ContactsPage() {
         }
       }
       
-      if (selectedContact.type === 'airport_staff') {
+      if (selectedContact.type === 'staff') {
         if (formData.languages && typeof formData.languages === 'string') {
           updateData.languages = formData.languages.split(',').map((l: string) => l.trim())
         }
@@ -520,7 +724,7 @@ export default function ContactsPage() {
     a.click()
   }
 
-  // Render form field
+  // Render form field - FIXED: Increased select height for better UX
   const renderFormField = (field: { name: string; key: string; type: string; required?: boolean; options?: string[] }) => {
     const value = formData[field.key] || ''
     
@@ -529,7 +733,8 @@ export default function ContactsPage() {
         <select
           value={value}
           onChange={(e) => setFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
-          className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+          className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white appearance-none cursor-pointer"
+          style={{ lineHeight: '1.5' }}
         >
           <option value="">Select {field.name}</option>
           {field.options.map(opt => (
@@ -556,7 +761,7 @@ export default function ContactsPage() {
         type={field.type}
         value={value}
         onChange={(e) => setFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
-        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+        className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
         placeholder={`Enter ${field.name.toLowerCase()}`}
         required={field.required}
       />
@@ -570,10 +775,50 @@ export default function ContactsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">All Contacts</h1>
-              <p className="text-sm text-gray-500">Manage all your clients and partners in one place</p>
+              <h1 className="text-lg font-semibold text-gray-900">
+                {selectedType === 'all' ? 'All Contacts' : TYPE_CONFIG[selectedType as ContactType]?.label || 'Contacts'}
+              </h1>
+              <p className="text-sm text-gray-500">
+                {selectedType === 'all' 
+                  ? 'Manage all your clients and partners in one place'
+                  : `Manage your ${TYPE_CONFIG[selectedType as ContactType]?.label.toLowerCase() || 'contacts'}`
+                }
+              </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* View Toggle */}
+              <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    viewMode === 'grid' ? 'bg-white shadow-sm text-primary-600' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Grid View"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    viewMode === 'table' ? 'bg-white shadow-sm text-primary-600' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Table View"
+                >
+                  <Table2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    viewMode === 'list' ? 'bg-white shadow-sm text-primary-600' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="List View"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="w-px h-6 bg-gray-200" />
+              
               <button 
                 onClick={() => setShowImportModal(true)}
                 className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
@@ -601,7 +846,7 @@ export default function ContactsPage() {
           {/* Stats/Filters */}
           <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
             <button
-              onClick={() => setSelectedType('all')}
+              onClick={() => handleTypeChange('all')}
               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
                 selectedType === 'all' 
                   ? 'bg-gray-900 text-white' 
@@ -614,7 +859,7 @@ export default function ContactsPage() {
             {Object.entries(TYPE_CONFIG).map(([key, config]) => (
               <button
                 key={key}
-                onClick={() => setSelectedType(key)}
+                onClick={() => handleTypeChange(key)}
                 className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
                   selectedType === key 
                     ? config.color
@@ -648,7 +893,7 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Contacts Grid */}
+      {/* Contacts Display */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -667,157 +912,520 @@ export default function ContactsPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredContacts.map((contact) => {
-              const config = TYPE_CONFIG[contact.type]
-              const Icon = config.icon
-              
-              return (
-                <div 
-                  key={`${contact.type}-${contact.id}`}
-                  className={`bg-white rounded-lg border ${config.borderColor} p-4 hover:shadow-md transition-all cursor-pointer group`}
-                  onClick={() => handleView(contact)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center`}>
-                        <Icon className="w-5 h-5" />
+          <>
+            {/* GRID VIEW */}
+            {viewMode === 'grid' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {paginatedContacts.map((contact) => {
+                  const config = TYPE_CONFIG[contact.type]
+                  const Icon = config.icon
+                  
+                  return (
+                    <div 
+                      key={`${contact.type}-${contact.id}`}
+                      className={`bg-white rounded-lg border ${config.borderColor} p-4 hover:shadow-md transition-all cursor-pointer group`}
+                      onClick={() => handleView(contact)}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center`}>
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-gray-900">{contact.name}</h3>
+                            <p className="text-xs text-gray-500">
+                              {contact.subtype}
+                              {contact.city && ` • ${contact.city}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setOpenMenuId(openMenuId === contact.id ? null : contact.id)
+                            }}
+                            className="p-1 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                          </button>
+                          
+                          {openMenuId === contact.id && (
+                            <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleView(contact) }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                View Details
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEdit(contact) }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                Edit
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-gray-900">{contact.name}</h3>
-                        <p className="text-xs text-gray-500">
-                          {contact.subtype}
-                          {contact.city && ` • ${contact.city}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setOpenMenuId(openMenuId === contact.id ? null : contact.id)
-                        }}
-                        className="p-1 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <MoreHorizontal className="w-4 h-4 text-gray-400" />
-                      </button>
-                      
-                      {/* Dropdown Menu */}
-                      {openMenuId === contact.id && (
-                        <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleView(contact)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+
+                      {contact.contact_person && contact.contact_person !== contact.name && (
+                        <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                          <Users className="w-3.5 h-3.5 text-gray-400" />
+                          {contact.contact_person}
+                        </div>
+                      )}
+
+                      {contact.email && (
+                        <a 
+                          href={`mailto:${contact.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 text-xs text-gray-600 hover:text-primary-600 mb-2"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-gray-400" />
+                          {contact.email}
+                        </a>
+                      )}
+
+                      {contact.phone && (
+                        <div className="flex items-center gap-3">
+                          <a 
+                            href={`tel:${contact.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-2 text-xs text-gray-600 hover:text-primary-600"
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                            View Details
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEdit(contact)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            Edit
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteClick(contact)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Delete
-                          </button>
+                            <Phone className="w-3.5 h-3.5 text-gray-400" />
+                            {contact.phone}
+                          </a>
+                          {contact.whatsapp && (
+                            <a
+                              href={`https://wa.me/${contact.whatsapp.replace(/[^0-9]/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200"
+                              title="WhatsApp"
+                            >
+                              <MessageCircle className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Extra info based on type */}
+                      {contact.type === 'accommodation' && contact.extra?.star_rating && (
+                        <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
+                          {Array.from({ length: parseInt(contact.extra.star_rating) }).map((_, i) => (
+                            <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                          ))}
+                        </div>
+                      )}
+
+                      {contact.type === 'guide' && contact.extra?.languages && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                          <Globe className="w-3.5 h-3.5" />
+                          {Array.isArray(contact.extra.languages) 
+                            ? contact.extra.languages.slice(0, 3).join(', ')
+                            : contact.extra.languages
+                          }
+                        </div>
+                      )}
+
+                      {contact.type === 'restaurant' && contact.extra?.cuisine_type && (
+                        <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                          🍽️ {contact.extra.cuisine_type}
+                        </div>
+                      )}
+
+                      {contact.type === 'transportation' && contact.extra?.vehicle_type && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                          <Car className="w-3.5 h-3.5" />
+                          {contact.extra.vehicle_type}
+                          {contact.extra.capacity && ` • ${contact.extra.capacity} pax`}
+                        </div>
+                      )}
+
+                      {contact.type === 'staff' && contact.city && (
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                          <MapPin className="w-3.5 h-3.5" />
+                          {contact.city}
                         </div>
                       )}
                     </div>
-                  </div>
+                  )
+                })}
+              </div>
+            )}
 
-                  {contact.contact_person && contact.contact_person !== contact.name && (
-                    <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-                      <Users className="w-3.5 h-3.5 text-gray-400" />
-                      {contact.contact_person}
-                    </div>
-                  )}
+            {/* TABLE VIEW */}
+            {viewMode === 'table' && (
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="text-left px-4 py-3">
+                          <button 
+                            onClick={() => handleSort('name')}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                          >
+                            Name
+                            <SortIcon field="name" />
+                          </button>
+                        </th>
+                        <th className="text-left px-4 py-3">
+                          <button 
+                            onClick={() => handleSort('type')}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                          >
+                            Type
+                            <SortIcon field="type" />
+                          </button>
+                        </th>
+                        <th className="text-left px-4 py-3">
+                          <button 
+                            onClick={() => handleSort('city')}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                          >
+                            Location
+                            <SortIcon field="city" />
+                          </button>
+                        </th>
+                        <th className="text-left px-4 py-3">
+                          <button 
+                            onClick={() => handleSort('email')}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                          >
+                            Email
+                            <SortIcon field="email" />
+                          </button>
+                        </th>
+                        <th className="text-left px-4 py-3">
+                          <span className="text-xs font-semibold text-gray-600">Phone</span>
+                        </th>
+                        <th className="text-right px-4 py-3">
+                          <span className="text-xs font-semibold text-gray-600">Actions</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedContacts.map((contact) => {
+                        const config = TYPE_CONFIG[contact.type]
+                        const Icon = config.icon
+                        
+                        return (
+                          <tr 
+                            key={`${contact.type}-${contact.id}`}
+                            className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                            onClick={() => handleView(contact)}
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-lg ${config.color} flex items-center justify-center flex-shrink-0`}>
+                                  <Icon className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{contact.name}</p>
+                                  {contact.subtype && (
+                                    <p className="text-xs text-gray-500 truncate">{contact.subtype}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${config.color}`}>
+                                {config.singular}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm text-gray-600">{contact.city || '—'}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {contact.email ? (
+                                <a 
+                                  href={`mailto:${contact.email}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-sm text-primary-600 hover:underline truncate block max-w-[200px]"
+                                >
+                                  {contact.email}
+                                </a>
+                              ) : (
+                                <span className="text-sm text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                {contact.phone ? (
+                                  <>
+                                    <a 
+                                      href={`tel:${contact.phone}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-sm text-gray-600 hover:text-primary-600"
+                                    >
+                                      {contact.phone}
+                                    </a>
+                                    {contact.whatsapp && (
+                                      <a
+                                        href={`https://wa.me/${contact.whatsapp.replace(/[^0-9]/g, '')}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200"
+                                        title="WhatsApp"
+                                      >
+                                        <MessageCircle className="w-3 h-3" />
+                                      </a>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-gray-400">—</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleEdit(contact) }}
+                                  className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }}
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
-                  {contact.email && (
-                    <a 
-                      href={`mailto:${contact.email}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-2 text-xs text-gray-600 hover:text-primary-600 mb-2"
+            {/* LIST VIEW */}
+            {viewMode === 'list' && (
+              <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
+                {paginatedContacts.map((contact) => {
+                  const config = TYPE_CONFIG[contact.type]
+                  const Icon = config.icon
+                  
+                  return (
+                    <div 
+                      key={`${contact.type}-${contact.id}`}
+                      className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 cursor-pointer group"
+                      onClick={() => handleView(contact)}
                     >
-                      <Mail className="w-3.5 h-3.5 text-gray-400" />
-                      {contact.email}
-                    </a>
-                  )}
-
-                  {contact.phone && (
-                    <div className="flex items-center gap-3">
-                      <a 
-                        href={`tel:${contact.phone}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-2 text-xs text-gray-600 hover:text-primary-600"
-                      >
-                        <Phone className="w-3.5 h-3.5 text-gray-400" />
-                        {contact.phone}
-                      </a>
-                      {contact.whatsapp && (
-                        <a
-                          href={`https://wa.me/${contact.whatsapp.replace(/[^0-9]/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200"
-                          title="WhatsApp"
+                      <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-4 gap-1 sm:gap-4">
+                        <div className="sm:col-span-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">{contact.name}</p>
+                          <p className="text-xs text-gray-500">{contact.subtype}</p>
+                        </div>
+                        
+                        <div className="sm:col-span-1 hidden sm:block">
+                          {contact.city && (
+                            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                              <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                              <span className="truncate">{contact.city}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="sm:col-span-1 hidden sm:block">
+                          {contact.email && (
+                            <a 
+                              href={`mailto:${contact.email}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-primary-600"
+                            >
+                              <Mail className="w-3.5 h-3.5 text-gray-400" />
+                              <span className="truncate">{contact.email}</span>
+                            </a>
+                          )}
+                        </div>
+                        
+                        <div className="sm:col-span-1 hidden sm:block">
+                          {contact.phone && (
+                            <div className="flex items-center gap-2">
+                              <a 
+                                href={`tel:${contact.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-primary-600"
+                              >
+                                <Phone className="w-3.5 h-3.5 text-gray-400" />
+                                <span>{contact.phone}</span>
+                              </a>
+                              {contact.whatsapp && (
+                                <a
+                                  href={`https://wa.me/${contact.whatsapp.replace(/[^0-9]/g, '')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1 bg-green-100 text-green-600 rounded hover:bg-green-200"
+                                  title="WhatsApp"
+                                >
+                                  <MessageCircle className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleEdit(contact) }}
+                          className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                          title="Edit"
                         >
-                          <MessageCircle className="w-3 h-3" />
-                        </a>
-                      )}
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  )}
+                  )
+                })}
+              </div>
+            )}
 
-                  {/* Extra info based on type */}
-                  {contact.type === 'hotel' && contact.extra?.star_rating && (
-                    <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-100">
-                      {Array.from({ length: parseInt(contact.extra.star_rating) }).map((_, i) => (
-                        <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+            {/* Pagination Controls */}
+            {totalPages > 0 && (
+              <div className="mt-6 flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
+                {/* Results info */}
+                <p className="text-sm text-gray-600 whitespace-nowrap">
+                  Showing <span className="font-medium">{startIndex + 1}</span>–<span className="font-medium">{Math.min(endIndex, filteredContacts.length)}</span> of{' '}
+                  <span className="font-medium">{filteredContacts.length}</span>
+                </p>
+                
+                {/* Right side: pagination + per page */}
+                <div className="flex items-center gap-4">
+                
+                {/* Pagination buttons */}
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    {/* First */}
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      title="First page"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Previous */}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      title="Previous page"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Page numbers */}
+                    <div className="flex items-center gap-1 mx-1">
+                      {getPageNumbers().map((page, index) => (
+                        page === '...' ? (
+                          <span key={`ellipsis-${index}`} className="px-2 text-gray-400">...</span>
+                        ) : (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page as number)}
+                            className={`min-w-[32px] h-8 px-2 text-sm font-medium rounded-lg transition-colors ${
+                              currentPage === page
+                                ? 'bg-primary-600 text-white'
+                                : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        )
                       ))}
                     </div>
-                  )}
-
-                  {contact.type === 'guide' && contact.extra?.languages && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                      <Globe className="w-3.5 h-3.5" />
-                      {Array.isArray(contact.extra.languages) 
-                        ? contact.extra.languages.slice(0, 3).join(', ')
-                        : contact.extra.languages
-                      }
-                    </div>
-                  )}
-
-                  {contact.type === 'restaurant' && contact.extra?.cuisine_type && (
-                    <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                      🍽️ {contact.extra.cuisine_type}
-                    </div>
-                  )}
-
-                  {contact.type === 'airport_staff' && contact.city && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                      <MapPin className="w-3.5 h-3.5" />
-                      {contact.city}
-                    </div>
-                  )}
+                    
+                    {/* Next */}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      title="Next page"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Last */}
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      title="Last page"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Quick jump */}
+                    {totalPages > 5 && (
+                      <div className="flex items-center gap-2 ml-3 pl-3 border-l border-gray-200">
+                        <span className="text-sm text-gray-500">Go to:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={totalPages}
+                          value={currentPage}
+                          onChange={(e) => {
+                            const page = parseInt(e.target.value)
+                            if (page >= 1 && page <= totalPages) {
+                              setCurrentPage(page)
+                            }
+                          }}
+                          className="w-16 h-8 px-2 text-sm text-center border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Per page selector */}
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="h-8 w-24 px-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white text-gray-600"
+                >
+                  <option value={12}>12 / page</option>
+                  <option value={24}>24 / page</option>
+                  <option value={48}>48 / page</option>
+                  <option value={96}>96 / page</option>
+                </select>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -829,18 +1437,18 @@ export default function ContactsPage() {
         />
       )}
 
-      {/* Add Contact Modal */}
+      {/* Add Contact Modal - WIDER */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-base font-semibold text-gray-900">Add New Contact</h3>
               <button onClick={() => setShowAddModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
             
-            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+            <div className="p-6 overflow-y-auto flex-1 space-y-5">
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -851,7 +1459,7 @@ export default function ContactsPage() {
               {/* Contact Type Selector */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Contact Type</label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-6 gap-2">
                   {Object.entries(TYPE_CONFIG).map(([key, config]) => (
                     <button
                       key={key}
@@ -859,24 +1467,24 @@ export default function ContactsPage() {
                         setNewContactType(key as ContactType)
                         setFormData({})
                       }}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors ${
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-colors ${
                         newContactType === key 
                           ? `${config.color} ${config.borderColor}` 
                           : 'border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      <config.icon className="w-4 h-4" />
-                      <span className="text-[10px] font-medium">{config.singular}</span>
+                      <config.icon className="w-5 h-5" />
+                      <span className="text-[10px] font-medium text-center leading-tight">{config.singular}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Dynamic Form Fields */}
-              <div className="space-y-3">
+              {/* Dynamic Form Fields - 2 columns */}
+              <div className="grid grid-cols-2 gap-4">
                 {FORM_FIELDS[newContactType].map(field => (
-                  <div key={field.key}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <div key={field.key} className={field.type === 'textarea' ? 'col-span-2' : ''}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
                       {field.name}
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </label>
@@ -886,7 +1494,7 @@ export default function ContactsPage() {
               </div>
             </div>
             
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
                 onClick={() => setShowAddModal(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
@@ -906,11 +1514,11 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {/* Edit Contact Modal */}
+      {/* Edit Contact Modal - WIDER */}
       {showEditModal && selectedContact && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-lg ${TYPE_CONFIG[selectedContact.type].color} flex items-center justify-center`}>
                   {(() => {
@@ -925,7 +1533,7 @@ export default function ContactsPage() {
               </button>
             </div>
             
-            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+            <div className="p-6 overflow-y-auto flex-1 space-y-5">
               {error && (
                 <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -933,11 +1541,11 @@ export default function ContactsPage() {
                 </div>
               )}
 
-              {/* Dynamic Form Fields */}
-              <div className="space-y-3">
+              {/* Dynamic Form Fields - 2 columns */}
+              <div className="grid grid-cols-2 gap-4">
                 {FORM_FIELDS[selectedContact.type].map(field => (
-                  <div key={field.key}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <div key={field.key} className={field.type === 'textarea' ? 'col-span-2' : ''}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
                       {field.name}
                       {field.required && <span className="text-red-500 ml-1">*</span>}
                     </label>
@@ -947,7 +1555,7 @@ export default function ContactsPage() {
               </div>
             </div>
             
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
                 onClick={() => setShowEditModal(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
@@ -1066,7 +1674,7 @@ export default function ContactsPage() {
                 )}
 
                 {/* Type-specific info */}
-                {selectedContact.type === 'hotel' && selectedContact.extra?.star_rating && (
+                {selectedContact.type === 'accommodation' && selectedContact.extra?.star_rating && (
                   <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                     <Star className="w-4 h-4 text-gray-400" />
                     <div>
@@ -1106,6 +1714,32 @@ export default function ContactsPage() {
                             {selectedContact.extra?.daily_rate && selectedContact.extra?.hourly_rate && ' • '}
                             {selectedContact.extra?.hourly_rate && `${selectedContact.extra.hourly_rate}/hour`}
                           </p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedContact.type === 'transportation' && (
+                  <>
+                    {selectedContact.extra?.vehicle_type && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <Car className="w-4 h-4 text-gray-400" />
+                        <div>
+                          <p className="text-xs text-gray-500">Vehicle</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {selectedContact.extra.vehicle_type}
+                            {selectedContact.extra?.capacity && ` • ${selectedContact.extra.capacity} pax capacity`}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedContact.extra?.daily_rate && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <span className="text-gray-400 text-sm">💰</span>
+                        <div>
+                          <p className="text-xs text-gray-500">Daily Rate</p>
+                          <p className="text-sm font-medium text-gray-900">{selectedContact.extra.daily_rate}</p>
                         </div>
                       </div>
                     )}
@@ -1236,8 +1870,8 @@ interface ImportResult {
 }
 
 const IMPORT_FIELDS: Record<ContactType, ImportField[]> = {
-  hotel: [
-    { key: 'name', label: 'Hotel Name', required: true, type: 'text' },
+  accommodation: [
+    { key: 'name', label: 'Property Name', required: true, type: 'text' },
     { key: 'property_type', label: 'Property Type', required: false, type: 'text' },
     { key: 'star_rating', label: 'Star Rating', required: false, type: 'number' },
     { key: 'city', label: 'City', required: false, type: 'text' },
@@ -1272,10 +1906,23 @@ const IMPORT_FIELDS: Record<ContactType, ImportField[]> = {
     { key: 'capacity', label: 'Capacity', required: false, type: 'number' },
     { key: 'notes', label: 'Notes', required: false, type: 'text' },
   ],
-  airport_staff: [
+  transportation: [
+    { key: 'name', label: 'Company/Driver Name', required: true, type: 'text' },
+    { key: 'service_type', label: 'Service Type', required: false, type: 'text' },
+    { key: 'vehicle_type', label: 'Vehicle Type', required: false, type: 'text' },
+    { key: 'city', label: 'City/Region', required: false, type: 'text' },
+    { key: 'contact_person', label: 'Contact Person', required: false, type: 'text' },
+    { key: 'email', label: 'Email', required: false, type: 'email' },
+    { key: 'phone', label: 'Phone', required: false, type: 'text' },
+    { key: 'whatsapp', label: 'WhatsApp', required: false, type: 'text' },
+    { key: 'capacity', label: 'Capacity', required: false, type: 'number' },
+    { key: 'daily_rate', label: 'Daily Rate', required: false, type: 'number' },
+    { key: 'notes', label: 'Notes', required: false, type: 'text' },
+  ],
+  staff: [
     { key: 'name', label: 'Full Name', required: true, type: 'text' },
     { key: 'role', label: 'Role', required: false, type: 'text' },
-    { key: 'airport_location', label: 'Airport Location', required: false, type: 'text' },
+    { key: 'airport_location', label: 'Location', required: false, type: 'text' },
     { key: 'email', label: 'Email', required: false, type: 'email' },
     { key: 'phone', label: 'Phone', required: false, type: 'text' },
     { key: 'whatsapp', label: 'WhatsApp', required: false, type: 'text' },
@@ -1296,10 +1943,11 @@ const IMPORT_FIELDS: Record<ContactType, ImportField[]> = {
 }
 
 const IMPORT_TYPE_CONFIG: Record<ContactType, { icon: any; label: string; color: string }> = {
-  hotel: { icon: Building2, label: 'Hotels', color: 'bg-blue-100 text-blue-700' },
+  accommodation: { icon: Building2, label: 'Accommodation', color: 'bg-blue-100 text-blue-700' },
   guide: { icon: Compass, label: 'Tour Guides', color: 'bg-green-100 text-green-700' },
   restaurant: { icon: Utensils, label: 'Restaurants', color: 'bg-orange-100 text-orange-700' },
-  airport_staff: { icon: Plane, label: 'Airport Staff', color: 'bg-purple-100 text-purple-700' },
+  transportation: { icon: Car, label: 'Transportation', color: 'bg-cyan-100 text-cyan-700' },
+  staff: { icon: UserCog, label: 'Staff', color: 'bg-purple-100 text-purple-700' },
   client: { icon: Users, label: 'Clients', color: 'bg-primary-100 text-primary-700' },
 }
 
@@ -1314,7 +1962,7 @@ function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModa
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   const [step, setStep] = useState<'type' | 'upload' | 'mapping' | 'preview' | 'result'>('type')
-  const [contactType, setContactType] = useState<ContactType>('hotel')
+  const [contactType, setContactType] = useState<ContactType>('accommodation')
   const [file, setFile] = useState<File | null>(null)
   const [csvData, setCsvData] = useState<string[][]>([])
   const [csvHeaders, setCsvHeaders] = useState<string[]>([])
@@ -1695,7 +2343,7 @@ function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModa
                     <select
                       value={columnMapping[field.key] || ''}
                       onChange={(e) => setColumnMapping(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      className="flex-1 h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+                      className="flex-1 h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
                     >
                       <option value="">-- Skip this field --</option>
                       {csvHeaders.map((header, index) => (

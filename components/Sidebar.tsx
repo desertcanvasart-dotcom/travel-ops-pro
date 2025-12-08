@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -10,6 +10,7 @@ import {
   DollarSign,
   Settings,
   ChevronRight,
+  ChevronDown,
   MessageSquare,
   FileText,
   MapPin,
@@ -37,7 +38,15 @@ import {
   BarChart3,
   CreditCard,
   Bell,
-  LayoutTemplate
+  LayoutTemplate,
+  ConciergeBell,
+  Train,
+  BedDouble,
+  Ship,
+  Building2,
+  Compass,
+  Car,
+  UserCog
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -45,10 +54,17 @@ interface SidebarProps {
   setIsCollapsed: (collapsed: boolean) => void
 }
 
+interface NavSubItem {
+  label: string
+  href: string
+  icon?: any
+}
+
 interface NavItem {
   label: string
   href: string
   icon: any
+  children?: NavSubItem[]
 }
 
 interface NavSection {
@@ -69,7 +85,19 @@ const navigation: NavSection[] = [
     items: [
       { label: 'All Clients', href: '/clients', icon: Users },
       { label: 'Add Client', href: '/clients/new', icon: UserPlus },
-      { label: 'Contacts', href: '/contacts', icon: Contact },
+      { 
+        label: 'Contacts', 
+        href: '/contacts', 
+        icon: Contact,
+        children: [
+          { label: 'All Contacts', href: '/contacts' },
+          { label: 'Accommodation', href: '/contacts?type=accommodation', icon: Building2 },
+          { label: 'Tour Guides', href: '/contacts?type=guide', icon: Compass },
+          { label: 'Restaurants', href: '/contacts?type=restaurant', icon: UtensilsCrossed },
+          { label: 'Transportation', href: '/contacts?type=transportation', icon: Car },
+          { label: 'Staff', href: '/contacts?type=staff', icon: UserCog },
+        ]
+      },
       { label: 'Follow-ups', href: '/followups', icon: CheckSquare },
     ]
   },
@@ -83,7 +111,6 @@ const navigation: NavSection[] = [
       { label: 'Itineraries', href: '/itineraries', icon: FileText },
       { label: 'Packages', href: '/tours', icon: Library },
       { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
-      
     ]
   },
   {
@@ -107,17 +134,20 @@ const navigation: NavSection[] = [
     ]
   },
   {
-    title: 'Operations',
+    title: 'Rates Management',
     items: [
-      { label: 'Resources', href: '/resources', icon: Box },
+      { label: 'Hotels', href: '/hotels', icon: Hotel },
+      { label: 'Nile Cruises', href: '/rates/cruises', icon: Ship },
+      { label: 'Sleeping Trains', href: '/rates/sleeping-train', icon: BedDouble },
+      { label: 'Trains', href: '/rates/trains', icon: Train },
+      { label: 'Restaurants', href: '/restaurants', icon: UtensilsCrossed },
+      { label: 'Attractions', href: '/attractions', icon: Ticket },
       { label: 'Tour Guides', href: '/guides', icon: Users },       
       { label: 'Transportation', href: '/transportation', icon: Truck },
-      { label: 'Attractions', href: '/attractions', icon: Ticket },
-      { label: 'Hotels', href: '/hotels', icon: Hotel },
-      { label: 'Restaurants', href: '/restaurants', icon: UtensilsCrossed },
-      { label: 'Airport Staff', href: '/airport-staff', icon: Plane },
-      { label: 'Hotel Staff', href: '/hotel-staff', icon: BellRing },
-      { label: 'Rates Management', href: '/rates', icon: Coins },
+      { label: 'Airport Services', href: '/rates/airport-services', icon: Plane },
+      { label: 'Hotel Services', href: '/rates/hotel-services', icon: ConciergeBell },
+      { label: 'Tipping', href: '/rates/tipping', icon: DollarSign },
+      { label: 'Rates Hub', href: '/rates', icon: Coins },
     ]
   },
   {
@@ -129,11 +159,50 @@ const navigation: NavSection[] = [
   }
 ]
 
-// ... rest of the component stays the same
 export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(['Contacts'])
+  const [currentUrl, setCurrentUrl] = useState('')
   const { profile, signOut } = useAuth()
+
+  // Get full URL on client side only
+  useEffect(() => {
+    setCurrentUrl(window.location.href)
+  }, [pathname])
+
+  // Auto-expand menu if on contacts page
+  useEffect(() => {
+    if (pathname === '/contacts') {
+      setExpandedMenus(prev => prev.includes('Contacts') ? prev : [...prev, 'Contacts'])
+    }
+  }, [pathname])
+
+  const toggleMenu = (label: string) => {
+    setExpandedMenus(prev => 
+      prev.includes(label) 
+        ? prev.filter(l => l !== label)
+        : [...prev, label]
+    )
+  }
+
+  // Check if a child link is active (works with query params on client)
+  const isChildActive = (childHref: string): boolean => {
+    if (!currentUrl) return false
+    
+    // For "All Contacts" - active when on /contacts with no type param
+    if (childHref === '/contacts') {
+      return pathname === '/contacts' && !currentUrl.includes('type=')
+    }
+    
+    // For type-specific links, check if URL contains the type param
+    const typeMatch = childHref.match(/type=(\w+)/)
+    if (typeMatch) {
+      return currentUrl.includes(`type=${typeMatch[1]}`)
+    }
+    
+    return false
+  }
 
   const handleSignOut = async () => {
     try {
@@ -222,9 +291,82 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const Icon = item.icon
-                  const isActive = pathname === item.href || 
-                    (item.href !== '/dashboard' && pathname.startsWith(item.href))
+                  const hasChildren = item.children && item.children.length > 0
+                  const isExpanded = expandedMenus.includes(item.label)
+                  
+                  // Check active state
+                  const isOnContactsPage = pathname === '/contacts'
+                  const isActive = hasChildren 
+                    ? isOnContactsPage
+                    : pathname === item.href || 
+                      (item.href !== '/dashboard' && pathname.startsWith(item.href))
 
+                  // For items with children (collapsible)
+                  if (hasChildren && !isCollapsed) {
+                    return (
+                      <div key={item.label}>
+                        {/* Parent item - clickable to expand/collapse */}
+                        <button
+                          onClick={() => toggleMenu(item.label)}
+                          className={`
+                            flex items-center gap-2.5 px-2 py-1.5 rounded-md w-full
+                            transition-all duration-150 text-sm
+                            ${isActive
+                              ? 'bg-primary-50 text-primary-700 font-medium'
+                              : 'text-gray-700 hover:bg-gray-50'
+                            }
+                          `}
+                        >
+                          <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
+                          <span className="text-[13px] flex-1 text-left">{item.label}</span>
+                          <ChevronDown 
+                            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180' : ''
+                            }`} 
+                          />
+                        </button>
+                        
+                        {/* Children */}
+                        <div className={`
+                          overflow-hidden transition-all duration-200 ease-in-out
+                          ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
+                        `}>
+                          <div className="ml-4 pl-2.5 border-l border-gray-200 mt-1 space-y-0.5">
+                            {item.children!.map((child) => {
+                              const ChildIcon = child.icon
+                              const isChildItemActive = isChildActive(child.href)
+                              
+                              return (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={() => setIsMobileOpen(false)}
+                                  className={`
+                                    flex items-center gap-2 px-2 py-1.5 rounded-md
+                                    transition-all duration-150 text-sm
+                                    ${isChildItemActive
+                                      ? 'bg-primary-50 text-primary-700 font-medium'
+                                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                    }
+                                  `}
+                                >
+                                  {ChildIcon && (
+                                    <ChildIcon className={`w-4 h-4 flex-shrink-0 ${isChildItemActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                                  )}
+                                  <span className="text-[12px]">{child.label}</span>
+                                  {isChildItemActive && (
+                                    <div className="ml-auto w-1 h-1 rounded-full bg-primary-600" />
+                                  )}
+                                </Link>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // Regular items (no children) or collapsed sidebar
                   return (
                     <Link
                       key={item.href}
