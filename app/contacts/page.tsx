@@ -138,8 +138,6 @@ const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string
     { name: 'Phone', key: 'phone', type: 'tel' },
     { name: 'Languages', key: 'languages', type: 'text' },
     { name: 'Specialties', key: 'specialties', type: 'text' },
-    { name: 'Daily Rate', key: 'daily_rate', type: 'number' },
-    { name: 'Hourly Rate', key: 'hourly_rate', type: 'number' },
     { name: 'Address', key: 'address', type: 'textarea' },
     { name: 'Notes', key: 'notes', type: 'textarea' },
   ],
@@ -166,7 +164,6 @@ const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string
     { name: 'Phone', key: 'phone', type: 'tel' },
     { name: 'WhatsApp', key: 'whatsapp', type: 'tel' },
     { name: 'Capacity', key: 'capacity', type: 'number' },
-    { name: 'Daily Rate', key: 'daily_rate', type: 'number' },
     { name: 'Notes', key: 'notes', type: 'textarea' },
   ],
   staff: [
@@ -326,7 +323,7 @@ export default function ContactsPage() {
           whatsapp: g.phone,
           address: g.address,
           notes: g.notes,
-          extra: { languages: g.languages, specialties: g.specialties, daily_rate: g.daily_rate, hourly_rate: g.hourly_rate },
+          extra: { languages: g.languages, specialties: g.specialties },
           rawData: g
         })))
       }
@@ -375,7 +372,7 @@ export default function ContactsPage() {
           email: t.email,
           whatsapp: t.whatsapp,
           notes: t.notes,
-          extra: { vehicle_type: t.vehicle_type, capacity: t.capacity, daily_rate: t.daily_rate },
+          extra: { vehicle_type: t.vehicle_type, capacity: t.capacity },
           rawData: t
         })))
       }
@@ -1704,19 +1701,6 @@ export default function ContactsPage() {
                         </div>
                       </div>
                     )}
-                    {(selectedContact.extra?.daily_rate || selectedContact.extra?.hourly_rate) && (
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <span className="text-gray-400 text-sm">💰</span>
-                        <div>
-                          <p className="text-xs text-gray-500">Rates</p>
-                          <p className="text-sm font-medium text-gray-900">
-                            {selectedContact.extra?.daily_rate && `${selectedContact.extra.daily_rate}/day`}
-                            {selectedContact.extra?.daily_rate && selectedContact.extra?.hourly_rate && ' • '}
-                            {selectedContact.extra?.hourly_rate && `${selectedContact.extra.hourly_rate}/hour`}
-                          </p>
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
 
@@ -1731,15 +1715,6 @@ export default function ContactsPage() {
                             {selectedContact.extra.vehicle_type}
                             {selectedContact.extra?.capacity && ` • ${selectedContact.extra.capacity} pax capacity`}
                           </p>
-                        </div>
-                      </div>
-                    )}
-                    {selectedContact.extra?.daily_rate && (
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <span className="text-gray-400 text-sm">💰</span>
-                        <div>
-                          <p className="text-xs text-gray-500">Daily Rate</p>
-                          <p className="text-sm font-medium text-gray-900">{selectedContact.extra.daily_rate}</p>
                         </div>
                       </div>
                     )}
@@ -1888,8 +1863,6 @@ const IMPORT_FIELDS: Record<ContactType, ImportField[]> = {
     { key: 'phone', label: 'Phone', required: false, type: 'text' },
     { key: 'languages', label: 'Languages', required: false, type: 'array' },
     { key: 'specialties', label: 'Specialties', required: false, type: 'array' },
-    { key: 'daily_rate', label: 'Daily Rate', required: false, type: 'number' },
-    { key: 'hourly_rate', label: 'Hourly Rate', required: false, type: 'number' },
     { key: 'address', label: 'Address', required: false, type: 'text' },
     { key: 'notes', label: 'Notes', required: false, type: 'text' },
   ],
@@ -1916,7 +1889,6 @@ const IMPORT_FIELDS: Record<ContactType, ImportField[]> = {
     { key: 'phone', label: 'Phone', required: false, type: 'text' },
     { key: 'whatsapp', label: 'WhatsApp', required: false, type: 'text' },
     { key: 'capacity', label: 'Capacity', required: false, type: 'number' },
-    { key: 'daily_rate', label: 'Daily Rate', required: false, type: 'number' },
     { key: 'notes', label: 'Notes', required: false, type: 'text' },
   ],
   staff: [
@@ -2069,7 +2041,6 @@ function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModa
         case 'languages': return 'English, Arabic'
         case 'specialties': return 'Pyramids, Luxor'
         case 'star_rating': return '5'
-        case 'daily_rate': return '100'
         case 'status': return 'active'
         default: return ''
       }
