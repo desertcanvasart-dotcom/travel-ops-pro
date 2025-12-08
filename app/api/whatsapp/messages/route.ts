@@ -108,7 +108,8 @@ export async function POST(request: NextRequest) {
     const twilioMessage = await twilioClient.messages.create({
       body: message,
       from: TWILIO_WHATSAPP_NUMBER,
-      to: `whatsapp:${formattedPhone}`
+      to: `whatsapp:${formattedPhone}`,
+      statusCallback: `${process.env.NEXT_PUBLIC_APP_URL || "https://autoura.net"}/api/whatsapp/status-callback`
     })
 
     // Store in database

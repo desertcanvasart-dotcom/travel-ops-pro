@@ -212,33 +212,33 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className={labelClass}>Email Address *</label>
-                <div className="relative">
-                  <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className={`${inputClass} pl-9`}
-                    placeholder="john@example.com"
-                  />
-                </div>
-              </div>
+  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+    <Mail className="w-3.5 h-3.5" />
+    Email Address *
+  </label>
+  <input
+    type="email"
+    required
+    value={formData.email}
+    onChange={(e) => handleInputChange('email', e.target.value)}
+    className={inputClass}
+    placeholder="john@example.com"
+  />
+</div>
 
-              <div>
-                <label className={labelClass}>Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className={`${inputClass} pl-9`}
-                    placeholder="+1 234 567 8900"
-                  />
-                </div>
-              </div>
+<div>
+  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+    <Phone className="w-3.5 h-3.5" />
+    Phone Number
+  </label>
+  <input
+    type="tel"
+    value={formData.phone}
+    onChange={(e) => handleInputChange('phone', e.target.value)}
+    className={inputClass}
+    placeholder="+1 234 567 8900"
+  />
+</div>
 
               <div>
                 <label className={labelClass}>Alternative Phone</label>

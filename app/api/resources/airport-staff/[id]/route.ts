@@ -14,7 +14,7 @@ export async function GET(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
 
     const { data, error } = await supabase
       .from('airport_staff')
@@ -50,7 +50,7 @@ export async function PUT(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     const updateData: any = {}
@@ -111,7 +111,7 @@ export async function DELETE(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
 
     const { error } = await supabase
       .from('airport_staff')

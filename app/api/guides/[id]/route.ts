@@ -16,7 +16,7 @@ export async function GET(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     
     const { data: guide, error } = await supabase
       .from('guides')
@@ -61,7 +61,7 @@ export async function PUT(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     
     console.log('🔵 Updating guide:', { id, body }) // Debug log
@@ -147,7 +147,7 @@ export async function DELETE(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     
     // Check if guide has any assigned bookings
     const { data: bookings, error: bookingsError } = await supabase

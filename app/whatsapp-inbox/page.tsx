@@ -343,7 +343,7 @@ export default function WhatsAppInboxPage() {
                 <button
                   onClick={parseConversation}
                   disabled={messages.length === 0}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Sparkles className="w-4 h-4" />
                   Parse Conversation

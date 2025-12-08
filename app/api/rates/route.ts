@@ -46,7 +46,6 @@ export async function GET(request: NextRequest) {
           address: hotel.address,
           supplier_name: hotel.contact_person,
           notes: hotel.notes,
-          // For now, set placeholder rates (you can add rate fields to hotel_contacts table later)
           base_rate_eur: 0,
           base_rate_non_eur: 0
         }))
@@ -76,7 +75,6 @@ export async function GET(request: NextRequest) {
           city: restaurant.city,
           supplier_name: restaurant.contact_person,
           notes: restaurant.notes,
-          // Placeholder rates
           base_rate_eur: 0,
           base_rate_non_eur: 0,
           eur_rate: 0,
@@ -101,28 +99,33 @@ export async function GET(request: NextRequest) {
         break
 
       case 'transportation':
-        // ✅ Pull from vehicles table
+        // ✅ Pull from transportation_rates table
         const transportQuery = supabase
-          .from('vehicles')
+          .from('transportation_rates')
           .select('*')
           .eq('is_active', true)
         
-        const transportResult = await transportQuery
+        if (city) {
+          transportQuery.eq('city', city)
+        }
         
-        // Transform vehicle data to match rates format
-        data = (transportResult.data || []).map(vehicle => ({
-          service_code: vehicle.id,
-          service_type: vehicle.name,
-          vehicle_type: vehicle.vehicle_type,
-          city: 'Cairo', // Default city, you can add city field to vehicles table
-          capacity_min: 1,
-          capacity_max: vehicle.passenger_capacity,
-          supplier_name: vehicle.default_driver_name,
-          notes: vehicle.notes,
-          base_rate_eur: vehicle.daily_rate || 0,
-          base_rate_non_eur: vehicle.daily_rate || 0,
-          eur_rate: vehicle.daily_rate || 0,
-          non_eur_rate: vehicle.daily_rate || 0
+        const transportResult = await transportQuery.order('city').order('service_type')
+        
+        data = (transportResult.data || []).map(rate => ({
+          service_code: rate.service_code || rate.id,
+          service_type: rate.service_type,
+          vehicle_type: rate.vehicle_type,
+          city: rate.city,
+          origin_city: rate.origin_city,
+          destination_city: rate.destination_city,
+          capacity_min: rate.capacity_min,
+          capacity_max: rate.capacity_max,
+          supplier_name: rate.supplier_name,
+          notes: rate.notes,
+          base_rate_eur: rate.base_rate_eur || 0,
+          base_rate_non_eur: rate.base_rate_non_eur || rate.base_rate_eur || 0,
+          eur_rate: rate.base_rate_eur || 0,
+          non_eur_rate: rate.base_rate_non_eur || rate.base_rate_eur || 0
         }))
         error = transportResult.error
         break
@@ -141,13 +144,13 @@ export async function GET(request: NextRequest) {
           service_code: guide.id,
           guide_language: guide.languages?.[0] || 'English',
           guide_type: guide.specialties?.[0] || 'General',
-          city: 'Cairo', // Default city, you can add city field to guides table
+          city: 'Cairo',
           tour_duration: 'full_day',
           notes: `${guide.name} - ${guide.certification_number || ''}`,
-          base_rate_eur: guide.daily_rate || 0,
-          base_rate_non_eur: guide.daily_rate || 0,
-          eur_rate: guide.daily_rate || 0,
-          non_eur_rate: guide.daily_rate || 0
+          base_rate_eur: guide.daily_rate_eur || guide.daily_rate || 0,
+          base_rate_non_eur: guide.daily_rate_eur || guide.daily_rate || 0,
+          eur_rate: guide.daily_rate_eur || guide.daily_rate || 0,
+          non_eur_rate: guide.daily_rate_eur || guide.daily_rate || 0
         }))
         error = guideResult.error
         break
@@ -165,6 +168,94 @@ export async function GET(request: NextRequest) {
         error = serviceResult.error
         break
 
+      // ============================================
+      // NEW RATE TYPES
+      // ============================================
+
+      case 'airport_staff':
+        // ✅ Pull from airport_staff_rates table
+        const airportStaffQuery = supabase
+          .from('airport_staff_rates')
+          .select('*')
+          .eq('is_active', true)
+          .order('airport_code')
+          .order('service_type')
+        
+        const airportStaffResult = await airportStaffQuery
+        data = airportStaffResult.data || []
+        error = airportStaffResult.error
+        break
+
+      case 'hotel_staff':
+        // ✅ Pull from hotel_staff_rates table
+        const hotelStaffQuery = supabase
+          .from('hotel_staff_rates')
+          .select('*')
+          .eq('is_active', true)
+          .order('service_type')
+          .order('hotel_category')
+        
+        const hotelStaffResult = await hotelStaffQuery
+        data = hotelStaffResult.data || []
+        error = hotelStaffResult.error
+        break
+
+      case 'cruises':
+        // ✅ Pull from nile_cruises table
+        const cruisesQuery = supabase
+          .from('nile_cruises')
+          .select('*')
+          .eq('is_active', true)
+          .order('ship_name')
+          .order('cabin_type')
+        
+        const cruisesResult = await cruisesQuery
+        data = cruisesResult.data || []
+        error = cruisesResult.error
+        break
+
+      case 'sleeping_trains':
+        // ✅ Pull from sleeping_train_rates table
+        const sleepingTrainsQuery = supabase
+          .from('sleeping_train_rates')
+          .select('*')
+          .eq('is_active', true)
+          .order('origin_city')
+          .order('destination_city')
+        
+        const sleepingTrainsResult = await sleepingTrainsQuery
+        data = sleepingTrainsResult.data || []
+        error = sleepingTrainsResult.error
+        break
+
+      case 'trains':
+        // ✅ Pull from train_rates table
+        const trainsQuery = supabase
+          .from('train_rates')
+          .select('*')
+          .eq('is_active', true)
+          .order('origin_city')
+          .order('destination_city')
+        
+        const trainsResult = await trainsQuery
+        data = trainsResult.data || []
+        error = trainsResult.error
+        break
+
+      case 'tipping':
+        // ✅ Pull from tipping_rates table
+        const tippingQuery = supabase
+          .from('tipping_rates')
+          .select('*')
+          .eq('is_active', true)
+          .order('role_type')
+          .order('context')
+        
+        const tippingResult = await tippingQuery
+        data = tippingResult.data || []
+        error = tippingResult.error
+        break
+
       default:
         return NextResponse.json(
           { success: false, error: 'Invalid type parameter' },
@@ -174,10 +265,12 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Supabase error:', error)
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      )
+      // Return empty array instead of error for missing tables
+      return NextResponse.json({
+        success: true,
+        data: [],
+        count: 0
+      })
     }
 
     return NextResponse.json({

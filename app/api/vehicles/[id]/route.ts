@@ -16,7 +16,7 @@ export async function GET(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     
     const { data: vehicle, error } = await supabase
       .from('vehicles')
@@ -61,7 +61,7 @@ export async function PUT(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     
     // Prepare update data (only include provided fields)
@@ -151,7 +151,7 @@ export async function DELETE(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     
     // Check if vehicle has any assigned bookings
     const { data: bookings, error: bookingsError } = await supabase

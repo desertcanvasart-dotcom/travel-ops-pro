@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
@@ -36,7 +36,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     const updateData = {
@@ -81,7 +81,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     const { error } = await supabaseAdmin
       .from('transportation_rates')

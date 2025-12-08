@@ -116,7 +116,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50/50">
-      {/* ⭐ CLEAN HEADER - White with subtle border */}
+      {/* CLEAN HEADER */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
@@ -139,9 +139,9 @@ export default function ProfilePage() {
       <div className="p-6">
         <div className="max-w-4xl mx-auto space-y-4">
           
-          {/* ⭐ PROFILE CARD - White with shadow */}
+          {/* PROFILE CARD */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            {/* Avatar Section - Light gray background */}
+            {/* Avatar Section */}
             <div className="bg-gray-50 border-b border-gray-200 p-5">
               <div className="flex items-center gap-4">
                 <div className="relative">
@@ -171,7 +171,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ⭐ COMPACT TABS */}
+            {/* COMPACT TABS */}
             <div className="border-b border-gray-200">
               <div className="flex">
                 <button
@@ -199,7 +199,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ⭐ TAB CONTENT */}
+            {/* TAB CONTENT */}
             <div className="p-5">
               {activeTab === 'profile' && (
                 <form onSubmit={handleSaveProfile}>
@@ -223,31 +223,31 @@ export default function ProfilePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Email Address *</label>
-                          <div className="relative">
-                            <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="email"
-                              name="email"
-                              value={profileData.email}
-                              onChange={handleProfileChange}
-                              required
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                            />
-                          </div>
+                          <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                            <Mail className="w-3.5 h-3.5" />
+                            Email Address *
+                          </label>
+                          <input
+                            type="email"
+                            name="email"
+                            value={profileData.email}
+                            onChange={handleProfileChange}
+                            required
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                          />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
-                          <div className="relative">
-                            <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="tel"
-                              name="phone"
-                              value={profileData.phone}
-                              onChange={handleProfileChange}
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                            />
-                          </div>
+                          <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            Phone Number
+                          </label>
+                          <input
+                            type="tel"
+                            name="phone"
+                            value={profileData.phone}
+                            onChange={handleProfileChange}
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                          />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
@@ -280,17 +280,17 @@ export default function ProfilePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Website</label>
-                          <div className="relative">
-                            <Globe className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="url"
-                              name="website"
-                              value={profileData.website}
-                              onChange={handleProfileChange}
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                            />
-                          </div>
+                          <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                            <Globe className="w-3.5 h-3.5" />
+                            Website
+                          </label>
+                          <input
+                            type="url"
+                            name="website"
+                            value={profileData.website}
+                            onChange={handleProfileChange}
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                          />
                         </div>
                         <div className="md:col-span-2">
                           <label className="block text-xs font-medium text-gray-600 mb-1">Address</label>
@@ -303,17 +303,17 @@ export default function ProfilePage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
-                          <div className="relative">
-                            <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                              type="text"
-                              name="city"
-                              value={profileData.city}
-                              onChange={handleProfileChange}
-                              className="w-full h-9 pl-9 pr-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                            />
-                          </div>
+                          <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                            <MapPin className="w-3.5 h-3.5" />
+                            City
+                          </label>
+                          <input
+                            type="text"
+                            name="city"
+                            value={profileData.city}
+                            onChange={handleProfileChange}
+                            className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                          />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Country</label>
@@ -409,7 +409,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* ⭐ BOTTOM CARDS - White with shadow */}
+          {/* BOTTOM CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Account Activity */}
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
@@ -456,7 +456,7 @@ export default function ProfilePage() {
                     <p className="text-[10px] text-gray-400">Manage tour schedules</p>
                   </div>
                 </Link>
-                <Link href="/resources" className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-50 transition-colors group">
+                <Link href="/rates" className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-50 transition-colors group">
                   <div className="w-8 h-8 bg-purple-50 rounded-md flex items-center justify-center group-hover:bg-purple-100 border border-purple-100">
                     <Building2 className="w-4 h-4 text-purple-600" />
                   </div>
@@ -469,7 +469,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* ⭐ DANGER ZONE - White with red accent border */}
+          {/* DANGER ZONE */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 border-l-4 border-l-red-500">
             <h3 className="text-sm font-semibold text-red-600 mb-3">Danger Zone</h3>
             <div className="space-y-3">

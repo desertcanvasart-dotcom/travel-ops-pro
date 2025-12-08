@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
 
     // Get template with category
     const { data: template, error: templateError } = await supabase
@@ -85,7 +85,7 @@ export async function PUT(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     const updateData: any = {}
@@ -165,7 +165,7 @@ export async function DELETE(
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
 
     // Check if template has any bookings/itineraries linked
     // (You might want to add this check based on your business rules)
