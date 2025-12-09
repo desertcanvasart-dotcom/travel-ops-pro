@@ -1,14 +1,14 @@
 // app/api/cruises/[id]/route.ts
 
 import { createClient } from '@/lib/supabase'
-import { NextRequest, NextResponse } from 'next'
+import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
     
     const { data, error } = await supabase
       .from('cruise_contacts')
