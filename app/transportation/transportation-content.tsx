@@ -20,7 +20,8 @@ interface TransportationRate {
   capacity_max: number
   city: string
   base_rate_eur: number
-  base_rate_non: number
+  base_rate_non: number        // Mapped from base_rate_non_eur by API
+  base_rate_non_eur?: number   // Actual database column
   season: string | null
   rate_valid_from: string
   rate_valid_to: string
@@ -71,6 +72,8 @@ const SERVICE_TYPES = [
   { value: 'multi_day', label: 'Multi-Day' },
   { value: 'city_transfer', label: 'City Transfer' },
   { value: 'intercity', label: 'Intercity' },
+  { value: 'half_day', label: 'Half Day' },
+  { value: 'sound_light', label: 'Sound & Light Transfer' },
 ]
 
 const VEHICLE_TYPES = [
@@ -83,7 +86,7 @@ const VEHICLE_TYPES = [
   { value: '4x4', label: '4x4', minPax: 1, maxPax: 6 },
 ]
 
-const CITIES = ['Cairo', 'Luxor', 'Aswan', 'Alexandria', 'Hurghada', 'Sharm El Sheikh', 'Dahab', 'Siwa', 'Marsa Alam']
+const CITIES = ['Cairo', 'Giza', 'Luxor', 'Aswan', 'Alexandria', 'Hurghada', 'Sharm El Sheikh', 'Dahab', 'Siwa', 'Marsa Alam']
 
 export default function TransportationContent() {
   const [rates, setRates] = useState<TransportationRate[]>([])
@@ -97,6 +100,7 @@ export default function TransportationContent() {
   const [editingRate, setEditingRate] = useState<TransportationRate | null>(null)
   const [formData, setFormData] = useState<FormData>(initialFormData)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchRates = useCallback(async () => {
     try {
@@ -123,6 +127,7 @@ export default function TransportationContent() {
   }, [fetchRates])
 
   const generateServiceCode = (city: string, serviceType: string, vehicleType: string) => {
+    if (!city) return ''
     const cityCode = city.toUpperCase().replace(/\s+/g, '-')
     const typeCode = serviceType.toUpperCase().replace(/_/g, '-')
     const vehicleCode = vehicleType.toUpperCase()
@@ -159,11 +164,13 @@ export default function TransportationContent() {
   const openAddModal = () => {
     setEditingRate(null)
     setFormData(initialFormData)
+    setError(null)
     setIsModalOpen(true)
   }
 
   const openEditModal = (rate: TransportationRate) => {
     setEditingRate(rate)
+    setError(null)
     setFormData({
       service_code: rate.service_code,
       service_type: rate.service_type,
@@ -172,7 +179,7 @@ export default function TransportationContent() {
       capacity_max: rate.capacity_max,
       city: rate.city,
       base_rate_eur: rate.base_rate_eur,
-      base_rate_non: rate.base_rate_non,
+      base_rate_non: rate.base_rate_non || rate.base_rate_non_eur || 0,
       season: rate.season || '',
       rate_valid_from: rate.rate_valid_from,
       rate_valid_to: rate.rate_valid_to,
@@ -186,6 +193,20 @@ export default function TransportationContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
+    setError(null)
+
+    // Validation
+    if (!formData.city) {
+      setError('Please select a city')
+      setSaving(false)
+      return
+    }
+
+    if (!formData.base_rate_eur || formData.base_rate_eur <= 0) {
+      setError('Please enter a valid EUR rate')
+      setSaving(false)
+      return
+    }
 
     try {
       const url = editingRate 
@@ -198,16 +219,17 @@ export default function TransportationContent() {
         body: JSON.stringify(formData)
       })
 
+      const result = await response.json()
+
       if (response.ok) {
         setIsModalOpen(false)
         fetchRates()
       } else {
-        const error = await response.json()
-        alert(error.error || 'Failed to save transportation rate')
+        setError(result.error || 'Failed to save transportation rate')
       }
     } catch (error) {
       console.error('Error saving transportation rate:', error)
-      alert('Failed to save transportation rate')
+      setError('Failed to save transportation rate. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -257,8 +279,8 @@ export default function TransportationContent() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
+    <div className="p-6 space-y-4">
+      {/* Header - Fixed with proper spacing */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Car className="h-5 w-5 text-blue-600" />
@@ -313,7 +335,7 @@ export default function TransportationContent() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
@@ -416,7 +438,7 @@ export default function TransportationContent() {
                     <span className="text-sm font-medium text-gray-900">{rate.vehicle_type}</span>
                   </td>
                   <td className="px-4 py-2">
-                    <span className="text-sm text-gray-600">{rate.capacity_min}-{rate.capacity_max} pax</span>
+                    <span className="text-sm text-gray-600">{rate.capacity_min || 1}-{rate.capacity_max} pax</span>
                   </td>
                   <td className="px-4 py-2">
                     <span className="text-sm text-gray-600">{rate.city}</span>
@@ -458,37 +480,44 @@ export default function TransportationContent() {
         </table>
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal - Fixed layout with better padding */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-900">
+            <div className="sticky top-0 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {editingRate ? 'Edit Transportation Rate' : 'Add Transportation Rate'}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-1"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+                  {error}
+                </div>
+              )}
+
               {/* Basic Info */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">Basic Information</h3>
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Basic Information</h3>
                 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       City <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formData.city}
                       onChange={(e) => handleCityChange(e.target.value)}
                       required
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">Select City</option>
                       {CITIES.map(city => (
@@ -498,14 +527,14 @@ export default function TransportationContent() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Service Type <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formData.service_type}
                       onChange={(e) => handleServiceTypeChange(e.target.value)}
                       required
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       {SERVICE_TYPES.map(type => (
                         <option key={type.value} value={type.value}>{type.label}</option>
@@ -514,16 +543,16 @@ export default function TransportationContent() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Vehicle Type <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formData.vehicle_type}
                       onChange={(e) => handleVehicleTypeChange(e.target.value)}
                       required
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       {VEHICLE_TYPES.map(type => (
                         <option key={type.value} value={type.value}>{type.label}</option>
@@ -532,7 +561,7 @@ export default function TransportationContent() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Service Code
                     </label>
                     <input
@@ -540,14 +569,14 @@ export default function TransportationContent() {
                       value={formData.service_code}
                       onChange={(e) => setFormData(prev => ({ ...prev, service_code: e.target.value }))}
                       placeholder="Auto-generated"
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Min Passengers
                     </label>
                     <input
@@ -555,12 +584,12 @@ export default function TransportationContent() {
                       value={formData.capacity_min}
                       onChange={(e) => setFormData(prev => ({ ...prev, capacity_min: parseInt(e.target.value) || 1 }))}
                       min="1"
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Max Passengers
                     </label>
                     <input
@@ -568,19 +597,19 @@ export default function TransportationContent() {
                       value={formData.capacity_max}
                       onChange={(e) => setFormData(prev => ({ ...prev, capacity_max: parseInt(e.target.value) || 2 }))}
                       min="1"
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Pricing */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">Pricing</h3>
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Pricing</h3>
                 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       EUR Rate <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
@@ -592,13 +621,13 @@ export default function TransportationContent() {
                         step="0.01"
                         min="0"
                         required
-                        className="w-full pl-7 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Non-EUR Rate
                     </label>
                     <div className="relative">
@@ -609,7 +638,7 @@ export default function TransportationContent() {
                         onChange={(e) => setFormData(prev => ({ ...prev, base_rate_non: parseFloat(e.target.value) || 0 }))}
                         step="0.01"
                         min="0"
-                        className="w-full pl-7 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       />
                     </div>
                   </div>
@@ -617,18 +646,18 @@ export default function TransportationContent() {
               </div>
 
               {/* Validity */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">Validity Period</h3>
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Validity Period</h3>
                 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Season
                     </label>
                     <select
                       value={formData.season}
                       onChange={(e) => setFormData(prev => ({ ...prev, season: e.target.value }))}
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">All Year</option>
                       <option value="high_season">High Season</option>
@@ -638,37 +667,37 @@ export default function TransportationContent() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Valid From
                     </label>
                     <input
                       type="date"
                       value={formData.rate_valid_from}
                       onChange={(e) => setFormData(prev => ({ ...prev, rate_valid_from: e.target.value }))}
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Valid To
                     </label>
                     <input
                       type="date"
                       value={formData.rate_valid_to}
                       onChange={(e) => setFormData(prev => ({ ...prev, rate_valid_to: e.target.value }))}
-                      className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Additional Info */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700">Additional Information</h3>
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Additional Information</h3>
                 
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
                     Supplier Name
                   </label>
                   <input
@@ -676,20 +705,20 @@ export default function TransportationContent() {
                     value={formData.supplier_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
                     placeholder="e.g., Cairo Cars Co."
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
                     Notes
                   </label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={2}
+                    rows={3}
                     placeholder="Any additional notes..."
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] resize-none"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] resize-none"
                   />
                 </div>
 
@@ -708,18 +737,18 @@ export default function TransportationContent() {
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-1.5 text-sm bg-[#647C47] text-white rounded-md hover:bg-[#4f6238] transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-md hover:bg-[#4f6238] transition-colors disabled:opacity-50 min-w-[100px]"
                 >
                   {saving ? 'Saving...' : editingRate ? 'Update Rate' : 'Add Rate'}
                 </button>
