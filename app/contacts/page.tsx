@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   Search, 
@@ -40,7 +40,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Ship  // Added Ship icon for cruises
 } from 'lucide-react'
 
 type ViewMode = 'grid' | 'table' | 'list'
@@ -50,7 +51,7 @@ type SortDirection = 'asc' | 'desc'
 // Types
 interface Contact {
   id: string
-  type: 'accommodation' | 'guide' | 'restaurant' | 'transportation' | 'staff' | 'client'
+  type: 'accommodation' | 'guide' | 'restaurant' | 'transportation' | 'cruise' | 'staff' | 'client'
   name: string
   subtype?: string
   city?: string
@@ -64,9 +65,9 @@ interface Contact {
   rawData?: any
 }
 
-type ContactType = 'accommodation' | 'guide' | 'restaurant' | 'transportation' | 'staff' | 'client'
+type ContactType = 'accommodation' | 'guide' | 'restaurant' | 'transportation' | 'cruise' | 'staff' | 'client'
 
-// Config
+// Config - Added cruise type
 const TYPE_CONFIG = {
   accommodation: { 
     icon: Building2, 
@@ -100,6 +101,14 @@ const TYPE_CONFIG = {
     borderColor: 'border-cyan-200',
     hoverColor: 'hover:bg-cyan-50'
   },
+  cruise: { 
+    icon: Ship, 
+    label: 'Nile Cruises', 
+    singular: 'Cruise',
+    color: 'bg-indigo-100 text-indigo-700',
+    borderColor: 'border-indigo-200',
+    hoverColor: 'hover:bg-indigo-50'
+  },
   staff: { 
     icon: UserCog, 
     label: 'Staff', 
@@ -118,11 +127,11 @@ const TYPE_CONFIG = {
   },
 }
 
-// Form field configurations for each type
+// Form field configurations for each type - Added cruise fields
 const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string; required?: boolean; options?: string[] }[]> = {
   accommodation: [
     { name: 'Property Name', key: 'name', type: 'text', required: true },
-    { name: 'Property Type', key: 'property_type', type: 'select', options: ['Hotel', 'Resort', 'Boutique Hotel', 'Guest House', 'Nile Cruise', 'Camp', 'Apartment', 'Villa'] },
+    { name: 'Property Type', key: 'property_type', type: 'select', options: ['Hotel', 'Resort', 'Boutique Hotel', 'Guest House', 'Camp', 'Apartment', 'Villa'] },
     { name: 'Star Rating', key: 'star_rating', type: 'select', options: ['1', '2', '3', '4', '5'] },
     { name: 'City', key: 'city', type: 'text' },
     { name: 'Address', key: 'address', type: 'textarea' },
@@ -166,6 +175,19 @@ const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string
     { name: 'Capacity', key: 'capacity', type: 'number' },
     { name: 'Notes', key: 'notes', type: 'textarea' },
   ],
+  cruise: [
+    { name: 'Cruise Line / Company', key: 'name', type: 'text', required: true },
+    { name: 'Ship Name', key: 'ship_name', type: 'text' },
+    { name: 'Cruise Type', key: 'cruise_type', type: 'select', options: ['3-Night', '4-Night', '7-Night', 'Dahabiya', 'Lake Nasser'] },
+    { name: 'Star Rating', key: 'star_rating', type: 'select', options: ['3', '4', '5', '5-Star Deluxe'] },
+    { name: 'Route', key: 'route', type: 'select', options: ['Luxor to Aswan', 'Aswan to Luxor', 'Round Trip', 'Lake Nasser'] },
+    { name: 'Number of Cabins', key: 'cabin_count', type: 'number' },
+    { name: 'Contact Person', key: 'contact_person', type: 'text' },
+    { name: 'Email', key: 'email', type: 'email' },
+    { name: 'Phone', key: 'phone', type: 'tel' },
+    { name: 'WhatsApp', key: 'whatsapp', type: 'tel' },
+    { name: 'Notes', key: 'notes', type: 'textarea' },
+  ],
   staff: [
     { name: 'Full Name', key: 'name', type: 'text', required: true },
     { name: 'Role', key: 'role', type: 'select', options: ['Meet & Greet', 'Transfer Coordinator', 'VIP Assistant', 'Luggage Handler', 'Driver', 'Hotel Rep', 'Tour Leader', 'Office Staff'] },
@@ -189,19 +211,21 @@ const FORM_FIELDS: Record<ContactType, { name: string; key: string; type: string
   ],
 }
 
-// Table name mapping
+// Table name mapping - Added cruise
 const TABLE_NAMES: Record<ContactType, string> = {
   accommodation: 'hotel_contacts',
   guide: 'guides',
   restaurant: 'restaurant_contacts',
   transportation: 'transportation_contacts',
+  cruise: 'cruise_contacts',
   staff: 'airport_staff',
   client: 'clients',
 }
 
 export default function ContactsPage() {
   const supabase = createClient()
-  const router = useRouter()
+const router = useRouter()
+const searchParams = useSearchParams()
   
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
@@ -217,31 +241,17 @@ export default function ContactsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(12)
 
-  // Read URL params on client side only (avoids hydration issues)
+  // Read URL params reactively
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const typeParam = params.get('type')
-    const validTypes = ['all', 'accommodation', 'guide', 'restaurant', 'transportation', 'staff', 'client']
+    const typeParam = searchParams.get('type')
+    const validTypes = ['all', 'accommodation', 'guide', 'restaurant', 'transportation', 'cruise', 'staff', 'client']
     if (typeParam && validTypes.includes(typeParam)) {
       setSelectedType(typeParam)
+    } else {
+      setSelectedType('all')
     }
-  }, [])
+  }, [searchParams])
 
-  // Listen for browser back/forward navigation
-  useEffect(() => {
-    const handlePopState = () => {
-      const params = new URLSearchParams(window.location.search)
-      const typeParam = params.get('type')
-      const validTypes = ['all', 'accommodation', 'guide', 'restaurant', 'transportation', 'staff', 'client']
-      if (typeParam && validTypes.includes(typeParam)) {
-        setSelectedType(typeParam)
-      } else {
-        setSelectedType('all')
-      }
-    }
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
 
   // Sync URL when type changes
   const handleTypeChange = (type: string) => {
@@ -374,6 +384,36 @@ export default function ContactsPage() {
           notes: t.notes,
           extra: { vehicle_type: t.vehicle_type, capacity: t.capacity },
           rawData: t
+        })))
+      }
+
+      // Fetch Nile Cruises
+      const { data: cruises } = await supabase
+        .from('cruise_contacts')
+        .select('*')
+        .eq('is_active', true)
+        .order('name')
+
+      if (cruises) {
+        allContacts.push(...cruises.map(c => ({
+          id: c.id,
+          type: 'cruise' as const,
+          name: c.name,
+          subtype: c.cruise_type,
+          city: c.route,  // Use route as city for display
+          contact_person: c.contact_person,
+          phone: c.phone,
+          email: c.email,
+          whatsapp: c.whatsapp,
+          address: c.address,
+          notes: c.notes,
+          extra: { 
+            ship_name: c.ship_name, 
+            star_rating: c.star_rating, 
+            route: c.route,
+            cabin_count: c.cabin_count 
+          },
+          rawData: c
         })))
       }
 
@@ -536,13 +576,14 @@ export default function ContactsPage() {
       : <ChevronDown className="w-3.5 h-3.5 text-primary-600" />
   }
 
-  // Stats
+  // Stats - Added cruise
   const stats = {
     all: contacts.length,
     accommodation: contacts.filter(c => c.type === 'accommodation').length,
     guide: contacts.filter(c => c.type === 'guide').length,
     restaurant: contacts.filter(c => c.type === 'restaurant').length,
     transportation: contacts.filter(c => c.type === 'transportation').length,
+    cruise: contacts.filter(c => c.type === 'cruise').length,
     staff: contacts.filter(c => c.type === 'staff').length,
     client: contacts.filter(c => c.type === 'client').length,
   }
@@ -1051,6 +1092,33 @@ export default function ContactsPage() {
                         </div>
                       )}
 
+                      {/* Cruise specific info */}
+                      {contact.type === 'cruise' && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+                          {contact.extra?.ship_name && (
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <Ship className="w-3.5 h-3.5" />
+                              {contact.extra.ship_name}
+                            </div>
+                          )}
+                          {contact.extra?.star_rating && (
+                            <div className="flex items-center gap-1">
+                              {Array.from({ length: parseInt(contact.extra.star_rating) || 0 }).map((_, i) => (
+                                <Star key={i} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                              ))}
+                              {contact.extra.star_rating === '5-Star Deluxe' && (
+                                <span className="text-xs text-yellow-600 ml-1">Deluxe</span>
+                              )}
+                            </div>
+                          )}
+                          {contact.extra?.cabin_count && (
+                            <div className="text-xs text-gray-500">
+                              {contact.extra.cabin_count} cabins
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {contact.type === 'staff' && contact.city && (
                         <div className="flex items-center gap-2 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
                           <MapPin className="w-3.5 h-3.5" />
@@ -1453,10 +1521,10 @@ export default function ContactsPage() {
                 </div>
               )}
 
-              {/* Contact Type Selector */}
+              {/* Contact Type Selector - Now 7 types */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Contact Type</label>
-                <div className="grid grid-cols-6 gap-2">
+                <div className="grid grid-cols-7 gap-2">
                   {Object.entries(TYPE_CONFIG).map(([key, config]) => (
                     <button
                       key={key}
@@ -1721,6 +1789,55 @@ export default function ContactsPage() {
                   </>
                 )}
 
+                {/* Cruise specific view details */}
+                {selectedContact.type === 'cruise' && (
+                  <>
+                    {selectedContact.extra?.ship_name && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <Ship className="w-4 h-4 text-gray-400" />
+                        <div>
+                          <p className="text-xs text-gray-500">Ship Name</p>
+                          <p className="text-sm font-medium text-gray-900">{selectedContact.extra.ship_name}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedContact.extra?.route && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <MapPin className="w-4 h-4 text-gray-400" />
+                        <div>
+                          <p className="text-xs text-gray-500">Route</p>
+                          <p className="text-sm font-medium text-gray-900">{selectedContact.extra.route}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedContact.extra?.star_rating && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <Star className="w-4 h-4 text-gray-400" />
+                        <div>
+                          <p className="text-xs text-gray-500">Rating</p>
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: parseInt(selectedContact.extra.star_rating) || 0 }).map((_, i) => (
+                              <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                            ))}
+                            {selectedContact.extra.star_rating === '5-Star Deluxe' && (
+                              <span className="text-xs text-yellow-600 ml-1">Deluxe</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {selectedContact.extra?.cabin_count && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <Building2 className="w-4 h-4 text-gray-400" />
+                        <div>
+                          <p className="text-xs text-gray-500">Cabins</p>
+                          <p className="text-sm font-medium text-gray-900">{selectedContact.extra.cabin_count} cabins</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {selectedContact.notes && (
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-500 mb-1">Notes</p>
@@ -1891,6 +2008,19 @@ const IMPORT_FIELDS: Record<ContactType, ImportField[]> = {
     { key: 'capacity', label: 'Capacity', required: false, type: 'number' },
     { key: 'notes', label: 'Notes', required: false, type: 'text' },
   ],
+  cruise: [
+    { key: 'name', label: 'Cruise Line / Company', required: true, type: 'text' },
+    { key: 'ship_name', label: 'Ship Name', required: false, type: 'text' },
+    { key: 'cruise_type', label: 'Cruise Type', required: false, type: 'text' },
+    { key: 'star_rating', label: 'Star Rating', required: false, type: 'text' },
+    { key: 'route', label: 'Route', required: false, type: 'text' },
+    { key: 'cabin_count', label: 'Number of Cabins', required: false, type: 'number' },
+    { key: 'contact_person', label: 'Contact Person', required: false, type: 'text' },
+    { key: 'email', label: 'Email', required: false, type: 'email' },
+    { key: 'phone', label: 'Phone', required: false, type: 'text' },
+    { key: 'whatsapp', label: 'WhatsApp', required: false, type: 'text' },
+    { key: 'notes', label: 'Notes', required: false, type: 'text' },
+  ],
   staff: [
     { key: 'name', label: 'Full Name', required: true, type: 'text' },
     { key: 'role', label: 'Role', required: false, type: 'text' },
@@ -1919,6 +2049,7 @@ const IMPORT_TYPE_CONFIG: Record<ContactType, { icon: any; label: string; color:
   guide: { icon: Compass, label: 'Tour Guides', color: 'bg-green-100 text-green-700' },
   restaurant: { icon: Utensils, label: 'Restaurants', color: 'bg-orange-100 text-orange-700' },
   transportation: { icon: Car, label: 'Transportation', color: 'bg-cyan-100 text-cyan-700' },
+  cruise: { icon: Ship, label: 'Nile Cruises', color: 'bg-indigo-100 text-indigo-700' },
   staff: { icon: UserCog, label: 'Staff', color: 'bg-purple-100 text-purple-700' },
   client: { icon: Users, label: 'Clients', color: 'bg-primary-100 text-primary-700' },
 }
@@ -2042,6 +2173,10 @@ function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModa
         case 'specialties': return 'Pyramids, Luxor'
         case 'star_rating': return '5'
         case 'status': return 'active'
+        case 'ship_name': return 'MS Sonesta Moon Goddess'
+        case 'cruise_type': return '4-Night'
+        case 'route': return 'Luxor to Aswan'
+        case 'cabin_count': return '57'
         default: return ''
       }
     })
@@ -2216,7 +2351,7 @@ function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModa
             <div className="space-y-4">
               <p className="text-sm text-gray-600">What type of contacts do you want to import?</p>
               
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {Object.entries(IMPORT_TYPE_CONFIG).map(([key, config]) => {
                   const Icon = config.icon
                   return (

@@ -91,7 +91,8 @@ const navigation: NavSection[] = [
         icon: Contact,
         children: [
           { label: 'All Contacts', href: '/contacts' },
-          { label: 'Accommodation', href: '/contacts?type=accommodation', icon: Building2 },
+          { label: 'Hotels & Lodges', href: '/contacts?type=accommodation', icon: Building2 },
+          { label: 'Nile Cruises', href: '/contacts?type=cruise', icon: Ship },
           { label: 'Tour Guides', href: '/contacts?type=guide', icon: Compass },
           { label: 'Restaurants', href: '/contacts?type=restaurant', icon: UtensilsCrossed },
           { label: 'Transportation', href: '/contacts?type=transportation', icon: Car },
