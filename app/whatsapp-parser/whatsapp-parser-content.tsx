@@ -479,18 +479,18 @@ Client: Maybe next month, around 10 days
                   <h2 className="text-base font-bold text-gray-900 mb-3">Extracted Information</h2>
 
                   <div className="space-y-2.5">
-                  <div className="flex items-start gap-2">
-  <Calendar className="w-4 h-4 text-gray-400 mt-0.5" />
-  <div className="flex-1">
-    <div className="text-xs text-gray-600">Date</div>
-    <input
-      type="date"
-      value={extractedData.start_date}
-      onChange={(e) => setExtractedData({ ...extractedData, start_date: e.target.value })}
-      className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
-    />
-  </div>
-</div>
+                    <div className="flex items-start gap-2">
+                      <User className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600">Client Name</div>
+                        <input
+                          type="text"
+                          value={extractedData.client_name}
+                          onChange={(e) => setExtractedData({ ...extractedData, client_name: e.target.value })}
+                          className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
+                        />
+                      </div>
+                    </div>
 
                     <div className="flex items-start gap-2">
                       <Mail className="w-4 h-4 text-gray-400 mt-0.5" />
@@ -530,7 +530,12 @@ Client: Maybe next month, around 10 days
                       <Calendar className="w-4 h-4 text-gray-400 mt-0.5" />
                       <div className="flex-1">
                         <div className="text-xs text-gray-600">Date</div>
-                        <div className="text-sm font-medium text-gray-900">{extractedData.start_date}</div>
+                        <input
+                          type="date"
+                          value={extractedData.start_date}
+                          onChange={(e) => setExtractedData({ ...extractedData, start_date: e.target.value })}
+                          className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
+                        />
                       </div>
                     </div>
 
@@ -692,7 +697,7 @@ Client: Maybe next month, around 10 days
                       <div>
                         <h3 className="text-sm font-bold text-gray-900">Itinerary Generated!</h3>
                         <p className="text-xs text-gray-600">
-                          {generatedItinerary.itinerary_code} • €{generatedItinerary.total_cost}
+                          {generatedItinerary.itinerary_code} • €{generatedItinerary.total_cost?.toFixed(2) || '0.00'}
                         </p>
                       </div>
                     </div>

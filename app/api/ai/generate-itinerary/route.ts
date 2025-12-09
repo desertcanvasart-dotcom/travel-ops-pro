@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase'
-import { 
-  calculatePricingFromRates, 
-  getFallbackRates,
-  PricingCalculation 
-} from '@/lib/rate-lookup-service'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -71,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     console.log('🤖 Starting AI itinerary generation for:', client_name)
     console.log(`📅 Start date: ${start_date}, Duration: ${duration_days} days`)
+    console.log(`🏨 Include accommodation: ${include_accommodation}`)
     console.log(`💰 Margin: ${margin_percent}%`)
 
     const supabase = createClient()
@@ -167,34 +163,83 @@ export async function POST(request: NextRequest) {
       dinnerRate = toNumber(mealRates[0].dinner_rate_eur, 18)
     }
 
-    // 5. Accommodation rates
+    // 5. Accommodation rates - FIXED based on actual database schema
     console.log('🏨 Fetching accommodation rates...')
     let hotelRate = 0
-    let hotelName = hotel_name || 'Standard Hotel'
+    let hotelName_final = hotel_name || 'Standard Hotel'
     
     if (include_accommodation) {
-      const { data: hotels } = await supabase
-        .from('accommodation_rates')
+      // Map budget_level to tier
+      const tierMap: Record<string, string> = {
+        'budget': 'budget',
+        'standard': 'standard',
+        'luxury': 'luxury',
+        'deluxe': 'luxury'
+      }
+      const tier = tierMap[budget_level] || 'standard'
+      
+      // First try hotel_contacts table (has Cairo hotels with rates)
+      // Column names: name, city, rate_double_eur, is_active
+      console.log(`🏨 Searching hotel_contacts for city: ${city}`)
+      
+      const { data: hotelContacts, error: hcError } = await supabase
+        .from('hotel_contacts')
         .select('*')
+        .ilike('city', city)  // Case-insensitive match (cairo vs Cairo)
         .eq('is_active', true)
-        .limit(1)
+        .order('rate_double_eur', { ascending: budget_level === 'budget' })
+        .limit(5)
 
-      if (hotels && hotels.length > 0) {
-        hotelRate = toNumber(hotels[0].rate_double_eur, 0)
-        hotelName = hotels[0].hotel_name || hotelName
-        console.log(`✅ Hotel rate: €${hotelRate}/night`)
+      console.log(`🏨 hotel_contacts query result: found=${hotelContacts?.length || 0}`)
+      if (hcError) console.error('❌ hotel_contacts error:', hcError)
+
+      if (hotelContacts && hotelContacts.length > 0) {
+        // Pick based on budget level
+        let selectedHotel = hotelContacts[0]
+        
+        // For luxury, get highest rated; for budget, get lowest price (already sorted)
+        if (budget_level === 'luxury') {
+          selectedHotel = hotelContacts.reduce((best, h) => 
+            toNumber(h.star_rating, 0) > toNumber(best.star_rating, 0) ? h : best
+          , hotelContacts[0])
+        }
+        
+        hotelRate = toNumber(selectedHotel.rate_double_eur, 80)
+        hotelName_final = selectedHotel.name || hotelName_final
+        console.log(`✅ Found hotel in hotel_contacts: ${hotelName_final} @ €${hotelRate}/night (${selectedHotel.star_rating}⭐)`)
       } else {
-        // Fallback to hotel_contacts
-        const { data: hotelContacts } = await supabase
-          .from('hotel_contacts')
+        // Fallback to accommodation_rates table
+        // Column names: property_name, base_rate_eur, tier, city, is_active
+        console.log(`🏨 Trying accommodation_rates fallback for city: ${city}`)
+        
+        const { data: accRates, error: accError } = await supabase
+          .from('accommodation_rates')
           .select('*')
           .eq('is_active', true)
-          .eq('city', city)
-          .limit(1)
+          .ilike('city', `%${city}%`)  // Partial match for city
+          .limit(5)
 
-        if (hotelContacts && hotelContacts.length > 0) {
-          hotelRate = toNumber(hotelContacts[0].rate_double_eur, 80)
-          hotelName = hotelContacts[0].name || hotelName
+        console.log(`🏨 accommodation_rates query result: found=${accRates?.length || 0}`)
+        if (accError) console.error('❌ accommodation_rates error:', accError)
+
+        if (accRates && accRates.length > 0) {
+          // Filter by tier if possible
+          let matchingHotels = accRates.filter(h => h.tier === tier)
+          if (matchingHotels.length === 0) matchingHotels = accRates
+          
+          const hotel = matchingHotels[0]
+          hotelRate = toNumber(hotel.base_rate_eur, 80)
+          hotelName_final = hotel.property_name || hotelName_final
+          console.log(`✅ Found in accommodation_rates: ${hotelName_final} @ €${hotelRate}/night (tier: ${hotel.tier})`)
+        } else {
+          // Use default rate based on budget level
+          const defaultRates: Record<string, number> = {
+            'budget': 45,
+            'standard': 80,
+            'luxury': 150
+          }
+          hotelRate = defaultRates[budget_level] || 80
+          console.log(`⚠️ No hotel found in database, using default ${budget_level} rate: €${hotelRate}/night`)
         }
       }
     }
@@ -214,6 +259,7 @@ export async function POST(request: NextRequest) {
         }
         return sum
       }, 0)
+      if (dailyTips === 0) dailyTips = 15 // Fallback if no per_day rates
     }
 
     // ============================================
@@ -538,22 +584,26 @@ IMPORTANT:
       const isLastDay = dayData.day_number === duration_days
       const includesHotel = dayData.includes_hotel !== false && !isLastDay && include_accommodation
 
+      console.log(`   🏨 Day ${dayData.day_number}: isLastDay=${isLastDay}, includesHotel=${includesHotel}, hotelRate=${hotelRate}`)
+
       if (includesHotel && hotelRate > 0) {
         const hotelCost = hotelRate * roomsNeeded
         services.push({
           service_type: 'accommodation',
           service_code: 'HOTEL',
-          service_name: `${hotelName} (${roomsNeeded} room${roomsNeeded > 1 ? 's' : ''})`,
+          service_name: `${hotelName_final} (${roomsNeeded} room${roomsNeeded > 1 ? 's' : ''})`,
           quantity: roomsNeeded,
           rate_eur: hotelRate,
           rate_non_eur: hotelRate,
           total_cost: hotelCost,
           client_price: withMargin(hotelCost),
-          notes: `Overnight at ${hotelName}`
+          notes: `Overnight at ${hotelName_final}`
         })
         totalSupplierCost += hotelCost
         totalClientPrice += withMargin(hotelCost)
-        console.log(`   🏨 Hotel: €${hotelRate} x ${roomsNeeded} rooms = €${hotelCost}`)
+        console.log(`   ✅ Hotel added: ${hotelName_final} - €${hotelRate} x ${roomsNeeded} rooms = €${hotelCost}`)
+      } else if (includesHotel && hotelRate === 0) {
+        console.log(`   ⚠️ Hotel skipped: rate is €0`)
       }
 
       // ============================================
@@ -617,7 +667,9 @@ IMPORTANT:
         margin_percent: margin_percent,
         per_person_cost: Math.round(totalClientPrice / totalPax * 100) / 100,
         total_days: duration_days,
-        passport_type: isEuroPassport ? 'EUR' : 'non-EUR'
+        passport_type: isEuroPassport ? 'EUR' : 'non-EUR',
+        hotel_used: hotelName_final,
+        hotel_rate: hotelRate
       }
     })
 
