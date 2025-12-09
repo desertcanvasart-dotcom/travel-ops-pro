@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
-import ResourceAssignment from '@/app/components/ResourceAssignment'
+import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
@@ -794,21 +794,15 @@ export default function ViewItineraryPage() {
         </div>
 
         {/* Resource Assignment */}
-        <div id="resource-assignment">
-          <ResourceAssignment
-            itineraryId={itinerary.id}
-            startDate={itinerary.start_date}
-            endDate={itinerary.end_date}
-            numTravelers={itinerary.num_adults + itinerary.num_children}
-            currentGuideId={itinerary.assigned_guide_id}
-            currentVehicleId={itinerary.assigned_vehicle_id}
-            currentGuideNotes={itinerary.guide_notes}
-            currentVehicleNotes={itinerary.vehicle_notes}
-            currentPickupLocation={itinerary.pickup_location}
-            currentPickupTime={itinerary.pickup_time}
-            onUpdate={fetchItinerary}
-          />
-        </div>
+<div id="resource-assignment">
+<ResourceAssignmentV2
+  itineraryId={itinerary.id}
+  startDate={itinerary.start_date}
+  endDate={itinerary.end_date}
+  numTravelers={itinerary.num_adults + itinerary.num_children}
+  onUpdate={fetchItinerary}
+/>
+</div>
 
         {/* ⭐ COMPACT DAY CONTROLS */}
         <div className="flex justify-between items-center">
