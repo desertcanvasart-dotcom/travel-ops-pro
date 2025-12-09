@@ -236,7 +236,7 @@ export default function ProfilePage() {
                             className="w-full h-9 px-3 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
                           />
                         </div>
-                        <div>
+                        <div> npm run dev
                           <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
                             <Phone className="w-3.5 h-3.5" />
                             Phone Number
@@ -456,7 +456,7 @@ export default function ProfilePage() {
                     <p className="text-[10px] text-gray-400">Manage tour schedules</p>
                   </div>
                 </Link>
-                <Link href="/rates" className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-50 transition-colors group">
+                <Link href="/resources" className="flex items-center gap-2.5 p-2 rounded-md hover:bg-gray-50 transition-colors group">
                   <div className="w-8 h-8 bg-purple-50 rounded-md flex items-center justify-center group-hover:bg-purple-100 border border-purple-100">
                     <Building2 className="w-4 h-4 text-purple-600" />
                   </div>

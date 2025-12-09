@@ -9,10 +9,11 @@ const supabase = createClient(
 // GET /api/partners/[id]/template-data?type=hotel|guide|restaurant|airport_staff
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const partnerId = params.id
+    // Next.js 15: params is now a Promise
+    const { id: partnerId } = await params
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
 
@@ -73,8 +74,6 @@ export async function GET(
           partner_whatsapp: guide.phone || '',
           languages: Array.isArray(guide.languages) ? guide.languages.join(', ') : (guide.languages || ''),
           specialties: Array.isArray(guide.specialties) ? guide.specialties.join(', ') : (guide.specialties || ''),
-          daily_rate: guide.daily_rate ? `${guide.daily_rate}` : '',
-          hourly_rate: guide.hourly_rate ? `${guide.hourly_rate}` : '',
         }
         break
 
@@ -139,7 +138,7 @@ export async function GET(
     placeholderData.company_name = 'Travel2Egypt'
     placeholderData.agent_name = 'Islam'
     placeholderData.company_email = 'info@travel2egypt.com'
-    placeholderData.company_phone = '+20 123 456 7890'
+    placeholderData.company_phone = '+20 115 801 1600'
     placeholderData.today = formatDate(new Date())
 
     return NextResponse.json({
