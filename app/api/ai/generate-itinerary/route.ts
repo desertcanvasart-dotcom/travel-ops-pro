@@ -14,6 +14,21 @@ const openai = new OpenAI({
 // Default margin percentage
 const DEFAULT_MARGIN_PERCENT = 25
 
+// Helper to validate date
+function isValidDate(dateStr: string | null | undefined): boolean {
+  if (!dateStr) return false
+  const parsed = new Date(dateStr)
+  return !isNaN(parsed.getTime())
+}
+
+// Helper to ensure number (prevents null/undefined)
+function toNumber(value: any, fallback: number = 0): number {
+  if (value === null || value === undefined || isNaN(value)) {
+    return fallback
+  }
+  return Number(value)
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -23,9 +38,9 @@ export async function POST(request: NextRequest) {
       client_phone,
       tour_requested,
       start_date,
-      duration_days,
-      num_adults,
-      num_children,
+      duration_days: raw_duration_days,
+      num_adults: raw_num_adults,
+      num_children: raw_num_children,
       language = 'English',
       interests = [],
       special_requests = [],
@@ -44,7 +59,31 @@ export async function POST(request: NextRequest) {
       margin_percent = DEFAULT_MARGIN_PERCENT
     } = body
 
+    // Validate required fields
+    if (!isValidDate(start_date)) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Please provide a valid start date before generating the itinerary' 
+        },
+        { status: 400 }
+      )
+    }
+
+    // Ensure numbers are valid
+    const duration_days = toNumber(raw_duration_days, 1)
+    const num_adults = toNumber(raw_num_adults, 1)
+    const num_children = toNumber(raw_num_children, 0)
+
+    if (duration_days < 1) {
+      return NextResponse.json(
+        { success: false, error: 'Duration must be at least 1 day' },
+        { status: 400 }
+      )
+    }
+
     console.log('🤖 Starting AI itinerary generation for:', client_name)
+    console.log(`📅 Start date: ${start_date}, Duration: ${duration_days} days`)
     console.log(`💰 Margin: ${margin_percent}%`)
 
     const supabase = createClient()
@@ -124,7 +163,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate margin
     const marginMultiplier = 1 + (margin_percent / 100)
-    const total_cost = pricingData.total_cost
+    const total_cost = toNumber(pricingData.total_cost, 0)
     const total_revenue = Math.round(total_cost * marginMultiplier * 100) / 100
     const total_margin = total_revenue - total_cost
 
@@ -211,7 +250,7 @@ IMPORTANT:
 
     console.log('📊 Parsed itinerary data:', {
       trip_name: itineraryData.trip_name,
-      days_count: itineraryData.days.length
+      days_count: itineraryData.days?.length || 0
     })
 
     // Insert itinerary
@@ -222,7 +261,7 @@ IMPORTANT:
         client_name,
         client_email: client_email || null,
         client_phone: client_phone || null,
-        trip_name: itineraryData.trip_name,
+        trip_name: itineraryData.trip_name || 'Egypt Tour',
         start_date: start_date,
         end_date: endDate.toISOString().split('T')[0],
         total_days: duration_days,
@@ -247,31 +286,48 @@ IMPORTANT:
 
     console.log('✅ Created itinerary:', itinerary.id)
 
-    // Insert days with services
+    // Extract breakdown values with null safety
     const breakdown = pricingData.breakdown
     const ratesUsed = pricingData.rates_used
 
-    const vehicle_per_day = breakdown.transportation.per_day
-    const guide_per_day = breakdown.guide.per_day
-    const tips_per_day = breakdown.tips.per_day
-    const entrance_per_person_per_day = breakdown.entrances.per_person / duration_days
-    const lunch_per_person_per_day = breakdown.meals.per_person_lunch / duration_days
-    const water_per_person_per_day = breakdown.water.per_person / duration_days
+    // All values default to 0 if null/undefined
+    const vehicle_per_day = toNumber(breakdown.transportation?.per_day, 0)
+    const guide_per_day = toNumber(breakdown.guide?.per_day, 0)
+    const tips_total = toNumber(breakdown.tips?.total, 0)
+    const tips_per_day = duration_days > 0 ? tips_total / duration_days : 0
+    const entrance_per_person = toNumber(breakdown.entrances?.per_person, 0)
+    const entrance_per_person_per_day = duration_days > 0 ? entrance_per_person / duration_days : 0
+    const lunch_per_person = toNumber(breakdown.meals?.per_person_lunch, 0)
+    const lunch_per_person_per_day = duration_days > 0 ? lunch_per_person / duration_days : 0
+    const water_per_person = toNumber(breakdown.water?.per_person, 0)
+    const water_per_person_per_day = duration_days > 0 ? water_per_person / duration_days : 0
 
-    for (const dayData of itineraryData.days) {
+    console.log('📊 Service rates per day:', {
+      vehicle: vehicle_per_day,
+      guide: guide_per_day,
+      tips: tips_per_day,
+      entrance: entrance_per_person_per_day,
+      lunch: lunch_per_person_per_day,
+      water: water_per_person_per_day
+    })
+
+    // Insert days with services
+    const days = itineraryData.days || []
+    
+    for (const dayData of days) {
       console.log(`📅 Creating day ${dayData.day_number}...`)
 
       const dayDate = new Date(startDate)
-      dayDate.setDate(startDate.getDate() + dayData.day_number - 1)
+      dayDate.setDate(startDate.getDate() + (dayData.day_number || 1) - 1)
 
       const { data: day, error: dayError } = await supabase
         .from('itinerary_days')
         .insert({
           itinerary_id: itinerary.id,
-          day_number: dayData.day_number,
+          day_number: dayData.day_number || 1,
           date: dayDate.toISOString().split('T')[0],
-          title: dayData.title,
-          description: dayData.description,
+          title: dayData.title || `Day ${dayData.day_number}`,
+          description: dayData.description || '',
           city: city,
           overnight_city: city
         })
@@ -286,25 +342,25 @@ IMPORTANT:
       console.log(`✅ Created day ${dayData.day_number}`)
 
       const services = []
-      const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
+      const withMargin = (cost: number) => Math.round(toNumber(cost, 0) * marginMultiplier * 100) / 100
 
       // Transportation
-      const vehicleCost = vehicle_per_day
+      const vehicleCost = toNumber(vehicle_per_day, 0)
       services.push({
         service_type: 'transportation',
         service_code: ratesUsed.vehicle?.id || 'TRANS-001',
-        service_name: `${breakdown.transportation.vehicle_type} Transportation`,
+        service_name: `${breakdown.transportation?.vehicle_type || 'Vehicle'} Transportation`,
         quantity: 1,
         rate_eur: vehicleCost,
         rate_non_eur: vehicleCost,
         total_cost: vehicleCost,
         client_price: withMargin(vehicleCost),
-        notes: `${breakdown.transportation.vehicle_type} from ${city}`,
+        notes: `${breakdown.transportation?.vehicle_type || 'Vehicle'} from ${city}`,
         resource_id: ratesUsed.vehicle?.id || null
       })
 
       // Guide
-      const guideCost = guide_per_day
+      const guideCost = toNumber(guide_per_day, 0)
       services.push({
         service_type: 'guide',
         service_code: ratesUsed.guide?.id || `GUIDE-${language.substring(0,2).toUpperCase()}`,
@@ -319,7 +375,7 @@ IMPORTANT:
       })
 
       // Tips (no margin)
-      const tipsCost = tips_per_day
+      const tipsCost = toNumber(tips_per_day, 0)
       services.push({
         service_type: 'tips',
         service_code: 'DAILY-TIPS',
@@ -328,12 +384,12 @@ IMPORTANT:
         rate_eur: tipsCost,
         rate_non_eur: tipsCost,
         total_cost: tipsCost,
-        client_price: tipsCost,
+        client_price: tipsCost, // Tips pass through without margin
         notes: 'Driver and guide tips'
       })
 
       // Entrance Fees
-      const entranceCostPerPerson = entrance_per_person_per_day
+      const entranceCostPerPerson = toNumber(entrance_per_person_per_day, 0)
       const entranceTotalCost = entranceCostPerPerson * totalPax
       services.push({
         service_type: 'entrance',
@@ -351,7 +407,7 @@ IMPORTANT:
 
       // Lunch
       if (include_lunch && lunch_per_person_per_day > 0) {
-        const lunchCostPerPerson = lunch_per_person_per_day
+        const lunchCostPerPerson = toNumber(lunch_per_person_per_day, 0)
         const lunchTotalCost = lunchCostPerPerson * totalPax
         services.push({
           service_type: 'meal',
@@ -368,7 +424,7 @@ IMPORTANT:
       }
 
       // Water (no margin)
-      const waterCostPerPerson = water_per_person_per_day
+      const waterCostPerPerson = toNumber(water_per_person_per_day, 0)
       const waterTotalCost = waterCostPerPerson * totalPax
       services.push({
         service_type: 'supplies',
@@ -378,10 +434,11 @@ IMPORTANT:
         rate_eur: waterCostPerPerson,
         rate_non_eur: waterCostPerPerson,
         total_cost: waterTotalCost,
-        client_price: waterTotalCost,
+        client_price: waterTotalCost, // Water passes through without margin
         notes: 'Bottled water throughout the day'
       })
 
+      // Insert all services for this day
       for (const serviceData of services) {
         const { error: serviceError } = await supabase
           .from('itinerary_services')
@@ -392,7 +449,7 @@ IMPORTANT:
             service_name: serviceData.service_name,
             quantity: serviceData.quantity,
             rate_eur: serviceData.rate_eur,
-            rate_non_eur: serviceData.rate_non_eur || 0,
+            rate_non_eur: serviceData.rate_non_eur,
             total_cost: serviceData.total_cost,
             client_price: serviceData.client_price,
             notes: serviceData.notes
@@ -421,29 +478,43 @@ IMPORTANT:
         total_revenue: total_revenue,
         margin: total_margin,
         margin_percent: margin_percent,
-        per_person_cost: Math.round(total_revenue / totalPax * 100) / 100,
+        per_person_cost: totalPax > 0 ? Math.round(total_revenue / totalPax * 100) / 100 : 0,
         total_days: itinerary.total_days,
         passport_type: isEuroPassport ? 'EUR' : 'non-EUR',
         pricing_source: pricingData.rates_used.success ? 'database' : 'fallback',
         pricing_breakdown: {
           transportation: {
             ...breakdown.transportation,
-            client_price: Math.round(breakdown.transportation.total * marginMultiplier * 100) / 100
+            total: toNumber(breakdown.transportation?.total, 0),
+            per_day: toNumber(breakdown.transportation?.per_day, 0),
+            client_price: Math.round(toNumber(breakdown.transportation?.total, 0) * marginMultiplier * 100) / 100
           },
           guide: {
             ...breakdown.guide,
-            client_price: Math.round(breakdown.guide.total * marginMultiplier * 100) / 100
+            total: toNumber(breakdown.guide?.total, 0),
+            per_day: toNumber(breakdown.guide?.per_day, 0),
+            client_price: Math.round(toNumber(breakdown.guide?.total, 0) * marginMultiplier * 100) / 100
           },
           entrances: {
             ...breakdown.entrances,
-            client_price: Math.round(breakdown.entrances.total * marginMultiplier * 100) / 100
+            total: toNumber(breakdown.entrances?.total, 0),
+            per_person: toNumber(breakdown.entrances?.per_person, 0),
+            client_price: Math.round(toNumber(breakdown.entrances?.total, 0) * marginMultiplier * 100) / 100
           },
           meals: {
             ...breakdown.meals,
-            client_price: Math.round((breakdown.meals.lunch_total + breakdown.meals.dinner_total) * marginMultiplier * 100) / 100
+            lunch_total: toNumber(breakdown.meals?.lunch_total, 0),
+            dinner_total: toNumber(breakdown.meals?.dinner_total, 0),
+            client_price: Math.round((toNumber(breakdown.meals?.lunch_total, 0) + toNumber(breakdown.meals?.dinner_total, 0)) * marginMultiplier * 100) / 100
           },
-          tips: breakdown.tips,
-          water: breakdown.water
+          tips: {
+            total: toNumber(breakdown.tips?.total, 0),
+            breakdown: breakdown.tips?.breakdown || []
+          },
+          water: {
+            total: toNumber(breakdown.water?.total, 0),
+            per_person: toNumber(breakdown.water?.per_person, 0)
+          }
         },
         rates_used: {
           vehicle: ratesUsed.vehicle ? {
