@@ -47,6 +47,57 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 
+// Email body formatter - converts ■ bullets to styled lists
+function formatEmailBody(html: string): string {
+  if (!html) return ''
+
+  const lines = html.split(/<br\s*\/?>/gi)
+  let processedLines: string[] = []
+  let inList = false
+  let listItems: string[] = []
+
+  lines.forEach((line) => {
+    const trimmed = line.trim()
+    const bulletMatch = trimmed.match(/^[■●•◦▪▸►‣⁃\-–—\*]\s*(.+)/)
+    
+    if (bulletMatch) {
+      if (!inList) {
+        inList = true
+        listItems = []
+      }
+      const content = bulletMatch[1].trim()
+      // Check for Key: Value pattern
+      const kvMatch = content.match(/^([^:]+):\s*(.+)$/)
+      if (kvMatch) {
+        listItems.push(`<strong>${kvMatch[1]}:</strong> ${kvMatch[2]}`)
+      } else {
+        listItems.push(content)
+      }
+    } else {
+      if (inList) {
+        processedLines.push(`<ul class="email-list">${listItems.map(i => `<li>${i}</li>`).join('')}</ul>`)
+        inList = false
+        listItems = []
+      }
+      
+      if (trimmed) {
+        const headerMatch = trimmed.match(/^\[([^\]]+)\]$/)
+        if (headerMatch) {
+          processedLines.push(`<h3 class="email-section">${headerMatch[1]}</h3>`)
+        } else {
+          processedLines.push(`<p>${trimmed}</p>`)
+        }
+      }
+    }
+  })
+
+  if (inList && listItems.length > 0) {
+    processedLines.push(`<ul class="email-list">${listItems.map(i => `<li>${i}</li>`).join('')}</ul>`)
+  }
+
+  return processedLines.join('')
+}
+
 // UPDATED: Email interface with attachments
 interface Email {
   id: string

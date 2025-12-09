@@ -34,7 +34,7 @@ export interface RateLookupParams {
   // Accommodation
   include_accommodation?: boolean
   hotel_standard?: 'budget' | 'standard' | 'luxury'
-  num_hotel_stays?: number  // Number of different hotels (for hotel staff)
+  num_hotel_stays?: number
   
   // Airport
   include_airport_service?: boolean
@@ -260,6 +260,7 @@ export interface PricingBreakdown {
   }
   tips: {
     total: number
+    per_day: number
     breakdown: { role: string; amount: number }[]
   }
   water: {
@@ -275,6 +276,16 @@ export interface PricingCalculation {
   breakdown: PricingBreakdown
   rates_used: RatesUsed
   error?: string
+}
+
+// ============================================
+// HELPER: Safe number conversion
+// ============================================
+function toNumber(value: any, fallback: number = 0): number {
+  if (value === null || value === undefined || isNaN(Number(value))) {
+    return fallback
+  }
+  return Number(value)
 }
 
 // ============================================
@@ -307,37 +318,39 @@ export async function lookupRates(
     // ============================================
     const serviceType = params.service_type || 'day_tour'
     
+    console.log(`🚗 Looking up transportation: city=${params.city}, service_type=${serviceType}, pax=${params.pax}`)
+    
     let vehicleQuery = supabase
       .from('transportation_rates')
       .select('*')
       .eq('is_active', true)
 
-    // Build query based on service type
+    // Match service_type exactly as stored in database (lowercase with underscores)
     if (serviceType === 'intercity_transfer' && params.origin_city && params.destination_city) {
       vehicleQuery = vehicleQuery
-        .eq('service_type', 'Intercity Transfer')
+        .eq('service_type', 'intercity_transfer')
         .eq('origin_city', params.origin_city)
         .eq('destination_city', params.destination_city)
     } else if (serviceType === 'airport_transfer' && params.city) {
       vehicleQuery = vehicleQuery
-        .eq('service_type', 'Airport Transfer')
+        .eq('service_type', 'airport_transfer')
         .eq('city', params.city)
     } else if (serviceType === 'half_day_tour' && params.city) {
       vehicleQuery = vehicleQuery
-        .eq('service_type', 'Half Day Tour')
+        .eq('service_type', 'half_day_tour')
         .eq('city', params.city)
     } else if (serviceType === 'dinner_transfer' && params.city) {
       vehicleQuery = vehicleQuery
-        .eq('service_type', 'Dinner Transfer')
+        .eq('service_type', 'dinner_transfer')
         .eq('city', params.city)
     } else if (serviceType === 'sound_light_transfer' && params.city) {
       vehicleQuery = vehicleQuery
-        .eq('service_type', 'Sound Light Transfer')
+        .eq('service_type', 'sound_light_transfer')
         .eq('city', params.city)
     } else if (params.city) {
       // Default: Day Tour
       vehicleQuery = vehicleQuery
-        .eq('service_type', 'Day Tour')
+        .eq('service_type', 'day_tour')
         .eq('city', params.city)
     }
 
@@ -345,15 +358,18 @@ export async function lookupRates(
       .order('capacity_min', { ascending: true })
 
     if (vehicleError) {
-      console.error('Error fetching vehicles:', vehicleError)
+      console.error('❌ Error fetching vehicles:', vehicleError)
     } else if (vehicles && vehicles.length > 0) {
+      console.log(`✅ Found ${vehicles.length} vehicles`)
+      
       // Find vehicle that fits pax count
       const suitableVehicle = vehicles.find(v => 
-        params.pax >= (v.capacity_min || 1) && 
-        params.pax <= (v.capacity_max || 99)
+        params.pax >= toNumber(v.capacity_min, 1) && 
+        params.pax <= toNumber(v.capacity_max, 99)
       ) || vehicles[vehicles.length - 1]
 
       if (suitableVehicle) {
+        console.log(`✅ Selected vehicle: ${suitableVehicle.vehicle_type} @ €${suitableVehicle.base_rate_eur}/day`)
         result.vehicle = {
           id: suitableVehicle.id,
           service_code: suitableVehicle.service_code,
@@ -362,38 +378,49 @@ export async function lookupRates(
           city: suitableVehicle.city,
           origin_city: suitableVehicle.origin_city,
           destination_city: suitableVehicle.destination_city,
-          rate_per_day: suitableVehicle.base_rate_eur || 0,
-          capacity_min: suitableVehicle.capacity_min || 1,
-          capacity_max: suitableVehicle.capacity_max || 99
+          rate_per_day: toNumber(suitableVehicle.base_rate_eur, 0),
+          capacity_min: toNumber(suitableVehicle.capacity_min, 1),
+          capacity_max: toNumber(suitableVehicle.capacity_max, 99)
         }
       }
+    } else {
+      console.log(`⚠️ No vehicles found for city=${params.city}, service_type=${serviceType}`)
     }
 
     // ============================================
-    // 2. GUIDE RATES
+    // 2. GUIDE RATES (from guide_rates table!)
     // ============================================
+    console.log(`🎯 Looking up guide: language=${params.language}`)
+    
     const { data: guides, error: guideError } = await supabase
-      .from('guides')
+      .from('guide_rates')  // ✅ FIXED: Use guide_rates table
       .select('*')
       .eq('is_active', true)
-      .contains('languages', [params.language])
-      .order('daily_rate_eur', { ascending: true })
+      .eq('guide_language', params.language)  // ✅ FIXED: Use guide_language column
+      .order('base_rate_eur', { ascending: true })
       .limit(1)
 
-    if (!guideError && guides && guides.length > 0) {
+    if (guideError) {
+      console.error('❌ Error fetching guides:', guideError)
+    } else if (guides && guides.length > 0) {
       const guide = guides[0]
+      console.log(`✅ Found guide: ${guide.guide_language} @ €${guide.base_rate_eur}/day`)
       result.guide = {
         id: guide.id,
-        name: guide.name,
-        languages: guide.languages || [params.language],
-        daily_rate_eur: guide.daily_rate_eur || guide.rate_eur || 0,
+        name: `${guide.guide_language} Speaking Guide`,
+        languages: [guide.guide_language],
+        daily_rate_eur: toNumber(guide.base_rate_eur, 0),  // ✅ FIXED: Use base_rate_eur
         city: guide.city
       }
+    } else {
+      console.log(`⚠️ No guide found for language=${params.language}`)
     }
 
     // ============================================
     // 3. ATTRACTION RATES (Entrance Fees)
     // ============================================
+    console.log(`🏛️ Looking up entrance fees: city=${params.city}, attractions=${params.attractions?.join(', ') || 'default'}`)
+    
     if (params.attractions && params.attractions.length > 0) {
       const { data: attractions, error: attractionError } = await supabase
         .from('entrance_fees')
@@ -403,14 +430,15 @@ export async function lookupRates(
         .limit(20)
 
       if (!attractionError && attractions && attractions.length > 0) {
+        console.log(`✅ Found ${attractions.length} attractions by name`)
         result.attractions = attractions.map(a => ({
           id: a.id,
           name: a.attraction_name,
           city: a.city,
-          entrance_fee_eur: a.eur_rate || 0,
-          entrance_fee_non_eur: a.non_eur_rate || a.eur_rate || 0,
-          child_rate_eur: a.child_rate_eur,
-          child_rate_non_eur: a.child_rate_non_eur
+          entrance_fee_eur: toNumber(a.eur_rate, 0),
+          entrance_fee_non_eur: toNumber(a.non_eur_rate, a.eur_rate || 0),
+          child_rate_eur: toNumber(a.child_rate_eur, 0),
+          child_rate_non_eur: toNumber(a.child_rate_non_eur, 0)
         }))
       }
     } else if (params.city) {
@@ -423,72 +451,118 @@ export async function lookupRates(
         .limit(10)
 
       if (!attractionError && attractions && attractions.length > 0) {
+        console.log(`✅ Found ${attractions.length} attractions for ${params.city}`)
         result.attractions = attractions.map(a => ({
           id: a.id,
           name: a.attraction_name,
           city: a.city,
-          entrance_fee_eur: a.eur_rate || 0,
-          entrance_fee_non_eur: a.non_eur_rate || a.eur_rate || 0,
-          child_rate_eur: a.child_rate_eur,
-          child_rate_non_eur: a.child_rate_non_eur
+          entrance_fee_eur: toNumber(a.eur_rate, 0),
+          entrance_fee_non_eur: toNumber(a.non_eur_rate, a.eur_rate || 0),
+          child_rate_eur: toNumber(a.child_rate_eur, 0),
+          child_rate_non_eur: toNumber(a.child_rate_non_eur, 0)
         }))
+      } else {
+        console.log(`⚠️ No attractions found for city=${params.city}`)
       }
     }
 
     // ============================================
-    // 4. RESTAURANT RATES
+    // 4. MEAL RATES (from meal_rates table)
     // ============================================
     if (params.include_lunch || params.include_dinner) {
-      const { data: restaurants, error: restaurantError } = await supabase
-        .from('restaurant_contacts')
+      console.log(`🍽️ Looking up meal rates: city=${params.city}`)
+      
+      const { data: meals, error: mealError } = await supabase
+        .from('meal_rates')
         .select('*')
         .eq('is_active', true)
-        .eq('city', params.city || 'Cairo')
-        .order('lunch_rate_eur', { ascending: true })
         .limit(1)
 
-      if (!restaurantError && restaurants && restaurants.length > 0) {
-        const restaurant = restaurants[0]
+      if (!mealError && meals && meals.length > 0) {
+        const meal = meals[0]
+        console.log(`✅ Found meal rate: lunch €${meal.lunch_rate_eur}, dinner €${meal.dinner_rate_eur}`)
         result.restaurant = {
-          id: restaurant.id,
-          name: restaurant.name,
-          city: restaurant.city,
-          lunch_rate_eur: restaurant.lunch_rate_eur || restaurant.rate_per_person || 0,
-          dinner_rate_eur: restaurant.dinner_rate_eur || restaurant.rate_per_person || 0
+          id: meal.id,
+          name: 'Standard Restaurant',
+          city: params.city || 'Cairo',
+          lunch_rate_eur: toNumber(meal.lunch_rate_eur, 12),
+          dinner_rate_eur: toNumber(meal.dinner_rate_eur, 18)
+        }
+      } else {
+        // Fallback to restaurant_contacts if meal_rates is empty
+        const { data: restaurants, error: restaurantError } = await supabase
+          .from('restaurant_contacts')
+          .select('*')
+          .eq('is_active', true)
+          .eq('city', params.city || 'Cairo')
+          .order('lunch_rate_eur', { ascending: true })
+          .limit(1)
+
+        if (!restaurantError && restaurants && restaurants.length > 0) {
+          const restaurant = restaurants[0]
+          result.restaurant = {
+            id: restaurant.id,
+            name: restaurant.name,
+            city: restaurant.city,
+            lunch_rate_eur: toNumber(restaurant.lunch_rate_eur, restaurant.rate_per_person || 12),
+            dinner_rate_eur: toNumber(restaurant.dinner_rate_eur, restaurant.rate_per_person || 18)
+          }
         }
       }
     }
 
     // ============================================
-    // 5. HOTEL RATES
+    // 5. ACCOMMODATION RATES
     // ============================================
     if (params.include_accommodation) {
-      let hotelQuery = supabase
-        .from('hotel_contacts')
+      console.log(`🏨 Looking up accommodation: city=${params.city}, standard=${params.hotel_standard}`)
+      
+      const { data: hotels, error: hotelError } = await supabase
+        .from('accommodation_rates')
         .select('*')
         .eq('is_active', true)
-        .eq('city', params.city || 'Cairo')
-
-      if (params.hotel_standard === 'luxury') {
-        hotelQuery = hotelQuery.gte('star_rating', 5)
-      } else if (params.hotel_standard === 'budget') {
-        hotelQuery = hotelQuery.lte('star_rating', 3)
-      }
-
-      const { data: hotels, error: hotelError } = await hotelQuery
-        .order('rate_double_eur', { ascending: true })
         .limit(1)
 
       if (!hotelError && hotels && hotels.length > 0) {
         const hotel = hotels[0]
         result.hotel = {
           id: hotel.id,
-          name: hotel.name,
-          city: hotel.city,
-          rate_single_eur: hotel.rate_single_eur || hotel.single_rate || 0,
-          rate_double_eur: hotel.rate_double_eur || hotel.double_rate || 0,
-          rate_triple_eur: hotel.rate_triple_eur || hotel.triple_rate || 0,
-          star_rating: hotel.star_rating || hotel.stars
+          name: hotel.hotel_name || 'Standard Hotel',
+          city: hotel.city || params.city || 'Cairo',
+          rate_single_eur: toNumber(hotel.rate_single_eur, 0),
+          rate_double_eur: toNumber(hotel.rate_double_eur, 0),
+          rate_triple_eur: toNumber(hotel.rate_triple_eur, 0),
+          star_rating: toNumber(hotel.star_rating, 4)
+        }
+      } else {
+        // Fallback to hotel_contacts
+        let hotelQuery = supabase
+          .from('hotel_contacts')
+          .select('*')
+          .eq('is_active', true)
+          .eq('city', params.city || 'Cairo')
+
+        if (params.hotel_standard === 'luxury') {
+          hotelQuery = hotelQuery.gte('star_rating', 5)
+        } else if (params.hotel_standard === 'budget') {
+          hotelQuery = hotelQuery.lte('star_rating', 3)
+        }
+
+        const { data: hotelContacts, error: hcError } = await hotelQuery
+          .order('rate_double_eur', { ascending: true })
+          .limit(1)
+
+        if (!hcError && hotelContacts && hotelContacts.length > 0) {
+          const hotel = hotelContacts[0]
+          result.hotel = {
+            id: hotel.id,
+            name: hotel.name,
+            city: hotel.city,
+            rate_single_eur: toNumber(hotel.rate_single_eur, hotel.single_rate || 0),
+            rate_double_eur: toNumber(hotel.rate_double_eur, hotel.double_rate || 0),
+            rate_triple_eur: toNumber(hotel.rate_triple_eur, hotel.triple_rate || 0),
+            star_rating: toNumber(hotel.star_rating, hotel.stars)
+          }
         }
       }
     }
@@ -502,8 +576,6 @@ export async function lookupRates(
         .select('*')
         .eq('is_active', true)
         .eq('airport_code', params.airport_code)
-        .eq('service_type', params.airport_service_type || 'meet_greet')
-        .eq('direction', 'arrival')
         .limit(1)
 
       if (!airportError && airportStaff && airportStaff.length > 0) {
@@ -512,10 +584,10 @@ export async function lookupRates(
           id: staff.id,
           service_code: staff.service_code,
           airport_code: staff.airport_code,
-          airport_name: staff.airport_name,
-          service_type: staff.service_type,
-          direction: staff.direction,
-          rate_eur: staff.rate_eur
+          airport_name: staff.airport_name || staff.airport_code,
+          service_type: staff.service_type || 'meet_greet',
+          direction: staff.direction || 'arrival',
+          rate_eur: toNumber(staff.rate_eur, 0)
         }
       }
     }
@@ -528,8 +600,6 @@ export async function lookupRates(
         .from('hotel_staff_rates')
         .select('*')
         .eq('is_active', true)
-        .eq('service_type', 'full_service')
-        .or(`hotel_category.eq.${params.hotel_standard || 'standard'},hotel_category.eq.all`)
         .limit(1)
 
       if (!hotelStaffError && hotelStaff && hotelStaff.length > 0) {
@@ -537,9 +607,9 @@ export async function lookupRates(
         result.hotel_staff = {
           id: staff.id,
           service_code: staff.service_code,
-          service_type: staff.service_type,
-          hotel_category: staff.hotel_category,
-          rate_eur: staff.rate_eur
+          service_type: staff.service_type || 'full_service',
+          hotel_category: staff.hotel_category || 'standard',
+          rate_eur: toNumber(staff.rate_eur, 0)
         }
       }
     }
@@ -557,9 +627,6 @@ export async function lookupRates(
 
       if (params.cruise_cabin_type) {
         cruiseQuery = cruiseQuery.eq('cabin_type', params.cruise_cabin_type)
-      }
-      if (params.cruise_ship) {
-        cruiseQuery = cruiseQuery.ilike('ship_name', `%${params.cruise_ship}%`)
       }
       if (params.cruise_nights) {
         cruiseQuery = cruiseQuery.eq('duration_nights', params.cruise_nights)
@@ -579,11 +646,11 @@ export async function lookupRates(
           route_name: cruise.route_name,
           embark_city: cruise.embark_city,
           disembark_city: cruise.disembark_city,
-          duration_nights: cruise.duration_nights,
+          duration_nights: toNumber(cruise.duration_nights, 0),
           cabin_type: cruise.cabin_type,
-          rate_single_eur: cruise.rate_single_eur,
-          rate_double_eur: cruise.rate_double_eur,
-          rate_triple_eur: cruise.rate_triple_eur
+          rate_single_eur: toNumber(cruise.rate_single_eur, 0),
+          rate_double_eur: toNumber(cruise.rate_double_eur, 0),
+          rate_triple_eur: toNumber(cruise.rate_triple_eur, 0)
         }
       }
     }
@@ -598,7 +665,6 @@ export async function lookupRates(
         .eq('is_active', true)
         .eq('origin_city', params.sleeping_train_origin)
         .eq('destination_city', params.sleeping_train_destination)
-        .eq('cabin_type', params.sleeping_train_cabin || 'double')
         .limit(1)
 
       if (!sleepTrainError && sleepTrains && sleepTrains.length > 0) {
@@ -608,9 +674,9 @@ export async function lookupRates(
           service_code: train.service_code,
           origin_city: train.origin_city,
           destination_city: train.destination_city,
-          cabin_type: train.cabin_type,
-          rate_oneway_eur: train.rate_oneway_eur,
-          rate_roundtrip_eur: train.rate_roundtrip_eur
+          cabin_type: train.cabin_type || 'double',
+          rate_oneway_eur: toNumber(train.rate_oneway_eur, 0),
+          rate_roundtrip_eur: toNumber(train.rate_roundtrip_eur, 0)
         }
       }
     }
@@ -625,7 +691,6 @@ export async function lookupRates(
         .eq('is_active', true)
         .eq('origin_city', params.train_origin)
         .eq('destination_city', params.train_destination)
-        .eq('class_type', params.train_class || 'first_class')
         .limit(1)
 
       if (!trainError && trains && trains.length > 0) {
@@ -635,9 +700,9 @@ export async function lookupRates(
           service_code: train.service_code,
           origin_city: train.origin_city,
           destination_city: train.destination_city,
-          class_type: train.class_type,
-          rate_eur: train.rate_eur,
-          duration_hours: train.duration_hours
+          class_type: train.class_type || 'first_class',
+          rate_eur: toNumber(train.rate_eur, 0),
+          duration_hours: toNumber(train.duration_hours, 0)
         }
       }
     }
@@ -646,21 +711,21 @@ export async function lookupRates(
     // 11. TIPPING RATES
     // ============================================
     if (params.include_tips !== false) {
-      const context = params.tip_context || 'day_tour'
+      console.log(`💰 Looking up tipping rates`)
       
       const { data: tips, error: tipError } = await supabase
         .from('tipping_rates')
         .select('*')
         .eq('is_active', true)
-        .or(`context.eq.${context},context.is.null`)
 
       if (!tipError && tips && tips.length > 0) {
+        console.log(`✅ Found ${tips.length} tipping rates`)
         result.tipping = tips.map(t => ({
           id: t.id,
           service_code: t.service_code,
           role_type: t.role_type,
-          rate_unit: t.rate_unit,
-          rate_eur: t.rate_eur,
+          rate_unit: t.rate_unit || 'per_day',
+          rate_eur: toNumber(t.rate_eur, 0),
           context: t.context
         }))
       }
@@ -670,7 +735,7 @@ export async function lookupRates(
     return result
 
   } catch (error: any) {
-    console.error('Error in lookupRates:', error)
+    console.error('❌ Error in lookupRates:', error)
     return result
   }
 }
@@ -704,7 +769,7 @@ export async function calculatePricingFromRates(
       cruise: { total: 0, per_person: 0, ship_name: '', cabin_type: '', nights: 0 },
       sleeping_train: { total: 0, per_person: 0, cabin_type: '', is_roundtrip: false },
       train: { total: 0, per_person: 0, class_type: '' },
-      tips: { total: 0, breakdown: [] },
+      tips: { total: 0, per_day: 0, breakdown: [] },
       water: { total: 0, per_person: 0 }
     },
     rates_used: rates
@@ -714,9 +779,8 @@ export async function calculatePricingFromRates(
   // 1. TRANSPORTATION (Per Group)
   // ============================================
   if (rates.vehicle) {
-    const transportPerDay = rates.vehicle.rate_per_day
-    // For intercity/transfers, it's a one-time cost. For day tours, multiply by days
-    const isTransfer = ['Intercity Transfer', 'Airport Transfer', 'Dinner Transfer', 'Sound Light Transfer'].includes(rates.vehicle.service_type)
+    const transportPerDay = toNumber(rates.vehicle.rate_per_day, 0)
+    const isTransfer = ['intercity_transfer', 'airport_transfer', 'dinner_transfer', 'sound_light_transfer'].includes(rates.vehicle.service_type)
     const transportTotal = isTransfer ? transportPerDay : transportPerDay * duration_days
     
     result.breakdown.transportation = {
@@ -731,7 +795,7 @@ export async function calculatePricingFromRates(
   // 2. GUIDE (Per Group)
   // ============================================
   if (rates.guide) {
-    const guidePerDay = rates.guide.daily_rate_eur
+    const guidePerDay = toNumber(rates.guide.daily_rate_eur, 0)
     const guideTotal = guidePerDay * duration_days
     
     result.breakdown.guide = {
@@ -748,7 +812,9 @@ export async function calculatePricingFromRates(
     let totalEntrancePerPerson = 0
     
     for (const attraction of rates.attractions) {
-      const adultFee = params.is_euro_passport ? attraction.entrance_fee_eur : attraction.entrance_fee_non_eur
+      const adultFee = params.is_euro_passport 
+        ? toNumber(attraction.entrance_fee_eur, 0) 
+        : toNumber(attraction.entrance_fee_non_eur, attraction.entrance_fee_eur || 0)
       totalEntrancePerPerson += adultFee
     }
     
@@ -766,8 +832,8 @@ export async function calculatePricingFromRates(
   // 4. MEALS (Per Person)
   // ============================================
   if (rates.restaurant) {
-    const lunchPerPerson = params.include_lunch ? rates.restaurant.lunch_rate_eur : 0
-    const dinnerPerPerson = params.include_dinner ? rates.restaurant.dinner_rate_eur : 0
+    const lunchPerPerson = params.include_lunch ? toNumber(rates.restaurant.lunch_rate_eur, 0) : 0
+    const dinnerPerPerson = params.include_dinner ? toNumber(rates.restaurant.dinner_rate_eur, 0) : 0
     
     result.breakdown.meals = {
       lunch_total: lunchPerPerson * pax * duration_days,
@@ -783,7 +849,7 @@ export async function calculatePricingFromRates(
   if (rates.hotel && params.include_accommodation) {
     const nights = duration_days > 1 ? duration_days - 1 : 0
     const roomsNeeded = Math.ceil(pax / 2)
-    const ratePerNight = rates.hotel.rate_double_eur
+    const ratePerNight = toNumber(rates.hotel.rate_double_eur, 0)
     
     result.breakdown.accommodation = {
       total: ratePerNight * roomsNeeded * nights,
@@ -799,7 +865,7 @@ export async function calculatePricingFromRates(
   if (rates.airport_staff && params.include_airport_service) {
     const arrivals = params.num_arrivals || 0
     const departures = params.num_departures || 0
-    const ratePerService = rates.airport_staff.rate_eur
+    const ratePerService = toNumber(rates.airport_staff.rate_eur, 0)
     
     result.breakdown.airport_staff = {
       total: ratePerService * (arrivals + departures),
@@ -813,7 +879,7 @@ export async function calculatePricingFromRates(
   // 7. HOTEL STAFF (Per Hotel Stay)
   // ============================================
   if (rates.hotel_staff && params.num_hotel_stays) {
-    const perStay = rates.hotel_staff.rate_eur
+    const perStay = toNumber(rates.hotel_staff.rate_eur, 0)
     
     result.breakdown.hotel_staff = {
       total: perStay * params.num_hotel_stays,
@@ -826,13 +892,12 @@ export async function calculatePricingFromRates(
   // 8. NILE CRUISE (Per Person)
   // ============================================
   if (rates.cruise && params.include_cruise) {
-    // Calculate based on occupancy
-    let perPerson = rates.cruise.rate_double_eur // Default to double
+    let perPerson = toNumber(rates.cruise.rate_double_eur, 0)
     
     if (pax === 1) {
-      perPerson = rates.cruise.rate_single_eur
+      perPerson = toNumber(rates.cruise.rate_single_eur, 0)
     } else if (pax >= 3 && rates.cruise.rate_triple_eur) {
-      perPerson = rates.cruise.rate_triple_eur
+      perPerson = toNumber(rates.cruise.rate_triple_eur, 0)
     }
     
     result.breakdown.cruise = {
@@ -850,8 +915,8 @@ export async function calculatePricingFromRates(
   if (rates.sleeping_train && params.include_sleeping_train) {
     const isRoundtrip = params.sleeping_train_roundtrip || false
     const perPerson = isRoundtrip && rates.sleeping_train.rate_roundtrip_eur
-      ? rates.sleeping_train.rate_roundtrip_eur
-      : rates.sleeping_train.rate_oneway_eur
+      ? toNumber(rates.sleeping_train.rate_roundtrip_eur, 0)
+      : toNumber(rates.sleeping_train.rate_oneway_eur, 0)
     
     result.breakdown.sleeping_train = {
       total: perPerson * pax,
@@ -865,7 +930,7 @@ export async function calculatePricingFromRates(
   // 10. REGULAR TRAIN (Per Person)
   // ============================================
   if (rates.train && params.include_train) {
-    const perPerson = rates.train.rate_eur
+    const perPerson = toNumber(rates.train.rate_eur, 0)
     
     result.breakdown.train = {
       total: perPerson * pax,
@@ -877,21 +942,25 @@ export async function calculatePricingFromRates(
   // ============================================
   // 11. TIPPING (Configurable)
   // ============================================
+  let tipsTotal = 0
+  const tipsBreakdown: { role: string; amount: number }[] = []
+  
   if (rates.tipping.length > 0 && params.include_tips !== false) {
-    let tipsTotal = 0
-    const tipsBreakdown: { role: string; amount: number }[] = []
-    
     for (const tip of rates.tipping) {
       let tipAmount = 0
+      const tipRate = toNumber(tip.rate_eur, 0)
       
       if (tip.rate_unit === 'per_day') {
-        tipAmount = tip.rate_eur * duration_days
+        tipAmount = tipRate * duration_days
       } else if (tip.rate_unit === 'per_service') {
-        tipAmount = tip.rate_eur
+        tipAmount = tipRate
       } else if (tip.rate_unit === 'per_night' && params.include_cruise) {
-        tipAmount = tip.rate_eur * (params.cruise_nights || 0)
+        tipAmount = tipRate * (params.cruise_nights || 0)
       } else if (tip.rate_unit === 'per_cruise' && params.include_cruise) {
-        tipAmount = tip.rate_eur
+        tipAmount = tipRate
+      } else {
+        // Default to per_day
+        tipAmount = tipRate * duration_days
       }
       
       if (tipAmount > 0) {
@@ -899,11 +968,13 @@ export async function calculatePricingFromRates(
         tipsBreakdown.push({ role: tip.role_type, amount: tipAmount })
       }
     }
-    
-    result.breakdown.tips = {
-      total: tipsTotal,
-      breakdown: tipsBreakdown
-    }
+  }
+  
+  // ✅ FIXED: Calculate per_day from total
+  result.breakdown.tips = {
+    total: tipsTotal,
+    per_day: duration_days > 0 ? tipsTotal / duration_days : 0,
+    breakdown: tipsBreakdown
   }
 
   // ============================================
@@ -944,6 +1015,16 @@ export async function calculatePricingFromRates(
   result.per_person_cost = Math.round(result.per_person_cost * 100) / 100
 
   result.success = true
+  
+  console.log(`💰 PRICING SUMMARY:`)
+  console.log(`   Transportation: €${result.breakdown.transportation.total} (${result.breakdown.transportation.vehicle_type})`)
+  console.log(`   Guide: €${result.breakdown.guide.total} (${params.language})`)
+  console.log(`   Entrances: €${result.breakdown.entrances.total} (${result.breakdown.entrances.count} sites)`)
+  console.log(`   Meals: €${result.breakdown.meals.lunch_total + result.breakdown.meals.dinner_total}`)
+  console.log(`   Tips: €${result.breakdown.tips.total}`)
+  console.log(`   Water: €${result.breakdown.water.total}`)
+  console.log(`   TOTAL: €${result.total_cost}`)
+  
   return result
 }
 
@@ -960,8 +1041,8 @@ export function getFallbackRates(params: {
   const { pax, duration_days } = params
 
   // Hardcoded fallback rates
-  const vehiclePerDay = pax <= 2 ? 40 : pax <= 6 ? 55 : pax <= 10 ? 70 : 90
-  const guidePerDay = 55
+  const vehiclePerDay = pax <= 2 ? 50 : pax <= 6 ? 110 : pax <= 10 ? 150 : 200
+  const guidePerDay = params.language === 'English' ? 50 : 90
   const entrancePerPerson = params.is_euro_passport ? 18 : 25
   const lunchPerPerson = 12
   const tipPerDay = 15
@@ -1006,7 +1087,14 @@ export function getFallbackRates(params: {
       cruise: { total: 0, per_person: 0, ship_name: '', cabin_type: '', nights: 0 },
       sleeping_train: { total: 0, per_person: 0, cabin_type: '', is_roundtrip: false },
       train: { total: 0, per_person: 0, class_type: '' },
-      tips: { total: tipsTotal, breakdown: [{ role: 'guide', amount: tipPerDay * duration_days * 0.67 }, { role: 'driver', amount: tipPerDay * duration_days * 0.33 }] },
+      tips: { 
+        total: tipsTotal, 
+        per_day: tipPerDay,
+        breakdown: [
+          { role: 'guide', amount: tipPerDay * duration_days * 0.67 }, 
+          { role: 'driver', amount: tipPerDay * duration_days * 0.33 }
+        ] 
+      },
       water: { total: waterTotal, per_person: waterPerPerson * duration_days }
     },
     rates_used: {

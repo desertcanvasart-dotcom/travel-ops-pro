@@ -56,10 +56,18 @@ export function useEmailPolling({
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const isPollingRef = useRef(false)
+  const consecutiveErrorsRef = useRef(0)
+  const maxConsecutiveErrors = 3
 
   // Poll for new emails
   const poll = useCallback(async () => {
     if (!userId || isPollingRef.current) return
+
+    // Skip polling if we've had too many consecutive errors
+    if (consecutiveErrorsRef.current >= maxConsecutiveErrors) {
+      console.log('Polling paused due to consecutive errors. Click Refresh to retry.')
+      return
+    }
 
     isPollingRef.current = true
     setIsPolling(true)
@@ -74,8 +82,15 @@ export function useEmailPolling({
       const response = await fetch(`/api/gmail/poll?${params}`)
       
       if (!response.ok) {
-        throw new Error('Failed to poll for emails')
+        // Don't throw - just log and handle gracefully
+        const errorData = await response.json().catch(() => ({}))
+        console.warn('Poll request failed:', response.status, errorData.error || 'Unknown error')
+        consecutiveErrorsRef.current++
+        return
       }
+
+      // Reset error count on success
+      consecutiveErrorsRef.current = 0
 
       const result: PollResult = await response.json()
 
@@ -109,7 +124,9 @@ export function useEmailPolling({
       setLastPollTime(new Date())
 
     } catch (err: any) {
-      console.error('Polling error:', err)
+      // Fail silently - polling is not critical functionality
+      console.warn('Polling error (non-critical):', err.message)
+      consecutiveErrorsRef.current++
       setError(err.message)
     } finally {
       isPollingRef.current = false
@@ -133,7 +150,8 @@ export function useEmailPolling({
         setUnreadCount(data.unreadCount || 0)
       }
     } catch (err) {
-      console.error('Error fetching unread count:', err)
+      // Fail silently
+      console.warn('Error fetching unread count (non-critical):', err)
     }
   }, [userId])
 
@@ -142,11 +160,11 @@ export function useEmailPolling({
     setNewEmailCount(0)
   }, [])
 
-  // Manual refresh
+  // Manual refresh - resets error count
   const refresh = useCallback(async () => {
+    consecutiveErrorsRef.current = 0 // Reset errors on manual refresh
     await poll()
-    // await fetchUnreadCount()
-  }, [poll, fetchUnreadCount])
+  }, [poll])
 
   // Set up polling interval
   useEffect(() => {
@@ -158,23 +176,24 @@ export function useEmailPolling({
       return
     }
 
-    // Initial poll
-    poll()
-    // fetchUnreadCount()
+    // Initial poll (delayed slightly to let page load first)
+    const initialTimeout = setTimeout(() => {
+      poll()
+    }, 2000)
 
     // Set up interval
     intervalRef.current = setInterval(() => {
       poll()
-      // fetchUnreadCount()
     }, interval)
 
     return () => {
+      clearTimeout(initialTimeout)
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
       }
     }
-  }, [enabled, userId, interval, poll, fetchUnreadCount])
+  }, [enabled, userId, interval, poll])
 
   return {
     isPolling,
@@ -201,43 +220,69 @@ export function useEmailCache(userId: string | null) {
     import('./email-cache').then(({ initEmailCache }) => {
       initEmailCache().then(() => {
         setIsCacheReady(true)
+      }).catch(() => {
+        // Cache initialization failed - continue without cache
+        console.warn('Email cache initialization failed (non-critical)')
       })
+    }).catch(() => {
+      // Module not found - continue without cache
+      console.warn('Email cache module not found (non-critical)')
     })
   }, [])
 
   const getCached = useCallback(async (folder: string, options?: any) => {
     if (!isCacheReady || !userId) return { emails: [], fromCache: false, isStale: true }
 
-    const { getCachedEmails } = await import('./email-cache')
-    return getCachedEmails(userId, folder, options)
+    try {
+      const { getCachedEmails } = await import('./email-cache')
+      return getCachedEmails(userId, folder, options)
+    } catch {
+      return { emails: [], fromCache: false, isStale: true }
+    }
   }, [isCacheReady, userId])
 
   const cache = useCallback(async (folder: string, emails: any[], historyId?: string) => {
     if (!isCacheReady || !userId) return
 
-    const { cacheEmails } = await import('./email-cache')
-    return cacheEmails(userId, folder, emails, historyId)
+    try {
+      const { cacheEmails } = await import('./email-cache')
+      return cacheEmails(userId, folder, emails, historyId)
+    } catch {
+      // Fail silently
+    }
   }, [isCacheReady, userId])
 
   const updateCached = useCallback(async (emailId: string, updates: any) => {
     if (!isCacheReady) return
 
-    const { updateCachedEmail } = await import('./email-cache')
-    return updateCachedEmail(emailId, updates)
+    try {
+      const { updateCachedEmail } = await import('./email-cache')
+      return updateCachedEmail(emailId, updates)
+    } catch {
+      // Fail silently
+    }
   }, [isCacheReady])
 
   const removeCached = useCallback(async (emailIds: string[]) => {
     if (!isCacheReady) return
 
-    const { removeCachedEmails } = await import('./email-cache')
-    return removeCachedEmails(emailIds)
+    try {
+      const { removeCachedEmails } = await import('./email-cache')
+      return removeCachedEmails(emailIds)
+    } catch {
+      // Fail silently
+    }
   }, [isCacheReady])
 
   const clearCache = useCallback(async () => {
     if (!isCacheReady) return
 
-    const { clearEmailCache } = await import('./email-cache')
-    return clearEmailCache(userId || undefined)
+    try {
+      const { clearEmailCache } = await import('./email-cache')
+      return clearEmailCache(userId || undefined)
+    } catch {
+      // Fail silently
+    }
   }, [isCacheReady, userId])
 
   return {

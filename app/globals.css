@@ -488,7 +488,181 @@ tbody tr:last-child td {
 @media (prefers-color-scheme: dark) {
   /* Add dark mode styles here when ready */
 }
+
 /* Table header text fix */
 thead.bg-primary-600 th {
   color: white !important;
+}
+
+/* =============================================
+   EMAIL BODY STYLES
+   Improves rendering of email content in inbox
+   ============================================= */
+
+.email-body-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--gray-700);
+}
+
+.email-body-content p {
+  margin: 0 0 0.75em 0;
+}
+
+/* Section headers like [Request Details] */
+.email-body-content .email-section {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-600);
+  margin: 1.5em 0 0.75em 0;
+  padding: 0.5em 0.75em;
+  background: linear-gradient(to right, var(--gray-100), transparent);
+  border-left: 3px solid var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Styled bullet lists */
+.email-body-content .email-list {
+  margin: 1em 0;
+  padding: 0;
+  list-style: none;
+}
+
+.email-body-content .email-list li {
+  position: relative;
+  padding: 0.625em 1em 0.625em 2em;
+  margin-bottom: 0.25em;
+  background: var(--gray-50);
+  border-radius: 6px;
+  border-left: 3px solid var(--gray-200);
+  transition: all 0.15s ease;
+}
+
+.email-body-content .email-list li:hover {
+  background: var(--gray-100);
+  border-left-color: var(--primary);
+}
+
+.email-body-content .email-list li::before {
+  content: "";
+  position: absolute;
+  left: 0.75em;
+  top: 1em;
+  width: 6px;
+  height: 6px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+/* Bold/Strong text */
+.email-body-content strong,
+.email-body-content b {
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+/* Links */
+.email-body-content a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.email-body-content a:hover {
+  text-decoration: underline;
+}
+
+/* Gmail signature */
+.email-body-content .gmail_signature,
+.email-body-content [data-smartmail="gmail_signature"] {
+  margin-top: 2em;
+  padding-top: 1.5em;
+  border-top: 1px dashed var(--gray-200);
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+/* Gmail quote (previous messages in thread) */
+.email-body-content .gmail_quote {
+  margin-top: 2em;
+  padding: 1em;
+  background: var(--gray-50);
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+  color: var(--gray-600);
+  font-size: 13px;
+}
+
+/* Blockquotes */
+.email-body-content blockquote {
+  margin: 1em 0;
+  padding: 1em 1.25em;
+  background: var(--gray-50);
+  border-left: 4px solid var(--gray-300);
+  color: var(--gray-600);
+  font-size: 13px;
+  border-radius: 0 6px 6px 0;
+}
+
+/* Tables in emails */
+.email-body-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 13px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.email-body-content table th {
+  background: var(--gray-100);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75em 1em;
+  border-bottom: 2px solid var(--gray-200);
+}
+
+.email-body-content table td {
+  padding: 0.625em 1em;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.email-body-content table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Images in emails */
+.email-body-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.5em 0;
+}
+
+/* HR */
+.email-body-content hr {
+  border: none;
+  border-top: 1px solid var(--gray-200);
+  margin: 1.5em 0;
+}
+
+/* Pre/Code */
+.email-body-content pre {
+  background: var(--gray-800);
+  color: var(--gray-100);
+  padding: 1em 1.25em;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.email-body-content code {
+  background: var(--gray-100);
+  padding: 0.125em 0.375em;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
 }
