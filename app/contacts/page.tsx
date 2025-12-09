@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect, useRef, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
   Search, 
@@ -221,10 +221,9 @@ const TABLE_NAMES: Record<ContactType, string> = {
   client: 'clients',
 }
 
-function ContactsPageContent() {
-    const supabase = createClient()
+export default function ContactsPage() {
+      const supabase = createClient()
 const router = useRouter()
-const searchParams = useSearchParams()
   
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
@@ -240,16 +239,22 @@ const searchParams = useSearchParams()
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(12)
 
-  // Read URL params reactively
-  useEffect(() => {
-    const typeParam = searchParams.get('type')
+ // Read URL params and listen for changes
+ useEffect(() => {
+  const updateTypeFromURL = () => {
+    const typeParam = new URLSearchParams(window.location.search).get('type')
     const validTypes = ['all', 'accommodation', 'guide', 'restaurant', 'transportation', 'cruise', 'staff', 'client']
     if (typeParam && validTypes.includes(typeParam)) {
       setSelectedType(typeParam)
     } else {
       setSelectedType('all')
     }
-  }, [searchParams])
+  }
+  
+  updateTypeFromURL()
+  window.addEventListener('popstate', updateTypeFromURL)
+  return () => window.removeEventListener('popstate', updateTypeFromURL)
+})
 
 
   // Sync URL when type changes
@@ -2645,16 +2650,5 @@ function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModa
         </div>
       </div>
     </div>
-  )
-}
-export default function ContactsPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
-      </div>
-    }>
-      <ContactsPageContent />
-    </Suspense>
   )
 }
