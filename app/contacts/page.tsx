@@ -1,6 +1,5 @@
 'use client'
-
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { 
@@ -222,8 +221,8 @@ const TABLE_NAMES: Record<ContactType, string> = {
   client: 'clients',
 }
 
-export default function ContactsPage() {
-  const supabase = createClient()
+function ContactsPageContent() {
+    const supabase = createClient()
 const router = useRouter()
 const searchParams = useSearchParams()
   
@@ -2646,5 +2645,16 @@ function ImportModal({ isOpen, onClose, onImportComplete, supabase }: ImportModa
         </div>
       </div>
     </div>
+  )
+}
+export default function ContactsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+      </div>
+    }>
+      <ContactsPageContent />
+    </Suspense>
   )
 }
