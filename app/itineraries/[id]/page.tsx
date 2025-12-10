@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
@@ -11,6 +11,7 @@ import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ItineraryPL from '@/app/components/ItineraryPL'
+import { createClient } from '@/lib/supabase'
 
 interface Itinerary {
   id: string
@@ -35,6 +36,8 @@ interface Itinerary {
   vehicle_notes: string
   pickup_location: string
   pickup_time: string
+  cost_mode?: 'auto' | 'manual'
+  tier?: string
 }
 
 interface ItineraryDay {
@@ -71,6 +74,8 @@ interface ExistingInvoice {
 export default function ViewItineraryPage() {
   const params = useParams()
   const router = useRouter()
+  const supabase = createClient()
+  
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
   const [loading, setLoading] = useState(true)
@@ -82,6 +87,14 @@ export default function ViewItineraryPage() {
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [existingInvoice, setExistingInvoice] = useState<ExistingInvoice | null>(null)
+  
+  // Cost Mode State
+  const [costMode, setCostMode] = useState<'auto' | 'manual'>('auto')
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null)
+  const [editedCost, setEditedCost] = useState<string>('')
+  const [savingCostMode, setSavingCostMode] = useState(false)
+  const [savingServiceCost, setSavingServiceCost] = useState(false)
+  const [costModeChanged, setCostModeChanged] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -102,6 +115,7 @@ export default function ViewItineraryPage() {
       }
 
       setItinerary(itinData.data)
+      setCostMode(itinData.data.cost_mode || 'auto')
 
       const daysResponse = await fetch(`/api/itineraries/${params.id}/days`)
       const daysData = await daysResponse.json()
@@ -128,6 +142,110 @@ export default function ViewItineraryPage() {
       }
     } catch (error) {
       console.error('Error checking existing invoice:', error)
+    }
+  }
+
+  // Toggle cost mode
+  const handleToggleCostMode = async () => {
+    const newMode = costMode === 'auto' ? 'manual' : 'auto'
+    setSavingCostMode(true)
+    
+    try {
+      const { error } = await supabase
+        .from('itineraries')
+        .update({ cost_mode: newMode })
+        .eq('id', params.id)
+
+      if (error) throw error
+
+      setCostMode(newMode)
+      setCostModeChanged(true)
+      setTimeout(() => setCostModeChanged(false), 2000)
+      
+      if (itinerary) {
+        setItinerary({ ...itinerary, cost_mode: newMode })
+      }
+    } catch (error) {
+      console.error('Error updating cost mode:', error)
+      alert('Failed to update cost mode')
+    } finally {
+      setSavingCostMode(false)
+    }
+  }
+
+  // Start editing a service cost
+  const handleStartEditCost = (service: Service) => {
+    if (costMode !== 'manual') return
+    setEditingServiceId(service.id)
+    setEditedCost(service.total_cost.toString())
+  }
+
+  // Cancel editing
+  const handleCancelEditCost = () => {
+    setEditingServiceId(null)
+    setEditedCost('')
+  }
+
+  // Save edited cost
+  const handleSaveServiceCost = async (serviceId: string, dayId: string) => {
+    const newCost = parseFloat(editedCost)
+    if (isNaN(newCost) || newCost < 0) {
+      alert('Please enter a valid cost')
+      return
+    }
+
+    setSavingServiceCost(true)
+    
+    try {
+      const { error } = await supabase
+        .from('itinerary_services')
+        .update({ total_cost: newCost })
+        .eq('id', serviceId)
+
+      if (error) throw error
+
+      // Update local state
+      setDays(prevDays => prevDays.map(day => {
+        if (day.id === dayId) {
+          return {
+            ...day,
+            services: day.services.map(s => 
+              s.id === serviceId ? { ...s, total_cost: newCost } : s
+            )
+          }
+        }
+        return day
+      }))
+
+      // Recalculate total cost
+      let newTotalCost = 0
+      days.forEach(day => {
+        day.services.forEach(s => {
+          if (s.id === serviceId) {
+            newTotalCost += newCost
+          } else {
+            newTotalCost += s.total_cost
+          }
+        })
+      })
+
+      // Update itinerary total
+      await supabase
+        .from('itineraries')
+        .update({ total_cost: newTotalCost })
+        .eq('id', params.id)
+
+      if (itinerary) {
+        setItinerary({ ...itinerary, total_cost: newTotalCost })
+      }
+
+      setEditingServiceId(null)
+      setEditedCost('')
+    } catch (error) {
+      console.error('Error updating service cost:', error)
+      alert('Failed to update cost')
+    } finally {
+      setSavingServiceCost(false)
     }
   }
 
@@ -402,7 +520,9 @@ export default function ViewItineraryPage() {
       entrance: '🎫',
       meal: '🍽️',
       activity: '🎭',
-      service_fee: '💼'
+      service_fee: '💼',
+      tips: '💰',
+      supplies: '💧'
     }
     return icons[type] || '📋'
   }
@@ -457,6 +577,19 @@ export default function ViewItineraryPage() {
                   <span className="font-mono text-primary-600">{itinerary.itinerary_code}</span>
                   <span className="mx-2">•</span>
                   {itinerary.client_name}
+                  {itinerary.tier && (
+                    <>
+                      <span className="mx-2">•</span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                        itinerary.tier === 'luxury' ? 'bg-amber-100 text-amber-700' :
+                        itinerary.tier === 'deluxe' ? 'bg-purple-100 text-purple-700' :
+                        itinerary.tier === 'standard' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {itinerary.tier.toUpperCase()}
+                      </span>
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -674,15 +807,74 @@ export default function ViewItineraryPage() {
             </div>
           )}
         </div>
+
+        {/* ⭐ COST MODE TOGGLE */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${costMode === 'auto' ? 'bg-blue-100' : 'bg-amber-100'}`}>
+                {costMode === 'auto' ? (
+                  <Calculator className="w-5 h-5 text-blue-600" />
+                ) : (
+                  <Settings className="w-5 h-5 text-amber-600" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Cost Calculation: {costMode === 'auto' ? 'Automatic' : 'Manual'}
+                </h3>
+                <p className="text-xs text-gray-600">
+                  {costMode === 'auto' 
+                    ? 'Costs are calculated from the rates database' 
+                    : 'Click on any cost to edit it manually'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {costModeChanged && (
+                <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  Saved
+                </span>
+              )}
+              <button
+                onClick={handleToggleCostMode}
+                disabled={savingCostMode}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  costMode === 'manual' ? 'bg-amber-600' : 'bg-gray-300'
+                } ${savingCostMode ? 'opacity-50' : ''}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    costMode === 'manual' ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <span className="text-xs font-medium text-gray-700">
+                {costMode === 'manual' ? 'Manual' : 'Auto'}
+              </span>
+            </div>
+          </div>
+          
+          {costMode === 'manual' && (
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-800">
+                <strong>Manual Mode:</strong> Click on any service cost below to edit it. Changes are saved immediately and profit/loss will update automatically.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* ⭐ PROFIT & LOSS ANALYSIS */}
-          {days.length > 0 && (
-            <ItineraryPL
+        {days.length > 0 && (
+          <ItineraryPL
             itineraryId={itinerary.id}
             totalCost={itinerary.total_cost}
-             currency={itinerary.currency}
-             marginPercent={25}
-             days={days}
-            />
+            currency={itinerary.currency}
+            marginPercent={25}
+            days={days}
+          />
         )}
 
         {/* ⭐ WHATSAPP ACTIONS - Compact */}
@@ -794,15 +986,15 @@ export default function ViewItineraryPage() {
         </div>
 
         {/* Resource Assignment */}
-<div id="resource-assignment">
-<ResourceAssignmentV2
-  itineraryId={itinerary.id}
-  startDate={itinerary.start_date}
-  endDate={itinerary.end_date}
-  numTravelers={itinerary.num_adults + itinerary.num_children}
-  onUpdate={fetchItinerary}
-/>
-</div>
+        <div id="resource-assignment">
+          <ResourceAssignmentV2
+            itineraryId={itinerary.id}
+            startDate={itinerary.start_date}
+            endDate={itinerary.end_date}
+            numTravelers={itinerary.num_adults + itinerary.num_children}
+            onUpdate={fetchItinerary}
+          />
+        </div>
 
         {/* ⭐ COMPACT DAY CONTROLS */}
         <div className="flex justify-between items-center">
@@ -823,7 +1015,7 @@ export default function ViewItineraryPage() {
           </div>
         </div>
 
-        {/* ⭐ COMPACT DAYS LIST */}
+        {/* ⭐ COMPACT DAYS LIST WITH EDITABLE COSTS */}
         <div className="space-y-3">
           {days.map((day) => (
             <div key={day.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
@@ -878,9 +1070,49 @@ export default function ViewItineraryPage() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-semibold text-gray-900">
-                                {itinerary.currency} {service.total_cost.toFixed(2)}
-                              </p>
+                              {/* Editable cost field in manual mode */}
+                              {costMode === 'manual' && editingServiceId === service.id ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-sm text-gray-500">{itinerary.currency}</span>
+                                  <input
+                                    type="number"
+                                    value={editedCost}
+                                    onChange={(e) => setEditedCost(e.target.value)}
+                                    className="w-20 px-2 py-1 text-sm font-semibold text-right border border-primary-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveServiceCost(service.id, day.id)
+                                      if (e.key === 'Escape') handleCancelEditCost()
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => handleSaveServiceCost(service.id, day.id)}
+                                    disabled={savingServiceCost}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEditCost}
+                                    className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleStartEditCost(service)}
+                                  disabled={costMode !== 'manual'}
+                                  className={`text-sm font-semibold ${
+                                    costMode === 'manual' 
+                                      ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' 
+                                      : 'text-gray-900 cursor-default'
+                                  }`}
+                                  title={costMode === 'manual' ? 'Click to edit' : 'Switch to Manual mode to edit'}
+                                >
+                                  {itinerary.currency} {service.total_cost.toFixed(2)}
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}

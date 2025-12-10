@@ -6,7 +6,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
-// Default margin percentage
+// Default margin percentage (used if no user preference)
 const DEFAULT_MARGIN_PERCENT = 25
 
 // ============================================
@@ -51,9 +51,71 @@ function normalizeTier(value: string | null | undefined): ServiceTier {
   return TIER_MAP[normalized] || 'standard'
 }
 
+// ============================================
+// FETCH USER PREFERENCES
+// ============================================
+async function getUserPreferences(supabase: any): Promise<{
+  default_cost_mode: 'auto' | 'manual'
+  default_tier: ServiceTier
+  default_margin_percent: number
+  default_currency: string
+}> {
+  const defaults = {
+    default_cost_mode: 'auto' as const,
+    default_tier: 'standard' as ServiceTier,
+    default_margin_percent: DEFAULT_MARGIN_PERCENT,
+    default_currency: 'EUR'
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      console.log('⚙️ No authenticated user, using default preferences')
+      return defaults
+    }
+
+    const { data: prefs, error } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+
+    if (error || !prefs) {
+      console.log('⚙️ No user preferences found, using defaults')
+      return defaults
+    }
+
+    console.log('⚙️ Loaded user preferences:', {
+      cost_mode: prefs.default_cost_mode,
+      tier: prefs.default_tier,
+      margin: prefs.default_margin_percent,
+      currency: prefs.default_currency
+    })
+
+    return {
+      default_cost_mode: prefs.default_cost_mode || defaults.default_cost_mode,
+      default_tier: normalizeTier(prefs.default_tier) || defaults.default_tier,
+      default_margin_percent: prefs.default_margin_percent ?? defaults.default_margin_percent,
+      default_currency: prefs.default_currency || defaults.default_currency
+    }
+  } catch (error) {
+    console.error('⚠️ Error fetching user preferences:', error)
+    return defaults
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    
+    const supabase = createClient()
+    
+    // ============================================
+    // FETCH USER PREFERENCES FIRST
+    // ============================================
+    const userPrefs = await getUserPreferences(supabase)
+    
     const {
       client_name,
       client_email,
@@ -67,7 +129,7 @@ export async function POST(request: NextRequest) {
       interests = [],
       special_requests = [],
       budget_level = 'standard',
-      // NEW: Accept tier parameter (takes precedence over budget_level)
+      // NEW: Accept tier parameter (takes precedence over budget_level, then user preference)
       tier: raw_tier = null,
       hotel_name,
       hotel_location,
@@ -80,13 +142,20 @@ export async function POST(request: NextRequest) {
       include_dinner = false,
       include_accommodation = true,
       attractions = [],
-      margin_percent = DEFAULT_MARGIN_PERCENT
+      // Use user preference as default, allow override from request
+      margin_percent = userPrefs.default_margin_percent,
+      // NEW: Accept currency parameter, default to user preference
+      currency = userPrefs.default_currency,
+      // NEW: Accept cost_mode parameter, default to user preference
+      cost_mode = userPrefs.default_cost_mode
     } = body
 
-    // Normalize tier - use explicit tier param if provided, otherwise map from budget_level
+    // Normalize tier - use explicit tier param if provided, otherwise budget_level, otherwise user preference
     const tier: ServiceTier = raw_tier 
       ? normalizeTier(raw_tier) 
-      : normalizeTier(budget_level)
+      : budget_level !== 'standard' 
+        ? normalizeTier(budget_level)
+        : userPrefs.default_tier
 
     // Validate date
     if (!isValidDate(start_date)) {
@@ -100,11 +169,12 @@ export async function POST(request: NextRequest) {
 
     console.log('🤖 Starting AI itinerary generation for:', client_name)
     console.log(`📅 Start date: ${start_date}, Duration: ${duration_days} days`)
-    console.log(`🎯 Service Tier: ${tier.toUpperCase()}`)
+    console.log(`🎯 Service Tier: ${tier.toUpperCase()} (from: ${raw_tier ? 'request' : budget_level !== 'standard' ? 'budget_level' : 'user preference'})`)
+    console.log(`💰 Margin: ${margin_percent}% (from: ${body.margin_percent ? 'request' : 'user preference'})`)
+    console.log(`💱 Currency: ${currency} (from: ${body.currency ? 'request' : 'user preference'})`)
+    console.log(`📊 Cost Mode: ${cost_mode} (from: ${body.cost_mode ? 'request' : 'user preference'})`)
     console.log(`🏨 Include accommodation: ${include_accommodation}`)
-    console.log(`💰 Margin: ${margin_percent}%`)
 
-    const supabase = createClient()
     const totalPax = num_adults + num_children
 
     // Determine EUR vs non-EUR passport
@@ -499,7 +569,7 @@ IMPORTANT:
     })
 
     // ============================================
-    // INSERT ITINERARY
+    // INSERT ITINERARY (with cost_mode from user preferences)
     // ============================================
     
     const { data: itinerary, error: itineraryError } = await supabase
@@ -515,12 +585,13 @@ IMPORTANT:
         total_days: duration_days,
         num_adults,
         num_children,
-        currency: 'EUR',
+        currency: currency, // Use currency from request or user preference
         total_cost: 0, // Will update after calculating
         total_revenue: 0,
         margin_percent: margin_percent,
         status: 'draft',
         tier: tier, // Store the tier used for this itinerary
+        cost_mode: cost_mode, // NEW: Store cost mode from user preference
         notes: special_requests.length > 0 ? special_requests.join('; ') : null,
         user_id: null,
         client_id: client_id
@@ -533,7 +604,7 @@ IMPORTANT:
       throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
     }
 
-    console.log('✅ Created itinerary:', itinerary.id)
+    console.log('✅ Created itinerary:', itinerary.id, `(cost_mode: ${cost_mode})`)
 
     // ============================================
     // INSERT DAYS WITH SERVICES
@@ -839,6 +910,7 @@ IMPORTANT:
 
     console.log('🎉 Itinerary generation completed!')
     console.log(`🎯 Service Tier: ${tier.toUpperCase()}`)
+    console.log(`📊 Cost Mode: ${cost_mode}`)
     console.log(`💰 Total Supplier Cost: €${totalSupplierCost.toFixed(2)}`)
     console.log(`💰 Total Client Price: €${totalClientPrice.toFixed(2)}`)
     console.log(`💰 Margin: €${(totalClientPrice - totalSupplierCost).toFixed(2)}`)
@@ -851,6 +923,8 @@ IMPORTANT:
         itinerary_code: itinerary.itinerary_code,
         trip_name: itineraryData.trip_name,
         tier: tier,
+        cost_mode: cost_mode, // Include in response
+        currency: currency,
         supplier_cost: totalSupplierCost,
         total_cost: totalClientPrice,
         total_revenue: totalClientPrice,
