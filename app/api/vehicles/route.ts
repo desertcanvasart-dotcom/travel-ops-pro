@@ -157,39 +157,43 @@ export async function POST(request: NextRequest) {
     }
     
     // Validate vehicle type
-    const validTypes = ['car', 'van', 'minibus', 'bus', 'suv']
-    if (!validTypes.includes(body.vehicle_type)) {
+   // Validate vehicle type
+const validTypes = ['car', 'sedan', 'van', 'minivan', 'minibus', 'bus', 'suv']
+if (!validTypes.includes(body.vehicle_type)) {
       return NextResponse.json(
         { success: false, error: 'Invalid vehicle type' },
         { status: 400 }
       )
     }
     
-    // Prepare vehicle data
-    const vehicleData = {
-      name: body.name,
-      vehicle_type: body.vehicle_type,
-      make: body.make || null,
-      model: body.model || null,
-      year: body.year || null,
-      license_plate: body.license_plate || null,
-      registration_number: body.registration_number || null,
-      passenger_capacity: body.passenger_capacity,
-      has_ac: body.has_ac !== undefined ? body.has_ac : true,
-      has_wifi: body.has_wifi !== undefined ? body.has_wifi : false,
-      is_luxury: body.is_luxury !== undefined ? body.is_luxury : false,
-      is_active: body.is_active !== undefined ? body.is_active : true,
-      current_mileage: body.current_mileage || null,
-      last_service_date: body.last_service_date || null,
-      next_service_date: body.next_service_date || null,
-      insurance_expiry: body.insurance_expiry || null,
-      daily_rate: body.daily_rate || null,
-      rate_per_km: body.rate_per_km || null,
-      default_driver_name: body.default_driver_name || null,
-      default_driver_phone: body.default_driver_phone || null,
-      notes: body.notes || null,
-      photo_url: body.photo_url || null,
-    }
+   // Prepare vehicle data
+const vehicleData = {
+  name: body.name,
+  vehicle_type: body.vehicle_type,
+  make: body.make || null,
+  model: body.model || null,
+  year: body.year || null,
+  license_plate: body.license_plate || null,
+  registration_number: body.registration_number || null,
+  passenger_capacity: body.passenger_capacity,
+  has_ac: body.has_ac !== undefined ? body.has_ac : true,
+  has_wifi: body.has_wifi !== undefined ? body.has_wifi : false,
+  is_luxury: body.is_luxury !== undefined ? body.is_luxury : false,
+  is_active: body.is_active !== undefined ? body.is_active : true,
+  current_mileage: body.current_mileage || null,
+  last_service_date: body.last_service_date || null,
+  next_service_date: body.next_service_date || null,
+  insurance_expiry: body.insurance_expiry || null,
+  daily_rate: body.daily_rate || null,
+  rate_per_km: body.rate_per_km || null,
+  default_driver_name: body.default_driver_name || null,
+  default_driver_phone: body.default_driver_phone || null,
+  notes: body.notes || null,
+  photo_url: body.photo_url || null,
+  tier: body.tier || 'standard',
+  is_preferred: body.is_preferred || false,
+  city: body.city || null,
+}
     
     // Insert into database
     const { data, error } = await supabase

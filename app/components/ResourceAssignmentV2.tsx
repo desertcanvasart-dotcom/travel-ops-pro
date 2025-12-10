@@ -5,13 +5,14 @@ import { useEffect, useState, useCallback } from 'react'
 import { 
   Users, Truck, Hotel, UtensilsCrossed, Ship, Plane, UserCheck,
   Check, AlertCircle, Loader2, MapPin, Clock, Plus, Trash2, Calendar,
-  ChevronDown, ChevronUp, X
+  ChevronDown, ChevronUp, X, MessageCircle, Send
 } from 'lucide-react'
 
 // Types
 interface Resource {
   id: string
   name: string
+  phone?: string
   [key: string]: any
 }
 
@@ -43,6 +44,8 @@ interface ResourceAssignmentV2Props {
   startDate: string
   endDate: string
   numTravelers?: number
+  clientName?: string
+  tripName?: string
   onUpdate?: () => void
 }
 
@@ -55,16 +58,20 @@ const RESOURCE_TYPES = [
     color: 'blue',
     apiEndpoint: '/api/guides',
     nameField: 'name',
-    displayField: (r: any) => `${r.name}${r.languages?.length ? ` (${r.languages.join(', ')})` : ''}`
+    phoneField: 'phone',
+    displayField: (r: any) => `${r.name}${r.languages?.length ? ` (${r.languages.join(', ')})` : ''}`,
+    canNotify: true  // ✓ WhatsApp button
   },
   { 
     key: 'vehicle', 
     label: 'Vehicles', 
     icon: Truck, 
     color: 'green',
-    apiEndpoint: '/api/resources/transportation',
+    apiEndpoint: '/api/vehicles',
     nameField: 'name',
-    displayField: (r: any) => `${r.name} - ${r.vehicle_type || 'Vehicle'} (${r.passenger_capacity || '?'} seats)`
+    phoneField: 'default_driver_phone',
+    displayField: (r: any) => `${r.name || r.vehicle_type || 'Vehicle'} - ${r.city || 'N/A'} (${r.passenger_capacity || '?'} pax)`,
+    canNotify: false  // ✗ No WhatsApp button
   },
   { 
     key: 'hotel', 
@@ -73,7 +80,9 @@ const RESOURCE_TYPES = [
     color: 'purple',
     apiEndpoint: '/api/resources/hotels',
     nameField: 'name',
-    displayField: (r: any) => `${r.name}${r.city ? ` - ${r.city}` : ''}${r.star_rating ? ` ⭐${r.star_rating}` : ''}`
+    phoneField: 'phone',
+    displayField: (r: any) => `${r.name}${r.city ? ` - ${r.city}` : ''}${r.star_rating ? ` ⭐${r.star_rating}` : ''}`,
+    canNotify: false  // ✗ No WhatsApp button
   },
   { 
     key: 'restaurant', 
@@ -82,16 +91,20 @@ const RESOURCE_TYPES = [
     color: 'orange',
     apiEndpoint: '/api/resources/restaurants',
     nameField: 'name',
-    displayField: (r: any) => `${r.name}${r.city ? ` - ${r.city}` : ''}${r.cuisine_type ? ` (${r.cuisine_type})` : ''}`
+    phoneField: 'phone',
+    displayField: (r: any) => `${r.name}${r.city ? ` - ${r.city}` : ''}${r.cuisine_type ? ` (${r.cuisine_type})` : ''}`,
+    canNotify: true  // ✓ WhatsApp button
   },
   { 
     key: 'cruise', 
     label: 'Cruises', 
     icon: Ship, 
     color: 'indigo',
-    apiEndpoint: '/api/cruises',  // May need to create this
+    apiEndpoint: '/api/cruises',
     nameField: 'name',
-    displayField: (r: any) => `${r.name}${r.ship_name ? ` - ${r.ship_name}` : ''}${r.star_rating ? ` ⭐${r.star_rating}` : ''}`
+    phoneField: 'phone',
+    displayField: (r: any) => `${r.name}${r.ship_name ? ` - ${r.ship_name}` : ''}${r.star_rating ? ` ⭐${r.star_rating}` : ''}`,
+    canNotify: false  // ✗ No WhatsApp button
   },
   { 
     key: 'airport_staff', 
@@ -100,7 +113,9 @@ const RESOURCE_TYPES = [
     color: 'cyan',
     apiEndpoint: '/api/resources/airport-staff',
     nameField: 'name',
-    displayField: (r: any) => `${r.name}${r.location ? ` - ${r.location}` : ''}`
+    phoneField: 'phone',
+    displayField: (r: any) => `${r.name}${r.location ? ` - ${r.location}` : ''}`,
+    canNotify: true  // ✓ WhatsApp button
   },
   { 
     key: 'hotel_staff', 
@@ -109,7 +124,9 @@ const RESOURCE_TYPES = [
     color: 'pink',
     apiEndpoint: '/api/resources/hotel-staff',
     nameField: 'name',
-    displayField: (r: any) => `${r.name}${r.location ? ` - ${r.location}` : ''}`
+    phoneField: 'phone',
+    displayField: (r: any) => `${r.name}${r.location ? ` - ${r.location}` : ''}`,
+    canNotify: true  // ✓ WhatsApp button
   }
 ]
 
@@ -128,6 +145,8 @@ export default function ResourceAssignmentV2({
   startDate,
   endDate,
   numTravelers,
+  clientName,
+  tripName,
   onUpdate
 }: ResourceAssignmentV2Props) {
   const [activeTab, setActiveTab] = useState('guide')
@@ -153,11 +172,9 @@ export default function ResourceAssignmentV2({
     quantity: 1
   })
 
-  // Pickup details (legacy support)
-  const [pickupDetails, setPickupDetails] = useState({
-    pickup_location: '',
-    pickup_time: ''
-  })
+  // WhatsApp sending state
+  const [sendingWhatsApp, setSendingWhatsApp] = useState<string | null>(null)
+  const [whatsAppSent, setWhatsAppSent] = useState<Set<string>>(new Set())
 
   // Fetch all data on mount
   useEffect(() => {
@@ -299,6 +316,69 @@ export default function ResourceAssignmentV2({
     }
   }
 
+// WhatsApp notification handler
+const handleSendWhatsApp = async (resource: AssignedResource) => {
+  const typeConfig = RESOURCE_TYPES.find(t => t.key === resource.resource_type)
+  if (!typeConfig?.canNotify) return
+
+  setSendingWhatsApp(resource.id)
+  
+  try {
+    let endpoint = ''
+    let body: any = {}
+
+    if (resource.resource_type === 'guide') {
+      // Use existing guide endpoint
+      endpoint = '/api/whatsapp/notify-guide'
+      body = { 
+        itineraryId, 
+        guideId: resource.resource_id 
+      }
+    } else if (['restaurant', 'airport_staff', 'hotel_staff'].includes(resource.resource_type)) {
+      // Use generic resource endpoint
+      endpoint = '/api/whatsapp/notify-resource'
+      body = {
+        itineraryId,
+        resourceId: resource.resource_id,
+        resourceType: resource.resource_type,
+        resourceName: resource.resource_name,
+        startDate: resource.start_date,
+        endDate: resource.end_date,
+        notes: resource.notes
+      }
+    } else {
+      console.log('No WhatsApp endpoint for resource type:', resource.resource_type)
+      return
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+
+    const data = await response.json()
+
+    if (data.success) {
+      setWhatsAppSent(prev => new Set([...prev, resource.id]))
+      setTimeout(() => {
+        setWhatsAppSent(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(resource.id)
+          return newSet
+        })
+      }, 3000)
+    } else {
+      alert(data.error || 'Failed to send WhatsApp notification')
+    }
+  } catch (error) {
+    console.error('Error sending WhatsApp:', error)
+    alert('Failed to send WhatsApp notification')
+  } finally {
+    setSendingWhatsApp(null)
+  }
+}
+
   const resetAddForm = () => {
     setAddFormData({
       resource_id: '',
@@ -420,49 +500,88 @@ export default function ResourceAssignmentV2({
         {/* Assigned Resources List */}
         {activeResources.length > 0 ? (
           <div className="space-y-3 mb-4">
-            {activeResources.map((resource) => (
-              <div 
-                key={resource.id}
-                className={`flex items-center justify-between p-4 rounded-lg border ${activeColor.border} ${activeColor.light}`}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{resource.resource_name}</span>
-                    {resource.quantity > 1 && (
-                      <span className="text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">
-                        ×{resource.quantity}
-                      </span>
-                    )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      resource.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                      resource.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {resource.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {formatDate(resource.start_date)}
-                      {resource.end_date && resource.end_date !== resource.start_date && (
-                        <> - {formatDate(resource.end_date)}</>
+            {activeResources.map((resource) => {
+              const typeConfig = RESOURCE_TYPES.find(t => t.key === resource.resource_type)
+              const canNotify = typeConfig?.canNotify || false
+              const isSending = sendingWhatsApp === resource.id
+              const wasSent = whatsAppSent.has(resource.id)
+              
+              return (
+                <div 
+                  key={resource.id}
+                  className={`p-4 rounded-lg border ${activeColor.border} ${activeColor.light}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">{resource.resource_name}</span>
+                        {resource.quantity > 1 && (
+                          <span className="text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">
+                            ×{resource.quantity}
+                          </span>
+                        )}
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          resource.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+                          resource.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {resource.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          {formatDate(resource.start_date)}
+                          {resource.end_date && resource.end_date !== resource.start_date && (
+                            <> - {formatDate(resource.end_date)}</>
+                          )}
+                        </span>
+                        {resource.notes && (
+                          <span className="text-gray-500 truncate max-w-xs">• {resource.notes}</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2">
+                      {/* WhatsApp Button */}
+                      {canNotify && (
+                        <button
+                          onClick={() => handleSendWhatsApp(resource)}
+                          disabled={isSending}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                            wasSent 
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-[#25D366] text-white hover:bg-[#20BD5A]'
+                          } disabled:opacity-50`}
+                          title="Send WhatsApp notification"
+                        >
+                          {isSending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : wasSent ? (
+                            <Check className="w-4 h-4" />
+                          ) : (
+                            <MessageCircle className="w-4 h-4" />
+                          )}
+                          <span className="hidden sm:inline">
+                            {isSending ? 'Sending...' : wasSent ? 'Sent!' : 'Notify'}
+                          </span>
+                        </button>
                       )}
-                    </span>
-                    {resource.notes && (
-                      <span className="text-gray-500 truncate max-w-xs">• {resource.notes}</span>
-                    )}
+                      
+                      {/* Remove Button */}
+                      <button
+                        onClick={() => handleRemoveResource(resource.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleRemoveResource(resource.id)}
-                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Remove"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="text-center py-8 text-gray-500 mb-4">

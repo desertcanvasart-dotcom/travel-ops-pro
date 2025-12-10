@@ -69,7 +69,7 @@ export async function PUT(
     
     if (body.name !== undefined) updateData.name = body.name
     if (body.vehicle_type !== undefined) {
-      const validTypes = ['car', 'van', 'minibus', 'bus', 'suv']
+      const validTypes = ['car', 'sedan', 'van', 'minivan', 'minibus', 'bus', 'suv']
       if (!validTypes.includes(body.vehicle_type)) {
         return NextResponse.json(
           { success: false, error: 'Invalid vehicle type' },
@@ -89,15 +89,20 @@ export async function PUT(
     if (body.is_luxury !== undefined) updateData.is_luxury = body.is_luxury
     if (body.is_active !== undefined) updateData.is_active = body.is_active
     if (body.current_mileage !== undefined) updateData.current_mileage = body.current_mileage
-    if (body.last_service_date !== undefined) updateData.last_service_date = body.last_service_date
-    if (body.next_service_date !== undefined) updateData.next_service_date = body.next_service_date
-    if (body.insurance_expiry !== undefined) updateData.insurance_expiry = body.insurance_expiry
+    if (body.last_service_date !== undefined) updateData.last_service_date = body.last_service_date || null
+    if (body.next_service_date !== undefined) updateData.next_service_date = body.next_service_date || null
+    if (body.insurance_expiry !== undefined) updateData.insurance_expiry = body.insurance_expiry || null
     if (body.daily_rate !== undefined) updateData.daily_rate = body.daily_rate
     if (body.rate_per_km !== undefined) updateData.rate_per_km = body.rate_per_km
     if (body.default_driver_name !== undefined) updateData.default_driver_name = body.default_driver_name
     if (body.default_driver_phone !== undefined) updateData.default_driver_phone = body.default_driver_phone
     if (body.notes !== undefined) updateData.notes = body.notes
     if (body.photo_url !== undefined) updateData.photo_url = body.photo_url
+    if (body.tier !== undefined) updateData.tier = body.tier
+    if (body.is_preferred !== undefined) updateData.is_preferred = body.is_preferred
+    if (body.city !== undefined) updateData.city = body.city
+    
+    // Update in database
     
     // Update in database
     const { data, error } = await supabase

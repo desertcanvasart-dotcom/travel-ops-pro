@@ -987,13 +987,15 @@ export default function ViewItineraryPage() {
 
         {/* Resource Assignment */}
         <div id="resource-assignment">
-          <ResourceAssignmentV2
-            itineraryId={itinerary.id}
-            startDate={itinerary.start_date}
-            endDate={itinerary.end_date}
-            numTravelers={itinerary.num_adults + itinerary.num_children}
-            onUpdate={fetchItinerary}
-          />
+        <ResourceAssignmentV2
+  itineraryId={itinerary.id}
+  startDate={itinerary.start_date}
+  endDate={itinerary.end_date}
+  numTravelers={itinerary.num_travelers || itinerary.num_adults}
+  clientName={itinerary.client_name}
+  tripName={itinerary.trip_name}
+  onUpdate={fetchItinerary}
+/>
         </div>
 
         {/* ⭐ COMPACT DAY CONTROLS */}
