@@ -9,6 +9,26 @@ const openai = new OpenAI({
 // Default margin percentage
 const DEFAULT_MARGIN_PERCENT = 25
 
+// ============================================
+// TIER SYSTEM CONSTANTS
+// ============================================
+type ServiceTier = 'budget' | 'standard' | 'deluxe' | 'luxury'
+
+const VALID_TIERS: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
+
+// Map legacy budget_level values to new tier system
+const TIER_MAP: Record<string, ServiceTier> = {
+  'budget': 'budget',
+  'economy': 'budget',
+  'standard': 'standard',
+  'mid-range': 'standard',
+  'deluxe': 'deluxe',
+  'superior': 'deluxe',
+  'luxury': 'luxury',
+  'premium': 'luxury',
+  'vip': 'luxury'
+}
+
 // Helper to validate date
 function isValidDate(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false
@@ -22,6 +42,13 @@ function toNumber(value: any, fallback: number = 0): number {
     return fallback
   }
   return Number(value)
+}
+
+// Helper to normalize tier value
+function normalizeTier(value: string | null | undefined): ServiceTier {
+  if (!value) return 'standard'
+  const normalized = value.toLowerCase().trim()
+  return TIER_MAP[normalized] || 'standard'
 }
 
 export async function POST(request: NextRequest) {
@@ -40,6 +67,8 @@ export async function POST(request: NextRequest) {
       interests = [],
       special_requests = [],
       budget_level = 'standard',
+      // NEW: Accept tier parameter (takes precedence over budget_level)
+      tier: raw_tier = null,
       hotel_name,
       hotel_location,
       city = 'Cairo',
@@ -54,6 +83,11 @@ export async function POST(request: NextRequest) {
       margin_percent = DEFAULT_MARGIN_PERCENT
     } = body
 
+    // Normalize tier - use explicit tier param if provided, otherwise map from budget_level
+    const tier: ServiceTier = raw_tier 
+      ? normalizeTier(raw_tier) 
+      : normalizeTier(budget_level)
+
     // Validate date
     if (!isValidDate(start_date)) {
       return NextResponse.json(
@@ -66,6 +100,7 @@ export async function POST(request: NextRequest) {
 
     console.log('🤖 Starting AI itinerary generation for:', client_name)
     console.log(`📅 Start date: ${start_date}, Duration: ${duration_days} days`)
+    console.log(`🎯 Service Tier: ${tier.toUpperCase()}`)
     console.log(`🏨 Include accommodation: ${include_accommodation}`)
     console.log(`💰 Margin: ${margin_percent}%`)
 
@@ -102,12 +137,47 @@ export async function POST(request: NextRequest) {
     const itinerary_code = `EGYPT-${year}-${randomNum}`
 
     // ============================================
-    // FETCH ALL AVAILABLE RATES
+    // FETCH ALL AVAILABLE RATES WITH TIER FILTERING
     // ============================================
     
-    // 1. Transportation rates
-    console.log('🚗 Fetching transportation rates...')
+    // 1. Transportation rates - Query vehicles table with tier filter
+    console.log(`🚗 Fetching vehicles for tier: ${tier}...`)
+    
+    // First, try to get preferred vehicles matching tier
     const { data: vehicles } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('is_active', true)
+      .eq('tier', tier)
+      .order('is_preferred', { ascending: false }) // Preferred first
+      .order('capacity_min', { ascending: true })
+
+    // Fallback: If no vehicles match tier, get any active vehicles
+    let availableVehicles = vehicles
+    if (!availableVehicles || availableVehicles.length === 0) {
+      console.log(`⚠️ No vehicles found for tier ${tier}, falling back to all active vehicles`)
+      const { data: fallbackVehicles } = await supabase
+        .from('vehicles')
+        .select('*')
+        .eq('is_active', true)
+        .order('is_preferred', { ascending: false })
+        .order('capacity_min', { ascending: true })
+      availableVehicles = fallbackVehicles
+    }
+
+    let selectedVehicle = null
+    if (availableVehicles && availableVehicles.length > 0) {
+      // Find vehicle that fits the group size, preferring preferred vehicles
+      selectedVehicle = availableVehicles.find(v => 
+        totalPax >= toNumber(v.capacity_min, 1) && 
+        totalPax <= toNumber(v.capacity_max, 99)
+      ) || availableVehicles[availableVehicles.length - 1]
+      
+      console.log(`✅ Selected vehicle: ${selectedVehicle.vehicle_type} (tier: ${selectedVehicle.tier}, preferred: ${selectedVehicle.is_preferred})`)
+    }
+
+    // Also get rate from transportation_rates for pricing
+    const { data: vehicleRates } = await supabase
       .from('transportation_rates')
       .select('*')
       .eq('is_active', true)
@@ -115,28 +185,60 @@ export async function POST(request: NextRequest) {
       .eq('city', city)
       .order('capacity_min')
 
-    let selectedVehicle = null
-    if (vehicles && vehicles.length > 0) {
-      selectedVehicle = vehicles.find(v => 
+    let vehicleRate = null
+    if (vehicleRates && vehicleRates.length > 0) {
+      vehicleRate = vehicleRates.find(v => 
         totalPax >= toNumber(v.capacity_min, 1) && 
         totalPax <= toNumber(v.capacity_max, 99)
-      ) || vehicles[vehicles.length - 1]
-      console.log(`✅ Selected vehicle: ${selectedVehicle.vehicle_type} @ €${selectedVehicle.base_rate_eur}/day`)
+      ) || vehicleRates[vehicleRates.length - 1]
+      console.log(`✅ Vehicle rate: €${vehicleRate.base_rate_eur}/day`)
     }
 
-    // 2. Guide rates
-    console.log('🎯 Fetching guide rates...')
+    // 2. Guide rates - Query guides table with tier filter
+    console.log(`🎯 Fetching guides for tier: ${tier}, language: ${language}...`)
+    
+    // First, try preferred guides matching tier and language
     const { data: guides } = await supabase
+      .from('guides')
+      .select('*')
+      .eq('is_active', true)
+      .eq('tier', tier)
+      .contains('languages', [language])
+      .order('is_preferred', { ascending: false }) // Preferred first
+      .limit(5)
+
+    // Fallback: If no guides match tier, get any active guides with the language
+    let availableGuides = guides
+    if (!availableGuides || availableGuides.length === 0) {
+      console.log(`⚠️ No guides found for tier ${tier} with ${language}, trying without tier filter`)
+      const { data: fallbackGuides } = await supabase
+        .from('guides')
+        .select('*')
+        .eq('is_active', true)
+        .contains('languages', [language])
+        .order('is_preferred', { ascending: false })
+        .limit(5)
+      availableGuides = fallbackGuides
+    }
+
+    let selectedGuide = null
+    if (availableGuides && availableGuides.length > 0) {
+      selectedGuide = availableGuides[0] // First one is preferred (due to ordering)
+      console.log(`✅ Selected guide: ${selectedGuide.name} (tier: ${selectedGuide.tier}, preferred: ${selectedGuide.is_preferred})`)
+    }
+
+    // Get guide rate from guide_rates table
+    const { data: guideRates } = await supabase
       .from('guide_rates')
       .select('*')
       .eq('is_active', true)
       .eq('guide_language', language)
       .limit(1)
 
-    let selectedGuide = null
-    if (guides && guides.length > 0) {
-      selectedGuide = guides[0]
-      console.log(`✅ Selected guide: ${language} @ €${selectedGuide.base_rate_eur}/day`)
+    let guideRate = null
+    if (guideRates && guideRates.length > 0) {
+      guideRate = guideRates[0]
+      console.log(`✅ Guide rate: €${guideRate.base_rate_eur}/day`)
     }
 
     // 3. ALL entrance fees (we'll match per day later)
@@ -148,8 +250,33 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Loaded ${allEntranceFees?.length || 0} entrance fees`)
 
-    // 4. Meal rates
-    console.log('🍽️ Fetching meal rates...')
+    // 4. Meal rates - Query restaurants with tier filter for recommendations
+    console.log(`🍽️ Fetching restaurants for tier: ${tier}...`)
+    
+    const { data: restaurants } = await supabase
+      .from('restaurant_contacts')
+      .select('*')
+      .eq('is_active', true)
+      .eq('tier', tier)
+      .order('is_preferred', { ascending: false })
+      .limit(10)
+
+    let recommendedRestaurants = restaurants
+    if (!recommendedRestaurants || recommendedRestaurants.length === 0) {
+      const { data: fallbackRestaurants } = await supabase
+        .from('restaurant_contacts')
+        .select('*')
+        .eq('is_active', true)
+        .order('is_preferred', { ascending: false })
+        .limit(10)
+      recommendedRestaurants = fallbackRestaurants
+    }
+
+    if (recommendedRestaurants && recommendedRestaurants.length > 0) {
+      console.log(`✅ Found ${recommendedRestaurants.length} restaurants for tier ${tier}`)
+    }
+
+    // Get meal rates from meal_rates table
     const { data: mealRates } = await supabase
       .from('meal_rates')
       .select('*')
@@ -163,88 +290,91 @@ export async function POST(request: NextRequest) {
       dinnerRate = toNumber(mealRates[0].dinner_rate_eur, 18)
     }
 
-    // 5. Accommodation rates - FIXED based on actual database schema
-    console.log('🏨 Fetching accommodation rates...')
+    // Adjust meal rates based on tier
+    const tierMealMultiplier: Record<ServiceTier, number> = {
+      'budget': 0.8,
+      'standard': 1.0,
+      'deluxe': 1.3,
+      'luxury': 1.6
+    }
+    lunchRate = Math.round(lunchRate * tierMealMultiplier[tier])
+    dinnerRate = Math.round(dinnerRate * tierMealMultiplier[tier])
+    console.log(`✅ Meal rates (tier-adjusted): Lunch €${lunchRate}, Dinner €${dinnerRate}`)
+
+    // 5. Accommodation rates - Query hotel_contacts with tier filter
+    console.log(`🏨 Fetching hotels for tier: ${tier}...`)
     let hotelRate = 0
     let hotelName_final = hotel_name || 'Standard Hotel'
+    let selectedHotel = null
     
     if (include_accommodation) {
-      // Map budget_level to tier
-      const tierMap: Record<string, string> = {
-        'budget': 'budget',
-        'standard': 'standard',
-        'luxury': 'luxury',
-        'deluxe': 'luxury'
-      }
-      const tier = tierMap[budget_level] || 'standard'
-      
-      // First try hotel_contacts table (has Cairo hotels with rates)
-      // Column names: name, city, rate_double_eur, is_active
-      console.log(`🏨 Searching hotel_contacts for city: ${city}`)
-      
+      // Query hotel_contacts with tier filter and preferred ordering
       const { data: hotelContacts, error: hcError } = await supabase
         .from('hotel_contacts')
         .select('*')
-        .ilike('city', city)  // Case-insensitive match (cairo vs Cairo)
+        .ilike('city', city)
         .eq('is_active', true)
-        .order('rate_double_eur', { ascending: budget_level === 'budget' })
+        .eq('tier', tier)
+        .order('is_preferred', { ascending: false }) // Preferred hotels first!
+        .order('star_rating', { ascending: false })
         .limit(5)
 
-      console.log(`🏨 hotel_contacts query result: found=${hotelContacts?.length || 0}`)
+      console.log(`🏨 hotel_contacts query (tier=${tier}): found=${hotelContacts?.length || 0}`)
       if (hcError) console.error('❌ hotel_contacts error:', hcError)
 
       if (hotelContacts && hotelContacts.length > 0) {
-        // Pick based on budget level
-        let selectedHotel = hotelContacts[0]
-        
-        // For luxury, get highest rated; for budget, get lowest price (already sorted)
-        if (budget_level === 'luxury') {
-          selectedHotel = hotelContacts.reduce((best, h) => 
-            toNumber(h.star_rating, 0) > toNumber(best.star_rating, 0) ? h : best
-          , hotelContacts[0])
-        }
-        
+        // First hotel is the best match (preferred + highest rated)
+        selectedHotel = hotelContacts[0]
         hotelRate = toNumber(selectedHotel.rate_double_eur, 80)
         hotelName_final = selectedHotel.name || hotelName_final
-        console.log(`✅ Found hotel in hotel_contacts: ${hotelName_final} @ €${hotelRate}/night (${selectedHotel.star_rating}⭐)`)
+        console.log(`✅ Selected hotel: ${hotelName_final} @ €${hotelRate}/night (${selectedHotel.star_rating}⭐, tier: ${selectedHotel.tier}, preferred: ${selectedHotel.is_preferred})`)
       } else {
-        // Fallback to accommodation_rates table
-        // Column names: property_name, base_rate_eur, tier, city, is_active
-        console.log(`🏨 Trying accommodation_rates fallback for city: ${city}`)
+        // Fallback: try without tier filter
+        console.log(`⚠️ No hotels found for tier ${tier}, falling back to any active hotels`)
         
-        const { data: accRates, error: accError } = await supabase
-          .from('accommodation_rates')
+        const { data: fallbackHotels } = await supabase
+          .from('hotel_contacts')
           .select('*')
+          .ilike('city', city)
           .eq('is_active', true)
-          .ilike('city', `%${city}%`)  // Partial match for city
+          .order('is_preferred', { ascending: false })
+          .order('star_rating', { ascending: tier === 'luxury' ? false : true })
           .limit(5)
 
-        console.log(`🏨 accommodation_rates query result: found=${accRates?.length || 0}`)
-        if (accError) console.error('❌ accommodation_rates error:', accError)
-
-        if (accRates && accRates.length > 0) {
-          // Filter by tier if possible
-          let matchingHotels = accRates.filter(h => h.tier === tier)
-          if (matchingHotels.length === 0) matchingHotels = accRates
-          
-          const hotel = matchingHotels[0]
-          hotelRate = toNumber(hotel.base_rate_eur, 80)
-          hotelName_final = hotel.property_name || hotelName_final
-          console.log(`✅ Found in accommodation_rates: ${hotelName_final} @ €${hotelRate}/night (tier: ${hotel.tier})`)
+        if (fallbackHotels && fallbackHotels.length > 0) {
+          selectedHotel = fallbackHotels[0]
+          hotelRate = toNumber(selectedHotel.rate_double_eur, 80)
+          hotelName_final = selectedHotel.name || hotelName_final
+          console.log(`✅ Fallback hotel: ${hotelName_final} @ €${hotelRate}/night`)
         } else {
-          // Use default rate based on budget level
-          const defaultRates: Record<string, number> = {
+          // Last resort: use default rates based on tier
+          const defaultRates: Record<ServiceTier, number> = {
             'budget': 45,
             'standard': 80,
-            'luxury': 150
+            'deluxe': 120,
+            'luxury': 180
           }
-          hotelRate = defaultRates[budget_level] || 80
-          console.log(`⚠️ No hotel found in database, using default ${budget_level} rate: €${hotelRate}/night`)
+          hotelRate = defaultRates[tier]
+          console.log(`⚠️ No hotel found in database, using default ${tier} rate: €${hotelRate}/night`)
         }
       }
     }
 
-    // 6. Tipping rates
+    // 6. Nile Cruises - Query cruise_contacts with tier filter (if applicable)
+    console.log(`🚢 Checking for Nile cruises (tier: ${tier})...`)
+    const { data: cruises } = await supabase
+      .from('cruise_contacts')
+      .select('*')
+      .eq('is_active', true)
+      .eq('tier', tier)
+      .order('is_preferred', { ascending: false })
+      .limit(5)
+
+    if (cruises && cruises.length > 0) {
+      console.log(`✅ Found ${cruises.length} cruise options for tier ${tier}`)
+    }
+
+    // 7. Tipping rates
     console.log('💰 Fetching tipping rates...')
     const { data: tippingRates } = await supabase
       .from('tipping_rates')
@@ -262,12 +392,30 @@ export async function POST(request: NextRequest) {
       if (dailyTips === 0) dailyTips = 15 // Fallback if no per_day rates
     }
 
+    // Adjust tips based on tier
+    const tierTipsMultiplier: Record<ServiceTier, number> = {
+      'budget': 0.8,
+      'standard': 1.0,
+      'deluxe': 1.2,
+      'luxury': 1.5
+    }
+    dailyTips = Math.round(dailyTips * tierTipsMultiplier[tier])
+    console.log(`✅ Daily tips (tier-adjusted): €${dailyTips}`)
+
     // ============================================
     // GENERATE ITINERARY WITH AI
     // Include attractions for each day
     // ============================================
     
     const attractionNames = allEntranceFees?.map(a => a.attraction_name).join(', ') || ''
+
+    // Include tier context in the AI prompt
+    const tierDescriptions: Record<ServiceTier, string> = {
+      'budget': 'cost-effective options, basic comfort, good value',
+      'standard': 'comfortable mid-range options, good quality-price ratio',
+      'deluxe': 'superior quality, enhanced comfort, premium experiences',
+      'luxury': 'top-tier experiences, finest accommodations, VIP treatment'
+    }
 
     const prompt = `You are an expert Egypt travel planner. Create a detailed ${duration_days}-day itinerary for ${city}.
 
@@ -278,15 +426,20 @@ CLIENT DETAILS:
 - Duration: ${duration_days} days
 - Travelers: ${num_adults} adults${num_children > 0 ? `, ${num_children} children` : ''}
 - Language: ${language}
-- Budget level: ${budget_level}
-${hotel_name ? `- Hotel: ${hotel_name}` : ''}
+- Service Tier: ${tier.toUpperCase()} (${tierDescriptions[tier]})
+${hotel_name ? `- Hotel: ${hotel_name}` : `- Hotel: ${hotelName_final}`}
 ${interests.length > 0 ? `- Interests: ${interests.join(', ')}` : ''}
 ${special_requests.length > 0 ? `- Special requests: ${special_requests.join(', ')}` : ''}
+
+SELECTED SUPPLIERS:
+${selectedVehicle ? `- Vehicle: ${selectedVehicle.vehicle_type} (${selectedVehicle.tier} tier${selectedVehicle.is_preferred ? ', preferred supplier' : ''})` : '- Vehicle: Standard vehicle'}
+${selectedGuide ? `- Guide: ${selectedGuide.name} (${selectedGuide.tier} tier${selectedGuide.is_preferred ? ', preferred supplier' : ''})` : '- Guide: Professional guide'}
+${selectedHotel ? `- Hotel: ${selectedHotel.name} (${selectedHotel.tier} tier${selectedHotel.is_preferred ? ', preferred supplier' : ''})` : `- Hotel: ${hotelName_final}`}
 
 AVAILABLE ATTRACTIONS IN DATABASE (use exact names for matching):
 ${attractionNames}
 
-Create a day-by-day itinerary. For each day, specify EXACTLY which attractions will be visited.
+Create a day-by-day itinerary appropriate for the ${tier.toUpperCase()} service tier. For each day, specify EXACTLY which attractions will be visited.
 
 Return JSON in this EXACT format:
 {
@@ -307,7 +460,8 @@ IMPORTANT:
 - The "attractions" array must contain EXACT names from the available attractions list above
 - Set "includes_hotel" to true for all nights except the last day
 - Spread attractions logically across days (don't visit everything on day 1)
-- Include 2-4 attractions per day maximum for a realistic pace`
+- Include 2-4 attractions per day maximum for a realistic pace
+- For ${tier.toUpperCase()} tier, ${tier === 'luxury' ? 'focus on exclusive experiences and VIP access where possible' : tier === 'budget' ? 'prioritize essential sites and efficient routing' : 'balance quality experiences with good value'}`
 
     console.log('🤖 Generating itinerary content with OpenAI...')
 
@@ -366,6 +520,7 @@ IMPORTANT:
         total_revenue: 0,
         margin_percent: margin_percent,
         status: 'draft',
+        tier: tier, // Store the tier used for this itinerary
         notes: special_requests.length > 0 ? special_requests.join('; ') : null,
         user_id: null,
         client_id: client_id
@@ -390,9 +545,15 @@ IMPORTANT:
     let totalSupplierCost = 0
     let totalClientPrice = 0
 
-    // Per-day fixed costs
-    const vehiclePerDay = selectedVehicle ? toNumber(selectedVehicle.base_rate_eur, 0) : 50
-    const guidePerDay = selectedGuide ? toNumber(selectedGuide.base_rate_eur, 0) : 55
+    // Per-day fixed costs (use rates from rate tables if available, otherwise from resource tables)
+    const vehiclePerDay = vehicleRate 
+      ? toNumber(vehicleRate.base_rate_eur, 0) 
+      : (selectedVehicle ? toNumber(selectedVehicle.daily_rate_eur, 50) : 50)
+    
+    const guidePerDay = guideRate 
+      ? toNumber(guideRate.base_rate_eur, 0) 
+      : (selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 55) : 55)
+    
     const waterPerPersonPerDay = 2
     const roomsNeeded = Math.ceil(totalPax / 2)
 
@@ -427,16 +588,20 @@ IMPORTANT:
       // 1. TRANSPORTATION (per day)
       // ============================================
       const vehicleCost = toNumber(vehiclePerDay, 0)
+      const vehicleName = selectedVehicle?.vehicle_type || vehicleRate?.vehicle_type || 'Vehicle'
       services.push({
         service_type: 'transportation',
-        service_code: selectedVehicle?.service_code || 'TRANS-001',
-        service_name: `${selectedVehicle?.vehicle_type || 'Vehicle'} Transportation`,
+        service_code: selectedVehicle?.id || vehicleRate?.service_code || 'TRANS-001',
+        service_name: `${vehicleName} Transportation`,
+        supplier_id: selectedVehicle?.id || null,
+        supplier_name: selectedVehicle?.company_name || null,
+        is_preferred_supplier: selectedVehicle?.is_preferred || false,
         quantity: 1,
         rate_eur: vehicleCost,
         rate_non_eur: vehicleCost,
         total_cost: vehicleCost,
         client_price: withMargin(vehicleCost),
-        notes: `${selectedVehicle?.vehicle_type || 'Vehicle'} from ${city}`
+        notes: `${vehicleName} from ${city}${selectedVehicle?.is_preferred ? ' (Preferred Supplier)' : ''}`
       })
       totalSupplierCost += vehicleCost
       totalClientPrice += withMargin(vehicleCost)
@@ -447,14 +612,17 @@ IMPORTANT:
       const guideCost = toNumber(guidePerDay, 0)
       services.push({
         service_type: 'guide',
-        service_code: selectedGuide?.service_code || `GUIDE-${language.substring(0,2).toUpperCase()}`,
+        service_code: selectedGuide?.id || guideRate?.service_code || `GUIDE-${language.substring(0,2).toUpperCase()}`,
         service_name: `${language} Speaking Guide`,
+        supplier_id: selectedGuide?.id || null,
+        supplier_name: selectedGuide?.name || null,
+        is_preferred_supplier: selectedGuide?.is_preferred || false,
         quantity: 1,
         rate_eur: guideCost,
         rate_non_eur: guideCost,
         total_cost: guideCost,
         client_price: withMargin(guideCost),
-        notes: `Professional ${language} speaking guide`
+        notes: `Professional ${language} speaking guide${selectedGuide?.is_preferred ? ' (Preferred Supplier)' : ''}`
       })
       totalSupplierCost += guideCost
       totalClientPrice += withMargin(guideCost)
@@ -525,16 +693,23 @@ IMPORTANT:
       // ============================================
       if (include_lunch) {
         const lunchCost = toNumber(lunchRate, 12) * totalPax
+        // Find a recommended restaurant for the note
+        const lunchRestaurant = recommendedRestaurants?.find(r => r.city?.toLowerCase() === city.toLowerCase())
         services.push({
           service_type: 'meal',
           service_code: 'LUNCH',
           service_name: 'Lunch',
+          supplier_id: lunchRestaurant?.id || null,
+          supplier_name: lunchRestaurant?.name || null,
+          is_preferred_supplier: lunchRestaurant?.is_preferred || false,
           quantity: totalPax,
           rate_eur: lunchRate,
           rate_non_eur: lunchRate,
           total_cost: lunchCost,
           client_price: withMargin(lunchCost),
-          notes: 'Lunch at local restaurant'
+          notes: lunchRestaurant 
+            ? `Lunch at ${lunchRestaurant.name}${lunchRestaurant.is_preferred ? ' (Preferred)' : ''}`
+            : 'Lunch at local restaurant'
         })
         totalSupplierCost += lunchCost
         totalClientPrice += withMargin(lunchCost)
@@ -545,16 +720,24 @@ IMPORTANT:
       // ============================================
       if (include_dinner) {
         const dinnerCost = toNumber(dinnerRate, 18) * totalPax
+        const dinnerRestaurant = recommendedRestaurants?.find(r => 
+          r.city?.toLowerCase() === city.toLowerCase() && r.cuisine_type?.toLowerCase().includes('dinner')
+        ) || recommendedRestaurants?.[0]
         services.push({
           service_type: 'meal',
           service_code: 'DINNER',
           service_name: 'Dinner',
+          supplier_id: dinnerRestaurant?.id || null,
+          supplier_name: dinnerRestaurant?.name || null,
+          is_preferred_supplier: dinnerRestaurant?.is_preferred || false,
           quantity: totalPax,
           rate_eur: dinnerRate,
           rate_non_eur: dinnerRate,
           total_cost: dinnerCost,
           client_price: withMargin(dinnerCost),
-          notes: 'Dinner at restaurant'
+          notes: dinnerRestaurant 
+            ? `Dinner at ${dinnerRestaurant.name}${dinnerRestaurant.is_preferred ? ' (Preferred)' : ''}`
+            : 'Dinner at restaurant'
         })
         totalSupplierCost += dinnerCost
         totalClientPrice += withMargin(dinnerCost)
@@ -590,14 +773,17 @@ IMPORTANT:
         const hotelCost = hotelRate * roomsNeeded
         services.push({
           service_type: 'accommodation',
-          service_code: 'HOTEL',
+          service_code: selectedHotel?.id || 'HOTEL',
           service_name: `${hotelName_final} (${roomsNeeded} room${roomsNeeded > 1 ? 's' : ''})`,
+          supplier_id: selectedHotel?.id || null,
+          supplier_name: hotelName_final,
+          is_preferred_supplier: selectedHotel?.is_preferred || false,
           quantity: roomsNeeded,
           rate_eur: hotelRate,
           rate_non_eur: hotelRate,
           total_cost: hotelCost,
           client_price: withMargin(hotelCost),
-          notes: `Overnight at ${hotelName_final}`
+          notes: `Overnight at ${hotelName_final}${selectedHotel?.is_preferred ? ' (Preferred Supplier)' : ''}`
         })
         totalSupplierCost += hotelCost
         totalClientPrice += withMargin(hotelCost)
@@ -617,6 +803,9 @@ IMPORTANT:
             service_type: serviceData.service_type,
             service_code: serviceData.service_code,
             service_name: serviceData.service_name,
+            supplier_id: serviceData.supplier_id || null,
+            supplier_name: serviceData.supplier_name || null,
+            is_preferred_supplier: serviceData.is_preferred_supplier || false,
             quantity: serviceData.quantity,
             rate_eur: toNumber(serviceData.rate_eur, 0),
             rate_non_eur: toNumber(serviceData.rate_non_eur, 0),
@@ -649,6 +838,7 @@ IMPORTANT:
     }
 
     console.log('🎉 Itinerary generation completed!')
+    console.log(`🎯 Service Tier: ${tier.toUpperCase()}`)
     console.log(`💰 Total Supplier Cost: €${totalSupplierCost.toFixed(2)}`)
     console.log(`💰 Total Client Price: €${totalClientPrice.toFixed(2)}`)
     console.log(`💰 Margin: €${(totalClientPrice - totalSupplierCost).toFixed(2)}`)
@@ -660,6 +850,7 @@ IMPORTANT:
         itinerary_id: itinerary.id,
         itinerary_code: itinerary.itinerary_code,
         trip_name: itineraryData.trip_name,
+        tier: tier,
         supplier_cost: totalSupplierCost,
         total_cost: totalClientPrice,
         total_revenue: totalClientPrice,
@@ -668,8 +859,28 @@ IMPORTANT:
         per_person_cost: Math.round(totalClientPrice / totalPax * 100) / 100,
         total_days: duration_days,
         passport_type: isEuroPassport ? 'EUR' : 'non-EUR',
-        hotel_used: hotelName_final,
-        hotel_rate: hotelRate
+        // Selected suppliers info
+        selected_suppliers: {
+          vehicle: selectedVehicle ? {
+            name: selectedVehicle.vehicle_type,
+            tier: selectedVehicle.tier,
+            is_preferred: selectedVehicle.is_preferred
+          } : null,
+          guide: selectedGuide ? {
+            name: selectedGuide.name,
+            tier: selectedGuide.tier,
+            is_preferred: selectedGuide.is_preferred
+          } : null,
+          hotel: selectedHotel ? {
+            name: selectedHotel.name,
+            tier: selectedHotel.tier,
+            is_preferred: selectedHotel.is_preferred,
+            rate: hotelRate
+          } : {
+            name: hotelName_final,
+            rate: hotelRate
+          }
+        }
       }
     })
 

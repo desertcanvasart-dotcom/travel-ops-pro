@@ -22,8 +22,21 @@ import {
   MapPin,
   ChevronDown,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Crown,
+  Star
 } from 'lucide-react'
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+]
 
 // ============================================
 // EGYPTIAN CITIES
@@ -75,6 +88,8 @@ interface Restaurant {
   dietary_options?: string[]
   notes?: string
   is_active: boolean
+  tier: string | null
+  is_preferred: boolean
   created_at: string
   rate_per_person_eur?: number
   rate_per_person_non_eur?: number
@@ -102,8 +117,18 @@ interface Toast {
 type ViewMode = 'table' | 'cards' | 'compact'
 
 // ============================================
-// TOAST COMPONENT
+// COMPONENTS
 // ============================================
+
+function TierBadge({ tier }: { tier: string | null }) {
+  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
+      {tierConfig.label}
+    </span>
+  )
+}
+
 function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   useEffect(() => {
     const timer = setTimeout(onClose, 4000)
@@ -148,6 +173,7 @@ export default function RestaurantsContent() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCity, setSelectedCity] = useState('all')
+  const [filterTier, setFilterTier] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingRestaurant, setEditingRestaurant] = useState<Restaurant | null>(null)
@@ -172,6 +198,8 @@ export default function RestaurantsContent() {
     dietary_options: [] as string[],
     notes: '',
     is_active: true,
+    tier: 'standard',
+    is_preferred: false,
     rate_per_person_eur: 0,
     rate_per_person_non_eur: 0,
     rate_breakfast_eur: 0,
@@ -275,6 +303,8 @@ export default function RestaurantsContent() {
       dietary_options: [],
       notes: '',
       is_active: true,
+      tier: 'standard',
+      is_preferred: false,
       rate_per_person_eur: 0,
       rate_per_person_non_eur: 0,
       rate_breakfast_eur: 0,
@@ -312,6 +342,8 @@ export default function RestaurantsContent() {
       dietary_options: restaurant.dietary_options || [],
       notes: restaurant.notes || '',
       is_active: restaurant.is_active,
+      tier: restaurant.tier || 'standard',
+      is_preferred: restaurant.is_preferred || false,
       rate_per_person_eur: restaurant.rate_per_person_eur || 0,
       rate_per_person_non_eur: restaurant.rate_per_person_non_eur || 0,
       rate_breakfast_eur: restaurant.rate_breakfast_eur || 0,
@@ -392,7 +424,7 @@ export default function RestaurantsContent() {
       'Name', 'Type', 'Cuisine', 'City', 'Address', 'Contact Person',
       'Phone', 'Email', 'WhatsApp', 'Capacity', 'Lunch EUR', 'Dinner EUR',
       'Lunch Non-EUR', 'Dinner Non-EUR', 'Child Discount %', 'Drinks Included',
-      'Tip Included', 'Active'
+      'Tip Included', 'Tier', 'Preferred', 'Active'
     ]
     
     const rows = filteredRestaurants.map(r => [
@@ -413,6 +445,8 @@ export default function RestaurantsContent() {
       r.child_discount_percent || '',
       r.drinks_included ? 'Yes' : 'No',
       r.tip_included ? 'Yes' : 'No',
+      r.tier || 'standard',
+      r.is_preferred ? 'Yes' : 'No',
       r.is_active ? 'Yes' : 'No'
     ])
     
@@ -467,7 +501,9 @@ export default function RestaurantsContent() {
             child_discount_percent: parseFloat(values[14]) || 50,
             drinks_included: values[15]?.toLowerCase() === 'yes',
             tip_included: values[16]?.toLowerCase() === 'yes',
-            is_active: values[17]?.toLowerCase() !== 'no'
+            tier: values[17] || 'standard',
+            is_preferred: values[18]?.toLowerCase() === 'yes',
+            is_active: values[19]?.toLowerCase() !== 'no'
           }
 
           if (!restaurantData.name || !restaurantData.city) {
@@ -516,8 +552,9 @@ export default function RestaurantsContent() {
     
     const matchesCity = selectedCity === 'all' || restaurant.city === selectedCity
     const matchesActive = showInactive || restaurant.is_active
+    const matchesTier = filterTier === null || restaurant.tier === filterTier
     
-    return matchesSearch && matchesCity && matchesActive
+    return matchesSearch && matchesCity && matchesActive && matchesTier
   })
 
   // Get unique cities from data
@@ -525,6 +562,7 @@ export default function RestaurantsContent() {
 
   // Stats
   const activeRestaurants = restaurants.filter(r => r.is_active).length
+  const preferredRestaurants = restaurants.filter(r => r.is_preferred).length
   const restaurantsWithRates = restaurants.filter(r => (r.rate_lunch_eur || 0) > 0 || (r.rate_per_person_eur || 0) > 0).length
   const avgRate = restaurants.length > 0 
     ? (restaurants.reduce((sum, r) => sum + (r.rate_lunch_eur || r.rate_per_person_eur || 0), 0) / restaurants.filter(r => (r.rate_lunch_eur || 0) > 0 || (r.rate_per_person_eur || 0) > 0).length || 0).toFixed(0)
@@ -606,7 +644,7 @@ export default function RestaurantsContent() {
 
       <div className="container mx-auto px-4 lg:px-6 py-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
             <div className="flex items-center gap-2 mb-2">
               <UtensilsCrossed className="w-4 h-4 text-gray-400" />
@@ -623,6 +661,15 @@ export default function RestaurantsContent() {
             </div>
             <p className="text-xs text-gray-600">Active</p>
             <p className="text-2xl font-bold text-gray-900">{activeRestaurants}</p>
+          </div>
+
+          <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+            </div>
+            <p className="text-xs text-gray-600">Preferred</p>
+            <p className="text-2xl font-bold text-gray-900">{preferredRestaurants}</p>
           </div>
 
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
@@ -679,6 +726,19 @@ export default function RestaurantsContent() {
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
+            <div className="md:w-40">
+              <select
+                value={filterTier || 'all'}
+                onChange={(e) => setFilterTier(e.target.value === 'all' ? null : e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+              >
+                <option value="all">All Tiers</option>
+                <option value="budget">Budget</option>
+                <option value="standard">Standard</option>
+                <option value="deluxe">Deluxe</option>
+                <option value="luxury">Luxury</option>
+              </select>
+            </div>
             <button
               onClick={() => setShowInactive(!showInactive)}
               className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
@@ -733,6 +793,7 @@ export default function RestaurantsContent() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Restaurant</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Type</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Tier</th>
                     <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Lunch (EUR)</th>
                     <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Dinner (EUR)</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Drinks</th>
@@ -745,9 +806,12 @@ export default function RestaurantsContent() {
                   {filteredRestaurants.map((restaurant, index) => (
                     <tr key={restaurant.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors`}>
                       <td className="px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{restaurant.name}</p>
-                          {restaurant.cuisine_type && <p className="text-xs text-gray-500">{restaurant.cuisine_type}</p>}
+                        <div className="flex items-center gap-2">
+                          {restaurant.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{restaurant.name}</p>
+                            {restaurant.cuisine_type && <p className="text-xs text-gray-500">{restaurant.cuisine_type}</p>}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -759,6 +823,9 @@ export default function RestaurantsContent() {
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
                           {restaurant.city}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <TierBadge tier={restaurant.tier} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-green-600">
@@ -812,7 +879,7 @@ export default function RestaurantsContent() {
                   ))}
                   {filteredRestaurants.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
+                      <td colSpan={10} className="px-4 py-12 text-center text-gray-500">
                         <UtensilsCrossed className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                         <p className="text-sm font-medium">No restaurants found</p>
                         <button
@@ -837,22 +904,28 @@ export default function RestaurantsContent() {
               <div key={restaurant.id} className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="p-4">
                   <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">{restaurant.name}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs capitalize">
-                          {restaurant.restaurant_type || 'Restaurant'}
-                        </span>
-                        {restaurant.cuisine_type && (
-                          <span className="text-xs text-gray-500">{restaurant.cuisine_type}</span>
-                        )}
+                    <div className="flex items-center gap-2">
+                      {restaurant.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-900">{restaurant.name}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs capitalize">
+                            {restaurant.restaurant_type || 'Restaurant'}
+                          </span>
+                          {restaurant.cuisine_type && (
+                            <span className="text-xs text-gray-500">{restaurant.cuisine_type}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      restaurant.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {restaurant.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        restaurant.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {restaurant.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                      <TierBadge tier={restaurant.tier} />
+                    </div>
                   </div>
                   
                   <div className="space-y-2 text-sm">
@@ -936,8 +1009,9 @@ export default function RestaurantsContent() {
             {filteredRestaurants.map((restaurant) => (
               <div key={restaurant.id} className="flex items-center justify-between px-4 py-2 hover:bg-gray-50 transition-colors">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 flex items-center gap-1">
                     <span className={`w-2 h-2 rounded-full inline-block ${restaurant.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
+                    {restaurant.is_preferred && <Star className="w-3 h-3 text-amber-500 fill-amber-500" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <span className="text-sm font-medium text-gray-900 truncate block">{restaurant.name}</span>
@@ -947,6 +1021,9 @@ export default function RestaurantsContent() {
                   </div>
                   <div className="hidden md:block">
                     <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{restaurant.city}</span>
+                  </div>
+                  <div className="hidden lg:block">
+                    <TierBadge tier={restaurant.tier} />
                   </div>
                   <div className="text-right">
                     <span className="text-sm font-bold text-green-600">
@@ -1084,10 +1161,69 @@ export default function RestaurantsContent() {
                 </div>
               </div>
 
+              {/* Service Tier & Preference */}
+              <div className="mb-4">
+                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">3</span>
+                  Service Tier & Preference
+                </h3>
+                
+                {/* Tier Selection */}
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                    Service Tier
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {TIER_OPTIONS.map((tier) => (
+                      <button
+                        key={tier.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, tier: tier.value })}
+                        className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+                          formData.tier === tier.value
+                            ? tier.value === 'luxury' 
+                              ? 'bg-amber-600 text-white'
+                              : tier.value === 'deluxe'
+                              ? 'bg-purple-600 text-white'
+                              : tier.value === 'standard'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
+                        {tier.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preferred Toggle */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_preferred}
+                      onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
+                      className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+                        <Star className="w-4 h-4 text-amber-600" />
+                        Preferred Restaurant
+                      </span>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Preferred restaurants are prioritized when AI generates itineraries within the same tier.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               {/* Meal Rates - EUR */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
+                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">4</span>
                   Meal Rates - EUR Passport Holders <span className="text-xs font-normal text-gray-500 ml-2">(per person)</span>
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1117,7 +1253,7 @@ export default function RestaurantsContent() {
               {/* Meal Rates - Non-EUR */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">4</span>
+                  <span className="w-6 h-6 rounded-full bg-cyan-100 text-cyan-600 flex items-center justify-center text-xs font-bold">5</span>
                   Meal Rates - Non-EUR Passport Holders <span className="text-xs font-normal text-gray-500 ml-2">(per person)</span>
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1147,7 +1283,7 @@ export default function RestaurantsContent() {
               {/* Discounts & Inclusions */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">5</span>
+                  <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">6</span>
                   Discounts & Inclusions
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -1184,7 +1320,7 @@ export default function RestaurantsContent() {
               {/* Rate Validity */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-cyan-100 text-cyan-600 flex items-center justify-center text-xs font-bold">6</span>
+                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">7</span>
                   Rate Validity Period
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1204,7 +1340,7 @@ export default function RestaurantsContent() {
               {/* Meal Types */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">7</span>
+                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">8</span>
                   Meal Types Offered
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -1221,7 +1357,7 @@ export default function RestaurantsContent() {
               {/* Dietary Options */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-xs font-bold">8</span>
+                  <span className="w-6 h-6 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-xs font-bold">9</span>
                   Dietary Options
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">

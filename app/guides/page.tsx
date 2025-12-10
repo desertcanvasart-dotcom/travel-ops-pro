@@ -18,7 +18,9 @@ import {
   AlertCircle,
   X,
   Check,
-  Eye
+  Eye,
+  Crown,
+  Award
 } from 'lucide-react'
 
 interface Guide {
@@ -39,6 +41,8 @@ interface Guide {
   address: string | null
   notes: string | null
   profile_photo_url: string | null
+  tier: string | null
+  is_preferred: boolean
   active_bookings?: number
   upcoming_bookings?: number
   total_revenue?: number
@@ -56,6 +60,13 @@ const COMMON_SPECIALTIES = [
   'Adventure Tours', 'Photography Tours'
 ]
 
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+]
+
 export default function GuidesPage() {
   const [guides, setGuides] = useState<Guide[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,6 +74,7 @@ export default function GuidesPage() {
   const [editingGuide, setEditingGuide] = useState<Guide | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterActive, setFilterActive] = useState<boolean | null>(null)
+  const [filterTier, setFilterTier] = useState<string | null>(null)
   const [showStats, setShowStats] = useState(true)
 
   useEffect(() => {
@@ -123,16 +135,17 @@ export default function GuidesPage() {
       guide.languages.some(lang => lang.toLowerCase().includes(searchQuery.toLowerCase()))
     
     const matchesActive = filterActive === null || guide.is_active === filterActive
+    const matchesTier = filterTier === null || guide.tier === filterTier
 
-    return matchesSearch && matchesActive
+    return matchesSearch && matchesActive && matchesTier
   })
 
   const stats = {
     total: guides.length,
     active: guides.filter(g => g.is_active).length,
     inactive: guides.filter(g => !g.is_active).length,
-    withBookings: guides.filter(g => (g.active_bookings || 0) + (g.upcoming_bookings || 0) > 0).length,
-    avgDailyRate: guides.reduce((sum, g) => sum + (g.daily_rate || 0), 0) / guides.length
+    preferred: guides.filter(g => g.is_preferred).length,
+    avgDailyRate: guides.reduce((sum, g) => sum + (g.daily_rate || 0), 0) / guides.length || 0
   }
 
   if (loading) {
@@ -185,10 +198,10 @@ export default function GuidesPage() {
             dotColor="bg-gray-600"
           />
           <StatCard
-            icon={<Calendar className="w-4 h-4" />}
-            label="With Bookings"
-            value={stats.withBookings}
-            dotColor="bg-purple-600"
+            icon={<Star className="w-4 h-4" />}
+            label="Preferred"
+            value={stats.preferred}
+            dotColor="bg-amber-500"
           />
           <StatCard
             icon={<DollarSign className="w-4 h-4" />}
@@ -227,9 +240,25 @@ export default function GuidesPage() {
               }}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
             >
-              <option value="all">All Guides</option>
+              <option value="all">All Status</option>
               <option value="active">Active Only</option>
               <option value="inactive">Inactive Only</option>
+            </select>
+          </div>
+
+          {/* Tier Filter */}
+          <div className="flex items-center gap-2">
+            <Crown className="w-4 h-4 text-gray-400" />
+            <select
+              value={filterTier || 'all'}
+              onChange={(e) => setFilterTier(e.target.value === 'all' ? null : e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+            >
+              <option value="all">All Tiers</option>
+              <option value="budget">Budget</option>
+              <option value="standard">Standard</option>
+              <option value="deluxe">Deluxe</option>
+              <option value="luxury">Luxury</option>
             </select>
           </div>
         </div>
@@ -250,11 +279,11 @@ export default function GuidesPage() {
             <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Guides Found</h3>
             <p className="text-sm text-gray-600 mb-4">
-              {searchQuery || filterActive !== null
+              {searchQuery || filterActive !== null || filterTier !== null
                 ? 'Try adjusting your filters'
                 : 'Get started by adding your first guide'}
             </p>
-            {!searchQuery && filterActive === null && (
+            {!searchQuery && filterActive === null && filterTier === null && (
               <button
                 onClick={handleCreate}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
@@ -271,8 +300,7 @@ export default function GuidesPage() {
                 <tr>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Guide</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Languages</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Specialties</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Bookings</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Tier</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Daily Rate</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Status</th>
                   <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600">Actions</th>
@@ -282,20 +310,27 @@ export default function GuidesPage() {
                 {filteredGuides.map((guide) => (
                   <tr key={guide.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">{guide.name}</div>
-                        {guide.email && (
-                          <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
-                            <Mail className="w-3 h-3" />
-                            {guide.email}
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-semibold text-gray-900">{guide.name}</span>
+                            {guide.is_preferred && (
+                              <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                            )}
                           </div>
-                        )}
-                        {guide.phone && (
-                          <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
-                            <Phone className="w-3 h-3" />
-                            {guide.phone}
-                          </div>
-                        )}
+                          {guide.email && (
+                            <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+                              <Mail className="w-3 h-3" />
+                              {guide.email}
+                            </div>
+                          )}
+                          {guide.phone && (
+                            <div className="flex items-center gap-1 text-xs text-gray-600 mt-0.5">
+                              <Phone className="w-3 h-3" />
+                              {guide.phone}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -316,31 +351,7 @@ export default function GuidesPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {guide.specialties.slice(0, 2).map((spec, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium"
-                          >
-                            {spec}
-                          </span>
-                        ))}
-                        {guide.specialties.length > 2 && (
-                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-                            +{guide.specialties.length - 2}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-xs">
-                        <div className="font-medium text-gray-900">
-                          {(guide.active_bookings || 0) + (guide.upcoming_bookings || 0)} total
-                        </div>
-                        <div className="text-gray-600">
-                          {guide.active_bookings || 0} active
-                        </div>
-                      </div>
+                      <TierBadge tier={guide.tier} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-gray-900">
@@ -407,6 +418,16 @@ export default function GuidesPage() {
   )
 }
 
+function TierBadge({ tier }: { tier: string | null }) {
+  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1] // default to standard
+  
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
+      {tierConfig.label}
+    </span>
+  )
+}
+
 function StatCard({ icon, label, value, dotColor }: any) {
   return (
     <div className="bg-white rounded-lg shadow-md border border-gray-200 p-3">
@@ -439,6 +460,8 @@ function GuideModal({ guide, onClose, onSuccess }: any) {
     emergency_contact_phone: guide?.emergency_contact_phone || '',
     address: guide?.address || '',
     notes: guide?.notes || '',
+    tier: guide?.tier || 'standard',
+    is_preferred: guide?.is_preferred || false,
   })
 
   const [saving, setSaving] = useState(false)
@@ -481,7 +504,7 @@ function GuideModal({ guide, onClose, onSuccess }: any) {
     setFormData(prev => ({
       ...prev,
       languages: prev.languages.includes(lang)
-        ? prev.languages.filter(l => l !== lang)
+        ? prev.languages.filter((l: string) => l !== lang)
         : [...prev.languages, lang]
     }))
   }
@@ -490,7 +513,7 @@ function GuideModal({ guide, onClose, onSuccess }: any) {
     setFormData(prev => ({
       ...prev,
       specialties: prev.specialties.includes(spec)
-        ? prev.specialties.filter(s => s !== spec)
+        ? prev.specialties.filter((s: string) => s !== spec)
         : [...prev.specialties, spec]
     }))
   }
@@ -563,6 +586,67 @@ function GuideModal({ guide, onClose, onSuccess }: any) {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Tier & Preferred Section - NEW */}
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 mb-3">Service Tier & Preference</h3>
+              
+              {/* Tier Selection */}
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-600 mb-2">
+                  Service Tier
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {TIER_OPTIONS.map((tier) => (
+                    <button
+                      key={tier.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, tier: tier.value })}
+                      className={`px-4 py-2 text-sm rounded-lg border-2 font-medium transition-all ${
+                        formData.tier === tier.value
+                          ? tier.value === 'budget'
+                            ? 'border-gray-600 bg-gray-100 text-gray-800'
+                            : tier.value === 'standard'
+                            ? 'border-blue-600 bg-blue-50 text-blue-800'
+                            : tier.value === 'deluxe'
+                            ? 'border-purple-600 bg-purple-50 text-purple-800'
+                            : 'border-amber-600 bg-amber-50 text-amber-800'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5 inline mr-1" />}
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Tier determines which itineraries this guide will be assigned to based on client's selected style.
+                </p>
+              </div>
+
+              {/* Preferred Toggle */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_preferred}
+                    onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
+                    className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                  />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Star className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm font-semibold text-gray-900">
+                        Preferred Supplier
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      Preferred guides are prioritized when AI generates itineraries within the same tier.
+                    </p>
+                  </div>
+                </label>
               </div>
             </div>
 

@@ -19,8 +19,32 @@ import {
   Wifi,
   Wind,
   Star,
-  Users
+  Users,
+  Crown
 } from 'lucide-react'
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+]
+
+const VEHICLE_TYPES = [
+  { value: 'car', label: 'Car', icon: '🚗' },
+  { value: 'van', label: 'Van', icon: '🚐' },
+  { value: 'minibus', label: 'Minibus', icon: '🚌' },
+  { value: 'bus', label: 'Bus', icon: '🚍' },
+  { value: 'suv', label: 'SUV', icon: '🚙' },
+]
+
+// ============================================
+// INTERFACES
+// ============================================
 
 interface Vehicle {
   id: string
@@ -46,18 +70,44 @@ interface Vehicle {
   default_driver_phone: string | null
   notes: string | null
   photo_url: string | null
+  tier: string | null
+  is_preferred: boolean
   active_bookings?: number
   upcoming_bookings?: number
   total_revenue?: number
 }
 
-const VEHICLE_TYPES = [
-  { value: 'car', label: 'Car', icon: '🚗' },
-  { value: 'van', label: 'Van', icon: '🚐' },
-  { value: 'minibus', label: 'Minibus', icon: '🚌' },
-  { value: 'bus', label: 'Bus', icon: '🚍' },
-  { value: 'suv', label: 'SUV', icon: '🚙' },
-]
+// ============================================
+// COMPONENTS
+// ============================================
+
+function TierBadge({ tier }: { tier: string | null }) {
+  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
+      {tierConfig.label}
+    </span>
+  )
+}
+
+function StatCard({ icon, label, value, dotColor }: any) {
+  return (
+    <div className="bg-white rounded-lg shadow-md border border-gray-200 p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="text-gray-400">
+          {icon}
+        </div>
+        <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+      </div>
+      <div className="text-2xl font-bold text-gray-900">{value}</div>
+      <div className="text-xs text-gray-600 mt-0.5">{label}</div>
+    </div>
+  )
+}
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
@@ -67,6 +117,7 @@ export default function VehiclesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterActive, setFilterActive] = useState<boolean | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
+  const [filterTier, setFilterTier] = useState<string | null>(null)
   const [showStats, setShowStats] = useState(true)
 
   useEffect(() => {
@@ -128,14 +179,16 @@ export default function VehiclesPage() {
     
     const matchesActive = filterActive === null || vehicle.is_active === filterActive
     const matchesType = filterType === 'all' || vehicle.vehicle_type === filterType
+    const matchesTier = filterTier === null || vehicle.tier === filterTier
 
-    return matchesSearch && matchesActive && matchesType
+    return matchesSearch && matchesActive && matchesType && matchesTier
   })
 
   const stats = {
     total: vehicles.length,
     active: vehicles.filter(v => v.is_active).length,
     inactive: vehicles.filter(v => !v.is_active).length,
+    preferred: vehicles.filter(v => v.is_preferred).length,
     withBookings: vehicles.filter(v => (v.active_bookings || 0) + (v.upcoming_bookings || 0) > 0).length,
     avgDailyRate: vehicles.reduce((sum, v) => sum + (v.daily_rate || 0), 0) / vehicles.length || 0,
     typeBreakdown: VEHICLE_TYPES.reduce((acc, type) => ({
@@ -174,7 +227,7 @@ export default function VehiclesPage() {
 
       {/* Statistics */}
       {showStats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
           <StatCard
             icon={<Truck className="w-4 h-4" />}
             label="Total Vehicles"
@@ -192,6 +245,12 @@ export default function VehiclesPage() {
             label="Inactive"
             value={stats.inactive}
             dotColor="bg-gray-600"
+          />
+          <StatCard
+            icon={<Star className="w-4 h-4" />}
+            label="Preferred"
+            value={stats.preferred}
+            dotColor="bg-amber-600"
           />
           <StatCard
             icon={<Calendar className="w-4 h-4" />}
@@ -259,6 +318,21 @@ export default function VehiclesPage() {
             </select>
           </div>
 
+          {/* Tier Filter */}
+          <div>
+            <select
+              value={filterTier || 'all'}
+              onChange={(e) => setFilterTier(e.target.value === 'all' ? null : e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+            >
+              <option value="all">All Tiers</option>
+              <option value="budget">Budget</option>
+              <option value="standard">Standard</option>
+              <option value="deluxe">Deluxe</option>
+              <option value="luxury">Luxury</option>
+            </select>
+          </div>
+
           {/* Status Filter */}
           <div>
             <select
@@ -292,11 +366,11 @@ export default function VehiclesPage() {
             <Truck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Vehicles Found</h3>
             <p className="text-sm text-gray-600 mb-4">
-              {searchQuery || filterActive !== null || filterType !== 'all'
+              {searchQuery || filterActive !== null || filterType !== 'all' || filterTier !== null
                 ? 'Try adjusting your filters'
                 : 'Get started by adding your first vehicle'}
             </p>
-            {!searchQuery && filterActive === null && filterType === 'all' && (
+            {!searchQuery && filterActive === null && filterType === 'all' && filterTier === null && (
               <button
                 onClick={handleCreate}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
@@ -315,6 +389,7 @@ export default function VehiclesPage() {
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Type</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Capacity</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Features</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Tier</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Bookings</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Daily Rate</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600">Status</th>
@@ -325,18 +400,21 @@ export default function VehiclesPage() {
                 {filteredVehicles.map((vehicle) => (
                   <tr key={vehicle.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3">
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">{vehicle.name}</div>
-                        {vehicle.license_plate && (
-                          <div className="text-xs text-gray-600 mt-0.5">
-                            {vehicle.license_plate}
-                          </div>
-                        )}
-                        {vehicle.make && vehicle.model && (
-                          <div className="text-xs text-gray-500">
-                            {vehicle.make} {vehicle.model} {vehicle.year && `(${vehicle.year})`}
-                          </div>
-                        )}
+                      <div className="flex items-center gap-2">
+                        {vehicle.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900">{vehicle.name}</div>
+                          {vehicle.license_plate && (
+                            <div className="text-xs text-gray-600 mt-0.5">
+                              {vehicle.license_plate}
+                            </div>
+                          )}
+                          {vehicle.make && vehicle.model && (
+                            <div className="text-xs text-gray-500">
+                              {vehicle.make} {vehicle.model} {vehicle.year && `(${vehicle.year})`}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -364,10 +442,13 @@ export default function VehiclesPage() {
                         )}
                         {vehicle.is_luxury && (
                           <div className="p-1 bg-gray-100 text-gray-600 rounded" title="Luxury">
-                            <Star className="w-3.5 h-3.5" />
+                            <Crown className="w-3.5 h-3.5" />
                           </div>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <TierBadge tier={vehicle.tier} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-xs">
@@ -444,21 +525,6 @@ export default function VehiclesPage() {
   )
 }
 
-function StatCard({ icon, label, value, dotColor }: any) {
-  return (
-    <div className="bg-white rounded-lg shadow-md border border-gray-200 p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="text-gray-400">
-          {icon}
-        </div>
-        <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
-      </div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
-      <div className="text-xs text-gray-600 mt-0.5">{label}</div>
-    </div>
-  )
-}
-
 function VehicleModal({ vehicle, onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({
     name: vehicle?.name || '',
@@ -482,6 +548,8 @@ function VehicleModal({ vehicle, onClose, onSuccess }: any) {
     default_driver_name: vehicle?.default_driver_name || '',
     default_driver_phone: vehicle?.default_driver_phone || '',
     notes: vehicle?.notes || '',
+    tier: vehicle?.tier || 'standard',
+    is_preferred: vehicle?.is_preferred || false,
   })
 
   const [saving, setSaving] = useState(false)
@@ -688,8 +756,64 @@ function VehicleModal({ vehicle, onClose, onSuccess }: any) {
                     onChange={(e) => setFormData({ ...formData, is_luxury: e.target.checked })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-600"
                   />
-                  <Star className="w-4 h-4 text-gray-400" />
+                  <Crown className="w-4 h-4 text-gray-400" />
                   <span className="text-sm font-medium text-gray-900">Luxury Vehicle</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Service Tier & Preference */}
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 mb-3">Service Tier & Preference</h3>
+              
+              {/* Tier Selection */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-600 mb-2">
+                  Service Tier
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {TIER_OPTIONS.map((tier) => (
+                    <button
+                      key={tier.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, tier: tier.value })}
+                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+                        formData.tier === tier.value
+                          ? tier.value === 'luxury' 
+                            ? 'bg-amber-600 text-white'
+                            : tier.value === 'deluxe'
+                            ? 'bg-purple-600 text-white'
+                            : tier.value === 'standard'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preferred Toggle */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_preferred}
+                    onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
+                    className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 mt-0.5"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+                      <Star className="w-4 h-4 text-amber-600" />
+                      Preferred Vehicle
+                    </span>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Preferred vehicles are prioritized when AI generates itineraries within the same tier.
+                    </p>
+                  </div>
                 </label>
               </div>
             </div>

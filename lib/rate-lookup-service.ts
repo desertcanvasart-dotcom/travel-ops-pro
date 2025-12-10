@@ -2,8 +2,24 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 // ============================================
 // ENHANCED RATE LOOKUP SERVICE
-// Queries real rates from all database tables
+// With Tier System & Preferred Supplier Support
 // ============================================
+
+// ============================================
+// TIER SYSTEM TYPES
+// ============================================
+
+export type ServiceTier = 'budget' | 'standard' | 'deluxe' | 'luxury'
+
+const VALID_TIERS: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
+
+// Tier-based rate multipliers for fallback calculations
+const TIER_MULTIPLIERS: Record<ServiceTier, number> = {
+  'budget': 0.8,
+  'standard': 1.0,
+  'deluxe': 1.3,
+  'luxury': 1.6
+}
 
 // ============================================
 // INTERFACES
@@ -17,6 +33,9 @@ export interface RateLookupParams {
   duration_days: number
   language: string
   is_euro_passport: boolean
+  
+  // NEW: Service Tier
+  tier?: ServiceTier
   
   // Transportation
   city?: string
@@ -84,6 +103,9 @@ export interface VehicleRate {
   rate_per_day: number
   capacity_min: number
   capacity_max: number
+  // NEW: Tier fields
+  tier: string | null
+  is_preferred: boolean
 }
 
 export interface GuideRate {
@@ -92,6 +114,9 @@ export interface GuideRate {
   languages: string[]
   daily_rate_eur: number
   city?: string
+  // NEW: Tier fields
+  tier: string | null
+  is_preferred: boolean
 }
 
 export interface AttractionRate {
@@ -110,6 +135,9 @@ export interface RestaurantRate {
   city: string
   lunch_rate_eur: number
   dinner_rate_eur: number
+  // NEW: Tier fields
+  tier: string | null
+  is_preferred: boolean
 }
 
 export interface HotelRate {
@@ -120,6 +148,9 @@ export interface HotelRate {
   rate_double_eur: number
   rate_triple_eur: number
   star_rating?: number
+  // NEW: Tier fields
+  tier: string | null
+  is_preferred: boolean
 }
 
 export interface AirportStaffRate {
@@ -130,6 +161,9 @@ export interface AirportStaffRate {
   service_type: string
   direction: string
   rate_eur: number
+  // NEW: Tier fields
+  tier: string | null
+  is_preferred: boolean
 }
 
 export interface HotelStaffRate {
@@ -138,6 +172,9 @@ export interface HotelStaffRate {
   service_type: string
   hotel_category: string
   rate_eur: number
+  // NEW: Tier fields
+  tier: string | null
+  is_preferred: boolean
 }
 
 export interface CruiseRate {
@@ -153,6 +190,9 @@ export interface CruiseRate {
   rate_single_eur: number
   rate_double_eur: number
   rate_triple_eur: number | null
+  // NEW: Tier fields
+  tier: string | null
+  is_preferred: boolean
 }
 
 export interface SleepingTrainRate {
@@ -186,6 +226,7 @@ export interface TippingRate {
 
 export interface RatesUsed {
   success: boolean
+  tier_used: ServiceTier
   vehicle: VehicleRate | null
   guide: GuideRate | null
   attractions: AttractionRate[]
@@ -205,11 +246,13 @@ export interface PricingBreakdown {
     per_day: number
     vehicle_type: string
     service_type: string
+    is_preferred: boolean
   }
   guide: {
     total: number
     per_day: number
     language: string
+    is_preferred: boolean
   }
   entrances: {
     total: number
@@ -222,23 +265,27 @@ export interface PricingBreakdown {
     dinner_total: number
     per_person_lunch: number
     per_person_dinner: number
+    is_preferred: boolean
   }
   accommodation: {
     total: number
     per_night: number
     rooms: number
     nights: number
+    is_preferred: boolean
   }
   airport_staff: {
     total: number
     arrivals: number
     departures: number
     service_type: string
+    is_preferred: boolean
   }
   hotel_staff: {
     total: number
     per_stay: number
     num_stays: number
+    is_preferred: boolean
   }
   cruise: {
     total: number
@@ -246,6 +293,7 @@ export interface PricingBreakdown {
     ship_name: string
     cabin_type: string
     nights: number
+    is_preferred: boolean
   }
   sleeping_train: {
     total: number
@@ -273,6 +321,8 @@ export interface PricingCalculation {
   success: boolean
   total_cost: number
   per_person_cost: number
+  tier_used: ServiceTier
+  preferred_suppliers_count: number
   breakdown: PricingBreakdown
   rates_used: RatesUsed
   error?: string
@@ -289,6 +339,30 @@ function toNumber(value: any, fallback: number = 0): number {
 }
 
 // ============================================
+// HELPER: Normalize tier value
+// ============================================
+function normalizeTier(value: string | null | undefined): ServiceTier {
+  if (!value) return 'standard'
+  const normalized = value.toLowerCase().trim()
+  if (VALID_TIERS.includes(normalized as ServiceTier)) {
+    return normalized as ServiceTier
+  }
+  // Map legacy values
+  const tierMap: Record<string, ServiceTier> = {
+    'budget': 'budget',
+    'economy': 'budget',
+    'standard': 'standard',
+    'mid-range': 'standard',
+    'deluxe': 'deluxe',
+    'superior': 'deluxe',
+    'luxury': 'luxury',
+    'premium': 'luxury',
+    'vip': 'luxury'
+  }
+  return tierMap[normalized] || 'standard'
+}
+
+// ============================================
 // MAIN LOOKUP FUNCTION
 // ============================================
 
@@ -297,8 +371,12 @@ export async function lookupRates(
   params: RateLookupParams
 ): Promise<RatesUsed> {
   
+  // Normalize the tier
+  const tier = normalizeTier(params.tier)
+  
   const result: RatesUsed = {
     success: false,
+    tier_used: tier,
     vehicle: null,
     guide: null,
     attractions: [],
@@ -313,111 +391,155 @@ export async function lookupRates(
   }
 
   try {
+    console.log(`🎯 Looking up rates for tier: ${tier.toUpperCase()}`)
+    
     // ============================================
-    // 1. TRANSPORTATION RATES
+    // 1. VEHICLE RATES (from vehicles table with tier)
     // ============================================
     const serviceType = params.service_type || 'day_tour'
     
-    console.log(`🚗 Looking up transportation: city=${params.city}, service_type=${serviceType}, pax=${params.pax}`)
+    console.log(`🚗 Looking up vehicles: city=${params.city}, tier=${tier}, pax=${params.pax}`)
     
-    let vehicleQuery = supabase
-      .from('transportation_rates')
+    // First try: Get vehicles matching tier, ordered by preferred
+    let { data: vehicles, error: vehicleError } = await supabase
+      .from('vehicles')
       .select('*')
       .eq('is_active', true)
-
-    // Match service_type exactly as stored in database (lowercase with underscores)
-    if (serviceType === 'intercity_transfer' && params.origin_city && params.destination_city) {
-      vehicleQuery = vehicleQuery
-        .eq('service_type', 'intercity_transfer')
-        .eq('origin_city', params.origin_city)
-        .eq('destination_city', params.destination_city)
-    } else if (serviceType === 'airport_transfer' && params.city) {
-      vehicleQuery = vehicleQuery
-        .eq('service_type', 'airport_transfer')
-        .eq('city', params.city)
-    } else if (serviceType === 'half_day_tour' && params.city) {
-      vehicleQuery = vehicleQuery
-        .eq('service_type', 'half_day_tour')
-        .eq('city', params.city)
-    } else if (serviceType === 'dinner_transfer' && params.city) {
-      vehicleQuery = vehicleQuery
-        .eq('service_type', 'dinner_transfer')
-        .eq('city', params.city)
-    } else if (serviceType === 'sound_light_transfer' && params.city) {
-      vehicleQuery = vehicleQuery
-        .eq('service_type', 'sound_light_transfer')
-        .eq('city', params.city)
-    } else if (params.city) {
-      // Default: Day Tour
-      vehicleQuery = vehicleQuery
-        .eq('service_type', 'day_tour')
-        .eq('city', params.city)
-    }
-
-    const { data: vehicles, error: vehicleError } = await vehicleQuery
+      .eq('tier', tier)
+      .order('is_preferred', { ascending: false }) // Preferred first!
       .order('capacity_min', { ascending: true })
 
-    if (vehicleError) {
-      console.error('❌ Error fetching vehicles:', vehicleError)
-    } else if (vehicles && vehicles.length > 0) {
-      console.log(`✅ Found ${vehicles.length} vehicles`)
-      
-      // Find vehicle that fits pax count
+    // Fallback: If no vehicles match tier, get any active vehicles
+    if (!vehicles || vehicles.length === 0) {
+      console.log(`⚠️ No vehicles found for tier ${tier}, falling back to all active vehicles`)
+      const { data: fallbackVehicles } = await supabase
+        .from('vehicles')
+        .select('*')
+        .eq('is_active', true)
+        .order('is_preferred', { ascending: false })
+        .order('capacity_min', { ascending: true })
+      vehicles = fallbackVehicles
+    }
+
+    if (vehicles && vehicles.length > 0) {
+      // Find vehicle that fits pax count, preferring preferred suppliers
       const suitableVehicle = vehicles.find(v => 
         params.pax >= toNumber(v.capacity_min, 1) && 
         params.pax <= toNumber(v.capacity_max, 99)
       ) || vehicles[vehicles.length - 1]
 
       if (suitableVehicle) {
-        console.log(`✅ Selected vehicle: ${suitableVehicle.vehicle_type} @ €${suitableVehicle.base_rate_eur}/day`)
+        console.log(`✅ Selected vehicle: ${suitableVehicle.vehicle_type} (tier: ${suitableVehicle.tier}, preferred: ${suitableVehicle.is_preferred})`)
+        
+        // Now get the rate from transportation_rates
+        const { data: vehicleRates } = await supabase
+          .from('transportation_rates')
+          .select('*')
+          .eq('is_active', true)
+          .eq('service_type', serviceType)
+          .eq('city', params.city || 'Cairo')
+          .gte('capacity_max', params.pax)
+          .order('capacity_min', { ascending: true })
+          .limit(1)
+
+        const ratePerDay = vehicleRates && vehicleRates.length > 0 
+          ? toNumber(vehicleRates[0].base_rate_eur, 50)
+          : toNumber(suitableVehicle.daily_rate_eur, 50)
+
         result.vehicle = {
           id: suitableVehicle.id,
-          service_code: suitableVehicle.service_code,
+          service_code: suitableVehicle.id,
           vehicle_type: suitableVehicle.vehicle_type,
-          service_type: suitableVehicle.service_type,
-          city: suitableVehicle.city,
-          origin_city: suitableVehicle.origin_city,
-          destination_city: suitableVehicle.destination_city,
-          rate_per_day: toNumber(suitableVehicle.base_rate_eur, 0),
+          service_type: serviceType,
+          city: suitableVehicle.city || params.city || null,
+          origin_city: null,
+          destination_city: null,
+          rate_per_day: ratePerDay,
           capacity_min: toNumber(suitableVehicle.capacity_min, 1),
-          capacity_max: toNumber(suitableVehicle.capacity_max, 99)
+          capacity_max: toNumber(suitableVehicle.capacity_max, 99),
+          tier: suitableVehicle.tier,
+          is_preferred: suitableVehicle.is_preferred || false
         }
       }
-    } else {
-      console.log(`⚠️ No vehicles found for city=${params.city}, service_type=${serviceType}`)
     }
 
     // ============================================
-    // 2. GUIDE RATES (from guide_rates table!)
+    // 2. GUIDE RATES (from guides table with tier)
     // ============================================
-    console.log(`🎯 Looking up guide: language=${params.language}`)
+    console.log(`🎯 Looking up guides: language=${params.language}, tier=${tier}`)
     
-    const { data: guides, error: guideError } = await supabase
-      .from('guide_rates')  // ✅ FIXED: Use guide_rates table
+    // First try: Get guides matching tier and language, ordered by preferred
+    let { data: guides } = await supabase
+      .from('guides')
       .select('*')
       .eq('is_active', true)
-      .eq('guide_language', params.language)  // ✅ FIXED: Use guide_language column
-      .order('base_rate_eur', { ascending: true })
-      .limit(1)
+      .eq('tier', tier)
+      .contains('languages', [params.language])
+      .order('is_preferred', { ascending: false }) // Preferred first!
+      .limit(5)
 
-    if (guideError) {
-      console.error('❌ Error fetching guides:', guideError)
-    } else if (guides && guides.length > 0) {
-      const guide = guides[0]
-      console.log(`✅ Found guide: ${guide.guide_language} @ €${guide.base_rate_eur}/day`)
+    // Fallback: If no guides match tier, get any active guides with the language
+    if (!guides || guides.length === 0) {
+      console.log(`⚠️ No guides found for tier ${tier} with ${params.language}, trying without tier filter`)
+      const { data: fallbackGuides } = await supabase
+        .from('guides')
+        .select('*')
+        .eq('is_active', true)
+        .contains('languages', [params.language])
+        .order('is_preferred', { ascending: false })
+        .limit(5)
+      guides = fallbackGuides
+    }
+
+    if (guides && guides.length > 0) {
+      const selectedGuide = guides[0] // First one is preferred due to ordering
+      console.log(`✅ Selected guide: ${selectedGuide.name} (tier: ${selectedGuide.tier}, preferred: ${selectedGuide.is_preferred})`)
+      
+      // Get rate from guide_rates table
+      const { data: guideRates } = await supabase
+        .from('guide_rates')
+        .select('*')
+        .eq('is_active', true)
+        .eq('guide_language', params.language)
+        .limit(1)
+
+      const dailyRate = guideRates && guideRates.length > 0
+        ? toNumber(guideRates[0].base_rate_eur, 55)
+        : toNumber(selectedGuide.daily_rate_eur, 55)
+
       result.guide = {
-        id: guide.id,
-        name: `${guide.guide_language} Speaking Guide`,
-        languages: [guide.guide_language],
-        daily_rate_eur: toNumber(guide.base_rate_eur, 0),  // ✅ FIXED: Use base_rate_eur
-        city: guide.city
+        id: selectedGuide.id,
+        name: selectedGuide.name,
+        languages: selectedGuide.languages || [params.language],
+        daily_rate_eur: dailyRate,
+        city: selectedGuide.city,
+        tier: selectedGuide.tier,
+        is_preferred: selectedGuide.is_preferred || false
       }
     } else {
-      console.log(`⚠️ No guide found for language=${params.language}`)
+      // Ultimate fallback: Use guide_rates table directly
+      const { data: guideRates } = await supabase
+        .from('guide_rates')
+        .select('*')
+        .eq('is_active', true)
+        .eq('guide_language', params.language)
+        .limit(1)
+
+      if (guideRates && guideRates.length > 0) {
+        const rate = guideRates[0]
+        result.guide = {
+          id: rate.id,
+          name: `${params.language} Speaking Guide`,
+          languages: [params.language],
+          daily_rate_eur: toNumber(rate.base_rate_eur, 55),
+          tier: 'standard',
+          is_preferred: false
+        }
+      }
     }
 
     // ============================================
-    // 3. ATTRACTION RATES (Entrance Fees)
+    // 3. ATTRACTION RATES (Entrance Fees - no tier)
     // ============================================
     console.log(`🏛️ Looking up entrance fees: city=${params.city}, attractions=${params.attractions?.join(', ') || 'default'}`)
     
@@ -442,15 +564,14 @@ export async function lookupRates(
         }))
       }
     } else if (params.city) {
-      // Get default attractions for city
-      const { data: attractions, error: attractionError } = await supabase
+      const { data: attractions } = await supabase
         .from('entrance_fees')
         .select('*')
         .eq('is_active', true)
         .eq('city', params.city)
         .limit(10)
 
-      if (!attractionError && attractions && attractions.length > 0) {
+      if (attractions && attractions.length > 0) {
         console.log(`✅ Found ${attractions.length} attractions for ${params.city}`)
         result.attractions = attractions.map(a => ({
           id: a.id,
@@ -461,163 +582,268 @@ export async function lookupRates(
           child_rate_eur: toNumber(a.child_rate_eur, 0),
           child_rate_non_eur: toNumber(a.child_rate_non_eur, 0)
         }))
-      } else {
-        console.log(`⚠️ No attractions found for city=${params.city}`)
       }
     }
 
     // ============================================
-    // 4. MEAL RATES (from meal_rates table)
+    // 4. RESTAURANT RATES (with tier)
     // ============================================
     if (params.include_lunch || params.include_dinner) {
-      console.log(`🍽️ Looking up meal rates: city=${params.city}`)
+      console.log(`🍽️ Looking up restaurants: city=${params.city}, tier=${tier}`)
       
-      const { data: meals, error: mealError } = await supabase
-        .from('meal_rates')
+      // First try: Get restaurants matching tier, ordered by preferred
+      let { data: restaurants } = await supabase
+        .from('restaurant_contacts')
         .select('*')
         .eq('is_active', true)
-        .limit(1)
+        .eq('tier', tier)
+        .eq('city', params.city || 'Cairo')
+        .order('is_preferred', { ascending: false })
+        .limit(5)
 
-      if (!mealError && meals && meals.length > 0) {
-        const meal = meals[0]
-        console.log(`✅ Found meal rate: lunch €${meal.lunch_rate_eur}, dinner €${meal.dinner_rate_eur}`)
-        result.restaurant = {
-          id: meal.id,
-          name: 'Standard Restaurant',
-          city: params.city || 'Cairo',
-          lunch_rate_eur: toNumber(meal.lunch_rate_eur, 12),
-          dinner_rate_eur: toNumber(meal.dinner_rate_eur, 18)
-        }
-      } else {
-        // Fallback to restaurant_contacts if meal_rates is empty
-        const { data: restaurants, error: restaurantError } = await supabase
+      // Fallback: If no restaurants match tier
+      if (!restaurants || restaurants.length === 0) {
+        const { data: fallbackRestaurants } = await supabase
           .from('restaurant_contacts')
           .select('*')
           .eq('is_active', true)
           .eq('city', params.city || 'Cairo')
-          .order('lunch_rate_eur', { ascending: true })
+          .order('is_preferred', { ascending: false })
+          .limit(5)
+        restaurants = fallbackRestaurants
+      }
+
+      if (restaurants && restaurants.length > 0) {
+        const restaurant = restaurants[0]
+        console.log(`✅ Selected restaurant: ${restaurant.name} (tier: ${restaurant.tier}, preferred: ${restaurant.is_preferred})`)
+        
+        // Apply tier multiplier to base meal rates
+        const tierMultiplier = TIER_MULTIPLIERS[tier]
+        
+        result.restaurant = {
+          id: restaurant.id,
+          name: restaurant.name,
+          city: restaurant.city,
+          lunch_rate_eur: Math.round(toNumber(restaurant.lunch_rate_eur, 12) * tierMultiplier),
+          dinner_rate_eur: Math.round(toNumber(restaurant.dinner_rate_eur, 18) * tierMultiplier),
+          tier: restaurant.tier,
+          is_preferred: restaurant.is_preferred || false
+        }
+      } else {
+        // Fallback to meal_rates table
+        const { data: mealRates } = await supabase
+          .from('meal_rates')
+          .select('*')
+          .eq('is_active', true)
           .limit(1)
 
-        if (!restaurantError && restaurants && restaurants.length > 0) {
-          const restaurant = restaurants[0]
+        if (mealRates && mealRates.length > 0) {
+          const meal = mealRates[0]
+          const tierMultiplier = TIER_MULTIPLIERS[tier]
           result.restaurant = {
-            id: restaurant.id,
-            name: restaurant.name,
-            city: restaurant.city,
-            lunch_rate_eur: toNumber(restaurant.lunch_rate_eur, restaurant.rate_per_person || 12),
-            dinner_rate_eur: toNumber(restaurant.dinner_rate_eur, restaurant.rate_per_person || 18)
+            id: meal.id,
+            name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Restaurant`,
+            city: params.city || 'Cairo',
+            lunch_rate_eur: Math.round(toNumber(meal.lunch_rate_eur, 12) * tierMultiplier),
+            dinner_rate_eur: Math.round(toNumber(meal.dinner_rate_eur, 18) * tierMultiplier),
+            tier: tier,
+            is_preferred: false
           }
         }
       }
     }
 
     // ============================================
-    // 5. ACCOMMODATION RATES
+    // 5. HOTEL RATES (with tier)
     // ============================================
     if (params.include_accommodation) {
-      console.log(`🏨 Looking up accommodation: city=${params.city}, standard=${params.hotel_standard}`)
+      console.log(`🏨 Looking up hotels: city=${params.city}, tier=${tier}`)
       
-      const { data: hotels, error: hotelError } = await supabase
-        .from('accommodation_rates')
+      // First try: Get hotels matching tier, ordered by preferred
+      let { data: hotels } = await supabase
+        .from('hotel_contacts')
         .select('*')
         .eq('is_active', true)
-        .limit(1)
+        .eq('tier', tier)
+        .ilike('city', params.city || 'Cairo')
+        .order('is_preferred', { ascending: false }) // Preferred first!
+        .order('star_rating', { ascending: false })
+        .limit(5)
 
-      if (!hotelError && hotels && hotels.length > 0) {
-        const hotel = hotels[0]
-        result.hotel = {
-          id: hotel.id,
-          name: hotel.hotel_name || 'Standard Hotel',
-          city: hotel.city || params.city || 'Cairo',
-          rate_single_eur: toNumber(hotel.rate_single_eur, 0),
-          rate_double_eur: toNumber(hotel.rate_double_eur, 0),
-          rate_triple_eur: toNumber(hotel.rate_triple_eur, 0),
-          star_rating: toNumber(hotel.star_rating, 4)
-        }
-      } else {
-        // Fallback to hotel_contacts
-        let hotelQuery = supabase
+      // Fallback: If no hotels match tier
+      if (!hotels || hotels.length === 0) {
+        console.log(`⚠️ No hotels found for tier ${tier}, falling back`)
+        const { data: fallbackHotels } = await supabase
           .from('hotel_contacts')
           .select('*')
           .eq('is_active', true)
-          .eq('city', params.city || 'Cairo')
+          .ilike('city', params.city || 'Cairo')
+          .order('is_preferred', { ascending: false })
+          .order('star_rating', { ascending: tier === 'luxury' ? false : true })
+          .limit(5)
+        hotels = fallbackHotels
+      }
 
-        if (params.hotel_standard === 'luxury') {
-          hotelQuery = hotelQuery.gte('star_rating', 5)
-        } else if (params.hotel_standard === 'budget') {
-          hotelQuery = hotelQuery.lte('star_rating', 3)
+      if (hotels && hotels.length > 0) {
+        const hotel = hotels[0]
+        console.log(`✅ Selected hotel: ${hotel.name} (tier: ${hotel.tier}, preferred: ${hotel.is_preferred}, ${hotel.star_rating}⭐)`)
+        
+        result.hotel = {
+          id: hotel.id,
+          name: hotel.name,
+          city: hotel.city,
+          rate_single_eur: toNumber(hotel.rate_single_eur, 0),
+          rate_double_eur: toNumber(hotel.rate_double_eur, 0),
+          rate_triple_eur: toNumber(hotel.rate_triple_eur, 0),
+          star_rating: toNumber(hotel.star_rating, 4),
+          tier: hotel.tier,
+          is_preferred: hotel.is_preferred || false
         }
-
-        const { data: hotelContacts, error: hcError } = await hotelQuery
-          .order('rate_double_eur', { ascending: true })
-          .limit(1)
-
-        if (!hcError && hotelContacts && hotelContacts.length > 0) {
-          const hotel = hotelContacts[0]
-          result.hotel = {
-            id: hotel.id,
-            name: hotel.name,
-            city: hotel.city,
-            rate_single_eur: toNumber(hotel.rate_single_eur, hotel.single_rate || 0),
-            rate_double_eur: toNumber(hotel.rate_double_eur, hotel.double_rate || 0),
-            rate_triple_eur: toNumber(hotel.rate_triple_eur, hotel.triple_rate || 0),
-            star_rating: toNumber(hotel.star_rating, hotel.stars)
-          }
+      } else {
+        // Use default rates based on tier
+        const defaultRates: Record<ServiceTier, number> = {
+          'budget': 45,
+          'standard': 80,
+          'deluxe': 120,
+          'luxury': 180
+        }
+        result.hotel = {
+          id: 'default',
+          name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Hotel`,
+          city: params.city || 'Cairo',
+          rate_single_eur: defaultRates[tier] * 0.8,
+          rate_double_eur: defaultRates[tier],
+          rate_triple_eur: defaultRates[tier] * 1.2,
+          star_rating: tier === 'luxury' ? 5 : tier === 'deluxe' ? 4 : tier === 'standard' ? 4 : 3,
+          tier: tier,
+          is_preferred: false
         }
       }
     }
 
     // ============================================
-    // 6. AIRPORT STAFF RATES
+    // 6. AIRPORT STAFF RATES (with tier)
     // ============================================
     if (params.include_airport_service && params.airport_code) {
-      const { data: airportStaff, error: airportError } = await supabase
+      console.log(`✈️ Looking up airport staff: airport=${params.airport_code}, tier=${tier}`)
+      
+      let { data: airportStaff } = await supabase
+        .from('airport_staff')
+        .select('*')
+        .eq('is_active', true)
+        .eq('tier', tier)
+        .order('is_preferred', { ascending: false })
+        .limit(5)
+
+      if (!airportStaff || airportStaff.length === 0) {
+        const { data: fallbackStaff } = await supabase
+          .from('airport_staff')
+          .select('*')
+          .eq('is_active', true)
+          .order('is_preferred', { ascending: false })
+          .limit(5)
+        airportStaff = fallbackStaff
+      }
+
+      // Get rate from airport_staff_rates
+      const { data: staffRates } = await supabase
         .from('airport_staff_rates')
         .select('*')
         .eq('is_active', true)
         .eq('airport_code', params.airport_code)
         .limit(1)
 
-      if (!airportError && airportStaff && airportStaff.length > 0) {
+      if (airportStaff && airportStaff.length > 0) {
         const staff = airportStaff[0]
+        const rate = staffRates && staffRates.length > 0 ? staffRates[0] : null
+        
         result.airport_staff = {
           id: staff.id,
-          service_code: staff.service_code,
-          airport_code: staff.airport_code,
-          airport_name: staff.airport_name || staff.airport_code,
-          service_type: staff.service_type || 'meet_greet',
-          direction: staff.direction || 'arrival',
-          rate_eur: toNumber(staff.rate_eur, 0)
+          service_code: staff.id,
+          airport_code: params.airport_code,
+          airport_name: rate?.airport_name || params.airport_code,
+          service_type: params.airport_service_type || 'meet_greet',
+          direction: 'both',
+          rate_eur: rate ? toNumber(rate.rate_eur, 25) : 25,
+          tier: staff.tier,
+          is_preferred: staff.is_preferred || false
         }
       }
     }
 
     // ============================================
-    // 7. HOTEL STAFF RATES
+    // 7. HOTEL STAFF RATES (with tier)
     // ============================================
     if (params.include_accommodation && params.num_hotel_stays && params.num_hotel_stays > 0) {
-      const { data: hotelStaff, error: hotelStaffError } = await supabase
+      console.log(`🛎️ Looking up hotel staff: tier=${tier}`)
+      
+      let { data: hotelStaff } = await supabase
+        .from('hotel_staff')
+        .select('*')
+        .eq('is_active', true)
+        .eq('tier', tier)
+        .order('is_preferred', { ascending: false })
+        .limit(5)
+
+      if (!hotelStaff || hotelStaff.length === 0) {
+        const { data: fallbackStaff } = await supabase
+          .from('hotel_staff')
+          .select('*')
+          .eq('is_active', true)
+          .order('is_preferred', { ascending: false })
+          .limit(5)
+        hotelStaff = fallbackStaff
+      }
+
+      // Get rate from hotel_staff_rates
+      const { data: staffRates } = await supabase
         .from('hotel_staff_rates')
         .select('*')
         .eq('is_active', true)
         .limit(1)
 
-      if (!hotelStaffError && hotelStaff && hotelStaff.length > 0) {
+      if (hotelStaff && hotelStaff.length > 0) {
         const staff = hotelStaff[0]
+        const rate = staffRates && staffRates.length > 0 ? staffRates[0] : null
+        
         result.hotel_staff = {
           id: staff.id,
-          service_code: staff.service_code,
-          service_type: staff.service_type || 'full_service',
-          hotel_category: staff.hotel_category || 'standard',
-          rate_eur: toNumber(staff.rate_eur, 0)
+          service_code: staff.id,
+          service_type: 'full_service',
+          hotel_category: tier,
+          rate_eur: rate ? toNumber(rate.rate_eur, 15) : 15,
+          tier: staff.tier,
+          is_preferred: staff.is_preferred || false
         }
       }
     }
 
     // ============================================
-    // 8. NILE CRUISE RATES
+    // 8. NILE CRUISE RATES (with tier)
     // ============================================
     if (params.include_cruise && params.cruise_embark_city && params.cruise_disembark_city) {
+      console.log(`🚢 Looking up cruises: ${params.cruise_embark_city} → ${params.cruise_disembark_city}, tier=${tier}`)
+      
+      // First try: Get cruises matching tier, ordered by preferred
+      let { data: cruises } = await supabase
+        .from('cruise_contacts')
+        .select('*')
+        .eq('is_active', true)
+        .eq('tier', tier)
+        .order('is_preferred', { ascending: false })
+        .limit(5)
+
+      if (!cruises || cruises.length === 0) {
+        const { data: fallbackCruises } = await supabase
+          .from('cruise_contacts')
+          .select('*')
+          .eq('is_active', true)
+          .order('is_preferred', { ascending: false })
+          .limit(5)
+        cruises = fallbackCruises
+      }
+
+      // Get rate from nile_cruises table
       let cruiseQuery = supabase
         .from('nile_cruises')
         .select('*')
@@ -632,12 +858,14 @@ export async function lookupRates(
         cruiseQuery = cruiseQuery.eq('duration_nights', params.cruise_nights)
       }
 
-      const { data: cruises, error: cruiseError } = await cruiseQuery
-        .order('rate_double_eur', { ascending: true })
+      const { data: cruiseRates } = await cruiseQuery
+        .order('rate_double_eur', { ascending: tier === 'budget' })
         .limit(1)
 
-      if (!cruiseError && cruises && cruises.length > 0) {
-        const cruise = cruises[0]
+      if (cruiseRates && cruiseRates.length > 0) {
+        const cruise = cruiseRates[0]
+        const selectedCruiseContact = cruises && cruises.length > 0 ? cruises[0] : null
+        
         result.cruise = {
           id: cruise.id,
           cruise_code: cruise.cruise_code,
@@ -650,16 +878,18 @@ export async function lookupRates(
           cabin_type: cruise.cabin_type,
           rate_single_eur: toNumber(cruise.rate_single_eur, 0),
           rate_double_eur: toNumber(cruise.rate_double_eur, 0),
-          rate_triple_eur: toNumber(cruise.rate_triple_eur, 0)
+          rate_triple_eur: toNumber(cruise.rate_triple_eur, 0),
+          tier: selectedCruiseContact?.tier || tier,
+          is_preferred: selectedCruiseContact?.is_preferred || false
         }
       }
     }
 
     // ============================================
-    // 9. SLEEPING TRAIN RATES
+    // 9. SLEEPING TRAIN RATES (no tier - fixed pricing)
     // ============================================
     if (params.include_sleeping_train && params.sleeping_train_origin && params.sleeping_train_destination) {
-      const { data: sleepTrains, error: sleepTrainError } = await supabase
+      const { data: sleepTrains } = await supabase
         .from('sleeping_train_rates')
         .select('*')
         .eq('is_active', true)
@@ -667,7 +897,7 @@ export async function lookupRates(
         .eq('destination_city', params.sleeping_train_destination)
         .limit(1)
 
-      if (!sleepTrainError && sleepTrains && sleepTrains.length > 0) {
+      if (sleepTrains && sleepTrains.length > 0) {
         const train = sleepTrains[0]
         result.sleeping_train = {
           id: train.id,
@@ -682,10 +912,10 @@ export async function lookupRates(
     }
 
     // ============================================
-    // 10. REGULAR TRAIN RATES
+    // 10. REGULAR TRAIN RATES (no tier - fixed pricing)
     // ============================================
     if (params.include_train && params.train_origin && params.train_destination) {
-      const { data: trains, error: trainError } = await supabase
+      const { data: trains } = await supabase
         .from('train_rates')
         .select('*')
         .eq('is_active', true)
@@ -693,7 +923,7 @@ export async function lookupRates(
         .eq('destination_city', params.train_destination)
         .limit(1)
 
-      if (!trainError && trains && trains.length > 0) {
+      if (trains && trains.length > 0) {
         const train = trains[0]
         result.train = {
           id: train.id,
@@ -708,30 +938,45 @@ export async function lookupRates(
     }
 
     // ============================================
-    // 11. TIPPING RATES
+    // 11. TIPPING RATES (adjusted by tier)
     // ============================================
     if (params.include_tips !== false) {
-      console.log(`💰 Looking up tipping rates`)
+      console.log(`💰 Looking up tipping rates (tier multiplier: ${TIER_MULTIPLIERS[tier]}x)`)
       
-      const { data: tips, error: tipError } = await supabase
+      const { data: tips } = await supabase
         .from('tipping_rates')
         .select('*')
         .eq('is_active', true)
 
-      if (!tipError && tips && tips.length > 0) {
-        console.log(`✅ Found ${tips.length} tipping rates`)
+      if (tips && tips.length > 0) {
+        const tierMultiplier = TIER_MULTIPLIERS[tier]
         result.tipping = tips.map(t => ({
           id: t.id,
           service_code: t.service_code,
           role_type: t.role_type,
           rate_unit: t.rate_unit || 'per_day',
-          rate_eur: toNumber(t.rate_eur, 0),
+          rate_eur: Math.round(toNumber(t.rate_eur, 0) * tierMultiplier),
           context: t.context
         }))
+        console.log(`✅ Found ${tips.length} tipping rates (adjusted for ${tier} tier)`)
       }
     }
 
     result.success = true
+    
+    // Log summary of preferred suppliers found
+    const preferredCount = [
+      result.vehicle?.is_preferred,
+      result.guide?.is_preferred,
+      result.restaurant?.is_preferred,
+      result.hotel?.is_preferred,
+      result.airport_staff?.is_preferred,
+      result.hotel_staff?.is_preferred,
+      result.cruise?.is_preferred
+    ].filter(Boolean).length
+    
+    console.log(`⭐ Preferred suppliers selected: ${preferredCount}`)
+    
     return result
 
   } catch (error: any) {
@@ -750,6 +995,7 @@ export async function calculatePricingFromRates(
 ): Promise<PricingCalculation> {
   
   const { pax, num_adults, num_children, duration_days } = params
+  const tier = normalizeTier(params.tier)
 
   // Get rates from database
   const rates = await lookupRates(supabase, params)
@@ -758,15 +1004,17 @@ export async function calculatePricingFromRates(
     success: false,
     total_cost: 0,
     per_person_cost: 0,
+    tier_used: tier,
+    preferred_suppliers_count: 0,
     breakdown: {
-      transportation: { total: 0, per_day: 0, vehicle_type: 'Unknown', service_type: 'day_tour' },
-      guide: { total: 0, per_day: 0, language: params.language },
+      transportation: { total: 0, per_day: 0, vehicle_type: 'Unknown', service_type: 'day_tour', is_preferred: false },
+      guide: { total: 0, per_day: 0, language: params.language, is_preferred: false },
       entrances: { total: 0, per_person: 0, count: 0, passport_type: params.is_euro_passport ? 'EUR' : 'non-EUR' },
-      meals: { lunch_total: 0, dinner_total: 0, per_person_lunch: 0, per_person_dinner: 0 },
-      accommodation: { total: 0, per_night: 0, rooms: 0, nights: 0 },
-      airport_staff: { total: 0, arrivals: 0, departures: 0, service_type: '' },
-      hotel_staff: { total: 0, per_stay: 0, num_stays: 0 },
-      cruise: { total: 0, per_person: 0, ship_name: '', cabin_type: '', nights: 0 },
+      meals: { lunch_total: 0, dinner_total: 0, per_person_lunch: 0, per_person_dinner: 0, is_preferred: false },
+      accommodation: { total: 0, per_night: 0, rooms: 0, nights: 0, is_preferred: false },
+      airport_staff: { total: 0, arrivals: 0, departures: 0, service_type: '', is_preferred: false },
+      hotel_staff: { total: 0, per_stay: 0, num_stays: 0, is_preferred: false },
+      cruise: { total: 0, per_person: 0, ship_name: '', cabin_type: '', nights: 0, is_preferred: false },
       sleeping_train: { total: 0, per_person: 0, cabin_type: '', is_roundtrip: false },
       train: { total: 0, per_person: 0, class_type: '' },
       tips: { total: 0, per_day: 0, breakdown: [] },
@@ -774,6 +1022,8 @@ export async function calculatePricingFromRates(
     },
     rates_used: rates
   }
+
+  let preferredCount = 0
 
   // ============================================
   // 1. TRANSPORTATION (Per Group)
@@ -787,8 +1037,10 @@ export async function calculatePricingFromRates(
       total: transportTotal,
       per_day: transportPerDay,
       vehicle_type: rates.vehicle.vehicle_type,
-      service_type: rates.vehicle.service_type
+      service_type: rates.vehicle.service_type,
+      is_preferred: rates.vehicle.is_preferred
     }
+    if (rates.vehicle.is_preferred) preferredCount++
   }
 
   // ============================================
@@ -801,8 +1053,10 @@ export async function calculatePricingFromRates(
     result.breakdown.guide = {
       total: guideTotal,
       per_day: guidePerDay,
-      language: params.language
+      language: params.language,
+      is_preferred: rates.guide.is_preferred
     }
+    if (rates.guide.is_preferred) preferredCount++
   }
 
   // ============================================
@@ -839,8 +1093,10 @@ export async function calculatePricingFromRates(
       lunch_total: lunchPerPerson * pax * duration_days,
       dinner_total: dinnerPerPerson * pax * duration_days,
       per_person_lunch: lunchPerPerson * duration_days,
-      per_person_dinner: dinnerPerPerson * duration_days
+      per_person_dinner: dinnerPerPerson * duration_days,
+      is_preferred: rates.restaurant.is_preferred
     }
+    if (rates.restaurant.is_preferred) preferredCount++
   }
 
   // ============================================
@@ -855,8 +1111,10 @@ export async function calculatePricingFromRates(
       total: ratePerNight * roomsNeeded * nights,
       per_night: ratePerNight,
       rooms: roomsNeeded,
-      nights: nights
+      nights: nights,
+      is_preferred: rates.hotel.is_preferred
     }
+    if (rates.hotel.is_preferred) preferredCount++
   }
 
   // ============================================
@@ -871,8 +1129,10 @@ export async function calculatePricingFromRates(
       total: ratePerService * (arrivals + departures),
       arrivals: arrivals,
       departures: departures,
-      service_type: rates.airport_staff.service_type
+      service_type: rates.airport_staff.service_type,
+      is_preferred: rates.airport_staff.is_preferred
     }
+    if (rates.airport_staff.is_preferred) preferredCount++
   }
 
   // ============================================
@@ -884,8 +1144,10 @@ export async function calculatePricingFromRates(
     result.breakdown.hotel_staff = {
       total: perStay * params.num_hotel_stays,
       per_stay: perStay,
-      num_stays: params.num_hotel_stays
+      num_stays: params.num_hotel_stays,
+      is_preferred: rates.hotel_staff.is_preferred
     }
+    if (rates.hotel_staff.is_preferred) preferredCount++
   }
 
   // ============================================
@@ -905,8 +1167,10 @@ export async function calculatePricingFromRates(
       per_person: perPerson,
       ship_name: rates.cruise.ship_name,
       cabin_type: rates.cruise.cabin_type,
-      nights: rates.cruise.duration_nights
+      nights: rates.cruise.duration_nights,
+      is_preferred: rates.cruise.is_preferred
     }
+    if (rates.cruise.is_preferred) preferredCount++
   }
 
   // ============================================
@@ -940,7 +1204,7 @@ export async function calculatePricingFromRates(
   }
 
   // ============================================
-  // 11. TIPPING (Configurable)
+  // 11. TIPPING (Already tier-adjusted in lookupRates)
   // ============================================
   let tipsTotal = 0
   const tipsBreakdown: { role: string; amount: number }[] = []
@@ -959,7 +1223,6 @@ export async function calculatePricingFromRates(
       } else if (tip.rate_unit === 'per_cruise' && params.include_cruise) {
         tipAmount = tipRate
       } else {
-        // Default to per_day
         tipAmount = tipRate * duration_days
       }
       
@@ -970,7 +1233,6 @@ export async function calculatePricingFromRates(
     }
   }
   
-  // ✅ FIXED: Calculate per_day from total
   result.breakdown.tips = {
     total: tipsTotal,
     per_day: duration_days > 0 ? tipsTotal / duration_days : 0,
@@ -981,7 +1243,7 @@ export async function calculatePricingFromRates(
   // 12. WATER (Per Person)
   // ============================================
   if (params.include_water !== false) {
-    const waterPerPersonPerDay = 2 // €2 per person per day
+    const waterPerPersonPerDay = 2
     const waterTotal = waterPerPersonPerDay * pax * duration_days
     
     result.breakdown.water = {
@@ -1009,6 +1271,7 @@ export async function calculatePricingFromRates(
     result.breakdown.water.total
 
   result.per_person_cost = pax > 0 ? result.total_cost / pax : 0
+  result.preferred_suppliers_count = preferredCount
 
   // Round to 2 decimals
   result.total_cost = Math.round(result.total_cost * 100) / 100
@@ -1016,13 +1279,15 @@ export async function calculatePricingFromRates(
 
   result.success = true
   
-  console.log(`💰 PRICING SUMMARY:`)
-  console.log(`   Transportation: €${result.breakdown.transportation.total} (${result.breakdown.transportation.vehicle_type})`)
-  console.log(`   Guide: €${result.breakdown.guide.total} (${params.language})`)
+  console.log(`💰 PRICING SUMMARY (Tier: ${tier.toUpperCase()}):`)
+  console.log(`   Transportation: €${result.breakdown.transportation.total} (${result.breakdown.transportation.vehicle_type}${result.breakdown.transportation.is_preferred ? ' ⭐' : ''})`)
+  console.log(`   Guide: €${result.breakdown.guide.total} (${params.language}${result.breakdown.guide.is_preferred ? ' ⭐' : ''})`)
   console.log(`   Entrances: €${result.breakdown.entrances.total} (${result.breakdown.entrances.count} sites)`)
-  console.log(`   Meals: €${result.breakdown.meals.lunch_total + result.breakdown.meals.dinner_total}`)
+  console.log(`   Meals: €${result.breakdown.meals.lunch_total + result.breakdown.meals.dinner_total}${result.breakdown.meals.is_preferred ? ' ⭐' : ''}`)
+  console.log(`   Accommodation: €${result.breakdown.accommodation.total}${result.breakdown.accommodation.is_preferred ? ' ⭐' : ''}`)
   console.log(`   Tips: €${result.breakdown.tips.total}`)
   console.log(`   Water: €${result.breakdown.water.total}`)
+  console.log(`   ⭐ Preferred Suppliers: ${preferredCount}`)
   console.log(`   TOTAL: €${result.total_cost}`)
   
   return result
@@ -1037,15 +1302,18 @@ export function getFallbackRates(params: {
   duration_days: number
   language: string
   is_euro_passport: boolean
+  tier?: ServiceTier
 }): PricingCalculation {
   const { pax, duration_days } = params
+  const tier = normalizeTier(params.tier)
+  const tierMultiplier = TIER_MULTIPLIERS[tier]
 
-  // Hardcoded fallback rates
-  const vehiclePerDay = pax <= 2 ? 50 : pax <= 6 ? 110 : pax <= 10 ? 150 : 200
-  const guidePerDay = params.language === 'English' ? 50 : 90
+  // Base rates adjusted by tier
+  const vehiclePerDay = Math.round((pax <= 2 ? 50 : pax <= 6 ? 110 : pax <= 10 ? 150 : 200) * tierMultiplier)
+  const guidePerDay = Math.round((params.language === 'English' ? 50 : 90) * tierMultiplier)
   const entrancePerPerson = params.is_euro_passport ? 18 : 25
-  const lunchPerPerson = 12
-  const tipPerDay = 15
+  const lunchPerPerson = Math.round(12 * tierMultiplier)
+  const tipPerDay = Math.round(15 * tierMultiplier)
   const waterPerPerson = 2
 
   const transportTotal = vehiclePerDay * duration_days
@@ -1061,14 +1329,22 @@ export function getFallbackRates(params: {
     success: true,
     total_cost: totalCost,
     per_person_cost: totalCost / pax,
+    tier_used: tier,
+    preferred_suppliers_count: 0,
     breakdown: {
       transportation: { 
         total: transportTotal, 
         per_day: vehiclePerDay, 
         vehicle_type: pax <= 2 ? 'Sedan' : pax <= 6 ? 'Minivan' : pax <= 10 ? 'Van' : 'Bus',
-        service_type: 'day_tour'
+        service_type: 'day_tour',
+        is_preferred: false
       },
-      guide: { total: guideTotal, per_day: guidePerDay, language: params.language },
+      guide: { 
+        total: guideTotal, 
+        per_day: guidePerDay, 
+        language: params.language,
+        is_preferred: false 
+      },
       entrances: { 
         total: entranceTotal, 
         per_person: entrancePerPerson * duration_days, 
@@ -1079,12 +1355,13 @@ export function getFallbackRates(params: {
         lunch_total: lunchTotal, 
         dinner_total: 0, 
         per_person_lunch: lunchPerPerson * duration_days,
-        per_person_dinner: 0
+        per_person_dinner: 0,
+        is_preferred: false
       },
-      accommodation: { total: 0, per_night: 0, rooms: 0, nights: 0 },
-      airport_staff: { total: 0, arrivals: 0, departures: 0, service_type: '' },
-      hotel_staff: { total: 0, per_stay: 0, num_stays: 0 },
-      cruise: { total: 0, per_person: 0, ship_name: '', cabin_type: '', nights: 0 },
+      accommodation: { total: 0, per_night: 0, rooms: 0, nights: 0, is_preferred: false },
+      airport_staff: { total: 0, arrivals: 0, departures: 0, service_type: '', is_preferred: false },
+      hotel_staff: { total: 0, per_stay: 0, num_stays: 0, is_preferred: false },
+      cruise: { total: 0, per_person: 0, ship_name: '', cabin_type: '', nights: 0, is_preferred: false },
       sleeping_train: { total: 0, per_person: 0, cabin_type: '', is_roundtrip: false },
       train: { total: 0, per_person: 0, class_type: '' },
       tips: { 
@@ -1099,6 +1376,7 @@ export function getFallbackRates(params: {
     },
     rates_used: {
       success: false,
+      tier_used: tier,
       vehicle: null,
       guide: null,
       attractions: [],

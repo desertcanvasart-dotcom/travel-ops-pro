@@ -2,7 +2,26 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star } from 'lucide-react'
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+]
+
+const CITIES = ['Luxor', 'Aswan', 'Cairo']
+const SHIP_CATEGORIES = ['standard', 'deluxe', 'luxury']
+const CABIN_TYPES = ['standard', 'deluxe', 'suite']
+
+// ============================================
+// INTERFACES
+// ============================================
 
 interface Cruise {
   id: string
@@ -22,6 +41,8 @@ interface Cruise {
   description: string | null
   notes: string | null
   is_active: boolean
+  tier: string | null
+  is_preferred: boolean
   created_at: string
 }
 
@@ -31,9 +52,22 @@ interface Toast {
   message: string
 }
 
-const CITIES = ['Luxor', 'Aswan', 'Cairo']
-const SHIP_CATEGORIES = ['standard', 'deluxe', 'luxury']
-const CABIN_TYPES = ['standard', 'deluxe', 'suite']
+// ============================================
+// COMPONENTS
+// ============================================
+
+function TierBadge({ tier }: { tier: string | null }) {
+  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
+      {tierConfig.label}
+    </span>
+  )
+}
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 export default function CruisesPage() {
   const [cruises, setCruises] = useState<Cruise[]>([])
@@ -41,6 +75,7 @@ export default function CruisesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedCabin, setSelectedCabin] = useState('all')
+  const [filterTier, setFilterTier] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingCruise, setEditingCruise] = useState<Cruise | null>(null)
@@ -62,7 +97,9 @@ export default function CruisesPage() {
     sightseeing_included: false,
     description: '',
     notes: '',
-    is_active: true
+    is_active: true,
+    tier: 'standard',
+    is_preferred: false
   })
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -128,7 +165,9 @@ export default function CruisesPage() {
       sightseeing_included: false,
       description: '',
       notes: '',
-      is_active: true
+      is_active: true,
+      tier: 'standard',
+      is_preferred: false
     })
     setShowModal(true)
   }
@@ -151,7 +190,9 @@ export default function CruisesPage() {
       sightseeing_included: cruise.sightseeing_included,
       description: cruise.description || '',
       notes: cruise.notes || '',
-      is_active: cruise.is_active
+      is_active: cruise.is_active,
+      tier: cruise.tier || 'standard',
+      is_preferred: cruise.is_preferred || false
     })
     setShowModal(true)
   }
@@ -218,13 +259,15 @@ export default function CruisesPage() {
     const matchesCategory = selectedCategory === 'all' || cruise.ship_category === selectedCategory
     const matchesCabin = selectedCabin === 'all' || cruise.cabin_type === selectedCabin
     const matchesActive = showInactive || cruise.is_active
+    const matchesTier = filterTier === null || cruise.tier === filterTier
 
-    return matchesSearch && matchesCategory && matchesCabin && matchesActive
+    return matchesSearch && matchesCategory && matchesCabin && matchesActive && matchesTier
   })
 
   const stats = {
     total: cruises.length,
     active: cruises.filter(c => c.is_active).length,
+    preferred: cruises.filter(c => c.is_preferred).length,
     ships: new Set(cruises.map(c => c.ship_name)).size,
     avgRate: cruises.length > 0 
       ? Math.round(cruises.reduce((sum, c) => sum + c.rate_double_eur, 0) / cruises.length)
@@ -283,7 +326,7 @@ export default function CruisesPage() {
 
       <div className="container mx-auto px-4 lg:px-6 py-6">
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">Total Rates</p>
             <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
@@ -291,6 +334,13 @@ export default function CruisesPage() {
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">Active</p>
             <p className="text-2xl font-bold text-green-600">{stats.active}</p>
+          </div>
+          <div className="bg-white p-3 rounded-lg shadow-md border">
+            <div className="flex items-center gap-1 mb-1">
+              <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+            </div>
+            <p className="text-xs text-gray-600">Preferred</p>
+            <p className="text-2xl font-bold text-amber-600">{stats.preferred}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">Ships</p>
@@ -335,6 +385,17 @@ export default function CruisesPage() {
                 <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
               ))}
             </select>
+            <select
+              value={filterTier || 'all'}
+              onChange={(e) => setFilterTier(e.target.value === 'all' ? null : e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+            >
+              <option value="all">All Tiers</option>
+              <option value="budget">Budget</option>
+              <option value="standard">Standard</option>
+              <option value="deluxe">Deluxe</option>
+              <option value="luxury">Luxury</option>
+            </select>
             <button
               onClick={() => setShowInactive(!showInactive)}
               className={`px-3 py-2 text-sm rounded-lg font-medium ${
@@ -359,6 +420,7 @@ export default function CruisesPage() {
                 <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Route</th>
                 <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Nights</th>
                 <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Cabin</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Tier</th>
                 <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Single</th>
                 <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Double</th>
                 <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Triple</th>
@@ -370,8 +432,13 @@ export default function CruisesPage() {
               {filteredCruises.map((cruise, idx) => (
                 <tr key={cruise.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-900">{cruise.ship_name}</p>
-                    <p className="text-xs text-gray-500 font-mono">{cruise.cruise_code}</p>
+                    <div className="flex items-center gap-2">
+                      {cruise.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{cruise.ship_name}</p>
+                        <p className="text-xs text-gray-500 font-mono">{cruise.cruise_code}</p>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -398,6 +465,9 @@ export default function CruisesPage() {
                     }`}>
                       {cruise.cabin_type}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <TierBadge tier={cruise.tier} />
                   </td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
                     €{cruise.rate_single_eur}
@@ -429,7 +499,7 @@ export default function CruisesPage() {
               ))}
               {filteredCruises.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={11} className="px-4 py-12 text-center text-gray-500">
                     <Ship className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p className="font-medium">No cruises found</p>
                     <button onClick={handleAddNew} className="mt-2 text-sm text-blue-600 hover:underline">
@@ -580,6 +650,62 @@ export default function CruisesPage() {
                     step="0.01"
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                   />
+                </div>
+              </div>
+
+              {/* Service Tier & Preference */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Service Tier & Preference</h3>
+                
+                {/* Tier Selection */}
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                    Service Tier
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {TIER_OPTIONS.map((tier) => (
+                      <button
+                        key={tier.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, tier: tier.value })}
+                        className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+                          formData.tier === tier.value
+                            ? tier.value === 'luxury' 
+                              ? 'bg-amber-600 text-white'
+                              : tier.value === 'deluxe'
+                              ? 'bg-purple-600 text-white'
+                              : tier.value === 'standard'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
+                        {tier.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preferred Toggle */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_preferred}
+                      onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
+                      className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+                        <Star className="w-4 h-4 text-amber-600" />
+                        Preferred Cruise
+                      </span>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Preferred cruises are prioritized when AI generates itineraries within the same tier.
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 

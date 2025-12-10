@@ -2,17 +2,28 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   CheckCircle, AlertCircle, Users, Calendar, MapPin,
   DollarSign, Languages, Loader2, MessageSquare, Sparkles,
-  User, Mail, Phone, Globe, ChevronRight, UserPlus, ArrowLeft
+  User, Mail, Phone, Globe, ChevronRight, UserPlus, ArrowLeft,
+  Crown, Star
 } from 'lucide-react'
 import Link from 'next/link'
 
 const supabase = createClient()
+
+// ============================================
+// TIER SYSTEM CONSTANTS
+// ============================================
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700 border-gray-300', description: 'Cost-effective, good value' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700 border-blue-300', description: 'Comfortable mid-range' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700 border-purple-300', description: 'Superior quality' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700 border-amber-300', description: 'Top-tier VIP experience' }
+]
 
 interface ExtractedData {
   client_name: string
@@ -33,6 +44,8 @@ interface ExtractedData {
   conversation_language: string
   confidence_score: number
   nationality?: string
+  // NEW: Tier field
+  tier?: string
 }
 
 interface ExistingClient {
@@ -74,6 +87,12 @@ function WhatsAppParserContent() {
   const [fromInbox, setFromInbox] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
   
+  // NEW: Selected tier for itinerary generation
+  const [selectedTier, setSelectedTier] = useState<string>('standard')
+  
+  // NEW: Ref for auto-scroll to success message
+  const itinerarySuccessRef = useRef<HTMLDivElement>(null)
+  
   const router = useRouter() 
   const searchParams = useSearchParams()
   const preSelectedClientId = searchParams?.get('clientId')
@@ -92,7 +111,8 @@ Cliente: Y queremos añadir Dahshur también
 Cliente: Mi nombre es Inmaculada Yurba Minguez
 Cliente: Mi email es inmayurba@yahoo.es
 Agente: Perfecto, ¿en qué hotel se alojan?
-Cliente: Gran Plaza`
+Cliente: Gran Plaza
+Cliente: Queremos algo de lujo, es nuestro aniversario`
 
   // Load conversation from URL params (from WhatsApp Inbox)
   useEffect(() => {
@@ -141,6 +161,24 @@ Cliente: Gran Plaza`
     setGeneratedItinerary(null)
     setError(null)
     setClientSaved(false)
+    setSelectedTier('standard')
+  }
+
+  // Helper to map budget_level to tier
+  const mapBudgetToTier = (budgetLevel: string): string => {
+    const mapping: Record<string, string> = {
+      'budget': 'budget',
+      'economy': 'budget',
+      'standard': 'standard',
+      'mid-range': 'standard',
+      'deluxe': 'deluxe',
+      'superior': 'deluxe',
+      'luxury': 'luxury',
+      'premium': 'luxury',
+      'vip': 'luxury',
+      'high-end': 'luxury'
+    }
+    return mapping[budgetLevel?.toLowerCase()] || 'standard'
   }
 
   const analyzeConversation = async () => {
@@ -173,6 +211,11 @@ Cliente: Gran Plaza`
       if (phoneNumber && !result.data.client_phone) {
         result.data.client_phone = phoneNumber
       }
+
+      // Map budget_level to tier if AI extracted it
+      const detectedTier = mapBudgetToTier(result.data.budget_level || 'standard')
+      result.data.tier = detectedTier
+      setSelectedTier(detectedTier)
 
       setExtractedData(result.data)
 
@@ -224,7 +267,7 @@ Cliente: Gran Plaza`
           passport_type: 'other',
           preferred_language: extractedData.conversation_language || 'English',
           client_source: 'whatsapp',
-          vip_status: false
+          vip_status: selectedTier === 'luxury' // Mark as VIP if luxury tier
         })
         .select()
         .single()
@@ -237,11 +280,12 @@ Cliente: Gran Plaza`
           .from('client_preferences')
           .insert({
             client_id: newClient.id,
-            preferred_accommodation_type: extractedData.budget_level === 'luxury' ? '5-star' : '4-star',
+            preferred_accommodation_type: selectedTier === 'luxury' ? '5-star' : selectedTier === 'deluxe' ? '4-star' : '3-star',
             tour_pace_preference: 'moderate',
             interests: extractedData.interests.join(', '),
             dietary_restrictions: null,
-            special_needs: extractedData.special_requests.join(', ') || null
+            special_needs: extractedData.special_requests.join(', ') || null,
+            preferred_tier: selectedTier // Store preferred tier
           })
 
         // Create initial note
@@ -249,7 +293,7 @@ Cliente: Gran Plaza`
           .from('client_notes')
           .insert({
             client_id: newClient.id,
-            note_text: `Client inquiry via WhatsApp. Interested in: ${extractedData.tour_name}. ${extractedData.cities.join(', ')}. ${extractedData.num_adults} adults${extractedData.num_children > 0 ? `, ${extractedData.num_children} children` : ''}.`,
+            note_text: `Client inquiry via WhatsApp. Interested in: ${extractedData.tour_name}. ${extractedData.cities.join(', ')}. ${extractedData.num_adults} adults${extractedData.num_children > 0 ? `, ${extractedData.num_children} children` : ''}. Preferred tier: ${selectedTier.toUpperCase()}.`,
             note_type: 'general',
             is_internal: true
           })
@@ -296,7 +340,10 @@ Cliente: Gran Plaza`
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...extractedData,
-          client_id: selectedClientId
+          client_id: selectedClientId,
+          // Pass the selected tier explicitly
+          tier: selectedTier,
+          budget_level: selectedTier // For backwards compatibility
         })
       })
 
@@ -307,6 +354,11 @@ Cliente: Gran Plaza`
       }
 
       setGeneratedItinerary(result.data)
+
+      // Auto-scroll to success message
+      setTimeout(() => {
+        itinerarySuccessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
 
       // If client was saved, log this as a communication
       if (selectedClientId) {
@@ -356,8 +408,8 @@ Cliente: Gran Plaza`
               <h1 className="text-xl font-bold text-gray-900">AI WhatsApp Parser</h1>
               <p className="text-xs text-gray-600">
                 {fromInbox 
-                  ? 'Conversation loaded from WhatsApp Inbox → Analyze → Generate itinerary'
-                  : 'Paste conversation → AI extracts info → Generate itinerary → Save client'
+                  ? 'Conversation loaded from WhatsApp Inbox → Analyze → Select Tier → Generate itinerary'
+                  : 'Paste conversation → AI extracts info → Select Tier → Generate itinerary → Save client'
                 }
               </p>
             </div>
@@ -377,7 +429,7 @@ Cliente: Gran Plaza`
           )}
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-gray-400 text-lg">1️⃣</span>
@@ -389,17 +441,25 @@ Cliente: Gran Plaza`
             <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-gray-400 text-lg">2️⃣</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
               </div>
               <div className="text-xs text-gray-600">Step 2</div>
-              <div className="text-sm font-bold text-gray-900">Save Client</div>
+              <div className="text-sm font-bold text-gray-900">Select Tier</div>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-gray-400 text-lg">3️⃣</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
               </div>
               <div className="text-xs text-gray-600">Step 3</div>
+              <div className="text-sm font-bold text-gray-900">Save Client</div>
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-gray-400 text-lg">4️⃣</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
+              </div>
+              <div className="text-xs text-gray-600">Step 4</div>
               <div className="text-sm font-bold text-gray-900">Generate</div>
             </div>
           </div>
@@ -572,6 +632,61 @@ Client: Maybe next month, around 10 days
                   </div>
                 </div>
 
+                {/* NEW: Service Tier Selection */}
+                <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Crown className="w-4 h-4 text-amber-600" />
+                    <h3 className="text-sm font-bold text-gray-900">Service Tier</h3>
+                    {extractedData.budget_level && extractedData.budget_level !== 'standard' && (
+                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                        AI detected: {extractedData.budget_level}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Select the service tier for this itinerary. AI will use matching suppliers.
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {TIER_OPTIONS.map((tier) => (
+                      <button
+                        key={tier.value}
+                        onClick={() => setSelectedTier(tier.value)}
+                        className={`p-3 rounded-lg border-2 text-left transition-all ${
+                          selectedTier === tier.value
+                            ? tier.value === 'luxury'
+                              ? 'border-amber-500 bg-amber-50'
+                              : tier.value === 'deluxe'
+                              ? 'border-purple-500 bg-purple-50'
+                              : tier.value === 'standard'
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-500 bg-gray-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          {tier.value === 'luxury' && <Crown className="w-4 h-4 text-amber-600" />}
+                          {tier.value === 'deluxe' && <Star className="w-4 h-4 text-purple-600" />}
+                          <span className={`text-sm font-semibold ${
+                            selectedTier === tier.value ? 'text-gray-900' : 'text-gray-700'
+                          }`}>
+                            {tier.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">{tier.description}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Preferred Suppliers Info */}
+                  <div className="mt-3 p-2 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                      <span>Preferred suppliers will be prioritized within the selected tier</span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Existing Clients */}
                 {existingClients.length > 0 && !clientSaved && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -667,8 +782,26 @@ Client: Maybe next month, around 10 days
                 <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                   <h3 className="text-sm font-bold text-gray-900 mb-2">Generate Itinerary</h3>
                   <p className="text-xs text-gray-600 mb-3">
-                    AI will create a complete day-by-day itinerary with services and pricing
+                    AI will create a complete day-by-day itinerary using{' '}
+                    <span className={`font-semibold ${
+                      selectedTier === 'luxury' ? 'text-amber-600' :
+                      selectedTier === 'deluxe' ? 'text-purple-600' :
+                      selectedTier === 'standard' ? 'text-blue-600' :
+                      'text-gray-600'
+                    }`}>
+                      {selectedTier.toUpperCase()}
+                    </span>
+                    {' '}tier suppliers
                   </p>
+                  
+                  {/* Selected Tier Badge */}
+                  <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg">
+                    {selectedTier === 'luxury' && <Crown className="w-4 h-4 text-amber-600" />}
+                    {selectedTier === 'deluxe' && <Star className="w-4 h-4 text-purple-600" />}
+                    <span className="text-xs text-gray-600">
+                      Using <strong>{selectedTier}</strong> tier hotels, vehicles, guides, and restaurants
+                    </span>
+                  </div>
                   
                   <button
                     onClick={generateItinerary}
@@ -678,12 +811,12 @@ Client: Maybe next month, around 10 days
                     {isGenerating ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Generating...
+                        Generating {selectedTier} itinerary...
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4" />
-                        Generate Itinerary with AI
+                        Generate {selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Itinerary
                       </>
                     )}
                   </button>
@@ -691,16 +824,62 @@ Client: Maybe next month, around 10 days
 
                 {/* Generated Itinerary Success */}
                 {generatedItinerary && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div ref={itinerarySuccessRef} className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
                         <h3 className="text-sm font-bold text-gray-900">Itinerary Generated!</h3>
                         <p className="text-xs text-gray-600">
                           {generatedItinerary.itinerary_code} • €{generatedItinerary.total_cost?.toFixed(2) || '0.00'}
+                          {generatedItinerary.tier && (
+                            <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${
+                              generatedItinerary.tier === 'luxury' ? 'bg-amber-100 text-amber-700' :
+                              generatedItinerary.tier === 'deluxe' ? 'bg-purple-100 text-purple-700' :
+                              generatedItinerary.tier === 'standard' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {generatedItinerary.tier.toUpperCase()}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
+
+                    {/* Show selected suppliers if available */}
+                    {generatedItinerary.selected_suppliers && (
+                      <div className="mb-3 p-2 bg-white rounded-lg border border-green-200">
+                        <div className="text-xs text-gray-600 mb-1 font-medium">Selected Suppliers:</div>
+                        <div className="space-y-1">
+                          {generatedItinerary.selected_suppliers.hotel && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="text-gray-500">🏨</span>
+                              <span>{generatedItinerary.selected_suppliers.hotel.name}</span>
+                              {generatedItinerary.selected_suppliers.hotel.is_preferred && (
+                                <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                              )}
+                            </div>
+                          )}
+                          {generatedItinerary.selected_suppliers.vehicle && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="text-gray-500">🚗</span>
+                              <span>{generatedItinerary.selected_suppliers.vehicle.name}</span>
+                              {generatedItinerary.selected_suppliers.vehicle.is_preferred && (
+                                <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                              )}
+                            </div>
+                          )}
+                          {generatedItinerary.selected_suppliers.guide && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <span className="text-gray-500">🎯</span>
+                              <span>{generatedItinerary.selected_suppliers.guide.name}</span>
+                              {generatedItinerary.selected_suppliers.guide.is_preferred && (
+                                <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="flex gap-2">
                       <button

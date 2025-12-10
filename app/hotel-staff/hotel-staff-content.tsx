@@ -5,6 +5,18 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { Crown, Star } from 'lucide-react'
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+]
 
 // ============================================
 // INTERFACES
@@ -29,7 +41,22 @@ interface HotelStaff {
   shift_times?: string
   notes?: string
   is_active: boolean
+  tier: string | null
+  is_preferred: boolean
   created_at: string
+}
+
+// ============================================
+// COMPONENTS
+// ============================================
+
+function TierBadge({ tier }: { tier: string | null }) {
+  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
+      {tierConfig.label}
+    </span>
+  )
 }
 
 // ============================================
@@ -43,6 +70,7 @@ export default function HotelStaffContent() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedHotel, setSelectedHotel] = useState('all')
+  const [filterTier, setFilterTier] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingStaff, setEditingStaff] = useState<HotelStaff | null>(null)
@@ -56,7 +84,9 @@ export default function HotelStaffContent() {
     languages: [] as string[],
     shift_times: '',
     notes: '',
-    is_active: true
+    is_active: true,
+    tier: 'standard',
+    is_preferred: false
   })
 
   // Fetch staff and hotels
@@ -135,7 +165,9 @@ export default function HotelStaffContent() {
       languages: [],
       shift_times: '',
       notes: '',
-      is_active: true
+      is_active: true,
+      tier: 'standard',
+      is_preferred: false
     })
     setShowModal(true)
   }
@@ -153,7 +185,9 @@ export default function HotelStaffContent() {
       languages: staffMember.languages || [],
       shift_times: staffMember.shift_times || '',
       notes: staffMember.notes || '',
-      is_active: staffMember.is_active
+      is_active: staffMember.is_active,
+      tier: staffMember.tier || 'standard',
+      is_preferred: staffMember.is_preferred || false
     })
     setShowModal(true)
   }
@@ -226,8 +260,9 @@ export default function HotelStaffContent() {
     
     const matchesHotel = selectedHotel === 'all' || member.hotel_id === selectedHotel
     const matchesActive = showInactive || member.is_active
+    const matchesTier = filterTier === null || member.tier === filterTier
     
-    return matchesSearch && matchesHotel && matchesActive
+    return matchesSearch && matchesHotel && matchesActive && matchesTier
   })
 
   // Calculate stats
@@ -235,6 +270,7 @@ export default function HotelStaffContent() {
   const inactiveStaff = staff.filter(s => !s.is_active).length
   const assignedStaff = staff.filter(s => s.hotel_id).length
   const unassignedStaff = staff.filter(s => !s.hotel_id).length
+  const preferredStaff = staff.filter(s => s.is_preferred).length
 
   if (loading) {
     return (
@@ -286,7 +322,7 @@ export default function HotelStaffContent() {
 
       {/* Stats Cards */}
       <div className="container mx-auto px-4 lg:px-6 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-gray-400 text-xl">🛎️</span>
@@ -322,6 +358,15 @@ export default function HotelStaffContent() {
             <p className="text-xs text-gray-600">Unassigned</p>
             <p className="text-2xl font-bold text-gray-900">{unassignedStaff}</p>
           </div>
+
+          <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+            </div>
+            <p className="text-xs text-gray-600">Preferred</p>
+            <p className="text-2xl font-bold text-gray-900">{preferredStaff}</p>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -347,6 +392,19 @@ export default function HotelStaffContent() {
                 {hotels.map(hotel => (
                   <option key={hotel.id} value={hotel.id}>{hotel.name}</option>
                 ))}
+              </select>
+            </div>
+            <div className="md:w-40">
+              <select
+                value={filterTier || 'all'}
+                onChange={(e) => setFilterTier(e.target.value === 'all' ? null : e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+              >
+                <option value="all">All Tiers</option>
+                <option value="budget">Budget</option>
+                <option value="standard">Standard</option>
+                <option value="deluxe">Deluxe</option>
+                <option value="luxury">Luxury</option>
               </select>
             </div>
             <button
@@ -378,6 +436,7 @@ export default function HotelStaffContent() {
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Hotel</th>
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Contact</th>
                 <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Languages</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Tier</th>
                 <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
                 <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
               </tr>
@@ -386,9 +445,12 @@ export default function HotelStaffContent() {
               {filteredStaff.map((member, index) => (
                 <tr key={member.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors`}>
                   <td className="px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{member.name}</p>
-                      {member.shift_times && <p className="text-xs text-gray-500">🕐 {member.shift_times}</p>}
+                    <div className="flex items-center gap-2">
+                      {member.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{member.name}</p>
+                        {member.shift_times && <p className="text-xs text-gray-500">🕐 {member.shift_times}</p>}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -423,6 +485,9 @@ export default function HotelStaffContent() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
+                    <TierBadge tier={member.tier} />
+                  </td>
+                  <td className="px-4 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       member.is_active 
                         ? 'bg-green-100 text-green-800' 
@@ -451,7 +516,7 @@ export default function HotelStaffContent() {
               ))}
               {filteredStaff.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-3xl text-gray-400">🛎️</span>
                       <p className="text-sm font-medium">No hotel staff found</p>
@@ -620,6 +685,62 @@ export default function HotelStaffContent() {
                       <span className="text-sm text-gray-700">{language}</span>
                     </label>
                   ))}
+                </div>
+              </div>
+
+              {/* Service Tier & Preference */}
+              <div className="mb-4">
+                <h3 className="text-base font-semibold text-gray-900 mb-3">Service Tier & Preference</h3>
+                
+                {/* Tier Selection */}
+                <div className="mb-3">
+                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                    Service Tier
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {TIER_OPTIONS.map((tier) => (
+                      <button
+                        key={tier.value}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, tier: tier.value })}
+                        className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+                          formData.tier === tier.value
+                            ? tier.value === 'luxury' 
+                              ? 'bg-amber-600 text-white'
+                              : tier.value === 'deluxe'
+                              ? 'bg-purple-600 text-white'
+                              : tier.value === 'standard'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
+                        {tier.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preferred Toggle */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_preferred}
+                      onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
+                      className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 mt-0.5"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
+                        <Star className="w-4 h-4 text-amber-600" />
+                        Preferred Staff Member
+                      </span>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Preferred staff are prioritized when AI generates itineraries within the same tier.
+                      </p>
+                    </div>
+                  </label>
                 </div>
               </div>
 
