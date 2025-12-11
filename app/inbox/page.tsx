@@ -1223,9 +1223,9 @@ ${bodyText}`
               </div>
 
               <div 
-                className="prose prose-sm max-w-none text-gray-700"
-                dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
-              />
+              className="email-body-content"
+              dangerouslySetInnerHTML={{ __html: formatEmailBody(selectedEmail.body) }}
+            />
 
               {/* NEW: Attachment List */}
               {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (

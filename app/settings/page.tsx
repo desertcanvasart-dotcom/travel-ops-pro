@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { 
   User, 
@@ -108,7 +108,7 @@ const TIMEZONES = [
 // MAIN COMPONENT
 // ============================================
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
@@ -832,5 +832,21 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// ============================================
+// EXPORT WITH SUSPENSE BOUNDARY
+// ============================================
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
   )
 }
