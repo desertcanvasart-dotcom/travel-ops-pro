@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { 
   Users, Truck, Hotel, UtensilsCrossed, Ship, Plane, UserCheck,
   Check, AlertCircle, Loader2, MapPin, Clock, Plus, Trash2, Calendar,
-  ChevronDown, ChevronUp, X, MessageCircle, Send
+  ChevronDown, ChevronUp, X, MessageCircle, Send, Filter, Anchor
 } from 'lucide-react'
 
 // Types
@@ -13,6 +13,14 @@ interface Resource {
   id: string
   name: string
   phone?: string
+  city?: string
+  airport_location?: string
+  route?: string
+  hotel?: {
+    id: string
+    name: string
+    city: string
+  }
   [key: string]: any
 }
 
@@ -49,6 +57,42 @@ interface ResourceAssignmentV2Props {
   onUpdate?: () => void
 }
 
+// City options for Egypt
+const CITY_OPTIONS = [
+  { value: 'all', label: 'All Cities' },
+  { value: 'Cairo', label: 'Cairo' },
+  { value: 'Giza', label: 'Giza' },
+  { value: 'Luxor', label: 'Luxor' },
+  { value: 'Aswan', label: 'Aswan' },
+  { value: 'Alexandria', label: 'Alexandria' },
+  { value: 'Hurghada', label: 'Hurghada' },
+  { value: 'Sharm El Sheikh', label: 'Sharm El Sheikh' },
+  { value: 'Dahab', label: 'Dahab' },
+  { value: 'Marsa Alam', label: 'Marsa Alam' },
+  { value: 'Siwa', label: 'Siwa' },
+  { value: 'Fayoum', label: 'Fayoum' }
+]
+
+// Airport locations (using airport codes and names)
+const AIRPORT_LOCATION_OPTIONS = [
+  { value: 'all', label: 'All Airports' },
+  { value: 'Cairo', label: 'Cairo (CAI)' },
+  { value: 'Luxor', label: 'Luxor (LXR)' },
+  { value: 'Aswan', label: 'Aswan (ASW)' },
+  { value: 'Hurghada', label: 'Hurghada (HRG)' },
+  { value: 'Sharm', label: 'Sharm El Sheikh (SSH)' },
+  { value: 'Alexandria', label: 'Alexandria (HBE/ALY)' },
+  { value: 'Marsa Alam', label: 'Marsa Alam (RMF)' }
+]
+
+// Cruise route options
+const CRUISE_ROUTE_OPTIONS = [
+  { value: 'all', label: 'All Routes' },
+  { value: 'luxor_aswan', label: 'Luxor → Aswan (4 nights)' },
+  { value: 'aswan_luxor', label: 'Aswan → Luxor (3 nights)' },
+  { value: 'round_trip', label: 'Round Trip (7 nights)' }
+]
+
 // Resource type configurations - using existing API endpoints
 const RESOURCE_TYPES = [
   { 
@@ -60,7 +104,9 @@ const RESOURCE_TYPES = [
     nameField: 'name',
     phoneField: 'phone',
     displayField: (r: any) => `${r.name}${r.languages?.length ? ` (${r.languages.join(', ')})` : ''}`,
-    canNotify: true  // ✓ WhatsApp button
+    canNotify: true,
+    filterType: 'city',
+    cityField: 'city'
   },
   { 
     key: 'vehicle', 
@@ -71,7 +117,9 @@ const RESOURCE_TYPES = [
     nameField: 'name',
     phoneField: 'default_driver_phone',
     displayField: (r: any) => `${r.name || r.vehicle_type || 'Vehicle'} - ${r.city || 'N/A'} (${r.passenger_capacity || '?'} pax)`,
-    canNotify: false  // ✗ No WhatsApp button
+    canNotify: false,
+    filterType: 'city',
+    cityField: 'city'
   },
   { 
     key: 'hotel', 
@@ -82,7 +130,9 @@ const RESOURCE_TYPES = [
     nameField: 'name',
     phoneField: 'phone',
     displayField: (r: any) => `${r.name}${r.city ? ` - ${r.city}` : ''}${r.star_rating ? ` ⭐${r.star_rating}` : ''}`,
-    canNotify: false  // ✗ No WhatsApp button
+    canNotify: false,
+    filterType: 'city',
+    cityField: 'city'
   },
   { 
     key: 'restaurant', 
@@ -93,18 +143,30 @@ const RESOURCE_TYPES = [
     nameField: 'name',
     phoneField: 'phone',
     displayField: (r: any) => `${r.name}${r.city ? ` - ${r.city}` : ''}${r.cuisine_type ? ` (${r.cuisine_type})` : ''}`,
-    canNotify: true  // ✓ WhatsApp button
+    canNotify: true,
+    filterType: 'city',
+    cityField: 'city'
   },
   { 
     key: 'cruise', 
-    label: 'Cruises', 
+    label: 'Nile Cruises', 
     icon: Ship, 
     color: 'indigo',
     apiEndpoint: '/api/cruises',
     nameField: 'name',
     phoneField: 'phone',
-    displayField: (r: any) => `${r.name}${r.ship_name ? ` - ${r.ship_name}` : ''}${r.star_rating ? ` ⭐${r.star_rating}` : ''}`,
-    canNotify: false  // ✗ No WhatsApp button
+    displayField: (r: any) => {
+      const routeLabels: Record<string, string> = {
+        'luxor_aswan': 'Luxor → Aswan (4n)',
+        'aswan_luxor': 'Aswan → Luxor (3n)',
+        'round_trip': 'Round Trip (7n)'
+      }
+      const routeLabel = r.route ? routeLabels[r.route] || r.route : ''
+      return `${r.name}${r.ship_name ? ` - ${r.ship_name}` : ''}${routeLabel ? ` • ${routeLabel}` : ''}`
+    },
+    canNotify: false,
+    filterType: 'route',
+    routeField: 'route'
   },
   { 
     key: 'airport_staff', 
@@ -114,8 +176,10 @@ const RESOURCE_TYPES = [
     apiEndpoint: '/api/resources/airport-staff',
     nameField: 'name',
     phoneField: 'phone',
-    displayField: (r: any) => `${r.name}${r.location ? ` - ${r.location}` : ''}`,
-    canNotify: true  // ✓ WhatsApp button
+    displayField: (r: any) => `${r.name}${r.airport_location ? ` - ${r.airport_location}` : ''}${r.role ? ` (${r.role})` : ''}`,
+    canNotify: true,
+    filterType: 'airport',
+    cityField: 'airport_location'
   },
   { 
     key: 'hotel_staff', 
@@ -125,8 +189,10 @@ const RESOURCE_TYPES = [
     apiEndpoint: '/api/resources/hotel-staff',
     nameField: 'name',
     phoneField: 'phone',
-    displayField: (r: any) => `${r.name}${r.location ? ` - ${r.location}` : ''}`,
-    canNotify: true  // ✓ WhatsApp button
+    displayField: (r: any) => `${r.name}${r.hotel?.name ? ` - ${r.hotel.name}` : ''}${r.hotel?.city ? ` (${r.hotel.city})` : ''}${r.role ? ` • ${r.role}` : ''}`,
+    canNotify: true,
+    filterType: 'hotelCity',
+    cityField: 'hotel.city'
   }
 ]
 
@@ -153,6 +219,11 @@ export default function ResourceAssignmentV2({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   
+  // Filter states for modal
+  const [modalCityFilter, setModalCityFilter] = useState('all')
+  const [modalRouteFilter, setModalRouteFilter] = useState('all')
+  const [modalAirportFilter, setModalAirportFilter] = useState('all')
+  
   // Available resources from each table
   const [availableResources, setAvailableResources] = useState<Record<string, Resource[]>>({})
   
@@ -175,6 +246,13 @@ export default function ResourceAssignmentV2({
   // WhatsApp sending state
   const [sendingWhatsApp, setSendingWhatsApp] = useState<string | null>(null)
   const [whatsAppSent, setWhatsAppSent] = useState<Set<string>>(new Set())
+
+  // Reset filters when modal opens or tab changes
+  const resetModalFilters = () => {
+    setModalCityFilter('all')
+    setModalRouteFilter('all')
+    setModalAirportFilter('all')
+  }
 
   // Fetch all data on mount
   useEffect(() => {
@@ -247,6 +325,90 @@ export default function ResourceAssignmentV2({
     }
   }
 
+  // Get filtered resources for the modal dropdown
+  const getFilteredResourcesForModal = (): Resource[] => {
+    const resources = availableResources[activeTab] || []
+    const typeConfig = RESOURCE_TYPES.find(t => t.key === activeTab)
+    
+    if (!typeConfig) return resources
+    
+    // Filter based on resource type
+    switch (typeConfig.filterType) {
+      case 'city':
+        // For guides, vehicles, hotels, restaurants
+        if (modalCityFilter === 'all') return resources
+        return resources.filter(r => {
+          const city = r[typeConfig.cityField || 'city']
+          return city?.toLowerCase().includes(modalCityFilter.toLowerCase())
+        })
+      
+      case 'airport':
+        // For airport staff - filter by airport_location
+        if (modalAirportFilter === 'all') return resources
+        return resources.filter(r => {
+          const location = r.airport_location?.toLowerCase() || ''
+          return location.includes(modalAirportFilter.toLowerCase())
+        })
+      
+      case 'hotelCity':
+        // For hotel staff - filter by hotel.city
+        if (modalCityFilter === 'all') return resources
+        return resources.filter(r => {
+          const hotelCity = r.hotel?.city?.toLowerCase() || ''
+          return hotelCity.includes(modalCityFilter.toLowerCase())
+        })
+      
+      case 'route':
+        // For cruises - filter by route
+        if (modalRouteFilter === 'all') return resources
+        return resources.filter(r => r.route === modalRouteFilter)
+      
+      default:
+        return resources
+    }
+  }
+
+  // Get unique values for filter dropdowns
+  const getUniqueAirportLocations = (): string[] => {
+    const resources = availableResources['airport_staff'] || []
+    const locations = new Set<string>()
+    resources.forEach(r => {
+      if (r.airport_location) locations.add(r.airport_location)
+    })
+    return Array.from(locations).sort()
+  }
+
+  const getUniqueHotelCities = (): string[] => {
+    const resources = availableResources['hotel_staff'] || []
+    const cities = new Set<string>()
+    resources.forEach(r => {
+      if (r.hotel?.city) cities.add(r.hotel.city)
+    })
+    return Array.from(cities).sort()
+  }
+
+  const getUniqueCruiseRoutes = (): string[] => {
+    const resources = availableResources['cruise'] || []
+    const routes = new Set<string>()
+    resources.forEach(r => {
+      if (r.route) routes.add(r.route)
+    })
+    return Array.from(routes)
+  }
+
+  const getUniqueCities = (type: string): string[] => {
+    const resources = availableResources[type] || []
+    const typeConfig = RESOURCE_TYPES.find(t => t.key === type)
+    const cityField = typeConfig?.cityField || 'city'
+    
+    const cities = new Set<string>()
+    resources.forEach(r => {
+      const city = r[cityField]
+      if (city) cities.add(city)
+    })
+    return Array.from(cities).sort()
+  }
+
   const handleAddResource = async () => {
     if (!addFormData.resource_id) {
       alert('Please select a resource')
@@ -256,7 +418,27 @@ export default function ResourceAssignmentV2({
     setSaving(true)
     try {
       const activeType = RESOURCE_TYPES.find(t => t.key === activeTab)
-      const selectedResource = availableResources[activeTab]?.find(r => r.id === addFormData.resource_id)
+      const filteredResources = getFilteredResourcesForModal()
+      const selectedResource = filteredResources.find(r => r.id === addFormData.resource_id)
+      
+      // Build resource name with location info
+      let resourceName = selectedResource?.[activeType?.nameField || 'name'] || 'Unknown'
+      
+      // Add location context to the name
+      if (activeTab === 'airport_staff' && selectedResource?.airport_location) {
+        resourceName += ` (${selectedResource.airport_location})`
+      } else if (activeTab === 'hotel_staff' && selectedResource?.hotel?.name) {
+        resourceName += ` - ${selectedResource.hotel.name}`
+      } else if (activeTab === 'cruise' && selectedResource?.route) {
+        const routeLabels: Record<string, string> = {
+          'luxor_aswan': 'Luxor → Aswan',
+          'aswan_luxor': 'Aswan → Luxor',
+          'round_trip': 'Round Trip'
+        }
+        resourceName += ` (${routeLabels[selectedResource.route] || selectedResource.route})`
+      } else if (selectedResource?.city && ['guide', 'vehicle', 'hotel', 'restaurant'].includes(activeTab)) {
+        resourceName += ` (${selectedResource.city})`
+      }
       
       const response = await fetch('/api/itinerary-resources', {
         method: 'POST',
@@ -265,7 +447,7 @@ export default function ResourceAssignmentV2({
           itinerary_id: itineraryId,
           resource_type: activeTab,
           resource_id: addFormData.resource_id,
-          resource_name: selectedResource?.[activeType?.nameField || 'name'] || 'Unknown',
+          resource_name: resourceName,
           start_date: addFormData.start_date,
           end_date: addFormData.end_date,
           notes: addFormData.notes,
@@ -316,68 +498,66 @@ export default function ResourceAssignmentV2({
     }
   }
 
-// WhatsApp notification handler
-const handleSendWhatsApp = async (resource: AssignedResource) => {
-  const typeConfig = RESOURCE_TYPES.find(t => t.key === resource.resource_type)
-  if (!typeConfig?.canNotify) return
+  // WhatsApp notification handler
+  const handleSendWhatsApp = async (resource: AssignedResource) => {
+    const typeConfig = RESOURCE_TYPES.find(t => t.key === resource.resource_type)
+    if (!typeConfig?.canNotify) return
 
-  setSendingWhatsApp(resource.id)
-  
-  try {
-    let endpoint = ''
-    let body: any = {}
+    setSendingWhatsApp(resource.id)
+    
+    try {
+      let endpoint = ''
+      let body: any = {}
 
-    if (resource.resource_type === 'guide') {
-      // Use existing guide endpoint
-      endpoint = '/api/whatsapp/notify-guide'
-      body = { 
-        itineraryId, 
-        guideId: resource.resource_id 
+      if (resource.resource_type === 'guide') {
+        endpoint = '/api/whatsapp/notify-guide'
+        body = { 
+          itineraryId, 
+          guideId: resource.resource_id 
+        }
+      } else if (['restaurant', 'airport_staff', 'hotel_staff'].includes(resource.resource_type)) {
+        endpoint = '/api/whatsapp/notify-resource'
+        body = {
+          itineraryId,
+          resourceId: resource.resource_id,
+          resourceType: resource.resource_type,
+          resourceName: resource.resource_name,
+          startDate: resource.start_date,
+          endDate: resource.end_date,
+          notes: resource.notes
+        }
+      } else {
+        console.log('No WhatsApp endpoint for resource type:', resource.resource_type)
+        return
       }
-    } else if (['restaurant', 'airport_staff', 'hotel_staff'].includes(resource.resource_type)) {
-      // Use generic resource endpoint
-      endpoint = '/api/whatsapp/notify-resource'
-      body = {
-        itineraryId,
-        resourceId: resource.resource_id,
-        resourceType: resource.resource_type,
-        resourceName: resource.resource_name,
-        startDate: resource.start_date,
-        endDate: resource.end_date,
-        notes: resource.notes
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setWhatsAppSent(prev => new Set([...prev, resource.id]))
+        setTimeout(() => {
+          setWhatsAppSent(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(resource.id)
+            return newSet
+          })
+        }, 3000)
+      } else {
+        alert(data.error || 'Failed to send WhatsApp notification')
       }
-    } else {
-      console.log('No WhatsApp endpoint for resource type:', resource.resource_type)
-      return
+    } catch (error) {
+      console.error('Error sending WhatsApp:', error)
+      alert('Failed to send WhatsApp notification')
+    } finally {
+      setSendingWhatsApp(null)
     }
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    })
-
-    const data = await response.json()
-
-    if (data.success) {
-      setWhatsAppSent(prev => new Set([...prev, resource.id]))
-      setTimeout(() => {
-        setWhatsAppSent(prev => {
-          const newSet = new Set(prev)
-          newSet.delete(resource.id)
-          return newSet
-        })
-      }, 3000)
-    } else {
-      alert(data.error || 'Failed to send WhatsApp notification')
-    }
-  } catch (error) {
-    console.error('Error sending WhatsApp:', error)
-    alert('Failed to send WhatsApp notification')
-  } finally {
-    setSendingWhatsApp(null)
   }
-}
 
   const resetAddForm = () => {
     setAddFormData({
@@ -387,6 +567,7 @@ const handleSendWhatsApp = async (resource: AssignedResource) => {
       notes: '',
       quantity: 1
     })
+    resetModalFilters()
   }
 
   const getResourcesForType = (type: string) => {
@@ -418,7 +599,8 @@ const handleSendWhatsApp = async (resource: AssignedResource) => {
   const activeColor = COLOR_CLASSES[activeTypeConfig.color]
   const activeResources = getResourcesForType(activeTab)
   const activeConflicts = getConflictsForType(activeTab)
-  const availableForType = availableResources[activeTab] || []
+  const filteredAvailableResources = getFilteredResourcesForModal()
+  const allAvailableForType = availableResources[activeTab] || []
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -604,7 +786,7 @@ const handleSendWhatsApp = async (resource: AssignedResource) => {
 
         {/* Available count */}
         <p className="text-xs text-gray-500 mt-2 text-center">
-          {availableForType.length} {activeTypeConfig.label.toLowerCase()} available
+          {allAvailableForType.length} {activeTypeConfig.label.toLowerCase()} available
         </p>
       </div>
 
@@ -625,10 +807,125 @@ const handleSendWhatsApp = async (resource: AssignedResource) => {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Resource Selection */}
+              
+              {/* ===== FILTER SECTION ===== */}
+              
+              {/* City Filter - for guides, vehicles, hotels, restaurants */}
+              {activeTypeConfig.filterType === 'city' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <MapPin className="w-4 h-4 inline mr-1.5 text-gray-400" />
+                    Filter by City
+                  </label>
+                  <select
+                    value={modalCityFilter}
+                    onChange={(e) => {
+                      setModalCityFilter(e.target.value)
+                      setAddFormData({ ...addFormData, resource_id: '' })
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
+                  >
+                    <option value="all">All Cities ({allAvailableForType.length})</option>
+                    {getUniqueCities(activeTab).map((city) => {
+                      const count = allAvailableForType.filter(r => r[activeTypeConfig.cityField || 'city'] === city).length
+                      return (
+                        <option key={city} value={city}>
+                          {city} ({count})
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* Airport Location Filter - for airport staff */}
+              {activeTypeConfig.filterType === 'airport' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Plane className="w-4 h-4 inline mr-1.5 text-gray-400" />
+                    Filter by Airport
+                  </label>
+                  <select
+                    value={modalAirportFilter}
+                    onChange={(e) => {
+                      setModalAirportFilter(e.target.value)
+                      setAddFormData({ ...addFormData, resource_id: '' })
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
+                  >
+                    <option value="all">All Airports ({allAvailableForType.length})</option>
+                    {getUniqueAirportLocations().map((location) => {
+                      const count = allAvailableForType.filter(r => r.airport_location === location).length
+                      return (
+                        <option key={location} value={location}>
+                          {location} ({count})
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* Hotel City Filter - for hotel staff */}
+              {activeTypeConfig.filterType === 'hotelCity' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Hotel className="w-4 h-4 inline mr-1.5 text-gray-400" />
+                    Filter by Hotel City
+                  </label>
+                  <select
+                    value={modalCityFilter}
+                    onChange={(e) => {
+                      setModalCityFilter(e.target.value)
+                      setAddFormData({ ...addFormData, resource_id: '' })
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
+                  >
+                    <option value="all">All Cities ({allAvailableForType.length})</option>
+                    {getUniqueHotelCities().map((city) => {
+                      const count = allAvailableForType.filter(r => r.hotel?.city === city).length
+                      return (
+                        <option key={city} value={city}>
+                          {city} ({count})
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* Route Filter - for cruises */}
+              {activeTypeConfig.filterType === 'route' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Anchor className="w-4 h-4 inline mr-1.5 text-gray-400" />
+                    Filter by Route
+                  </label>
+                  <select
+                    value={modalRouteFilter}
+                    onChange={(e) => {
+                      setModalRouteFilter(e.target.value)
+                      setAddFormData({ ...addFormData, resource_id: '' })
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
+                  >
+                    <option value="all">All Routes ({allAvailableForType.length})</option>
+                    {CRUISE_ROUTE_OPTIONS.filter(r => r.value !== 'all' && getUniqueCruiseRoutes().includes(r.value)).map((route) => {
+                      const count = allAvailableForType.filter(r => r.route === route.value).length
+                      return (
+                        <option key={route.value} value={route.value}>
+                          {route.label} ({count})
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* ===== RESOURCE SELECTION ===== */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select {activeTypeConfig.label.slice(0, -1)}
+                  Select {activeTypeConfig.label.slice(0, -1)} *
                 </label>
                 <select
                   value={addFormData.resource_id}
@@ -636,12 +933,22 @@ const handleSendWhatsApp = async (resource: AssignedResource) => {
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
                   <option value="">Choose...</option>
-                  {availableForType.map((resource) => (
+                  {filteredAvailableResources.map((resource) => (
                     <option key={resource.id} value={resource.id}>
                       {activeTypeConfig.displayField(resource)}
                     </option>
                   ))}
                 </select>
+                {filteredAvailableResources.length === 0 && (
+                  <p className="text-sm text-orange-600 mt-2">
+                    No {activeTypeConfig.label.toLowerCase()} found for this filter. Try selecting a different option.
+                  </p>
+                )}
+                {(modalCityFilter !== 'all' || modalAirportFilter !== 'all' || modalRouteFilter !== 'all') && filteredAvailableResources.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Showing {filteredAvailableResources.length} of {allAvailableForType.length}
+                  </p>
+                )}
               </div>
 
               {/* Date Range */}

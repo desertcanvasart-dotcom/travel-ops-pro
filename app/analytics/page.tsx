@@ -131,7 +131,10 @@ export default function AnalyticsPage() {
     conversion: '#F59E0B', // Orange
     confirmed: '#10B981',
     pending: '#F59E0B',
-    cancelled: '#EF4444'
+    cancelled: '#EF4444',
+    leads: '#94a3b8',
+    followups: '#3B82F6',
+    completed: '#8B5CF6'
   }
 
   const PIE_COLORS = [COLORS.confirmed, COLORS.pending, COLORS.cancelled]
@@ -160,14 +163,25 @@ export default function AnalyticsPage() {
     ? displayData.destinations 
     : displayData.destinations.filter(d => d.name === destinationFilter)
 
-  // Pipeline data
+  // Pipeline data - now includes cancelled
   const pipelineData = {
     leads: 9,
     followups: 3,
     pending: displayData.bookings.pending,
+    cancelled: displayData.bookings.cancelled,
     confirmed: displayData.bookings.confirmed,
     completed: Math.floor(displayData.bookings.confirmed * 0.8)
   }
+
+  // Pipeline stages configuration
+  const pipelineStages = [
+    { key: 'leads', label: 'Leads', color: COLORS.leads },
+    { key: 'followups', label: 'Follow-ups', color: COLORS.followups },
+    { key: 'pending', label: 'Pending', color: COLORS.pending },
+    { key: 'cancelled', label: 'Cancelled', color: COLORS.cancelled },
+    { key: 'confirmed', label: 'Confirmed', color: COLORS.confirmed },
+    { key: 'completed', label: 'Completed', color: COLORS.completed }
+  ]
 
   if (loading && !analytics) {
     return (
@@ -375,68 +389,26 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Booking Pipeline */}
+      {/* Booking Pipeline - Updated with 6 stages and smaller buttons */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <h3 className="text-base font-semibold text-gray-900 mb-3">Booking Pipeline</h3>
-        <div className="flex items-center gap-2">
-          {/* Leads */}
-          <div className="flex-1">
-            <div className="text-center">
-              <div className="h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl mb-2"
-                   style={{ backgroundColor: '#94a3b8' }}>
-                {pipelineData.leads}
+        <div className="flex items-center gap-1.5">
+          {pipelineStages.map((stage, index) => (
+            <div key={stage.key} className="flex items-center flex-1 min-w-0">
+              <div className="flex-1 text-center">
+                <div 
+                  className="h-12 rounded-lg flex items-center justify-center text-white font-bold text-lg mb-1.5"
+                  style={{ backgroundColor: stage.color }}
+                >
+                  {pipelineData[stage.key as keyof typeof pipelineData]}
+                </div>
+                <p className="text-[11px] text-gray-600 font-medium truncate">{stage.label}</p>
               </div>
-              <p className="text-xs text-gray-600 font-medium">Leads</p>
+              {index < pipelineStages.length - 1 && (
+                <ArrowRight className="w-3 h-3 text-gray-300 flex-shrink-0 mx-0.5" />
+              )}
             </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          
-          {/* Follow-ups */}
-          <div className="flex-1">
-            <div className="text-center">
-              <div className="h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl mb-2"
-                   style={{ backgroundColor: COLORS.clients }}>
-                {pipelineData.followups}
-              </div>
-              <p className="text-xs text-gray-600 font-medium">Follow-ups</p>
-            </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          
-          {/* Pending */}
-          <div className="flex-1">
-            <div className="text-center">
-              <div className="h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl mb-2"
-                   style={{ backgroundColor: COLORS.pending }}>
-                {pipelineData.pending}
-              </div>
-              <p className="text-xs text-gray-600 font-medium">Pending</p>
-            </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          
-          {/* Confirmed */}
-          <div className="flex-1">
-            <div className="text-center">
-              <div className="h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl mb-2"
-                   style={{ backgroundColor: COLORS.confirmed }}>
-                {pipelineData.confirmed}
-              </div>
-              <p className="text-xs text-gray-600 font-medium">Confirmed</p>
-            </div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          
-          {/* Completed */}
-          <div className="flex-1">
-            <div className="text-center">
-              <div className="h-16 rounded-lg flex items-center justify-center text-white font-bold text-xl mb-2"
-                   style={{ backgroundColor: COLORS.bookings }}>
-                {pipelineData.completed}
-              </div>
-              <p className="text-xs text-gray-600 font-medium">Completed</p>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 

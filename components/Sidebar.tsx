@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
+import NotificationBell from '@/components/NotificationBell'
 import {
   LayoutDashboard,
   Users,
@@ -69,12 +70,14 @@ interface NavItem {
 
 interface NavSection {
   title: string
+  key: string // Unique key for localStorage
   items: NavItem[]
 }
 
 const navigation: NavSection[] = [
   {
     title: 'Main',
+    key: 'main',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { label: 'Analytics', href: '/analytics', icon: TrendingUp },
@@ -82,6 +85,7 @@ const navigation: NavSection[] = [
   },
   {
     title: 'Clients & Partners',
+    key: 'clients',
     items: [
       { label: 'All Clients', href: '/clients', icon: Users },
       { label: 'Add Client', href: '/clients/new', icon: UserPlus },
@@ -104,6 +108,7 @@ const navigation: NavSection[] = [
   },
   {
     title: 'Sales',
+    key: 'sales',
     items: [
       { label: 'Inbox', href: '/inbox', icon: Mail },
       { label: 'WhatsApp', href: '/whatsapp-inbox', icon: MessageSquare },
@@ -116,6 +121,7 @@ const navigation: NavSection[] = [
   },
   {
     title: 'Accounting',
+    key: 'accounting',
     items: [
       { label: 'Invoices', href: '/invoices', icon: FileText },
       { label: 'Payments', href: '/payments', icon: DollarSign },
@@ -129,6 +135,7 @@ const navigation: NavSection[] = [
   },
   {
     title: 'Task Management',
+    key: 'tasks',
     items: [
       { label: 'Tasks', href: '/tasks', icon: CheckSquare },
       { label: 'Team', href: '/team-members', icon: Users },
@@ -136,6 +143,7 @@ const navigation: NavSection[] = [
   },
   {
     title: 'Rates Management',
+    key: 'rates',
     items: [
       { label: 'Hotels', href: '/hotels', icon: Hotel },
       { label: 'Nile Cruises', href: '/rates/cruises', icon: Ship },
@@ -153,24 +161,65 @@ const navigation: NavSection[] = [
   },
   {
     title: 'Settings',
+    key: 'settings',
     items: [
-      { label: 'Profile', href: '/settings/profile', icon: Settings },
-      { label: 'Email', href: '/settings/email', icon: Mail },
+      { label: 'Settings', href: '/settings', icon: Settings },
+      { label: 'Preferences', href: '/settings/preferences', icon: Ticket },
     ]
   }
 ]
 
+// Storage key for section states
+const STORAGE_KEY = 'autoura-sidebar-sections'
+
 export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [expandedSections, setExpandedSections] = useState<string[]>(['main', 'sales'])
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Contacts'])
   const [currentUrl, setCurrentUrl] = useState('')
   const { profile, signOut } = useAuth()
+
+  // Load saved section states from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        setExpandedSections(parsed.sections || ['main', 'sales'])
+        setExpandedMenus(parsed.menus || ['Contacts'])
+      } catch {
+        // Use defaults if parsing fails
+      }
+    }
+  }, [])
+
+  // Save section states to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      sections: expandedSections,
+      menus: expandedMenus
+    }))
+  }, [expandedSections, expandedMenus])
 
   // Get full URL on client side only
   useEffect(() => {
     setCurrentUrl(window.location.href)
   }, [pathname])
+
+  // Auto-expand section containing active page
+  useEffect(() => {
+    navigation.forEach(section => {
+      const hasActiveItem = section.items.some(item => 
+        pathname === item.href || 
+        (item.href !== '/dashboard' && pathname.startsWith(item.href)) ||
+        item.children?.some(child => pathname === child.href || currentUrl.includes(child.href))
+      )
+      if (hasActiveItem && !expandedSections.includes(section.key)) {
+        setExpandedSections(prev => [...prev, section.key])
+      }
+    })
+  }, [pathname, currentUrl])
 
   // Auto-expand menu if on contacts page
   useEffect(() => {
@@ -178,6 +227,14 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       setExpandedMenus(prev => prev.includes('Contacts') ? prev : [...prev, 'Contacts'])
     }
   }, [pathname])
+
+  const toggleSection = (key: string) => {
+    setExpandedSections(prev => 
+      prev.includes(key) 
+        ? prev.filter(k => k !== key)
+        : [...prev, key]
+    )
+  }
 
   const toggleMenu = (label: string) => {
     setExpandedMenus(prev => 
@@ -244,7 +301,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        {/* Logo Header */}
+        {/* Logo Header with Notification Bell */}
         <div className="flex items-center justify-between h-14 px-3 border-b border-gray-200 flex-shrink-0">
           <Link href="/dashboard" className="flex items-center gap-2">
             <div className="w-7 h-7 flex-shrink-0">
@@ -261,142 +318,172 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             )}
           </Link>
           
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:block p-1 hover:bg-gray-100 rounded transition-colors"
-          >
-            <ChevronRight
-              className={`w-4 h-4 text-gray-500 transition-transform ${
-                isCollapsed ? '' : 'rotate-180'
-              }`}
-            />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Notification Bell */}
+            {!isCollapsed && <NotificationBell />}
+            
+            {/* Collapse Button */}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="hidden lg:block p-1 hover:bg-gray-100 rounded transition-colors"
+            >
+              <ChevronRight
+                className={`w-4 h-4 text-gray-500 transition-transform ${
+                  isCollapsed ? '' : 'rotate-180'
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
+        {/* Notification Bell for collapsed state */}
+        {isCollapsed && (
+          <div className="flex justify-center py-2 border-b border-gray-100">
+            <NotificationBell />
+          </div>
+        )}
+
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-          {navigation.map((section) => (
-            <div key={section.title}>
-              {!isCollapsed && (
-                <div className="px-2 mb-1.5">
-                  <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                    {section.title}
-                  </h3>
-                </div>
-              )}
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
+          {navigation.map((section) => {
+            const isSectionExpanded = expandedSections.includes(section.key)
+            
+            return (
+              <div key={section.key}>
+                {/* Section Header - Clickable to expand/collapse */}
+                {!isCollapsed ? (
+                  <button
+                    onClick={() => toggleSection(section.key)}
+                    className="flex items-center justify-between w-full px-2 py-1.5 mb-1 rounded-md hover:bg-gray-50 transition-colors group"
+                  >
+                    <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider group-hover:text-gray-600">
+                      {section.title}
+                    </h3>
+                    <ChevronDown 
+                      className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${
+                        isSectionExpanded ? '' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+                ) : (
+                  section.title !== 'Main' && (
+                    <div className="h-px bg-gray-200 my-2 mx-2"></div>
+                  )
+                )}
 
-              {isCollapsed && section.title !== 'Main' && (
-                <div className="h-px bg-gray-200 my-2 mx-2"></div>
-              )}
+                {/* Section Items */}
+                <div className={`
+                  space-y-0.5 overflow-hidden transition-all duration-200
+                  ${!isCollapsed && !isSectionExpanded ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}
+                `}>
+                  {section.items.map((item) => {
+                    const Icon = item.icon
+                    const hasChildren = item.children && item.children.length > 0
+                    const isExpanded = expandedMenus.includes(item.label)
+                    
+                    // Check active state
+                    const isOnContactsPage = pathname === '/contacts'
+                    const isActive = hasChildren 
+                      ? isOnContactsPage
+                      : pathname === item.href || 
+                        (item.href !== '/dashboard' && pathname.startsWith(item.href))
 
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const Icon = item.icon
-                  const hasChildren = item.children && item.children.length > 0
-                  const isExpanded = expandedMenus.includes(item.label)
-                  
-                  // Check active state
-                  const isOnContactsPage = pathname === '/contacts'
-                  const isActive = hasChildren 
-                    ? isOnContactsPage
-                    : pathname === item.href || 
-                      (item.href !== '/dashboard' && pathname.startsWith(item.href))
-
-                  // For items with children (collapsible)
-                  if (hasChildren && !isCollapsed) {
-                    return (
-                      <div key={item.label}>
-                        {/* Parent item - clickable to expand/collapse */}
-                        <button
-                          onClick={() => toggleMenu(item.label)}
-                          className={`
-                            flex items-center gap-2.5 px-2 py-1.5 rounded-md w-full
-                            transition-all duration-150 text-sm
-                            ${isActive
-                              ? 'bg-primary-50 text-primary-700 font-medium'
-                              : 'text-gray-700 hover:bg-gray-50'
-                            }
-                          `}
-                        >
-                          <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
-                          <span className="text-[13px] flex-1 text-left">{item.label}</span>
-                          <ChevronDown 
-                            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                              isExpanded ? 'rotate-180' : ''
-                            }`} 
-                          />
-                        </button>
-                        
-                        {/* Children */}
-                        <div className={`
-                          overflow-hidden transition-all duration-200 ease-in-out
-                          ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
-                        `}>
-                          <div className="ml-4 pl-2.5 border-l border-gray-200 mt-1 space-y-0.5">
-                            {item.children!.map((child) => {
-                              const ChildIcon = child.icon
-                              const isChildItemActive = isChildActive(child.href)
-                              
-                              return (
-                                <Link
-                                  key={child.href}
-                                  href={child.href}
-                                  onClick={() => setIsMobileOpen(false)}
-                                  className={`
-                                    flex items-center gap-2 px-2 py-1.5 rounded-md
-                                    transition-all duration-150 text-sm
-                                    ${isChildItemActive
-                                      ? 'bg-primary-50 text-primary-700 font-medium'
-                                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                                    }
-                                  `}
-                                >
-                                  {ChildIcon && (
-                                    <ChildIcon className={`w-4 h-4 flex-shrink-0 ${isChildItemActive ? 'text-primary-600' : 'text-gray-400'}`} />
-                                  )}
-                                  <span className="text-[12px]">{child.label}</span>
-                                  {isChildItemActive && (
-                                    <div className="ml-auto w-1 h-1 rounded-full bg-primary-600" />
-                                  )}
-                                </Link>
-                              )
-                            })}
+                    // For items with children (collapsible)
+                    if (hasChildren && !isCollapsed) {
+                      return (
+                        <div key={item.label}>
+                          {/* Parent item - clickable to expand/collapse */}
+                          <button
+                            onClick={() => toggleMenu(item.label)}
+                            className={`
+                              flex items-center gap-2.5 px-2 py-1.5 rounded-md w-full
+                              transition-all duration-150 text-sm
+                              ${isActive
+                                ? 'bg-primary-50 text-primary-700 font-medium'
+                                : 'text-gray-700 hover:bg-gray-50'
+                              }
+                            `}
+                          >
+                            <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
+                            <span className="text-[13px] flex-1 text-left">{item.label}</span>
+                            <ChevronDown 
+                              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                isExpanded ? 'rotate-180' : ''
+                              }`} 
+                            />
+                          </button>
+                          
+                          {/* Children */}
+                          <div className={`
+                            overflow-hidden transition-all duration-200 ease-in-out
+                            ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
+                          `}>
+                            <div className="ml-4 pl-2.5 border-l border-gray-200 mt-1 space-y-0.5">
+                              {item.children!.map((child) => {
+                                const ChildIcon = child.icon
+                                const isChildItemActive = isChildActive(child.href)
+                                
+                                return (
+                                  <Link
+                                    key={child.href}
+                                    href={child.href}
+                                    onClick={() => setIsMobileOpen(false)}
+                                    className={`
+                                      flex items-center gap-2 px-2 py-1.5 rounded-md
+                                      transition-all duration-150 text-sm
+                                      ${isChildItemActive
+                                        ? 'bg-primary-50 text-primary-700 font-medium'
+                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                      }
+                                    `}
+                                  >
+                                    {ChildIcon && (
+                                      <ChildIcon className={`w-4 h-4 flex-shrink-0 ${isChildItemActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                                    )}
+                                    <span className="text-[12px]">{child.label}</span>
+                                    {isChildItemActive && (
+                                      <div className="ml-auto w-1 h-1 rounded-full bg-primary-600" />
+                                    )}
+                                  </Link>
+                                )
+                              })}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )
-                  }
+                      )
+                    }
 
-                  // Regular items (no children) or collapsed sidebar
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setIsMobileOpen(false)}
-                      className={`
-                        flex items-center gap-2.5 px-2 py-1.5 rounded-md
-                        transition-all duration-150 text-sm
-                        ${isActive
-                          ? 'bg-primary-50 text-primary-700 font-medium'
-                          : 'text-gray-700 hover:bg-gray-50'
-                        }
-                        ${isCollapsed ? 'justify-center' : ''}
-                      `}
-                      title={isCollapsed ? item.label : ''}
-                    >
-                      <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
-                      {!isCollapsed && (
-                        <span className="text-[13px]">{item.label}</span>
-                      )}
-                      {!isCollapsed && isActive && (
-                        <div className="ml-auto w-1 h-1 rounded-full bg-primary-600" />
-                      )}
-                    </Link>
-                  )
-                })}
+                    // Regular items (no children) or collapsed sidebar
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setIsMobileOpen(false)}
+                        className={`
+                          flex items-center gap-2.5 px-2 py-1.5 rounded-md
+                          transition-all duration-150 text-sm
+                          ${isActive
+                            ? 'bg-primary-50 text-primary-700 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                          }
+                          ${isCollapsed ? 'justify-center' : ''}
+                        `}
+                        title={isCollapsed ? item.label : ''}
+                      >
+                        <Icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-500'}`} />
+                        {!isCollapsed && (
+                          <span className="text-[13px]">{item.label}</span>
+                        )}
+                        {!isCollapsed && isActive && (
+                          <div className="ml-auto w-1 h-1 rounded-full bg-primary-600" />
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </nav>
 
         {/* User Profile Footer with Sign Out */}

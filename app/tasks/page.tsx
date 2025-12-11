@@ -22,13 +22,31 @@ import {
   FileText,
   Users as UsersIcon,
   Receipt,
-  MapPin
+  MapPin,
+  ChevronDown,
+  Loader2
 } from 'lucide-react'
 
 interface TeamMember {
   id: string
   name: string
   role: string
+  email?: string
+}
+
+interface Client {
+  id: string
+  name: string
+  email?: string
+  company?: string
+}
+
+interface Itinerary {
+  id: string
+  itinerary_code: string
+  client_name: string
+  trip_name?: string
+  start_date?: string
 }
 
 interface Task {
@@ -46,6 +64,8 @@ interface Task {
   updated_at: string
   completed_at: string
   assigned_member?: TeamMember
+  // For display purposes
+  linked_name?: string
 }
 
 interface Summary {
@@ -81,6 +101,8 @@ const LINKED_TYPES = [
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -102,6 +124,7 @@ export default function TasksPage() {
     notes: ''
   })
   const [saving, setSaving] = useState(false)
+  const [loadingLinkedItems, setLoadingLinkedItems] = useState(false)
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -140,14 +163,75 @@ export default function TasksPage() {
     }
   }
 
+  const fetchClients = async () => {
+    try {
+      const response = await fetch('/api/clients')
+      if (response.ok) {
+        const result = await response.json()
+        // Handle your API format: { clients: [...] }
+        const data = result.clients || result.data || (Array.isArray(result) ? result : [])
+        setClients(data)
+      }
+    } catch (error) {
+      console.error('Error fetching clients:', error)
+    }
+  }
+
+  const fetchItineraries = async () => {
+    try {
+      const response = await fetch('/api/itineraries')
+      if (response.ok) {
+        const result = await response.json()
+        const data = result.success ? result.data : (Array.isArray(result) ? result : [])
+        setItineraries(data)
+      }
+    } catch (error) {
+      console.error('Error fetching itineraries:', error)
+    }
+  }
+
   useEffect(() => {
     fetchTasks()
     fetchTeamMembers()
   }, [fetchTasks])
 
+  // Fetch clients/itineraries when modal opens
+  useEffect(() => {
+    if (showModal) {
+      if (clients.length === 0) fetchClients()
+      if (itineraries.length === 0) fetchItineraries()
+    }
+  }, [showModal])
+
+  // Create notification when task is assigned
+  const createTaskNotification = async (taskId: string, taskTitle: string, assigneeId: string, isNewTask: boolean) => {
+    try {
+      const assignee = teamMembers.find(m => m.id === assigneeId)
+      if (!assignee) return
+
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          team_member_id: assigneeId,
+          type: 'task_assigned',
+          title: isNewTask ? `New task assigned: ${taskTitle}` : `Task reassigned: ${taskTitle}`,
+          message: `You have been assigned to the task "${taskTitle}". ${formData.due_date ? `Due: ${new Date(formData.due_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}` : 'No due date set.'}`,
+          link: '/tasks',
+          related_task_id: taskId,
+          send_email: true
+        })
+      })
+    } catch (error) {
+      console.error('Error creating notification:', error)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
+
+    const previousAssignee = editingTask?.assigned_to
 
     try {
       const url = editingTask 
@@ -166,6 +250,17 @@ export default function TasksPage() {
       })
 
       if (response.ok) {
+        const result = await response.json()
+        const taskId = result.data?.id || editingTask?.id
+
+        // Send notification if task is assigned/reassigned
+        if (formData.assigned_to && taskId) {
+          const isNewAssignment = !editingTask || previousAssignee !== formData.assigned_to
+          if (isNewAssignment) {
+            await createTaskNotification(taskId, formData.title, formData.assigned_to, !editingTask)
+          }
+        }
+
         setShowModal(false)
         setEditingTask(null)
         resetForm()
@@ -284,6 +379,19 @@ export default function TasksPage() {
     todo: filteredTasks.filter(t => t.status === 'todo'),
     in_progress: filteredTasks.filter(t => t.status === 'in_progress'),
     done: filteredTasks.filter(t => t.status === 'done')
+  }
+
+  // Get linked item display name
+  const getLinkedItemName = (type: string, id: string) => {
+    if (type === 'client') {
+      const client = clients.find(c => c.id === id)
+      return client ? client.name : id
+    }
+    if (type === 'itinerary') {
+      const itinerary = itineraries.find(i => i.id === id)
+      return itinerary ? `${itinerary.itinerary_code} - ${itinerary.client_name}` : id
+    }
+    return id
   }
 
   if (loading) {
@@ -707,7 +815,10 @@ export default function TasksPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assign To
+                  <span className="text-xs text-gray-400 font-normal ml-2">(will receive email notification)</span>
+                </label>
                 <select
                   value={formData.assigned_to}
                   onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
@@ -715,36 +826,93 @@ export default function TasksPage() {
                 >
                   <option value="">Unassigned</option>
                   {teamMembers.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
+                    <option key={m.id} value={m.id}>
+                      {m.name} {m.email ? `(${m.email})` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Link To</label>
-                  <select
-                    value={formData.linked_type}
-                    onChange={(e) => setFormData({ ...formData, linked_type: e.target.value, linked_id: '' })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-                  >
-                    <option value="">None</option>
-                    {LINKED_TYPES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
+              {/* Link To Section - Improved */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">Link To</label>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <select
+                      value={formData.linked_type}
+                      onChange={(e) => setFormData({ ...formData, linked_type: e.target.value, linked_id: '' })}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                    >
+                      <option value="">None</option>
+                      {LINKED_TYPES.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Dynamic dropdown based on linked_type */}
+                  {formData.linked_type === 'client' && (
+                    <div>
+                      <select
+                        value={formData.linked_id}
+                        onChange={(e) => setFormData({ ...formData, linked_id: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                      >
+                        <option value="">Select client...</option>
+                        {clients.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} {c.company ? `(${c.company})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {formData.linked_type === 'itinerary' && (
+                    <div>
+                      <select
+                        value={formData.linked_id}
+                        onChange={(e) => setFormData({ ...formData, linked_id: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                      >
+                        <option value="">Select itinerary...</option>
+                        {itineraries.map(i => (
+                          <option key={i.id} value={i.id}>
+                            {i.itinerary_code} - {i.client_name}
+                            {i.start_date ? ` (${new Date(i.start_date).toLocaleDateString()})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* For Invoice and Expense, keep text input for now */}
+                  {(formData.linked_type === 'invoice' || formData.linked_type === 'expense') && (
+                    <div>
+                      <input
+                        type="text"
+                        value={formData.linked_id}
+                        onChange={(e) => setFormData({ ...formData, linked_id: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                        placeholder={`Enter ${formData.linked_type} ID`}
+                      />
+                    </div>
+                  )}
                 </div>
 
-                {formData.linked_type && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">ID</label>
-                    <input
-                      type="text"
-                      value={formData.linked_id}
-                      onChange={(e) => setFormData({ ...formData, linked_id: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                      placeholder="Enter ID"
-                    />
+                {/* Show selected item info */}
+                {formData.linked_type && formData.linked_id && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      {formData.linked_type === 'client' && <UsersIcon className="h-4 w-4 text-gray-400" />}
+                      {formData.linked_type === 'itinerary' && <MapPin className="h-4 w-4 text-gray-400" />}
+                      {formData.linked_type === 'invoice' && <FileText className="h-4 w-4 text-gray-400" />}
+                      {formData.linked_type === 'expense' && <Receipt className="h-4 w-4 text-gray-400" />}
+                      <span className="text-gray-600">
+                        Linked to: <strong>{getLinkedItemName(formData.linked_type, formData.linked_id)}</strong>
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -771,8 +939,9 @@ export default function TasksPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                   {saving ? 'Saving...' : editingTask ? 'Update' : 'Add Task'}
                 </button>
               </div>
