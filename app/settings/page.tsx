@@ -118,6 +118,7 @@ function SettingsContent() {
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   // Data states
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -182,8 +183,11 @@ function SettingsContent() {
     try {
       const response = await fetch('/api/profile')
       if (response.ok) {
-        const data = await response.json()
-        setProfile(data.profile || data)
+        const result = await response.json()
+        // Handle different response formats
+        const profileData = result.data || result.profile || result
+        console.log('Profile loaded:', profileData) // Debug
+        setProfile(profileData)
       }
     } catch (error) {
       console.error('Error fetching profile:', error)
@@ -326,6 +330,54 @@ function SettingsContent() {
     }
   }
 
+  // Handle avatar upload
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    console.log('Upload triggered, file:', file, 'profile:', profile) // Debug
+    
+    if (!file) {
+      console.log('No file selected')
+      return
+    }
+    
+    if (!profile?.id) {
+      console.log('No profile ID available')
+      setError('Profile not loaded. Please refresh the page.')
+      return
+    }
+
+    setUploadingAvatar(true)
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', profile.id)
+
+      console.log('Uploading to /api/avatar/upload...') // Debug
+      const response = await fetch('/api/avatar/upload', {
+        method: 'POST',
+        body: formData
+      })
+
+      const data = await response.json()
+      console.log('Upload response:', data) // Debug
+
+      if (data.success) {
+        setProfile(prev => prev ? { ...prev, avatar_url: data.url } : null)
+        setSaveSuccess(true)
+        setTimeout(() => setSaveSuccess(false), 3000)
+      } else {
+        setError(data.error || 'Failed to upload avatar')
+      }
+    } catch (err) {
+      console.error('Upload error:', err)
+      setError('Failed to upload avatar')
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
   // ============================================
   // RENDER TABS
   // ============================================
@@ -339,17 +391,42 @@ function SettingsContent() {
 
       {/* Avatar Section */}
       <div className="flex items-center gap-4">
-        <div className="w-20 h-20 rounded-full bg-primary-100 flex items-center justify-center overflow-hidden">
+        <div className="w-20 h-20 rounded-full bg-primary-100 flex items-center justify-center overflow-hidden relative">
           {profile?.avatar_url ? (
             <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
           ) : (
             <User className="w-10 h-10 text-primary-600" />
           )}
+          {uploadingAvatar && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 text-white animate-spin" />
+            </div>
+          )}
         </div>
         <div>
-          <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            Change Photo
-          </button>
+          <input
+            type="file"
+            id="avatar-upload"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            onChange={handleAvatarUpload}
+            className="hidden"
+          />
+          <label
+            htmlFor="avatar-upload"
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer ${uploadingAvatar ? 'opacity-50 pointer-events-none' : ''}`}
+          >
+            {uploadingAvatar ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              <>
+                <Camera className="w-4 h-4" />
+                Change Photo
+              </>
+            )}
+          </label>
           <p className="text-xs text-gray-500 mt-1">JPG, PNG up to 2MB</p>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { useRole, UserRole } from '@/hooks/useRole'
 import NotificationBell from '@/components/NotificationBell'
 import {
   LayoutDashboard,
@@ -47,7 +48,8 @@ import {
   Building2,
   Compass,
   Car,
-  UserCog
+  UserCog,
+  Shield
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -59,21 +61,25 @@ interface NavSubItem {
   label: string
   href: string
   icon?: any
+  roles?: UserRole[] // Which roles can see this item
 }
 
 interface NavItem {
   label: string
   href: string
   icon: any
+  roles?: UserRole[] // Which roles can see this item
   children?: NavSubItem[]
 }
 
 interface NavSection {
   title: string
-  key: string // Unique key for localStorage
+  key: string
+  roles?: UserRole[] // Which roles can see this section
   items: NavItem[]
 }
 
+// Define navigation with role-based visibility
 const navigation: NavSection[] = [
   {
     title: 'Main',
@@ -86,9 +92,10 @@ const navigation: NavSection[] = [
   {
     title: 'Clients & Partners',
     key: 'clients',
+    roles: ['admin', 'manager', 'agent'], // Not visible to viewers
     items: [
       { label: 'All Clients', href: '/clients', icon: Users },
-      { label: 'Add Client', href: '/clients/new', icon: UserPlus },
+      { label: 'Add Client', href: '/clients/new', icon: UserPlus, roles: ['admin', 'manager', 'agent'] },
       { 
         label: 'Contacts', 
         href: '/contacts', 
@@ -109,6 +116,7 @@ const navigation: NavSection[] = [
   {
     title: 'Sales',
     key: 'sales',
+    roles: ['admin', 'manager', 'agent'],
     items: [
       { label: 'Inbox', href: '/inbox', icon: Mail },
       { label: 'WhatsApp', href: '/whatsapp-inbox', icon: MessageSquare },
@@ -122,28 +130,31 @@ const navigation: NavSection[] = [
   {
     title: 'Accounting',
     key: 'accounting',
+    roles: ['admin', 'manager'], // Only admin and manager
     items: [
       { label: 'Invoices', href: '/invoices', icon: FileText },
       { label: 'Payments', href: '/payments', icon: DollarSign },
       { label: 'Reminders', href: '/reminders', icon: Bell },
       { label: 'Expenses', href: '/expenses', icon: Receipt },
-      { label: 'Receivables', href: '/accounts-receivable', icon: Wallet },
-      { label: 'Payables', href: '/accounts-payable', icon: CreditCard },
-      { label: 'Profit & Loss', href: '/profit-loss', icon: TrendingUp },
-      { label: 'Reports', href: '/financial-reports', icon: BarChart3 },
+      { label: 'Receivables', href: '/accounts-receivable', icon: Wallet, roles: ['admin', 'manager'] },
+      { label: 'Payables', href: '/accounts-payable', icon: CreditCard, roles: ['admin', 'manager'] },
+      { label: 'Profit & Loss', href: '/profit-loss', icon: TrendingUp, roles: ['admin', 'manager'] },
+      { label: 'Reports', href: '/financial-reports', icon: BarChart3, roles: ['admin', 'manager'] },
     ]
   },
   {
     title: 'Task Management',
     key: 'tasks',
+    roles: ['admin', 'manager', 'agent'],
     items: [
       { label: 'Tasks', href: '/tasks', icon: CheckSquare },
-      { label: 'Team', href: '/team-members', icon: Users },
+      { label: 'Team Members', href: '/team-members', icon: Users, roles: ['admin', 'manager'] },
     ]
   },
   {
     title: 'Rates Management',
     key: 'rates',
+    roles: ['admin', 'manager'], // Only admin and manager
     items: [
       { label: 'Hotels', href: '/hotels', icon: Hotel },
       { label: 'Nile Cruises', href: '/rates/cruises', icon: Ship },
@@ -162,9 +173,11 @@ const navigation: NavSection[] = [
   {
     title: 'Settings',
     key: 'settings',
+    roles: ['admin'], // Only admin
     items: [
       { label: 'Settings', href: '/settings', icon: Settings },
-      { label: 'Preferences', href: '/settings/preferences', icon: Ticket },
+      { label: 'Prefernces', href: '/settings/prefernces', icon: Ticket },
+      { label: 'User Management', href: '/users', icon: Shield },
     ]
   }
 ]
@@ -172,13 +185,42 @@ const navigation: NavSection[] = [
 // Storage key for section states
 const STORAGE_KEY = 'autoura-sidebar-sections'
 
+// Role badge colors
+const ROLE_COLORS: Record<UserRole, string> = {
+  admin: 'bg-purple-100 text-purple-700',
+  manager: 'bg-blue-100 text-blue-700',
+  agent: 'bg-green-100 text-green-700',
+  viewer: 'bg-gray-100 text-gray-600'
+}
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  manager: 'Manager',
+  agent: 'Agent',
+  viewer: 'Viewer'
+}
+
 export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
+  const { profile, signOut } = useAuth()
+  const { role, canAccess } = useRole()
+  
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['main', 'sales'])
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Contacts'])
   const [currentUrl, setCurrentUrl] = useState('')
-  const { profile, signOut } = useAuth()
+
+  // Filter navigation based on user role
+  const filteredNavigation = navigation.filter(section => {
+    if (!section.roles) return true // No restriction
+    return canAccess(section.roles)
+  }).map(section => ({
+    ...section,
+    items: section.items.filter(item => {
+      if (!item.roles) return true
+      return canAccess(item.roles)
+    })
+  }))
 
   // Load saved section states from localStorage
   useEffect(() => {
@@ -209,7 +251,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
   // Auto-expand section containing active page
   useEffect(() => {
-    navigation.forEach(section => {
+    filteredNavigation.forEach(section => {
       const hasActiveItem = section.items.some(item => 
         pathname === item.href || 
         (item.href !== '/dashboard' && pathname.startsWith(item.href)) ||
@@ -219,7 +261,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         setExpandedSections(prev => [...prev, section.key])
       }
     })
-  }, [pathname, currentUrl])
+  }, [pathname, currentUrl, filteredNavigation])
 
   // Auto-expand menu if on contacts page
   useEffect(() => {
@@ -248,12 +290,10 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const isChildActive = (childHref: string): boolean => {
     if (!currentUrl) return false
     
-    // For "All Contacts" - active when on /contacts with no type param
     if (childHref === '/contacts') {
       return pathname === '/contacts' && !currentUrl.includes('type=')
     }
     
-    // For type-specific links, check if URL contains the type param
     const typeMatch = childHref.match(/type=(\w+)/)
     if (typeMatch) {
       return currentUrl.includes(`type=${typeMatch[1]}`)
@@ -319,10 +359,8 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           </Link>
           
           <div className="flex items-center gap-1">
-            {/* Notification Bell */}
             {!isCollapsed && <NotificationBell />}
             
-            {/* Collapse Button */}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className="hidden lg:block p-1 hover:bg-gray-100 rounded transition-colors"
@@ -345,12 +383,12 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-          {navigation.map((section) => {
+          {filteredNavigation.map((section) => {
             const isSectionExpanded = expandedSections.includes(section.key)
             
             return (
               <div key={section.key}>
-                {/* Section Header - Clickable to expand/collapse */}
+                {/* Section Header */}
                 {!isCollapsed ? (
                   <button
                     onClick={() => toggleSection(section.key)}
@@ -381,7 +419,6 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                     const hasChildren = item.children && item.children.length > 0
                     const isExpanded = expandedMenus.includes(item.label)
                     
-                    // Check active state
                     const isOnContactsPage = pathname === '/contacts'
                     const isActive = hasChildren 
                       ? isOnContactsPage
@@ -392,7 +429,6 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                     if (hasChildren && !isCollapsed) {
                       return (
                         <div key={item.label}>
-                          {/* Parent item - clickable to expand/collapse */}
                           <button
                             onClick={() => toggleMenu(item.label)}
                             className={`
@@ -419,7 +455,10 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                             ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}
                           `}>
                             <div className="ml-4 pl-2.5 border-l border-gray-200 mt-1 space-y-0.5">
-                              {item.children!.map((child) => {
+                              {item.children!.filter(child => {
+                                if (!child.roles) return true
+                                return canAccess(child.roles)
+                              }).map((child) => {
                                 const ChildIcon = child.icon
                                 const isChildItemActive = isChildActive(child.href)
                                 
@@ -453,7 +492,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                       )
                     }
 
-                    // Regular items (no children) or collapsed sidebar
+                    // Regular items
                     return (
                       <Link
                         key={item.href}
@@ -486,9 +525,9 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           })}
         </nav>
 
-        {/* User Profile Footer with Sign Out */}
+        {/* User Profile Footer */}
         <div className="border-t border-gray-200 p-2.5 flex-shrink-0 space-y-1">
-          {/* User Info */}
+          {/* User Info with Role Badge */}
           <div
             className={`
               flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md
@@ -503,9 +542,9 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 <p className="text-[13px] font-medium text-gray-700 truncate">
                   {profile?.full_name || 'User'}
                 </p>
-                <p className="text-[10px] text-gray-500 truncate">
-                  {profile?.role?.toUpperCase() || 'AUTOURA'}
-                </p>
+                <span className={`inline-block px-1.5 py-0.5 text-[9px] font-medium rounded ${ROLE_COLORS[role]}`}>
+                  {ROLE_LABELS[role]}
+                </span>
               </div>
             )}
           </div>
