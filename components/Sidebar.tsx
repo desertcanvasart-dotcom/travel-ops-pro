@@ -121,6 +121,7 @@ const navigation: NavSection[] = [
       { label: 'Inbox', href: '/inbox', icon: Mail },
       { label: 'WhatsApp', href: '/whatsapp-inbox', icon: MessageSquare },
       { label: 'Parser', href: '/whatsapp-parser', icon: MessageSquare },
+      { label: 'Message Templates', href: '/templates', icon: FileText },
       { label: 'Calendar', href: '/calendar', icon: Calendar },
       { label: 'Itineraries', href: '/itineraries', icon: FileText },
       { label: 'Packages', href: '/tours', icon: Library },

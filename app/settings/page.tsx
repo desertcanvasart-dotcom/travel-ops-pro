@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { createClient } from '@/app/supabase'
 import { 
   User, 
   Mail, 
@@ -25,7 +26,10 @@ import {
   CheckCircle,
   AlertCircle,
   FileText,
-  Send
+  Send,
+  Crown,
+  Calculator,
+  Info
 } from 'lucide-react'
 
 // ============================================
@@ -80,6 +84,15 @@ interface TeamMember {
   created_at: string
 }
 
+interface UserPreferences {
+  id?: string
+  user_id?: string
+  default_cost_mode: 'auto' | 'manual'
+  default_tier: string
+  default_margin_percent: number
+  default_currency: string
+}
+
 // ============================================
 // TAB CONFIGURATION
 // ============================================
@@ -87,10 +100,9 @@ interface TeamMember {
 const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'email', label: 'Email', icon: Mail },
-  { id: 'templates', label: 'Templates', icon: FileText },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'team', label: 'Team', icon: Users },
-  // { id: 'billing', label: 'Billing', icon: CreditCard }, // Future
+  { id: 'preferences', label: 'Preferences', icon: Settings },
 ]
 
 const TIMEZONES = [
@@ -102,6 +114,28 @@ const TIMEZONES = [
   { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
   { value: 'Asia/Dubai', label: 'Dubai (GST)' },
   { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
+]
+
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', description: 'Cost-effective options' },
+  { value: 'standard', label: 'Standard', description: 'Comfortable mid-range' },
+  { value: 'deluxe', label: 'Deluxe', description: 'Superior quality' },
+  { value: 'luxury', label: 'Luxury', description: 'Top-tier VIP experience' }
+]
+
+const COST_MODE_OPTIONS = [
+  { 
+    value: 'auto', 
+    label: 'Auto-Calculate', 
+    description: 'System calculates costs from rates database automatically',
+    icon: Calculator
+  },
+  { 
+    value: 'manual', 
+    label: 'Manual Entry', 
+    description: 'Enter actual costs manually for each service',
+    icon: Settings
+  }
 ]
 
 // ============================================
@@ -123,7 +157,6 @@ function SettingsContent() {
   // Data states
   const [profile, setProfile] = useState<Profile | null>(null)
   const [emailSettings, setEmailSettings] = useState<EmailSettings | null>(null)
-  const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreference>({
     task_assigned: true,
     task_due_soon: true,
@@ -133,6 +166,12 @@ function SettingsContent() {
     in_app_enabled: true
   })
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>({
+    default_cost_mode: 'auto',
+    default_tier: 'standard',
+    default_margin_percent: 25,
+    default_currency: 'EUR'
+  })
 
   // Update URL when tab changes
   const handleTabChange = (tabId: string) => {
@@ -154,14 +193,14 @@ function SettingsContent() {
           case 'email':
             await fetchEmailSettings()
             break
-          case 'templates':
-            await fetchTemplates()
-            break
           case 'notifications':
             await fetchNotificationPrefs()
             break
           case 'team':
             await fetchTeamMembers()
+            break
+          case 'preferences':
+            await fetchPreferences()
             break
         }
       } catch (err) {
@@ -184,13 +223,39 @@ function SettingsContent() {
       const response = await fetch('/api/profile')
       if (response.ok) {
         const result = await response.json()
-        // Handle different response formats
         const profileData = result.data || result.profile || result
-        console.log('Profile loaded:', profileData) // Debug
+        console.log('Profile loaded:', profileData)
         setProfile(profileData)
       }
     } catch (error) {
       console.error('Error fetching profile:', error)
+    }
+  }
+  const fetchPreferences = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) return
+  
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+  
+      if (data) {
+        setUserPreferences({
+          id: data.id,
+          user_id: data.user_id,
+          default_cost_mode: data.default_cost_mode || 'auto',
+          default_tier: data.default_tier || 'standard',
+          default_margin_percent: data.default_margin_percent || 25,
+          default_currency: data.default_currency || 'EUR'
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching preferences:', error)
     }
   }
 
@@ -201,7 +266,6 @@ function SettingsContent() {
         const data = await response.json()
         setEmailSettings(data)
       } else {
-        // Default settings if none exist
         setEmailSettings({
           gmail_connected: false,
           auto_reply_enabled: false
@@ -213,18 +277,6 @@ function SettingsContent() {
         gmail_connected: false,
         auto_reply_enabled: false
       })
-    }
-  }
-
-  const fetchTemplates = async () => {
-    try {
-      const response = await fetch('/api/email-templates')
-      if (response.ok) {
-        const data = await response.json()
-        setTemplates(data.templates || data.data || [])
-      }
-    } catch (error) {
-      console.error('Error fetching templates:', error)
     }
   }
 
@@ -249,6 +301,47 @@ function SettingsContent() {
       }
     } catch (error) {
       console.error('Error fetching team members:', error)
+    }
+  }
+
+  const savePreferences = async () => {
+    setSaving(true)
+    setError(null)
+  
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        setError('Please sign in to save preferences')
+        return
+      }
+  
+      const prefData = {
+        user_id: user.id,
+        default_cost_mode: userPreferences.default_cost_mode,
+        default_tier: userPreferences.default_tier,
+        default_margin_percent: userPreferences.default_margin_percent,
+        default_currency: userPreferences.default_currency,
+        updated_at: new Date().toISOString()
+      }
+  
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert(prefData, { 
+          onConflict: 'user_id',
+          ignoreDuplicates: false 
+        })
+  
+      if (error) throw error
+  
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err: any) {
+      console.error('Error saving preferences:', err)
+      setError(err.message || 'Failed to save preferences')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -333,7 +426,7 @@ function SettingsContent() {
   // Handle avatar upload
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    console.log('Upload triggered, file:', file, 'profile:', profile) // Debug
+    console.log('Upload triggered, file:', file, 'profile:', profile)
     
     if (!file) {
       console.log('No file selected')
@@ -354,14 +447,14 @@ function SettingsContent() {
       formData.append('file', file)
       formData.append('userId', profile.id)
 
-      console.log('Uploading to /api/avatar/upload...') // Debug
+      console.log('Uploading to /api/avatar/upload...')
       const response = await fetch('/api/avatar/upload', {
         method: 'POST',
         body: formData
       })
 
       const data = await response.json()
-      console.log('Upload response:', data) // Debug
+      console.log('Upload response:', data)
 
       if (data.success) {
         setProfile(prev => prev ? { ...prev, avatar_url: data.url } : null)
@@ -615,59 +708,8 @@ function SettingsContent() {
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
-    </div>
-  )
-
-  const renderTemplatesTab = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium text-gray-900">Email Templates</h3>
-          <p className="text-sm text-gray-500 mt-1">Create and manage reusable email templates.</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors">
-          <Plus className="w-4 h-4" />
-          New Template
-        </button>
       </div>
-
-      {/* Templates List */}
-      <div className="space-y-3">
-        {templates.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
-            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No email templates yet</p>
-            <p className="text-sm text-gray-400 mt-1">Create templates for common responses</p>
-          </div>
-        ) : (
-          templates.map(template => (
-            <div key={template.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-medium text-gray-900">{template.name}</h4>
-                    <span className="px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 rounded">
-                      {template.category}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Subject: {template.subject}</p>
-                  <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{template.body}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
+    )  
 
   const renderNotificationsTab = () => (
     <div className="space-y-6">
@@ -827,6 +869,201 @@ function SettingsContent() {
     </div>
   )
 
+  const renderPreferencesTab = () => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium text-gray-900">Itinerary Preferences</h3>
+        <p className="text-sm text-gray-500 mt-1">Configure default settings for itineraries and pricing.</p>
+      </div>
+
+      {/* Cost Mode Setting */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Calculator className="w-5 h-5 text-blue-600" />
+          <h4 className="text-sm font-bold text-gray-900">Cost Calculation Mode</h4>
+        </div>
+        
+        <p className="text-xs text-gray-600 mb-4">
+          Choose how costs are calculated for new itineraries. You can override this per itinerary.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {COST_MODE_OPTIONS.map((option) => {
+            const Icon = option.icon
+            const isSelected = userPreferences.default_cost_mode === option.value
+            
+            return (
+              <button
+                key={option.value}
+                onClick={() => setUserPreferences(prev => ({ ...prev, default_cost_mode: option.value as 'auto' | 'manual' }))}
+                className={`p-4 rounded-lg border-2 text-left transition-all ${
+                  isSelected
+                    ? 'border-[#647C47] bg-[#647C47]/5'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#647C47]/10' : 'bg-gray-100'}`}>
+                    <Icon className={`w-5 h-5 ${isSelected ? 'text-[#647C47]' : 'text-gray-500'}`} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
+                      {option.label}
+                    </span>
+                    {isSelected && (
+                      <span className="px-2 py-0.5 bg-[#647C47]/10 text-[#647C47] text-xs rounded-full font-medium">
+                        Default
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 ml-11">{option.description}</p>
+              </button>
+            )
+          })}
+        </div>
+
+        {userPreferences.default_cost_mode === 'manual' && (
+          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-600 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Manual Mode Selected</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  New itineraries will have editable cost fields. Auto-calculated values will be pre-filled as a starting point.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Default Tier Setting */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Crown className="w-5 h-5 text-amber-600" />
+          <h4 className="text-sm font-bold text-gray-900">Default Service Tier</h4>
+        </div>
+        
+        <p className="text-xs text-gray-600 mb-4">
+          Set the default tier for new itineraries. AI will select suppliers matching this tier.
+        </p>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {TIER_OPTIONS.map((tier) => {
+            const isSelected = userPreferences.default_tier === tier.value
+            
+            return (
+              <button
+                key={tier.value}
+                onClick={() => setUserPreferences(prev => ({ ...prev, default_tier: tier.value }))}
+                className={`p-3 rounded-lg border-2 text-center transition-all ${
+                  isSelected
+                    ? tier.value === 'luxury'
+                      ? 'border-amber-500 bg-amber-50'
+                      : tier.value === 'deluxe'
+                      ? 'border-purple-500 bg-purple-50'
+                      : tier.value === 'standard'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-500 bg-gray-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  {tier.value === 'luxury' && <Crown className="w-4 h-4 text-amber-600" />}
+                  <span className={`text-sm font-semibold ${
+                    isSelected ? 'text-gray-900' : 'text-gray-700'
+                  }`}>
+                    {tier.label}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500">{tier.description}</p>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Default Margin Setting */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">💰</span>
+          <h4 className="text-sm font-bold text-gray-900">Default Profit Margin</h4>
+        </div>
+        
+        <p className="text-xs text-gray-600 mb-4">
+          Set the default margin percentage applied to supplier costs.
+        </p>
+
+        <div className="flex items-center gap-4">
+          <input
+            type="range"
+            min="0"
+            max="50"
+            step="5"
+            value={userPreferences.default_margin_percent}
+            onChange={(e) => setUserPreferences(prev => ({ ...prev, default_margin_percent: parseInt(e.target.value) }))}
+            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#647C47]"
+          />
+          <div className="w-20 text-center">
+            <span className="text-2xl font-bold text-[#647C47]">{userPreferences.default_margin_percent}%</span>
+          </div>
+        </div>
+
+        <div className="flex justify-between mt-2 text-xs text-gray-500">
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+        </div>
+      </div>
+
+      {/* Default Currency Setting */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">💱</span>
+          <h4 className="text-sm font-bold text-gray-900">Default Currency</h4>
+        </div>
+        
+        <p className="text-xs text-gray-600 mb-4">
+          Set the default currency for new itineraries and pricing.
+        </p>
+
+        <div className="flex gap-2">
+          {['EUR', 'USD', 'GBP', 'EGP'].map((currency) => {
+            const isSelected = userPreferences.default_currency === currency
+            const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
+            
+            return (
+              <button
+                key={currency}
+                onClick={() => setUserPreferences(prev => ({ ...prev, default_currency: currency }))}
+                className={`px-4 py-2 rounded-lg border-2 font-medium transition-all ${
+                  isSelected
+                    ? 'border-[#647C47] bg-[#647C47]/5 text-[#647C47]'
+                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                }`}
+              >
+                {symbols[currency]} {currency}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end pt-4 border-t border-gray-200">
+        <button
+          onClick={savePreferences}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  )
+
   // ============================================
   // MAIN RENDER
   // ============================================
@@ -901,9 +1138,9 @@ function SettingsContent() {
             <>
               {activeTab === 'profile' && renderProfileTab()}
               {activeTab === 'email' && renderEmailTab()}
-              {activeTab === 'templates' && renderTemplatesTab()}
               {activeTab === 'notifications' && renderNotificationsTab()}
               {activeTab === 'team' && renderTeamTab()}
+              {activeTab === 'preferences' && renderPreferencesTab()}
             </>
           )}
         </div>

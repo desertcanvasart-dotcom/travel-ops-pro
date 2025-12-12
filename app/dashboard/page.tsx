@@ -285,7 +285,7 @@ export default function DashboardPage() {
           />
           <QuickActionButton
             icon={MapPin}
-            label="Browse Tours"
+            label="Browse Itineraries"
             href="/itineraries"
             description="Explore tour catalog"
             color="bg-warning"

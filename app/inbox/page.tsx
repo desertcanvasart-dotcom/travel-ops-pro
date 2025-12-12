@@ -1828,35 +1828,70 @@ function ComposeModal({
             />
           </div>
 
-          {/* Templates & Signatures */}
-          <div className="flex items-center justify-end gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
-            {templates.length > 0 && (
-              <div className="relative">
-                <button 
-                  onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} 
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  Templates
-                </button>
-                {showTemplateDropdown && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                    {templates.map((template) => (
-                      <button 
-                        key={template.id} 
-                        onClick={() => useTemplate(template)} 
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50"
-                      >
-                        <span className="font-medium text-gray-900">{template.name}</span>
-                        <span className="block text-gray-500 truncate">{template.subject}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+               {/* Templates & Signatures */}
+<div className="flex items-center justify-end gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
+{templates.length > 0 && (
+  <div className="relative">
+    <button 
+      onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} 
+      className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+    >
+      <FileText className="w-3.5 h-3.5" />
+      Templates
+    </button>
+    {showTemplateDropdown && (
+      <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 max-h-96 overflow-y-auto">
+        {['customer', 'partner', 'internal'].map(category => {
+          const categoryTemplates = templates.filter(t => t.category === category)
+          if (categoryTemplates.length === 0) return null
+          
+          return (
+            <div key={category}>
+              <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100 sticky top-0">
+                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  {category === 'customer' && '👤 Customer Templates'}
+                  {category === 'partner' && '🏨 Partner Templates'}
+                  {category === 'internal' && '📋 Internal Templates'}
+                </span>
               </div>
-            )}
-            
-            {signatures.length > 0 && (
+              {categoryTemplates.map((template) => (
+                <button 
+                  key={template.id} 
+                  onClick={() => template.channel !== 'whatsapp' && useTemplate(template)} 
+                  className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b border-gray-50 ${
+                    template.channel === 'whatsapp' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  title={template.channel === 'whatsapp' ? 'WhatsApp only - cannot use in email' : ''}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{template.name}</span>
+                    {template.channel === 'whatsapp' && (
+                      <span className="text-[9px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
+                        WA only
+                      </span>
+                    )}
+                    {template.channel === 'both' && (
+                      <span className="text-[9px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
+                        +WA
+                      </span>
+                    )}
+                  </div>
+                  {template.subject && (
+                    <span className="block text-gray-500 truncate mt-0.5">
+                      {template.subject}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    )}
+  </div>
+)}
+     
+        {signatures.length > 0 && (
               <div className="relative">
                 <button 
                   onClick={() => setShowSignatureDropdown(!showSignatureDropdown)} 
@@ -2062,9 +2097,9 @@ function ComposeModal({
                       </label>
                       <select
                         value={selectedClientId}
-                        onChange={(e) => handleClientChange(e.target.value)}
-                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
-                      >
+                       onChange={(e) => handleClientChange(e.target.value)}
+                       className="w-full h-11 px-3 text-sm border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white"
+                       >
                         <option value="">-- Select a client --</option>
                         {clients.map(client => (
                           <option key={client.id} value={client.id}>
@@ -2146,10 +2181,10 @@ function ComposeModal({
                         Partner Type
                       </label>
                       <select
-                        value={selectedPartnerType}
-                        onChange={(e) => handlePartnerTypeChange(e.target.value)}
-                        className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
-                      >
+                         value={selectedPartnerType}
+                         onChange={(e) => handlePartnerTypeChange(e.target.value)}
+                         className="w-full h-11 px-3 text-sm border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                           >
                         <option value="">-- Select type --</option>
                         <option value="hotel">🏨 Hotels</option>
                         <option value="guide">🧭 Tour Guides</option>

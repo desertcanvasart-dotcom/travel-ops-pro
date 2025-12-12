@@ -9,21 +9,20 @@ import {
   CheckCircle, AlertCircle, Users, Calendar, MapPin,
   DollarSign, Languages, Loader2, MessageSquare, Sparkles,
   User, Mail, Phone, Globe, ChevronRight, UserPlus, ArrowLeft,
-  Crown, Star
+  Crown, Star, Settings
 } from 'lucide-react'
 import Link from 'next/link'
 
-const supabase = createClient()
+// ============================================
+// TYPES
+// ============================================
 
-// ============================================
-// TIER SYSTEM CONSTANTS
-// ============================================
-const TIER_OPTIONS = [
-  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700 border-gray-300', description: 'Cost-effective, good value' },
-  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700 border-blue-300', description: 'Comfortable mid-range' },
-  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700 border-purple-300', description: 'Superior quality' },
-  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700 border-amber-300', description: 'Top-tier VIP experience' }
-]
+interface UserPreferences {
+  default_cost_mode: 'auto' | 'manual'
+  default_tier: string
+  default_margin_percent: number
+  default_currency: string
+}
 
 interface ExtractedData {
   client_name: string
@@ -44,7 +43,6 @@ interface ExtractedData {
   conversation_language: string
   confidence_score: number
   nationality?: string
-  // NEW: Tier field
   tier?: string
 }
 
@@ -56,7 +54,69 @@ interface ExistingClient {
   phone: string
 }
 
-// Main export with Suspense wrapper
+// ============================================
+// CONSTANTS
+// ============================================
+
+const TIER_OPTIONS = [
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700 border-gray-300', description: 'Cost-effective, good value' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700 border-blue-300', description: 'Comfortable mid-range' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700 border-purple-300', description: 'Superior quality' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700 border-amber-300', description: 'Top-tier VIP experience' }
+]
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  default_cost_mode: 'auto',
+  default_tier: 'standard',
+  default_margin_percent: 25,
+  default_currency: 'EUR'
+}
+
+const SAMPLE_CONVERSATION = `Cliente: Hola, queremos hacer un tour a Memphis, Sakkara
+Agente: ¡Perfecto! ¿Cuántas personas?
+Cliente: 4 adultos
+Agente: ¿Para qué fecha?
+Cliente: 12 de noviembre
+Cliente: Y queremos añadir Dahshur también
+Cliente: Mi nombre es Inmaculada Yurba Minguez
+Cliente: Mi email es inmayurba@yahoo.es
+Agente: Perfecto, ¿en qué hotel se alojan?
+Cliente: Gran Plaza
+Cliente: Queremos algo de lujo, es nuestro aniversario`
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+const mapBudgetToTier = (budgetLevel: string): string => {
+  const mapping: Record<string, string> = {
+    'budget': 'budget',
+    'economy': 'budget',
+    'standard': 'standard',
+    'mid-range': 'standard',
+    'deluxe': 'deluxe',
+    'superior': 'deluxe',
+    'luxury': 'luxury',
+    'premium': 'luxury',
+    'vip': 'luxury',
+    'high-end': 'luxury'
+  }
+  return mapping[budgetLevel?.toLowerCase()] || 'standard'
+}
+
+const getTierColors = (tier: string) => {
+  switch (tier) {
+    case 'luxury': return { border: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-600' }
+    case 'deluxe': return { border: 'border-purple-500', bg: 'bg-purple-50', text: 'text-purple-600' }
+    case 'standard': return { border: 'border-blue-500', bg: 'bg-blue-50', text: 'text-blue-600' }
+    default: return { border: 'border-gray-500', bg: 'bg-gray-50', text: 'text-gray-600' }
+  }
+}
+
+// ============================================
+// MAIN EXPORT WITH SUSPENSE
+// ============================================
+
 export default function WhatsappParserPage() {
   return (
     <Suspense fallback={
@@ -72,53 +132,100 @@ export default function WhatsappParserPage() {
   )
 }
 
-// Actual component with useSearchParams
+// ============================================
+// MAIN COMPONENT
+// ============================================
+
 function WhatsAppParserContent() {
-  const [conversation, setConversation] = useState('')
-  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [isSavingClient, setIsSavingClient] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [generatedItinerary, setGeneratedItinerary] = useState<any>(null)
-  const [existingClients, setExistingClients] = useState<ExistingClient[]>([])
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
-  const [clientSaved, setClientSaved] = useState(false)
-  const [fromInbox, setFromInbox] = useState(false)
-  const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
-  
-  // NEW: Selected tier for itinerary generation
-  const [selectedTier, setSelectedTier] = useState<string>('standard')
-  
-  // NEW: Ref for auto-scroll to success message
-  const itinerarySuccessRef = useRef<HTMLDivElement>(null)
-  
-  const router = useRouter() 
+  const supabase = createClient()
+  const router = useRouter()
   const searchParams = useSearchParams()
+
+  // URL params
   const preSelectedClientId = searchParams?.get('clientId')
   const conversationParam = searchParams?.get('conversation')
   const phoneParam = searchParams?.get('phone')
-  
-  const supabase = createClient()
 
-  // Sample conversation for testing
-  const sampleConversation = `Cliente: Hola, queremos hacer un tour a Memphis, Sakkara
-Agente: ¡Perfecto! ¿Cuántas personas?
-Cliente: 4 adultos
-Agente: ¿Para qué fecha?
-Cliente: 12 de noviembre
-Cliente: Y queremos añadir Dahshur también
-Cliente: Mi nombre es Inmaculada Yurba Minguez
-Cliente: Mi email es inmayurba@yahoo.es
-Agente: Perfecto, ¿en qué hotel se alojan?
-Cliente: Gran Plaza
-Cliente: Queremos algo de lujo, es nuestro aniversario`
+  // ============================================
+  // STATE
+  // ============================================
 
-  // Load conversation from URL params (from WhatsApp Inbox)
+  // User preferences (loaded from database)
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES)
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+
+  // Conversation & Analysis
+  const [conversation, setConversation] = useState('')
+  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Itinerary Generation
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generatedItinerary, setGeneratedItinerary] = useState<any>(null)
+  const [selectedTier, setSelectedTier] = useState<string>('standard')
+
+  // Client Management
+  const [existingClients, setExistingClients] = useState<ExistingClient[]>([])
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [clientSaved, setClientSaved] = useState(false)
+  const [isSavingClient, setIsSavingClient] = useState(false)
+
+  // UI State
+  const [fromInbox, setFromInbox] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
+
+  // Refs
+  const itinerarySuccessRef = useRef<HTMLDivElement>(null)
+
+  // ============================================
+  // EFFECTS
+  // ============================================
+
+  // 1. Load user preferences on mount
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          setPreferencesLoaded(true)
+          return
+        }
+
+        const { data, error } = await supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .single()
+
+        if (data && !error) {
+          const prefs: UserPreferences = {
+            default_cost_mode: data.default_cost_mode || 'auto',
+            default_tier: data.default_tier || 'standard',
+            default_margin_percent: data.default_margin_percent || 25,
+            default_currency: data.default_currency || 'EUR'
+          }
+          setUserPreferences(prefs)
+          setSelectedTier(prefs.default_tier)
+          console.log('✅ Loaded user preferences:', prefs)
+        } else {
+          console.log('ℹ️ No user preferences found, using defaults')
+        }
+      } catch (error) {
+        console.error('Error loading preferences:', error)
+      } finally {
+        setPreferencesLoaded(true)
+      }
+    }
+
+    loadUserPreferences()
+  }, [])
+
+  // 2. Load conversation from URL params (from WhatsApp Inbox)
   useEffect(() => {
     if (conversationParam) {
       const isBase64 = new URLSearchParams(window.location.search).get("encoded") === "base64"
-      const decoded = isBase64 
+      const decoded = isBase64
         ? decodeURIComponent(escape(atob(conversationParam)))
         : decodeURIComponent(conversationParam)
       setConversation(decoded)
@@ -129,7 +236,19 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
     }
   }, [conversationParam, phoneParam])
 
-  // Load client info when pre-selected from URL
+  // 3. Handle pre-selected client from URL
+  useEffect(() => {
+    if (preSelectedClientId && !selectedClientId) {
+      setSelectedClientId(preSelectedClientId)
+      setClientSaved(true)
+      loadClientInfo(preSelectedClientId)
+    }
+  }, [preSelectedClientId])
+
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
+
   const loadClientInfo = async (clientId: string) => {
     try {
       const { data, error } = await supabase
@@ -139,47 +258,30 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
         .single()
 
       if (error) throw error
-      
       console.log('Pre-selected client:', data)
     } catch (error) {
       console.error('Error loading client:', error)
     }
   }
 
-  // Check for pre-selected client from URL
-  useEffect(() => {
-    if (preSelectedClientId && !selectedClientId) {
-      setSelectedClientId(preSelectedClientId)
-      setClientSaved(true)
-      loadClientInfo(preSelectedClientId)
-    }
-  }, [preSelectedClientId])
-
   const loadSample = () => {
-    setConversation(sampleConversation)
+    setConversation(SAMPLE_CONVERSATION)
     setExtractedData(null)
     setGeneratedItinerary(null)
     setError(null)
     setClientSaved(false)
-    setSelectedTier('standard')
+    setSelectedTier(userPreferences.default_tier)
   }
 
-  // Helper to map budget_level to tier
-  const mapBudgetToTier = (budgetLevel: string): string => {
-    const mapping: Record<string, string> = {
-      'budget': 'budget',
-      'economy': 'budget',
-      'standard': 'standard',
-      'mid-range': 'standard',
-      'deluxe': 'deluxe',
-      'superior': 'deluxe',
-      'luxury': 'luxury',
-      'premium': 'luxury',
-      'vip': 'luxury',
-      'high-end': 'luxury'
+  const viewClientProfile = () => {
+    if (selectedClientId) {
+      router.push(`/clients/${selectedClientId}`)
     }
-    return mapping[budgetLevel?.toLowerCase()] || 'standard'
   }
+
+  // ============================================
+  // ANALYZE CONVERSATION
+  // ============================================
 
   const analyzeConversation = async () => {
     if (!conversation.trim()) {
@@ -213,9 +315,14 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
       }
 
       // Map budget_level to tier if AI extracted it
-      const detectedTier = mapBudgetToTier(result.data.budget_level || 'standard')
-      result.data.tier = detectedTier
-      setSelectedTier(detectedTier)
+      // But prefer user's default tier if AI didn't detect anything specific
+      const aiDetectedTier = mapBudgetToTier(result.data.budget_level || '')
+      const finalTier = result.data.budget_level
+        ? aiDetectedTier
+        : userPreferences.default_tier
+
+      result.data.tier = finalTier
+      setSelectedTier(finalTier)
 
       setExtractedData(result.data)
 
@@ -242,6 +349,10 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
     }
   }
 
+  // ============================================
+  // SAVE AS NEW CLIENT
+  // ============================================
+
   const saveAsNewClient = async () => {
     if (!extractedData) return
 
@@ -249,7 +360,6 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
     setError(null)
 
     try {
-      // Create new client
       const nameParts = extractedData.client_name.trim().split(' ')
       const firstName = nameParts[0] || ''
       const lastName = nameParts.slice(1).join(' ') || nameParts[0]
@@ -267,14 +377,13 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
           passport_type: 'other',
           preferred_language: extractedData.conversation_language || 'English',
           client_source: 'whatsapp',
-          vip_status: selectedTier === 'luxury' // Mark as VIP if luxury tier
+          vip_status: selectedTier === 'luxury'
         })
         .select()
         .single()
 
       if (clientError) throw clientError
 
-      // Create client preferences
       if (newClient) {
         await supabase
           .from('client_preferences')
@@ -285,10 +394,9 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
             interests: extractedData.interests.join(', '),
             dietary_restrictions: null,
             special_needs: extractedData.special_requests.join(', ') || null,
-            preferred_tier: selectedTier // Store preferred tier
+            preferred_tier: selectedTier
           })
 
-        // Create initial note
         await supabase
           .from('client_notes')
           .insert({
@@ -298,11 +406,10 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
             is_internal: true
           })
 
-        // Link client to WhatsApp conversation if we came from inbox
         if (phoneNumber) {
           await supabase
             .from('whatsapp_conversations')
-            .update({ 
+            .update({
               client_id: newClient.id,
               client_name: `${firstName} ${lastName}`.trim()
             })
@@ -320,10 +427,13 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
     }
   }
 
+  // ============================================
+  // GENERATE ITINERARY
+  // ============================================
+
   const generateItinerary = async () => {
     if (!extractedData) return
 
-    // If no client selected, prompt to create one
     if (!selectedClientId) {
       const shouldCreate = confirm('Create a new client profile before generating itinerary?')
       if (shouldCreate) {
@@ -341,9 +451,12 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
         body: JSON.stringify({
           ...extractedData,
           client_id: selectedClientId,
-          // Pass the selected tier explicitly
           tier: selectedTier,
-          budget_level: selectedTier // For backwards compatibility
+          budget_level: selectedTier,
+          // Pass user preferences
+          cost_mode: userPreferences.default_cost_mode,
+          margin_percent: userPreferences.default_margin_percent,
+          currency: userPreferences.default_currency
         })
       })
 
@@ -355,12 +468,10 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
 
       setGeneratedItinerary(result.data)
 
-      // Auto-scroll to success message
       setTimeout(() => {
         itinerarySuccessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 100)
 
-      // If client was saved, log this as a communication
       if (selectedClientId) {
         await supabase
           .from('communication_history')
@@ -381,20 +492,32 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
     }
   }
 
-  const viewClientProfile = () => {
-    if (selectedClientId) {
-      router.push(`/clients/${selectedClientId}`)
-    }
+  // ============================================
+  // RENDER
+  // ============================================
+
+  if (!preferencesLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3"></div>
+          <p className="text-sm text-gray-600">Loading preferences...</p>
+        </div>
+      </div>
+    )
   }
+
+  const tierColors = getTierColors(selectedTier)
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+
+        {/* HEADER */}
         <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4 mb-4">
           <div className="flex items-center gap-3 mb-3">
             {fromInbox && (
-              <Link 
+              <Link
                 href="/whatsapp-inbox"
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
@@ -404,15 +527,27 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
             <div className="p-2 bg-primary-100 rounded-lg">
               <MessageSquare className="w-5 h-5 text-primary-600" />
             </div>
-            <div>
+            <div className="flex-1">
               <h1 className="text-xl font-bold text-gray-900">AI WhatsApp Parser</h1>
               <p className="text-xs text-gray-600">
-                {fromInbox 
+                {fromInbox
                   ? 'Conversation loaded from WhatsApp Inbox → Analyze → Select Tier → Generate itinerary'
                   : 'Paste conversation → AI extracts info → Select Tier → Generate itinerary → Save client'
                 }
               </p>
             </div>
+
+            {/* Preferences Indicator */}
+            <Link
+             href="/settings?tab=preferences"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Edit default preferences"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">
+                Default: <strong className={tierColors.text}>{userPreferences.default_tier}</strong> • {userPreferences.default_currency} • {userPreferences.default_margin_percent}%
+              </span>
+            </Link>
           </div>
 
           {/* From Inbox Banner */}
@@ -428,7 +563,7 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
             </div>
           )}
 
-          {/* Stats */}
+          {/* Steps */}
           <div className="grid grid-cols-4 gap-3">
             <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
@@ -465,9 +600,10 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* MAIN CONTENT - TWO COLUMNS */}
         <div className="grid grid-cols-2 gap-4">
-          {/* Left: Input */}
+
+          {/* LEFT COLUMN: Input */}
           <div className="space-y-4">
             <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-3">
@@ -481,6 +617,7 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
                   </button>
                 )}
               </div>
+
               {preSelectedClientId && clientSaved && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
                   <div className="flex items-center gap-2 text-green-800">
@@ -491,6 +628,7 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
                   </div>
                 </div>
               )}
+
               <textarea
                 value={conversation}
                 onChange={(e) => setConversation(e.target.value)}
@@ -524,8 +662,10 @@ Client: Maybe next month, around 10 days
             </div>
           </div>
 
-          {/* Right: Extracted Data & Client Creation */}
+          {/* RIGHT COLUMN: Extracted Data & Actions */}
           <div className="space-y-4">
+
+            {/* Error Display */}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                 <p className="text-xs text-red-800">{error}</p>
@@ -534,7 +674,7 @@ Client: Maybe next month, around 10 days
 
             {extractedData && (
               <>
-                {/* Extracted Data */}
+                {/* Extracted Data Card */}
                 <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                   <h2 className="text-base font-bold text-gray-900 mb-3">Extracted Information</h2>
 
@@ -632,7 +772,7 @@ Client: Maybe next month, around 10 days
                   </div>
                 </div>
 
-                {/* NEW: Service Tier Selection */}
+                {/* Service Tier Selection */}
                 <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Crown className="w-4 h-4 text-amber-600" />
@@ -646,7 +786,7 @@ Client: Maybe next month, around 10 days
                   <p className="text-xs text-gray-600 mb-3">
                     Select the service tier for this itinerary. AI will use matching suppliers.
                   </p>
-                  
+
                   <div className="grid grid-cols-2 gap-2">
                     {TIER_OPTIONS.map((tier) => (
                       <button
@@ -672,6 +812,11 @@ Client: Maybe next month, around 10 days
                           }`}>
                             {tier.label}
                           </span>
+                          {tier.value === userPreferences.default_tier && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded">
+                              default
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-gray-500">{tier.description}</p>
                       </button>
@@ -687,14 +832,14 @@ Client: Maybe next month, around 10 days
                   </div>
                 </div>
 
-                {/* Existing Clients */}
+                {/* Existing Clients Warning */}
                 {existingClients.length > 0 && !clientSaved && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <h3 className="text-sm font-bold text-gray-900 mb-2">⚠️ Existing Clients Found</h3>
                     <p className="text-xs text-gray-600 mb-3">
                       We found {existingClients.length} client(s) with matching email/phone:
                     </p>
-                    
+
                     <div className="space-y-2 mb-3">
                       {existingClients.map((client) => (
                         <div
@@ -736,7 +881,7 @@ Client: Maybe next month, around 10 days
                     <p className="text-xs text-gray-600 mb-3">
                       Create a new client profile in your CRM with this information
                     </p>
-                    
+
                     <button
                       onClick={saveAsNewClient}
                       disabled={isSavingClient}
@@ -767,7 +912,7 @@ Client: Maybe next month, around 10 days
                         <p className="text-xs text-gray-600">New client added to your CRM</p>
                       </div>
                     </div>
-                    
+
                     <button
                       onClick={viewClientProfile}
                       className="w-full px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
@@ -783,17 +928,22 @@ Client: Maybe next month, around 10 days
                   <h3 className="text-sm font-bold text-gray-900 mb-2">Generate Itinerary</h3>
                   <p className="text-xs text-gray-600 mb-3">
                     AI will create a complete day-by-day itinerary using{' '}
-                    <span className={`font-semibold ${
-                      selectedTier === 'luxury' ? 'text-amber-600' :
-                      selectedTier === 'deluxe' ? 'text-purple-600' :
-                      selectedTier === 'standard' ? 'text-blue-600' :
-                      'text-gray-600'
-                    }`}>
+                    <span className={`font-semibold ${tierColors.text}`}>
                       {selectedTier.toUpperCase()}
                     </span>
                     {' '}tier suppliers
                   </p>
-                  
+
+                  {/* Settings Preview */}
+                  <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
+                    <Settings className="w-3 h-3" />
+                    <span>
+                      {userPreferences.default_cost_mode === 'auto' ? 'Auto-calculate' : 'Manual'} costs
+                      • {userPreferences.default_margin_percent}% margin
+                      • {userPreferences.default_currency}
+                    </span>
+                  </div>
+
                   {/* Selected Tier Badge */}
                   <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg">
                     {selectedTier === 'luxury' && <Crown className="w-4 h-4 text-amber-600" />}
@@ -802,7 +952,7 @@ Client: Maybe next month, around 10 days
                       Using <strong>{selectedTier}</strong> tier hotels, vehicles, guides, and restaurants
                     </span>
                   </div>
-                  
+
                   <button
                     onClick={generateItinerary}
                     disabled={isGenerating}
@@ -830,7 +980,7 @@ Client: Maybe next month, around 10 days
                       <div>
                         <h3 className="text-sm font-bold text-gray-900">Itinerary Generated!</h3>
                         <p className="text-xs text-gray-600">
-                          {generatedItinerary.itinerary_code} • €{generatedItinerary.total_cost?.toFixed(2) || '0.00'}
+                          {generatedItinerary.itinerary_code} • {userPreferences.default_currency} {generatedItinerary.total_cost?.toFixed(2) || '0.00'}
                           {generatedItinerary.tier && (
                             <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${
                               generatedItinerary.tier === 'luxury' ? 'bg-amber-100 text-amber-700' :
@@ -880,7 +1030,7 @@ Client: Maybe next month, around 10 days
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="flex gap-2">
                       <button
                         onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
