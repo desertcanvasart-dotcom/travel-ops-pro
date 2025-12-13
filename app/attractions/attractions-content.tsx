@@ -5,6 +5,17 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import {
+  Search, Plus, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+} from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 // ============================================
 // INTERFACES
@@ -31,12 +42,137 @@ interface Attraction {
   updated_at?: string
 }
 
+interface Toast {
+  id: string
+  type: 'success' | 'error'
+  message: string
+}
+
+// ============================================
+// PAGINATION COMPONENT
+// ============================================
+
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  startIndex,
+  endIndex,
+  itemsPerPage,
+  onPageChange,
+  onItemsPerPageChange
+}: {
+  currentPage: number
+  totalPages: number
+  totalItems: number
+  startIndex: number
+  endIndex: number
+  itemsPerPage: number
+  onPageChange: (page: number) => void
+  onItemsPerPageChange: (items: number) => void
+}) {
+  const goToPage = (page: number) => {
+    onPageChange(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Show</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+            className="px-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-600 bg-white"
+          >
+            {ITEMS_PER_PAGE_OPTIONS.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <span className="text-sm text-gray-500">per page</span>
+        </div>
+        <span className="text-sm text-gray-500">
+          Showing {startIndex + 1}-{endIndex} of {totalItems} attractions
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => goToPage(1)}
+          disabled={currentPage === 1}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="First page"
+        >
+          <ChevronsLeft className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Previous page"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+
+        {/* Page numbers */}
+        <div className="flex items-center gap-1 mx-2">
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum: number
+            if (totalPages <= 5) {
+              pageNum = i + 1
+            } else if (currentPage <= 3) {
+              pageNum = i + 1
+            } else if (currentPage >= totalPages - 2) {
+              pageNum = totalPages - 4 + i
+            } else {
+              pageNum = currentPage - 2 + i
+            }
+            
+            return (
+              <button
+                key={pageNum}
+                onClick={() => goToPage(pageNum)}
+                className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
+                  currentPage === pageNum
+                    ? 'bg-amber-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {pageNum}
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Next page"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => goToPage(totalPages)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Last page"
+        >
+          <ChevronsRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
 
 export default function AttractionsContent() {
   const searchParams = useSearchParams()
+  const dialog = useConfirmDialog()
+  
   const [attractions, setAttractions] = useState<Attraction[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -45,6 +181,11 @@ export default function AttractionsContent() {
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingAttraction, setEditingAttraction] = useState<Attraction | null>(null)
+  const [toasts, setToasts] = useState<Toast[]>([])
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
   
   const today = new Date().toISOString().split('T')[0]
   const nextYear = new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]
@@ -67,6 +208,13 @@ export default function AttractionsContent() {
     is_active: true
   })
 
+  // Toast helper
+  const showToast = (type: 'success' | 'error', message: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, message }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
+  }
+
   // Fetch attractions
   const fetchAttractions = async () => {
     try {
@@ -78,6 +226,7 @@ export default function AttractionsContent() {
       setLoading(false)
     } catch (error) {
       console.error('Error fetching attractions:', error)
+      showToast('error', 'Failed to load attractions')
       setLoading(false)
     }
   }
@@ -93,6 +242,11 @@ export default function AttractionsContent() {
       }
     }
   }, [searchParams])
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, selectedCity, selectedCategory, showInactive, itemsPerPage])
 
   // Generate service code
   const generateServiceCode = () => {
@@ -184,21 +338,25 @@ export default function AttractionsContent() {
       const data = await response.json()
       
       if (data.success) {
-        alert(editingAttraction ? 'Attraction updated!' : 'Attraction created!')
+        showToast('success', editingAttraction ? 'Attraction updated!' : 'Attraction created!')
         setShowModal(false)
         fetchAttractions()
       } else {
-        alert('Error: ' + data.error)
+        showToast('error', data.error || 'Failed to save')
       }
     } catch (error) {
       console.error('Error saving attraction:', error)
-      alert('Failed to save attraction')
+      showToast('error', 'Failed to save attraction')
     }
   }
 
   // Delete attraction
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"?`)) return
+    const confirmed = await dialog.confirmDelete('Attraction',
+      `Are you sure you want to delete "${name}"? This action cannot be undone.`
+    )
+    
+    if (!confirmed) return
     
     try {
       const response = await fetch(`/api/resources/attractions/${id}`, {
@@ -208,14 +366,14 @@ export default function AttractionsContent() {
       const data = await response.json()
       
       if (data.success) {
-        alert('Attraction deleted!')
+        showToast('success', 'Attraction deleted!')
         fetchAttractions()
       } else {
-        alert('Error: ' + data.error)
+        await dialog.alert('Error', data.error || 'Failed to delete attraction', 'warning')
       }
     } catch (error) {
       console.error('Error deleting attraction:', error)
-      alert('Failed to delete attraction')
+      await dialog.alert('Error', 'Failed to delete attraction. Please try again.', 'warning')
     }
   }
 
@@ -234,6 +392,13 @@ export default function AttractionsContent() {
     return matchesSearch && matchesCity && matchesCategory && matchesActive
   })
 
+  // Pagination calculations
+  const totalItems = filteredAttractions.length
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
+  const paginatedAttractions = filteredAttractions.slice(startIndex, endIndex)
+
   // Get unique values for filters
   const cities = Array.from(new Set(attractions.map(a => a.city))).filter(Boolean).sort()
   const categories = Array.from(new Set(attractions.map(a => a.category))).filter(Boolean).sort()
@@ -249,7 +414,7 @@ export default function AttractionsContent() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <div className="w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-sm text-gray-600">Loading attractions...</p>
         </div>
       </div>
@@ -278,6 +443,18 @@ export default function AttractionsContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toasts */}
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow-lg ${
+            toast.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'
+          }`}>
+            {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+          </div>
+        ))}
+      </div>
+
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="container mx-auto px-4 lg:px-6 py-3">
@@ -291,7 +468,7 @@ export default function AttractionsContent() {
                 onClick={handleAddNew}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-1.5"
               >
-                <span>+</span>
+                <Plus className="w-4 h-4" />
                 Add Attraction
               </button>
               <Link 
@@ -363,13 +540,14 @@ export default function AttractionsContent() {
         {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-md border border-gray-200 p-3 mb-4">
           <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search by name, city, code, or category..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
               />
             </div>
             <div className="md:w-40">
@@ -433,7 +611,7 @@ export default function AttractionsContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredAttractions.map((attraction, index) => (
+                {paginatedAttractions.map((attraction, index) => (
                   <tr key={attraction.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors`}>
                     <td className="px-4 py-3">
                       <div>
@@ -483,24 +661,24 @@ export default function AttractionsContent() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => handleEdit(attraction)}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                          className="p-1 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded"
                         >
-                          Edit
+                          <Edit className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(attraction.id, attraction.attraction_name)}
-                          className="text-xs text-red-600 hover:text-red-800 font-medium"
+                          className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
                         >
-                          Delete
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {filteredAttractions.length === 0 && (
+                {paginatedAttractions.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center gap-2">
@@ -519,6 +697,20 @@ export default function AttractionsContent() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {totalItems > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+          )}
         </div>
       </div>
 
@@ -532,9 +724,9 @@ export default function AttractionsContent() {
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600 text-xl"
+                className="p-1 text-gray-400 hover:text-gray-600 rounded"
               >
-                ×
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -799,14 +991,15 @@ export default function AttractionsContent() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors"
+                  className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors flex items-center justify-center gap-2"
                 >
+                  <Check className="w-4 h-4" />
                   {editingAttraction ? 'Update Attraction' : 'Create Attraction'}
                 </button>
               </div>

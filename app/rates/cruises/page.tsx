@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star } from 'lucide-react'
+import { 
+  Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+} from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // ============================================
 // CONSTANTS
@@ -18,6 +22,7 @@ const TIER_OPTIONS = [
 const CITIES = ['Luxor', 'Aswan', 'Cairo']
 const SHIP_CATEGORIES = ['standard', 'deluxe', 'luxury']
 const CABIN_TYPES = ['standard', 'deluxe', 'suite']
+const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 // ============================================
 // INTERFACES
@@ -66,10 +71,129 @@ function TierBadge({ tier }: { tier: string | null }) {
 }
 
 // ============================================
+// PAGINATION COMPONENT
+// ============================================
+
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  startIndex,
+  endIndex,
+  itemsPerPage,
+  onPageChange,
+  onItemsPerPageChange
+}: {
+  currentPage: number
+  totalPages: number
+  totalItems: number
+  startIndex: number
+  endIndex: number
+  itemsPerPage: number
+  onPageChange: (page: number) => void
+  onItemsPerPageChange: (items: number) => void
+}) {
+  const goToPage = (page: number) => {
+    onPageChange(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Show</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+            className="px-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white"
+          >
+            {ITEMS_PER_PAGE_OPTIONS.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <span className="text-sm text-gray-500">per page</span>
+        </div>
+        <span className="text-sm text-gray-500">
+          Showing {startIndex + 1}-{endIndex} of {totalItems} cruises
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => goToPage(1)}
+          disabled={currentPage === 1}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="First page"
+        >
+          <ChevronsLeft className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Previous page"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+
+        {/* Page numbers */}
+        <div className="flex items-center gap-1 mx-2">
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum: number
+            if (totalPages <= 5) {
+              pageNum = i + 1
+            } else if (currentPage <= 3) {
+              pageNum = i + 1
+            } else if (currentPage >= totalPages - 2) {
+              pageNum = totalPages - 4 + i
+            } else {
+              pageNum = currentPage - 2 + i
+            }
+            
+            return (
+              <button
+                key={pageNum}
+                onClick={() => goToPage(pageNum)}
+                className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
+                  currentPage === pageNum
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {pageNum}
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Next page"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => goToPage(totalPages)}
+          disabled={currentPage === totalPages}
+          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          title="Last page"
+        >
+          <ChevronsRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
 export default function CruisesPage() {
+  const dialog = useConfirmDialog()
+  
   const [cruises, setCruises] = useState<Cruise[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -80,6 +204,10 @@ export default function CruisesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingCruise, setEditingCruise] = useState<Cruise | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   const [formData, setFormData] = useState({
     cruise_code: '',
@@ -126,6 +254,11 @@ export default function CruisesPage() {
   useEffect(() => {
     fetchCruises()
   }, [])
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, selectedCategory, selectedCabin, filterTier, showInactive, itemsPerPage])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
@@ -232,21 +365,25 @@ export default function CruisesPage() {
     }
   }
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete cruise "${name}"?`)) return
+  const handleDelete = async (cruise: Cruise) => {
+    const confirmed = await dialog.confirmDelete('Cruise Rate',
+      `Are you sure you want to delete "${cruise.ship_name}" (${cruise.cruise_code})? This action cannot be undone.`
+    )
+    
+    if (!confirmed) return
 
     try {
-      const response = await fetch(`/api/rates/cruises/${id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/rates/cruises/${cruise.id}`, { method: 'DELETE' })
       const data = await response.json()
       
       if (data.success) {
         showToast('success', 'Cruise deleted!')
         fetchCruises()
       } else {
-        showToast('error', data.error || 'Failed to delete')
+        await dialog.alert('Error', data.error || 'Failed to delete cruise', 'warning')
       }
     } catch (error) {
-      showToast('error', 'Failed to delete cruise')
+      await dialog.alert('Error', 'Failed to delete cruise. Please try again.', 'warning')
     }
   }
 
@@ -263,6 +400,13 @@ export default function CruisesPage() {
 
     return matchesSearch && matchesCategory && matchesCabin && matchesActive && matchesTier
   })
+
+  // Pagination calculations
+  const totalItems = filteredCruises.length
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
+  const paginatedCruises = filteredCruises.slice(startIndex, endIndex)
 
   const stats = {
     total: cruises.length,
@@ -412,104 +556,120 @@ export default function CruisesPage() {
 
         {/* Table */}
         <div className="bg-white rounded-lg shadow-md border overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-blue-50 border-b border-blue-100">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Ship / Code</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Category</th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Route</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Nights</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Cabin</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Tier</th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Single</th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Double</th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Triple</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Status</th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredCruises.map((cruise, idx) => (
-                <tr key={cruise.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {cruise.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{cruise.ship_name}</p>
-                        <p className="text-xs text-gray-500 font-mono">{cruise.cruise_code}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      cruise.ship_category === 'luxury' ? 'bg-amber-100 text-amber-800' :
-                      cruise.ship_category === 'deluxe' ? 'bg-blue-100 text-blue-800' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {cruise.ship_category}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">
-                    {cruise.embark_city} → {cruise.disembark_city}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                      {cruise.duration_nights}N
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      cruise.cabin_type === 'suite' ? 'bg-purple-100 text-purple-800' :
-                      cruise.cabin_type === 'deluxe' ? 'bg-indigo-100 text-indigo-800' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {cruise.cabin_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <TierBadge tier={cruise.tier} />
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                    €{cruise.rate_single_eur}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                    €{cruise.rate_double_eur}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                    {cruise.rate_triple_eur ? `€${cruise.rate_triple_eur}` : '-'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      cruise.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {cruise.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => handleEdit(cruise)} className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete(cruise.id, cruise.ship_name)} className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filteredCruises.length === 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-blue-50 border-b border-blue-100">
                 <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-gray-500">
-                    <Ship className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p className="font-medium">No cruises found</p>
-                    <button onClick={handleAddNew} className="mt-2 text-sm text-blue-600 hover:underline">
-                      Add your first cruise
-                    </button>
-                  </td>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Ship / Code</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Category</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Route</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Nights</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Cabin</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Tier</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Single</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Double</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Triple</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Status</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paginatedCruises.map((cruise, idx) => (
+                  <tr key={cruise.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {cruise.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{cruise.ship_name}</p>
+                          <p className="text-xs text-gray-500 font-mono">{cruise.cruise_code}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        cruise.ship_category === 'luxury' ? 'bg-amber-100 text-amber-800' :
+                        cruise.ship_category === 'deluxe' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {cruise.ship_category}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {cruise.embark_city} → {cruise.disembark_city}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                        {cruise.duration_nights}N
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        cruise.cabin_type === 'suite' ? 'bg-purple-100 text-purple-800' :
+                        cruise.cabin_type === 'deluxe' ? 'bg-indigo-100 text-indigo-800' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {cruise.cabin_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <TierBadge tier={cruise.tier} />
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                      €{cruise.rate_single_eur}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
+                      €{cruise.rate_double_eur}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
+                      {cruise.rate_triple_eur ? `€${cruise.rate_triple_eur}` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        cruise.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {cruise.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => handleEdit(cruise)} className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDelete(cruise)} className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {paginatedCruises.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center text-gray-500">
+                      <Ship className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium">No cruises found</p>
+                      <button onClick={handleAddNew} className="mt-2 text-sm text-blue-600 hover:underline">
+                        Add your first cruise
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalItems > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+            />
+          )}
         </div>
       </div>
 

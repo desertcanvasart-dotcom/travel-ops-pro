@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ConciergeBell, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ConciergeBell, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface HotelStaffRate {
   id: string
@@ -19,8 +20,10 @@ interface Toast { id: string; type: 'success' | 'error'; message: string }
 
 const SERVICE_TYPES = ['porter', 'checkin_assist', 'full_service', 'concierge']
 const HOTEL_CATEGORIES = ['budget', 'standard', 'luxury', 'all']
+const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function HotelServicesPage() {
+  const dialog = useConfirmDialog()
   const [rates, setRates] = useState<HotelStaffRate[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -30,6 +33,8 @@ export default function HotelServicesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingRate, setEditingRate] = useState<HotelStaffRate | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   const [formData, setFormData] = useState({
     service_code: '',
@@ -60,6 +65,8 @@ export default function HotelServicesPage() {
   }
 
   useEffect(() => { fetchRates() }, [])
+
+  useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedService, selectedCategory, showInactive, itemsPerPage])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
@@ -131,14 +138,15 @@ export default function HotelServicesPage() {
     }
   }
 
-  const handleDelete = async (id: string, service: string) => {
-    if (!confirm(`Delete hotel service "${service}"?`)) return
+  const handleDelete = async (rate: HotelStaffRate) => {
+    const confirmed = await dialog.confirmDelete('Hotel Service', `Delete hotel service "${formatServiceType(rate.service_type)}"?`)
+    if (!confirmed) return
     try {
-      const response = await fetch(`/api/rates/hotel-services/${id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/rates/hotel-services/${rate.id}`, { method: 'DELETE' })
       const data = await response.json()
       if (data.success) { showToast('success', 'Deleted!'); fetchRates() }
-      else showToast('error', data.error)
-    } catch { showToast('error', 'Failed to delete') }
+      else await dialog.alert('Error', data.error || 'Failed to delete', 'warning')
+    } catch { await dialog.alert('Error', 'Failed to delete', 'warning') }
   }
 
   const filteredRates = rates.filter(rate => {
@@ -150,6 +158,14 @@ export default function HotelServicesPage() {
     const matchesActive = showInactive || rate.is_active
     return matchesSearch && matchesService && matchesCategory && matchesActive
   })
+
+  const totalItems = filteredRates.length
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
+  const paginatedRates = filteredRates.slice(startIndex, endIndex)
+
+  const goToPage = (page: number) => setCurrentPage(Math.max(1, Math.min(page, totalPages)))
 
   if (loading) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="w-8 h-8 border-4 border-rose-600 border-t-transparent rounded-full animate-spin"></div></div>
@@ -219,7 +235,7 @@ export default function HotelServicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredRates.map((rate, idx) => (
+              {paginatedRates.map((rate, idx) => (
                 <tr key={rate.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-rose-50`}>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -247,16 +263,44 @@ export default function HotelServicesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={() => handleEdit(rate)} className="p-1 text-gray-500 hover:text-rose-600 rounded"><Edit className="w-4 h-4" /></button>
-                      <button onClick={() => handleDelete(rate.id, formatServiceType(rate.service_type))} className="p-1 text-gray-500 hover:text-red-600 rounded"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => handleDelete(rate)} className="p-1 text-gray-500 hover:text-red-600 rounded"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {filteredRates.length === 0 && (
+              {paginatedRates.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">No hotel service rates found</td></tr>
               )}
             </tbody>
           </table>
+
+          {/* Pagination */}
+          {totalItems > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Show</span>
+                  <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="px-2 py-1 text-sm border border-gray-200 rounded-md bg-white">
+                    {ITEMS_PER_PAGE_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                  <span className="text-sm text-gray-500">per page</span>
+                </div>
+                <span className="text-sm text-gray-500">Showing {startIndex + 1}-{endIndex} of {totalItems}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => goToPage(1)} disabled={currentPage === 1} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40"><ChevronsLeft className="h-4 w-4" /></button>
+                <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button>
+                <div className="flex items-center gap-1 mx-2">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum = totalPages <= 5 ? i + 1 : currentPage <= 3 ? i + 1 : currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i
+                    return <button key={pageNum} onClick={() => goToPage(pageNum)} className={`min-w-[32px] h-8 px-2 text-sm rounded-md ${currentPage === pageNum ? 'bg-rose-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{pageNum}</button>
+                  })}
+                </div>
+                <button onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button>
+                <button onClick={() => goToPage(totalPages)} disabled={currentPage === totalPages} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40"><ChevronsRight className="h-4 w-4" /></button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -7,7 +7,6 @@ import {
   User, 
   Mail, 
   Bell, 
-  Users, 
   CreditCard,
   Settings,
   Save,
@@ -56,15 +55,6 @@ interface EmailSettings {
   auto_reply_message?: string
 }
 
-interface EmailTemplate {
-  id: string
-  name: string
-  subject: string
-  body: string
-  category: string
-  created_at: string
-}
-
 interface NotificationPreference {
   task_assigned: boolean
   task_due_soon: boolean
@@ -72,16 +62,6 @@ interface NotificationPreference {
   task_completed: boolean
   email_enabled: boolean
   in_app_enabled: boolean
-}
-
-interface TeamMember {
-  id: string
-  name: string
-  email: string
-  role: string
-  phone?: string
-  is_active: boolean
-  created_at: string
 }
 
 interface UserPreferences {
@@ -101,7 +81,6 @@ const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'email', label: 'Email', icon: Mail },
   { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'team', label: 'Team', icon: Users },
   { id: 'preferences', label: 'Preferences', icon: Settings },
 ]
 
@@ -165,7 +144,6 @@ function SettingsContent() {
     email_enabled: true,
     in_app_enabled: true
   })
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
     default_cost_mode: 'auto',
     default_tier: 'standard',
@@ -195,9 +173,6 @@ function SettingsContent() {
             break
           case 'notifications':
             await fetchNotificationPrefs()
-            break
-          case 'team':
-            await fetchTeamMembers()
             break
           case 'preferences':
             await fetchPreferences()
@@ -231,6 +206,7 @@ function SettingsContent() {
       console.error('Error fetching profile:', error)
     }
   }
+
   const fetchPreferences = async () => {
     try {
       const supabase = createClient()
@@ -289,18 +265,6 @@ function SettingsContent() {
       }
     } catch (error) {
       console.error('Error fetching notification prefs:', error)
-    }
-  }
-
-  const fetchTeamMembers = async () => {
-    try {
-      const response = await fetch('/api/team-members')
-      if (response.ok) {
-        const data = await response.json()
-        setTeamMembers(data.data || data.members || [])
-      }
-    } catch (error) {
-      console.error('Error fetching team members:', error)
     }
   }
 
@@ -708,8 +672,8 @@ function SettingsContent() {
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
-      </div>
-    )  
+    </div>
+  )
 
   const renderNotificationsTab = () => (
     <div className="space-y-6">
@@ -802,69 +766,6 @@ function SettingsContent() {
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
-      </div>
-    </div>
-  )
-
-  const renderTeamTab = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium text-gray-900">Team Members</h3>
-          <p className="text-sm text-gray-500 mt-1">Manage your team and their roles.</p>
-        </div>
-        <button 
-          onClick={() => router.push('/team-members/new')}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Member
-        </button>
-      </div>
-
-      {/* Team List */}
-      <div className="space-y-3">
-        {teamMembers.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 border border-dashed border-gray-300 rounded-lg">
-            <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No team members yet</p>
-            <p className="text-sm text-gray-400 mt-1">Add team members to assign tasks</p>
-          </div>
-        ) : (
-          teamMembers.map(member => (
-            <div key={member.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-                    <User className="w-5 h-5 text-primary-600" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-medium text-gray-900">{member.name}</h4>
-                      {!member.is_active && (
-                        <span className="px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded">
-                          Inactive
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500">{member.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="px-2 py-1 text-xs font-medium bg-[#647C47]/10 text-[#647C47] rounded">
-                    {member.role}
-                  </span>
-                  <button 
-                    onClick={() => router.push(`/team-members/${member.id}`)}
-                    className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
       </div>
     </div>
   )
@@ -1139,7 +1040,6 @@ function SettingsContent() {
               {activeTab === 'profile' && renderProfileTab()}
               {activeTab === 'email' && renderEmailTab()}
               {activeTab === 'notifications' && renderNotificationsTab()}
-              {activeTab === 'team' && renderTeamTab()}
               {activeTab === 'preferences' && renderPreferencesTab()}
             </>
           )}

@@ -8,8 +8,13 @@ import {
   Trash2, 
   X,
   Car,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface TransportationRate {
   id: string
@@ -19,9 +24,10 @@ interface TransportationRate {
   capacity_min: number
   capacity_max: number
   city: string
+  destination_city?: string | null
   base_rate_eur: number
-  base_rate_non: number        // Mapped from base_rate_non_eur by API
-  base_rate_non_eur?: number   // Actual database column
+  base_rate_non: number
+  base_rate_non_eur?: number
   season: string | null
   rate_valid_from: string
   rate_valid_to: string
@@ -39,6 +45,7 @@ interface FormData {
   capacity_min: number
   capacity_max: number
   city: string
+  destination_city: string
   base_rate_eur: number
   base_rate_non: number
   season: string
@@ -56,6 +63,7 @@ const initialFormData: FormData = {
   capacity_min: 1,
   capacity_max: 2,
   city: '',
+  destination_city: '',
   base_rate_eur: 0,
   base_rate_non: 0,
   season: '',
@@ -67,13 +75,13 @@ const initialFormData: FormData = {
 }
 
 const SERVICE_TYPES = [
-  { value: 'airport_transfer', label: 'Airport Transfer' },
-  { value: 'day_tour', label: 'Day Tour' },
-  { value: 'multi_day', label: 'Multi-Day' },
-  { value: 'city_transfer', label: 'City Transfer' },
-  { value: 'intercity', label: 'Intercity' },
-  { value: 'half_day', label: 'Half Day' },
-  { value: 'sound_light', label: 'Sound & Light Transfer' },
+  { value: 'airport_transfer', label: 'Airport Transfer', needsDestination: false },
+  { value: 'day_tour', label: 'Day Tour', needsDestination: false },
+  { value: 'multi_day', label: 'Multi-Day', needsDestination: false },
+  { value: 'city_transfer', label: 'City Transfer', needsDestination: true },
+  { value: 'intercity', label: 'Intercity', needsDestination: true },
+  { value: 'half_day', label: 'Half Day', needsDestination: false },
+  { value: 'sound_light', label: 'Sound & Light Transfer', needsDestination: false },
 ]
 
 const VEHICLE_TYPES = [
@@ -81,14 +89,18 @@ const VEHICLE_TYPES = [
   { value: 'Minivan', label: 'Minivan', minPax: 3, maxPax: 8 },
   { value: 'Van', label: 'Van', minPax: 9, maxPax: 14 },
   { value: 'Minibus', label: 'Minibus', minPax: 15, maxPax: 24 },
-  { value: 'Bus', label: 'Bus', minPax: 25, maxPax: 50 },
+  { value: 'Bus', label: 'Bus', minPax: 15, maxPax: 45 },
   { value: 'SUV', label: 'SUV', minPax: 1, maxPax: 4 },
   { value: '4x4', label: '4x4', minPax: 1, maxPax: 6 },
 ]
 
 const CITIES = ['Cairo', 'Giza', 'Luxor', 'Aswan', 'Alexandria', 'Hurghada', 'Sharm El Sheikh', 'Dahab', 'Siwa', 'Marsa Alam']
 
+const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
+
 export default function TransportationContent() {
+  const dialog = useConfirmDialog()
+  
   const [rates, setRates] = useState<TransportationRate[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -101,6 +113,10 @@ export default function TransportationContent() {
   const [formData, setFormData] = useState<FormData>(initialFormData)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   const fetchRates = useCallback(async () => {
     try {
@@ -126,11 +142,29 @@ export default function TransportationContent() {
     fetchRates()
   }, [fetchRates])
 
-  const generateServiceCode = (city: string, serviceType: string, vehicleType: string) => {
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, cityFilter, serviceTypeFilter, vehicleTypeFilter, showInactive, itemsPerPage])
+
+  // Check if service type needs destination city
+  const needsDestinationCity = (serviceType: string) => {
+    const type = SERVICE_TYPES.find(t => t.value === serviceType)
+    return type?.needsDestination || false
+  }
+
+  const generateServiceCode = (city: string, serviceType: string, vehicleType: string, destinationCity?: string) => {
     if (!city) return ''
     const cityCode = city.toUpperCase().replace(/\s+/g, '-')
     const typeCode = serviceType.toUpperCase().replace(/_/g, '-')
     const vehicleCode = vehicleType.toUpperCase()
+    
+    // For intercity, include destination
+    if (needsDestinationCity(serviceType) && destinationCity) {
+      const destCode = destinationCity.toUpperCase().replace(/\s+/g, '-')
+      return `${cityCode}-TO-${destCode}-${vehicleCode}`
+    }
+    
     return `${cityCode}-${typeCode}-${vehicleCode}`
   }
 
@@ -141,7 +175,7 @@ export default function TransportationContent() {
       vehicle_type: vehicleType,
       capacity_min: vehicle?.minPax || 1,
       capacity_max: vehicle?.maxPax || 2,
-      service_code: generateServiceCode(prev.city, prev.service_type, vehicleType)
+      service_code: generateServiceCode(prev.city, prev.service_type, vehicleType, prev.destination_city)
     }))
   }
 
@@ -149,15 +183,25 @@ export default function TransportationContent() {
     setFormData(prev => ({
       ...prev,
       city,
-      service_code: generateServiceCode(city, prev.service_type, prev.vehicle_type)
+      service_code: generateServiceCode(city, prev.service_type, prev.vehicle_type, prev.destination_city)
+    }))
+  }
+
+  const handleDestinationCityChange = (destinationCity: string) => {
+    setFormData(prev => ({
+      ...prev,
+      destination_city: destinationCity,
+      service_code: generateServiceCode(prev.city, prev.service_type, prev.vehicle_type, destinationCity)
     }))
   }
 
   const handleServiceTypeChange = (serviceType: string) => {
+    const needsDest = needsDestinationCity(serviceType)
     setFormData(prev => ({
       ...prev,
       service_type: serviceType,
-      service_code: generateServiceCode(prev.city, serviceType, prev.vehicle_type)
+      destination_city: needsDest ? prev.destination_city : '',
+      service_code: generateServiceCode(prev.city, serviceType, prev.vehicle_type, needsDest ? prev.destination_city : '')
     }))
   }
 
@@ -178,6 +222,7 @@ export default function TransportationContent() {
       capacity_min: rate.capacity_min,
       capacity_max: rate.capacity_max,
       city: rate.city,
+      destination_city: rate.destination_city || '',
       base_rate_eur: rate.base_rate_eur,
       base_rate_non: rate.base_rate_non || rate.base_rate_non_eur || 0,
       season: rate.season || '',
@@ -197,7 +242,20 @@ export default function TransportationContent() {
 
     // Validation
     if (!formData.city) {
-      setError('Please select a city')
+      setError('Please select a departure city')
+      setSaving(false)
+      return
+    }
+
+    // Validate destination city for intercity services
+    if (needsDestinationCity(formData.service_type) && !formData.destination_city) {
+      setError('Please select a destination city for intercity/city transfer services')
+      setSaving(false)
+      return
+    }
+
+    if (needsDestinationCity(formData.service_type) && formData.city === formData.destination_city) {
+      setError('Departure and destination cities must be different')
       setSaving(false)
       return
     }
@@ -235,33 +293,57 @@ export default function TransportationContent() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this transportation rate?')) return
+  const handleDelete = async (rate: TransportationRate) => {
+    const confirmed = await dialog.confirmDelete('Transportation Rate', 
+      `Are you sure you want to delete "${rate.service_code}"? This action cannot be undone.`
+    )
+    
+    if (!confirmed) return
 
     try {
-      const response = await fetch(`/api/resources/transportation/${id}`, {
+      const response = await fetch(`/api/resources/transportation/${rate.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
         fetchRates()
+        await dialog.alert('Deleted', 'Transportation rate has been deleted.', 'success')
       } else {
-        alert('Failed to delete transportation rate')
+        await dialog.alert('Error', 'Failed to delete transportation rate. Please try again.', 'warning')
       }
     } catch (error) {
       console.error('Error deleting transportation rate:', error)
-      alert('Failed to delete transportation rate')
+      await dialog.alert('Error', 'Failed to delete transportation rate. Please try again.', 'warning')
     }
   }
 
+  // Filter rates
   const filteredRates = rates.filter(rate => {
     const matchesSearch = 
       rate.service_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rate.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rate.vehicle_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (rate.destination_city && rate.destination_city.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (rate.supplier_name && rate.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()))
     return matchesSearch
   })
+
+  // Pagination calculations
+  const totalItems = filteredRates.length
+  const totalPages = Math.ceil(totalItems / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
+  const paginatedRates = filteredRates.slice(startIndex, endIndex)
+
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
+
+  const goToFirstPage = () => goToPage(1)
+  const goToLastPage = () => goToPage(totalPages)
+  const goToPrevPage = () => goToPage(currentPage - 1)
+  const goToNextPage = () => goToPage(currentPage + 1)
 
   // Stats
   const totalRates = rates.length
@@ -280,7 +362,7 @@ export default function TransportationContent() {
 
   return (
     <div className="p-6 space-y-4">
-      {/* Header - Fixed with proper spacing */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Car className="h-5 w-5 text-blue-600" />
@@ -410,77 +492,178 @@ export default function TransportationContent() {
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Service Type</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Vehicle</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Capacity</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">City</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Route</th>
               <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">EUR Rate</th>
               <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Status</th>
               <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredRates.length === 0 ? (
+            {paginatedRates.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
                   No transportation rates found
                 </td>
               </tr>
             ) : (
-              filteredRates.map((rate) => (
-                <tr key={rate.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2">
-                    <span className="text-sm font-mono text-gray-900">{rate.service_code}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="text-sm text-gray-600">
-                      {SERVICE_TYPES.find(t => t.value === rate.service_type)?.label || rate.service_type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="text-sm font-medium text-gray-900">{rate.vehicle_type}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="text-sm text-gray-600">{rate.capacity_min || 1}-{rate.capacity_max} pax</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="text-sm text-gray-600">{rate.city}</span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <span className="text-sm font-medium text-gray-900">€{Number(rate.base_rate_eur).toFixed(2)}</span>
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      rate.is_active 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {rate.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => openEditModal(rate)}
-                        className="p-1 text-gray-400 hover:text-[#647C47] transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(rate.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              paginatedRates.map((rate) => {
+                const isIntercity = needsDestinationCity(rate.service_type)
+                return (
+                  <tr key={rate.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <span className="text-sm font-mono text-gray-900">{rate.service_code}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm text-gray-600">
+                        {SERVICE_TYPES.find(t => t.value === rate.service_type)?.label || rate.service_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm font-medium text-gray-900">{rate.vehicle_type}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm text-gray-600">{rate.capacity_min || 1}-{rate.capacity_max} pax</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      {isIntercity && rate.destination_city ? (
+                        <div className="flex items-center gap-1 text-sm">
+                          <span className="text-gray-900">{rate.city}</span>
+                          <span className="text-gray-400">→</span>
+                          <span className="text-gray-900">{rate.destination_city}</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-600">{rate.city}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <span className="text-sm font-medium text-gray-900">€{Number(rate.base_rate_eur).toFixed(2)}</span>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        rate.is_active 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {rate.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEditModal(rate)}
+                          className="p-1 text-gray-400 hover:text-[#647C47] transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(rate)}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalItems > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Show</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="px-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] bg-white"
+                >
+                  {ITEMS_PER_PAGE_OPTIONS.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <span className="text-sm text-gray-500">per page</span>
+              </div>
+              <span className="text-sm text-gray-500">
+                Showing {startIndex + 1}-{endIndex} of {totalItems} rates
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={goToFirstPage}
+                disabled={currentPage === 1}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                title="First page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={goToPrevPage}
+                disabled={currentPage === 1}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                title="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {/* Page numbers */}
+              <div className="flex items-center gap-1 mx-2">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i
+                  } else {
+                    pageNum = currentPage - 2 + i
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
+                        currentPage === pageNum
+                          ? 'bg-[#647C47] text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage === totalPages}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                title="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={goToLastPage}
+                disabled={currentPage === totalPages}
+                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                title="Last page"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Add/Edit Modal - Fixed layout with better padding */}
+      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -511,23 +694,6 @@ export default function TransportationContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      City <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.city}
-                      onChange={(e) => handleCityChange(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      <option value="">Select City</option>
-                      {CITIES.map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Service Type <span className="text-red-500">*</span>
                     </label>
                     <select
@@ -541,9 +707,7 @@ export default function TransportationContent() {
                       ))}
                     </select>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Vehicle Type <span className="text-red-500">*</span>
@@ -559,7 +723,58 @@ export default function TransportationContent() {
                       ))}
                     </select>
                   </div>
+                </div>
 
+                {/* Route - Departure & Destination */}
+                <div className={`grid gap-4 ${needsDestinationCity(formData.service_type) ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                      {needsDestinationCity(formData.service_type) ? 'Departure City' : 'City'} <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.city}
+                      onChange={(e) => handleCityChange(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                    >
+                      <option value="">Select City</option>
+                      {CITIES.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {needsDestinationCity(formData.service_type) && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                        Destination City <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={formData.destination_city}
+                        onChange={(e) => handleDestinationCityChange(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      >
+                        <option value="">Select Destination</option>
+                        {CITIES.filter(city => city !== formData.city).map(city => (
+                          <option key={city} value={city}>{city}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Show route preview for intercity */}
+                {needsDestinationCity(formData.service_type) && formData.city && formData.destination_city && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-md">
+                    <span className="text-sm text-blue-700">Route:</span>
+                    <span className="text-sm font-medium text-blue-900">{formData.city}</span>
+                    <span className="text-blue-400">→</span>
+                    <span className="text-sm font-medium text-blue-900">{formData.destination_city}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
                       Service Code
@@ -572,33 +787,32 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Min Passengers
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.capacity_min}
-                      onChange={(e) => setFormData(prev => ({ ...prev, capacity_min: parseInt(e.target.value) || 1 }))}
-                      min="1"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Max Passengers
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.capacity_max}
-                      onChange={(e) => setFormData(prev => ({ ...prev, capacity_max: parseInt(e.target.value) || 2 }))}
-                      min="1"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                        Min Pax
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.capacity_min}
+                        onChange={(e) => setFormData(prev => ({ ...prev, capacity_min: parseInt(e.target.value) || 1 }))}
+                        min="1"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                        Max Pax
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.capacity_max}
+                        onChange={(e) => setFormData(prev => ({ ...prev, capacity_max: parseInt(e.target.value) || 2 }))}
+                        min="1"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
