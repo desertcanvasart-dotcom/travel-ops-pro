@@ -368,7 +368,7 @@ export default function ViewItineraryPage() {
 
     setGeneratingPDF(true)
     try {
-      const pdf = generateItineraryPDF(itinerary, days)
+      const pdf = await generateItineraryPDF(itinerary, days)
       const filename = `${itinerary.itinerary_code}_${itinerary.client_name.replace(/\s+/g, '_')}.pdf`
       pdf.save(filename)
     } catch (error) {
