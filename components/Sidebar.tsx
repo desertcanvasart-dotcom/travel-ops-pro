@@ -49,7 +49,9 @@ import {
   Compass,
   Car,
   UserCog,
-  Shield
+  Shield,
+  BookOpen,
+  Wand2
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -128,6 +130,18 @@ const navigation: NavSection[] = [
       { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
     ]
   },
+     
+  {
+    title: 'Content',
+    key: 'content',
+    roles: ['admin', 'manager'],
+    items: [
+      { label: 'Content Library', href: '/content-library', icon: Library },
+      { label: 'Writing Rules', href: '/content-library/rules', icon: BookOpen },
+      { label: 'AI Prompts', href: '/content-library/prompts', icon: Wand2 },
+    ]
+  },
+  
   {
     title: 'Accounting',
     key: 'accounting',
