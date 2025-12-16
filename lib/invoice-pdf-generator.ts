@@ -10,6 +10,9 @@ interface LineItem {
 interface Invoice {
   id: string
   invoice_number: string
+  invoice_type?: 'standard' | 'deposit' | 'final'
+  deposit_percent?: number
+  parent_invoice_id?: string | null
   client_name: string
   client_email: string
   line_items: LineItem[]
@@ -68,6 +71,17 @@ const formatDate = (dateString: string): string => {
   })
 }
 
+const getInvoiceTypeConfig = (type: string | undefined): { label: string; color: [number, number, number] } => {
+  switch (type) {
+    case 'deposit':
+      return { label: 'DEPOSIT INVOICE', color: [217, 119, 6] } // Amber
+    case 'final':
+      return { label: 'FINAL INVOICE', color: [5, 150, 105] } // Emerald
+    default:
+      return { label: 'INVOICE', color: [55, 65, 81] } // Dark gray
+  }
+}
+
 export function generateInvoicePDF(
   invoice: Invoice, 
   company: CompanyInfo = DEFAULT_COMPANY
@@ -83,6 +97,12 @@ export function generateInvoicePDF(
   const darkGray: [number, number, number] = [55, 65, 81]
   const mediumGray: [number, number, number] = [107, 114, 128]
   const lightGray: [number, number, number] = [243, 244, 246]
+  const amberColor: [number, number, number] = [217, 119, 6]
+  const emeraldColor: [number, number, number] = [5, 150, 105]
+
+  // Get invoice type configuration
+  const invoiceType = invoice.invoice_type || 'standard'
+  const typeConfig = getInvoiceTypeConfig(invoiceType)
 
   // ============================================
   // HEADER SECTION
@@ -94,12 +114,24 @@ export function generateInvoicePDF(
   doc.setFont('helvetica', 'bold')
   doc.text(company.name, margin, y)
 
-  // INVOICE label (right)
-  doc.setFontSize(28)
-  doc.setTextColor(...darkGray)
-  doc.text('INVOICE', pageWidth - margin, y, { align: 'right' })
+  // INVOICE label with type (right)
+  doc.setFontSize(24)
+  doc.setTextColor(...typeConfig.color)
+  doc.text(typeConfig.label, pageWidth - margin, y, { align: 'right' })
 
   y += 8
+
+  // Invoice type badge (for deposit/final)
+  if (invoiceType !== 'standard' && invoice.deposit_percent) {
+    doc.setFontSize(10)
+    doc.setTextColor(...typeConfig.color)
+    doc.setFont('helvetica', 'normal')
+    const badgeText = invoiceType === 'deposit' 
+      ? `${invoice.deposit_percent}% Booking Deposit`
+      : `Balance After ${invoice.deposit_percent}% Deposit`
+    doc.text(badgeText, pageWidth - margin, y, { align: 'right' })
+    y += 2
+  }
 
   // Company details
   doc.setFontSize(9)
@@ -125,6 +157,59 @@ export function generateInvoicePDF(
   doc.line(margin, y, pageWidth - margin, y)
 
   y += 15
+
+  // ============================================
+  // TRIP COST BREAKDOWN (for deposit/final invoices)
+  // ============================================
+
+  if (invoiceType !== 'standard' && invoice.deposit_percent) {
+    const fullTripCost = invoiceType === 'deposit'
+      ? (Number(invoice.total_amount) * 100) / invoice.deposit_percent
+      : Number(invoice.total_amount) + (Number(invoice.total_amount) * invoice.deposit_percent) / (100 - invoice.deposit_percent)
+
+    const depositAmount = (fullTripCost * invoice.deposit_percent) / 100
+    const balanceAmount = fullTripCost - depositAmount
+
+    // Background box
+    doc.setFillColor(250, 250, 250)
+    doc.roundedRect(margin, y - 2, contentWidth, 28, 3, 3, 'F')
+    doc.setDrawColor(229, 231, 235)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(margin, y - 2, contentWidth, 28, 3, 3, 'S')
+
+    // Title
+    doc.setFontSize(9)
+    doc.setTextColor(...darkGray)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Trip Cost Breakdown', margin + 5, y + 5)
+
+    y += 12
+
+    // Three columns
+    const col1X = margin + 5
+    const col2X = margin + contentWidth * 0.35
+    const col3X = margin + contentWidth * 0.70
+
+    doc.setFontSize(8)
+    doc.setTextColor(...mediumGray)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Full Trip Cost', col1X, y)
+    doc.text(`Deposit (${invoice.deposit_percent}%)`, col2X, y)
+    doc.text('Balance on Arrival', col3X, y)
+
+    y += 5
+
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...darkGray)
+    doc.text(formatCurrency(fullTripCost, invoice.currency), col1X, y)
+    doc.setTextColor(...amberColor)
+    doc.text(formatCurrency(depositAmount, invoice.currency), col2X, y)
+    doc.setTextColor(...emeraldColor)
+    doc.text(formatCurrency(balanceAmount, invoice.currency), col3X, y)
+
+    y += 18
+  }
 
   // ============================================
   // INVOICE INFO & CLIENT SECTION
@@ -168,7 +253,8 @@ export function generateInvoicePDF(
   doc.text('Due Date:', leftColX, y)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...darkGray)
-  doc.text(invoice.due_date ? formatDate(invoice.due_date) : '-', leftColX + 35, y)
+  const dueDateText = invoice.due_date ? formatDate(invoice.due_date) : (invoiceType === 'final' ? 'On Arrival' : '-')
+  doc.text(dueDateText, leftColX + 35, y)
 
   // Client email
   if (invoice.client_email) {
@@ -198,6 +284,12 @@ export function generateInvoicePDF(
   doc.setTextColor(...statusColor)
   doc.setFont('helvetica', 'bold')
   doc.text(invoice.status.toUpperCase(), leftColX + 35, y)
+
+  // Invoice type badge (next to status)
+  if (invoiceType !== 'standard') {
+    doc.setTextColor(...typeConfig.color)
+    doc.text(`• ${invoiceType.toUpperCase()}`, leftColX + 60, y)
+  }
 
   y += 20
 
@@ -304,12 +396,20 @@ export function generateInvoicePDF(
   doc.line(totalsX, y, pageWidth - margin, y)
   y += 8
 
-  // Total
+  // Total - with type-specific label
   doc.setFontSize(12)
   doc.setTextColor(...darkGray)
   doc.setFont('helvetica', 'bold')
-  doc.text('Total:', totalsX, y)
-  doc.setTextColor(...primaryColor)
+  
+  let totalLabel = 'Total:'
+  if (invoiceType === 'deposit') {
+    totalLabel = 'Deposit Amount:'
+  } else if (invoiceType === 'final') {
+    totalLabel = 'Balance Due:'
+  }
+  
+  doc.text(totalLabel, totalsX, y)
+  doc.setTextColor(...typeConfig.color)
   doc.text(formatCurrency(invoice.total_amount, invoice.currency), totalsValueX, y, { align: 'right' })
   y += 10
 
@@ -395,6 +495,50 @@ export function generateInvoicePDF(
   }
 
   // ============================================
+  // IMPORTANT NOTICE FOR DEPOSIT INVOICES
+  // ============================================
+
+  if (invoiceType === 'deposit') {
+    y += 5
+    doc.setFillColor(254, 243, 199) // Light amber
+    doc.roundedRect(margin, y, contentWidth, 20, 2, 2, 'F')
+    doc.setDrawColor(...amberColor)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(margin, y, contentWidth, 20, 2, 2, 'S')
+
+    doc.setFontSize(9)
+    doc.setTextColor(...amberColor)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Important Notice', margin + 5, y + 7)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(146, 64, 14)
+    doc.text('This deposit is required to confirm your booking. The remaining balance is payable upon arrival.', margin + 5, y + 14)
+    
+    y += 25
+  }
+
+  if (invoiceType === 'final') {
+    y += 5
+    doc.setFillColor(209, 250, 229) // Light emerald
+    doc.roundedRect(margin, y, contentWidth, 20, 2, 2, 'F')
+    doc.setDrawColor(...emeraldColor)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(margin, y, contentWidth, 20, 2, 2, 'S')
+
+    doc.setFontSize(9)
+    doc.setTextColor(...emeraldColor)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Balance Payment', margin + 5, y + 7)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(6, 95, 70)
+    doc.text('This invoice represents the remaining balance after your deposit. Payable in cash upon arrival in Cairo.', margin + 5, y + 14)
+    
+    y += 25
+  }
+
+  // ============================================
   // FOOTER
   // ============================================
 
@@ -403,7 +547,7 @@ export function generateInvoicePDF(
   doc.setFontSize(8)
   doc.setTextColor(...mediumGray)
   doc.setFont('helvetica', 'normal')
-  doc.text('Thank you for your business!', pageWidth / 2, footerY, { align: 'center' })
+  doc.text('Thank you for choosing Travel2Egypt!', pageWidth / 2, footerY, { align: 'center' })
   doc.text(
     `Generated on ${formatDate(new Date().toISOString())}`,
     pageWidth / 2,
@@ -416,6 +560,12 @@ export function generateInvoicePDF(
 
 export function downloadInvoicePDF(invoice: Invoice, company?: CompanyInfo): void {
   const pdf = generateInvoicePDF(invoice, company)
-  const filename = `${invoice.invoice_number}_${invoice.client_name.replace(/\s+/g, '_')}.pdf`
+  
+  // Include invoice type in filename
+  const typePrefix = invoice.invoice_type && invoice.invoice_type !== 'standard' 
+    ? `_${invoice.invoice_type.toUpperCase()}` 
+    : ''
+  const filename = `${invoice.invoice_number}${typePrefix}_${invoice.client_name.replace(/\s+/g, '_')}.pdf`
+  
   pdf.save(filename)
 }

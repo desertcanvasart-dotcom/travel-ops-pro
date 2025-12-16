@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, ChevronDown, ChevronRight, Trash2, User, Plane, Calendar, Users, FileText } from 'lucide-react'
+import { ArrowLeft, Save, ChevronDown, ChevronRight, Trash2, User, Plane, Calendar, Users, FileText, Building, Percent } from 'lucide-react'
 
 interface Itinerary {
   id: string
@@ -43,6 +43,19 @@ interface Service {
   rate_eur: number
   total_cost: number
   notes: string
+  supplier_id?: string
+  supplier_name?: string
+  commission_rate?: number
+  commission_amount?: number
+  commission_status?: string
+}
+
+interface Supplier {
+  id: string
+  name: string
+  type: string
+  default_commission_rate: number | null
+  commission_type: string | null
 }
 
 export default function EditItineraryPage() {
@@ -51,16 +64,31 @@ export default function EditItineraryPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deletedServices, setDeletedServices] = useState<{dayId: string, serviceId: string}[]>([])
   
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<Day[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
 
   useEffect(() => {
     if (params.id) {
       fetchItinerary()
+      fetchSuppliers()
     }
   }, [params.id])
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch('/api/suppliers?status=active')
+      if (response.ok) {
+        const result = await response.json()
+        setSuppliers(result.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error)
+    }
+  }
 
   const fetchItinerary = async () => {
     try {
@@ -112,10 +140,34 @@ export default function EditItineraryPage() {
           services: day.services.map(service => {
             if (service.id === serviceId) {
               const updated = { ...service, [field]: value }
+              
+              // If supplier changed, update supplier name and commission rate
+              if (field === 'supplier_id' && value) {
+                const selectedSupplier = suppliers.find(s => s.id === value)
+                if (selectedSupplier) {
+                  updated.supplier_name = selectedSupplier.name
+                  updated.commission_rate = selectedSupplier.default_commission_rate || 0
+                  // Recalculate commission amount
+                  if (updated.total_cost && updated.commission_rate) {
+                    updated.commission_amount = (updated.total_cost * updated.commission_rate) / 100
+                  }
+                }
+              }
+              
               // Recalculate total if quantity or rate changed
               if (field === 'quantity' || field === 'rate_eur') {
                 updated.total_cost = updated.quantity * updated.rate_eur * 1.25 // 25% markup
+                // Also recalculate commission
+                if (updated.commission_rate) {
+                  updated.commission_amount = (updated.total_cost * updated.commission_rate) / 100
+                }
               }
+              
+              // Recalculate commission if rate changed
+              if (field === 'commission_rate') {
+                updated.commission_amount = (updated.total_cost * (value || 0)) / 100
+              }
+              
               return updated
             }
             return service
@@ -128,6 +180,7 @@ export default function EditItineraryPage() {
 
   const handleRemoveService = (dayId: string, serviceId: string) => {
     if (confirm('Are you sure you want to remove this service?')) {
+      setDeletedServices(prev => [...prev, { dayId, serviceId }])
       setDays(days.map(day => {
         if (day.id === dayId) {
           return {
@@ -152,37 +205,46 @@ export default function EditItineraryPage() {
 
   const handleSave = async () => {
     if (!itinerary) return
-
+  
     setSaving(true)
     setError(null)
-
+  
     try {
-      // Update itinerary
+      // 1. Delete removed services FIRST
+      for (const { dayId, serviceId } of deletedServices) {
+        const response = await fetch(
+          `/api/itineraries/${params.id}/days/${dayId}/services/${serviceId}`,
+          { method: 'DELETE' }
+        )
+        if (!response.ok) {
+          console.error(`Failed to delete service ${serviceId}`)
+        }
+      }
+  
+      // 2. Update itinerary
       const updatedItinerary = {
         ...itinerary,
         total_cost: calculateTotal()
       }
-
+  
       const itinResponse = await fetch(`/api/itineraries/${params.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedItinerary)
       })
-
+  
       if (!itinResponse.ok) {
         throw new Error('Failed to update itinerary')
       }
-
-      // Update days and services
+  
+      // 3. Update days and services
       for (const day of days) {
-        // Update day
         await fetch(`/api/itineraries/${params.id}/days/${day.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(day)
         })
-
-        // Update services
+  
         for (const service of day.services) {
           await fetch(`/api/itineraries/${params.id}/days/${day.id}/services/${service.id}`, {
             method: 'PUT',
@@ -191,8 +253,8 @@ export default function EditItineraryPage() {
           })
         }
       }
-
-      // Redirect to view page
+  
+      setDeletedServices([])
       router.push(`/itineraries/${params.id}`)
     } catch (err) {
       setError('Failed to save changes')
@@ -217,27 +279,43 @@ export default function EditItineraryPage() {
   const getServiceIcon = (type: string) => {
     const icons: Record<string, string> = {
       accommodation: '🏨',
+      hotel: '🏨',
       transportation: '🚗',
+      transport: '🚗',
       guide: '👨‍🏫',
       entrance: '🎫',
       meal: '🍽️',
+      restaurant: '🍽️',
       activity: '🎭',
       service_fee: '💼',
       tips: '💰',
-      supplies: '📦'
+      supplies: '📦',
+      cruise: '🚢',
+      shopping: '🛍️'
     }
     return icons[type] || '📋'
   }
 
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      draft: 'bg-gray-50 text-gray-600 border-gray-200',
-      sent: 'bg-primary-50 text-primary-600 border-primary-200',
-      confirmed: 'bg-green-50 text-green-600 border-green-200',
-      completed: 'bg-purple-50 text-purple-600 border-purple-200',
-      cancelled: 'bg-red-50 text-red-600 border-red-200'
+  // Filter suppliers by service type
+  const getSuppliersByType = (serviceType: string) => {
+    const typeMap: Record<string, string[]> = {
+      accommodation: ['hotel'],
+      hotel: ['hotel'],
+      transportation: ['transport', 'driver'],
+      transport: ['transport', 'driver'],
+      guide: ['guide'],
+      entrance: ['attraction'],
+      meal: ['restaurant'],
+      restaurant: ['restaurant'],
+      activity: ['activity_provider', 'tour_operator'],
+      cruise: ['cruise'],
+      shopping: ['shop']
     }
-    return styles[status] || styles.draft
+    
+    const supplierTypes = typeMap[serviceType] || []
+    if (supplierTypes.length === 0) return suppliers
+    
+    return suppliers.filter(s => supplierTypes.includes(s.type))
   }
 
   if (loading) {
@@ -271,6 +349,9 @@ export default function EditItineraryPage() {
 
   const totalCost = calculateTotal()
   const totalServices = days.reduce((sum, day) => sum + day.services.length, 0)
+  const totalCommission = days.reduce((sum, day) => 
+    sum + day.services.reduce((sSum, s) => sSum + (s.commission_amount || 0), 0), 0
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -310,7 +391,7 @@ export default function EditItineraryPage() {
           </div>
         )}
 
-        {/* Client Information - Compact Card */}
+        {/* Client Information */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-6 h-6 bg-primary-50 rounded flex items-center justify-center">
@@ -349,7 +430,7 @@ export default function EditItineraryPage() {
           </div>
         </div>
 
-        {/* Trip Details - Compact Card */}
+        {/* Trip Details */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-6 h-6 bg-blue-50 rounded flex items-center justify-center">
@@ -434,7 +515,7 @@ export default function EditItineraryPage() {
           </div>
         </div>
 
-        {/* Days and Services - Compact Card */}
+        {/* Days and Services */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-6 h-6 bg-purple-50 rounded flex items-center justify-center">
@@ -505,10 +586,10 @@ export default function EditItineraryPage() {
                     {/* Services */}
                     <div>
                       <h4 className="text-xs font-semibold text-gray-700 mb-2">Services</h4>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {day.services.map((service) => (
                           <div key={service.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                            <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-2">
                                 <span className="text-lg">{getServiceIcon(service.service_type)}</span>
                                 <div>
@@ -525,6 +606,57 @@ export default function EditItineraryPage() {
                               </button>
                             </div>
 
+                            {/* Supplier Selection */}
+                            <div className="mb-3 p-2 bg-white rounded border border-gray-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Building className="w-3.5 h-3.5 text-gray-500" />
+                                <span className="text-xs font-medium text-gray-700">Supplier & Commission</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">Supplier</label>
+                                  <select
+                                    value={service.supplier_id || ''}
+                                    onChange={(e) => handleServiceChange(day.id, service.id, 'supplier_id', e.target.value || null)}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                                  >
+                                    <option value="">Select Supplier</option>
+                                    {getSuppliersByType(service.service_type).map(s => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.name} {s.default_commission_rate ? `(${s.default_commission_rate}%)` : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">Commission %</label>
+                                  <div className="relative">
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      min="0"
+                                      max="100"
+                                      value={service.commission_rate || ''}
+                                      onChange={(e) => handleServiceChange(day.id, service.id, 'commission_rate', parseFloat(e.target.value) || 0)}
+                                      placeholder="0"
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                    />
+                                    <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">Commission €</label>
+                                  <input
+                                    type="text"
+                                    value={`€${(service.commission_amount || 0).toFixed(2)}`}
+                                    disabled
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-green-50 text-green-700 font-medium"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Pricing */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                               <div>
                                 <label className="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
@@ -570,15 +702,23 @@ export default function EditItineraryPage() {
           </div>
         </div>
 
-        {/* Total Cost Summary - Compact Stats Row (Matching Vehicles page style) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Total Cost Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="bg-white rounded-lg border border-gray-200 p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <span className="text-primary-600">💰</span>
               <span className="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
             </div>
             <p className="text-xl font-bold text-gray-900">{itinerary.currency} {totalCost.toFixed(2)}</p>
-            <p className="text-xs text-gray-500">Total Cost (25% markup)</p>
+            <p className="text-xs text-gray-500">Total Cost</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-green-600">💵</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            </div>
+            <p className="text-xl font-bold text-green-600">€{totalCommission.toFixed(2)}</p>
+            <p className="text-xs text-gray-500">Est. Commission</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-3">
             <div className="flex items-center gap-1.5 mb-1">
@@ -606,7 +746,7 @@ export default function EditItineraryPage() {
           </div>
         </div>
 
-        {/* Action Buttons - Compact */}
+        {/* Action Buttons */}
         <div className="flex items-center justify-end gap-3 pt-2 pb-4">
           <Link
             href={`/itineraries/${itinerary.id}`}

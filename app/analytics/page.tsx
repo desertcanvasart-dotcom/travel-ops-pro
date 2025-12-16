@@ -59,6 +59,19 @@ interface AnalyticsData {
   avgDealSize: number
 }
 
+// Helper function to format numbers
+const formatNumber = (num: number, decimals: number = 2): string => {
+  return Number(num).toFixed(decimals)
+}
+
+const formatCurrency = (num: number): string => {
+  return `€${Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+const formatPercent = (num: number): string => {
+  return `${Number(num).toFixed(1)}%`
+}
+
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
@@ -139,20 +152,40 @@ export default function AnalyticsPage() {
 
   const PIE_COLORS = [COLORS.confirmed, COLORS.pending, COLORS.cancelled]
 
+  // Safe percentage calculation
+  const safePercent = (value: number, total: number): number => {
+    if (total === 0) return 0
+    return Math.round((value / total) * 100)
+  }
+
   // Calculate insights
   const getInsights = () => {
     const revenueData = displayData.revenue.monthlyData
+    if (revenueData.length === 0) {
+      return {
+        revenueInsight: 'No revenue data available yet.',
+        bookingInsight: 'Start adding bookings to see insights.',
+        conversionInsight: 'Conversion data will appear once you have bookings.'
+      }
+    }
+    
     const maxRevenue = Math.max(...revenueData.map(d => d.revenue))
     const maxRevenueWeek = revenueData.find(d => d.revenue === maxRevenue)
     
-    const pendingPercentage = Math.round((displayData.bookings.pending / displayData.bookings.total) * 100)
+    const pendingPercentage = safePercent(displayData.bookings.pending, displayData.bookings.total)
     
     return {
-      revenueInsight: `Your busiest period was ${maxRevenueWeek?.month} with €${maxRevenue.toLocaleString()} in revenue.`,
-      bookingInsight: `${pendingPercentage}% of active bookings are still pending — consider follow-ups.`,
+      revenueInsight: maxRevenue > 0 
+        ? `Your busiest period was ${maxRevenueWeek?.month} with ${formatCurrency(maxRevenue)} in revenue.`
+        : 'No revenue data available yet.',
+      bookingInsight: displayData.bookings.total > 0
+        ? `${pendingPercentage}% of active bookings are still pending — consider follow-ups.`
+        : 'No bookings recorded yet.',
       conversionInsight: displayData.conversionRate > 30 
         ? 'Strong conversion rate! Your sales process is working well.' 
-        : 'Conversion rate needs attention. Review your sales funnel.'
+        : displayData.conversionRate > 0
+          ? 'Conversion rate needs attention. Review your sales funnel.'
+          : 'Add bookings to see conversion insights.'
     }
   }
 
@@ -182,6 +215,11 @@ export default function AnalyticsPage() {
     { key: 'confirmed', label: 'Confirmed', color: COLORS.confirmed },
     { key: 'completed', label: 'Completed', color: COLORS.completed }
   ]
+
+  // Calculate returning rate safely
+  const returningRate = displayData.clients.total > 0 
+    ? safePercent(displayData.clients.returning, displayData.clients.total)
+    : 0
 
   if (loading && !analytics) {
     return (
@@ -240,18 +278,18 @@ export default function AnalyticsPage() {
               {displayData.revenue.growth >= 0 ? (
                 <span className="flex items-center text-xs font-medium" style={{ color: COLORS.revenue }}>
                   <ArrowUpRight className="w-3 h-3 mr-1" />
-                  {displayData.revenue.growth}%
+                  {formatNumber(displayData.revenue.growth, 1)}%
                 </span>
               ) : (
                 <span className="flex items-center text-danger text-xs font-medium">
                   <ArrowDownRight className="w-3 h-3 mr-1" />
-                  {Math.abs(displayData.revenue.growth)}%
+                  {formatNumber(Math.abs(displayData.revenue.growth), 1)}%
                 </span>
               )}
             </div>
             <h3 className="text-xs text-gray-600 font-medium mb-1">Total Revenue</h3>
             <p className="text-3xl font-bold text-gray-900">
-              €{displayData.revenue.total.toLocaleString()}
+              {formatCurrency(displayData.revenue.total)}
             </p>
             <p className="text-xs text-gray-500 mt-1 mb-2">vs. previous period</p>
             
@@ -293,18 +331,15 @@ export default function AnalyticsPage() {
           <div className="flex gap-1 mt-2 h-8 items-end">
             <div className="flex-1 rounded-t" style={{ 
               backgroundColor: COLORS.confirmed, 
-              height: `${(displayData.bookings.confirmed / displayData.bookings.total) * 100}%`,
-              minHeight: '20%'
+              height: `${Math.max(20, safePercent(displayData.bookings.confirmed, displayData.bookings.total))}%`
             }} />
             <div className="flex-1 rounded-t" style={{ 
               backgroundColor: COLORS.pending, 
-              height: `${(displayData.bookings.pending / displayData.bookings.total) * 100}%`,
-              minHeight: '15%'
+              height: `${Math.max(15, safePercent(displayData.bookings.pending, displayData.bookings.total))}%`
             }} />
             <div className="flex-1 rounded-t" style={{ 
               backgroundColor: COLORS.cancelled, 
-              height: `${(displayData.bookings.cancelled / displayData.bookings.total) * 100}%`,
-              minHeight: '10%'
+              height: `${Math.max(10, safePercent(displayData.bookings.cancelled, displayData.bookings.total))}%`
             }} />
           </div>
         </div>
@@ -333,12 +368,12 @@ export default function AnalyticsPage() {
                 className="h-2 rounded-full transition-all"
                 style={{ 
                   backgroundColor: COLORS.clients,
-                  width: `${(displayData.clients.returning / displayData.clients.total) * 100}%`
+                  width: `${returningRate}%`
                 }}
               />
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              {Math.round((displayData.clients.returning / displayData.clients.total) * 100)}% returning rate
+              {returningRate}% returning rate
             </p>
           </div>
         </div>
@@ -353,10 +388,10 @@ export default function AnalyticsPage() {
           </div>
           <h3 className="text-xs text-gray-600 font-medium mb-1">Conversion Rate</h3>
           <p className="text-3xl font-bold text-gray-900">
-            {displayData.conversionRate}%
+            {formatPercent(displayData.conversionRate)}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            Avg deal: €{displayData.avgDealSize}
+            Avg deal: {formatCurrency(displayData.avgDealSize)}
           </p>
           
           {/* Circular progress indicator */}
@@ -379,7 +414,7 @@ export default function AnalyticsPage() {
                   strokeWidth="4"
                   fill="transparent"
                   strokeDasharray={`${2 * Math.PI * 20}`}
-                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - displayData.conversionRate / 100)}`}
+                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - Math.min(displayData.conversionRate, 100) / 100)}`}
                   strokeLinecap="round"
                 />
               </svg>
@@ -428,7 +463,7 @@ export default function AnalyticsPage() {
             <p className="text-xs text-gray-600 mt-1">Pending bookings</p>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <p className="text-2xl font-bold text-gray-900">€{displayData.avgDealSize}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(displayData.avgDealSize)}</p>
             <p className="text-xs text-gray-600 mt-1">Avg deal size</p>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-lg">
@@ -462,6 +497,7 @@ export default function AnalyticsPage() {
               <YAxis 
                 stroke="#666" 
                 style={{ fontSize: '12px' }}
+                tickFormatter={(value) => `€${value.toLocaleString()}`}
               />
               <Tooltip 
                 contentStyle={{ 
@@ -470,7 +506,7 @@ export default function AnalyticsPage() {
                   borderRadius: '8px',
                   fontSize: '12px'
                 }}
-                formatter={(value: any) => [`€${value.toLocaleString()}`, 'Revenue']}
+                formatter={(value: any) => [formatCurrency(value), 'Revenue']}
               />
               <Line 
                 type="monotone" 
@@ -490,16 +526,18 @@ export default function AnalyticsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-base font-semibold text-gray-900">Top Destinations</h3>
-            <select
-              value={destinationFilter}
-              onChange={(e) => setDestinationFilter(e.target.value)}
-              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="all">All Destinations</option>
-              {displayData.destinations.map(dest => (
-                <option key={dest.name} value={dest.name}>{dest.name}</option>
-              ))}
-            </select>
+            {displayData.destinations.length > 0 && (
+              <select
+                value={destinationFilter}
+                onChange={(e) => setDestinationFilter(e.target.value)}
+                className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="all">All Destinations</option>
+                {displayData.destinations.map(dest => (
+                  <option key={dest.name} value={dest.name}>{dest.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           
           {filteredDestinations.length > 0 ? (
@@ -523,6 +561,10 @@ export default function AnalyticsPage() {
                       borderRadius: '8px',
                       fontSize: '12px'
                     }}
+                    formatter={(value: any, name: string) => [
+                      name === 'revenue' ? formatCurrency(value) : value,
+                      name === 'revenue' ? 'Revenue' : 'Bookings'
+                    ]}
                   />
                   <Bar 
                     dataKey="bookings" 
@@ -532,16 +574,14 @@ export default function AnalyticsPage() {
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-2 p-2 bg-purple-50 rounded text-xs text-gray-700">
-                💡 {filteredDestinations.length > 0 
-                  ? `${filteredDestinations[0].name} leads with ${filteredDestinations[0].bookings} bookings`
-                  : 'No destination data available yet'}
+                💡 {filteredDestinations[0].name} leads with {filteredDestinations[0].bookings} bookings ({formatCurrency(filteredDestinations[0].revenue)})
               </div>
             </>
           ) : (
             <div className="h-80 flex flex-col items-center justify-center text-center">
               <MapPin className="w-12 h-12 text-gray-300 mb-3" />
               <p className="text-sm text-gray-500 mb-2">No destination data yet</p>
-              <p className="text-xs text-gray-400">Data will appear as you add bookings</p>
+              <p className="text-xs text-gray-400">Data will appear as you add bookings with cities</p>
             </div>
           )}
         </div>
@@ -588,7 +628,7 @@ export default function AnalyticsPage() {
                   <Cell key={`cell-${index}`} fill={PIE_COLORS[index]} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip formatter={(value: any) => [value, 'Bookings']} />
             </PieChart>
           </ResponsiveContainer>
           
@@ -600,7 +640,7 @@ export default function AnalyticsPage() {
                 <span className="text-xs text-gray-700">Confirmed</span>
               </div>
               <span className="text-xs font-bold text-gray-900">
-                {displayData.bookings.confirmed} ({Math.round((displayData.bookings.confirmed / displayData.bookings.total) * 100)}%)
+                {displayData.bookings.confirmed} ({safePercent(displayData.bookings.confirmed, displayData.bookings.total)}%)
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -609,7 +649,7 @@ export default function AnalyticsPage() {
                 <span className="text-xs text-gray-700">Pending</span>
               </div>
               <span className="text-xs font-bold text-gray-900">
-                {displayData.bookings.pending} ({Math.round((displayData.bookings.pending / displayData.bookings.total) * 100)}%)
+                {displayData.bookings.pending} ({safePercent(displayData.bookings.pending, displayData.bookings.total)}%)
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -618,7 +658,7 @@ export default function AnalyticsPage() {
                 <span className="text-xs text-gray-700">Cancelled</span>
               </div>
               <span className="text-xs font-bold text-gray-900">
-                {displayData.bookings.cancelled} ({Math.round((displayData.bookings.cancelled / displayData.bookings.total) * 100)}%)
+                {displayData.bookings.cancelled} ({safePercent(displayData.bookings.cancelled, displayData.bookings.total)}%)
               </span>
             </div>
           </div>
@@ -641,7 +681,7 @@ export default function AnalyticsPage() {
                       <span className="text-sm font-medium text-gray-900">{dest.name}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-sm font-bold text-gray-900">€{dest.revenue.toLocaleString()}</span>
+                      <span className="text-sm font-bold text-gray-900">{formatCurrency(dest.revenue)}</span>
                       <span className="text-xs text-gray-500 ml-2">({dest.bookings} bookings)</span>
                     </div>
                   </div>
@@ -650,7 +690,7 @@ export default function AnalyticsPage() {
                       className="h-2 rounded-full transition-all duration-500"
                       style={{ 
                         backgroundColor: COLORS.revenue,
-                        width: `${(dest.revenue / displayData.destinations[0].revenue) * 100}%` 
+                        width: `${displayData.destinations[0].revenue > 0 ? (dest.revenue / displayData.destinations[0].revenue) * 100 : 0}%` 
                       }}
                     />
                   </div>
@@ -661,7 +701,7 @@ export default function AnalyticsPage() {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <MapPin className="w-12 h-12 text-gray-300 mb-3" />
               <p className="text-sm text-gray-500 mb-2">No destination data yet</p>
-              <p className="text-xs text-gray-400">Revenue will appear as you add bookings</p>
+              <p className="text-xs text-gray-400">Revenue will appear as you add itineraries with cities</p>
             </div>
           )}
         </div>

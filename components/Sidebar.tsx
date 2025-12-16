@@ -51,7 +51,9 @@ import {
   UserCog,
   Shield,
   BookOpen,
-  Wand2
+  Wand2,
+  Handshake,
+  Building
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -139,6 +141,7 @@ const navigation: NavSection[] = [
       { label: 'Content Library', href: '/content-library', icon: Library },
       { label: 'Writing Rules', href: '/content-library/rules', icon: BookOpen },
       { label: 'AI Prompts', href: '/content-library/prompts', icon: Wand2 },
+      { label: 'Documents', href: '/documents', icon: FileText },
     ]
   },
   
@@ -151,6 +154,8 @@ const navigation: NavSection[] = [
       { label: 'Payments', href: '/payments', icon: DollarSign },
       { label: 'Reminders', href: '/reminders', icon: Bell },
       { label: 'Expenses', href: '/expenses', icon: Receipt },
+      { label: 'Commissions', href: '/commissions', icon: Handshake },
+      { label: 'Suppliers', href: '/suppliers', icon: Building },
       { label: 'Receivables', href: '/accounts-receivable', icon: Wallet, roles: ['admin', 'manager'] },
       { label: 'Payables', href: '/accounts-payable', icon: CreditCard, roles: ['admin', 'manager'] },
       { label: 'Profit & Loss', href: '/profit-loss', icon: TrendingUp, roles: ['admin', 'manager'] },
@@ -191,7 +196,6 @@ const navigation: NavSection[] = [
     roles: ['admin'], // Only admin
     items: [
       { label: 'Settings', href: '/settings', icon: Settings },
-      { label: 'Prefernces', href: '/settings/prefernces', icon: Ticket },
       { label: 'User Management', href: '/users', icon: Shield },
     ]
   }

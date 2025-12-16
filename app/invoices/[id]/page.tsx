@@ -19,13 +19,20 @@ import {
   Clock,
   AlertCircle,
   Bell,
-  XCircle
+  XCircle,
+  Wallet,
+  Receipt,
+  ArrowRight,
+  Link as LinkIcon
 } from 'lucide-react'
 import { downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
 
 interface Invoice {
   id: string
   invoice_number: string
+  invoice_type: 'standard' | 'deposit' | 'final'
+  deposit_percent: number
+  parent_invoice_id: string | null
   client_id: string
   itinerary_id: string | null
   client_name: string
@@ -99,6 +106,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   cancelled: { label: 'Cancelled', color: 'text-gray-500', bg: 'bg-gray-100', icon: X }
 }
 
+const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+  standard: { label: 'Standard', color: 'text-gray-600', bg: 'bg-gray-50', icon: FileText },
+  deposit: { label: 'Deposit', color: 'text-amber-700', bg: 'bg-amber-50', icon: Wallet },
+  final: { label: 'Final', color: 'text-emerald-700', bg: 'bg-emerald-50', icon: Receipt }
+}
+
 const PAYMENT_METHODS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'credit_card', label: 'Credit Card' },
@@ -123,12 +136,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const resolvedParams = use(params)
   const router = useRouter()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const [linkedInvoice, setLinkedInvoice] = useState<Invoice | null>(null)
+  const [childInvoice, setChildInvoice] = useState<Invoice | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
   const [reminders, setReminders] = useState<ReminderHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [savingPayment, setSavingPayment] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
+  const [creatingFinalInvoice, setCreatingFinalInvoice] = useState(false)
   const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
     amount: 0,
     currency: 'EUR',
@@ -155,6 +171,29 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           amount: Number(data.balance_due),
           currency: data.currency
         }))
+
+        // Fetch linked invoice (parent if this is final)
+        if (data.parent_invoice_id) {
+          const parentResponse = await fetch(`/api/invoices/${data.parent_invoice_id}`)
+          if (parentResponse.ok) {
+            const parentData = await parentResponse.json()
+            setLinkedInvoice(parentData)
+          }
+        }
+
+        // Fetch child invoice (if this is deposit, find the final invoice)
+        if (data.invoice_type === 'deposit') {
+          const allInvoicesResponse = await fetch(`/api/invoices?itineraryId=${data.itinerary_id}`)
+          if (allInvoicesResponse.ok) {
+            const allInvoices = await allInvoicesResponse.json()
+            const finalInvoice = allInvoices.find((inv: Invoice) => 
+              inv.parent_invoice_id === data.id && inv.invoice_type === 'final'
+            )
+            if (finalInvoice) {
+              setChildInvoice(finalInvoice)
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching invoice:', error)
@@ -267,6 +306,60 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const handleCreateFinalInvoice = async () => {
+    if (!invoice) return
+    
+    if (!confirm('Create a Final Invoice for the remaining balance?')) return
+
+    setCreatingFinalInvoice(true)
+    try {
+      // Calculate full trip cost from deposit
+      const fullTripCost = (Number(invoice.total_amount) * 100) / invoice.deposit_percent
+      const balanceAmount = fullTripCost - Number(invoice.total_amount)
+
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_type: 'final',
+          deposit_percent: invoice.deposit_percent,
+          parent_invoice_id: invoice.id,
+          client_id: invoice.client_id,
+          itinerary_id: invoice.itinerary_id,
+          client_name: invoice.client_name,
+          client_email: invoice.client_email,
+          full_trip_cost: fullTripCost,
+          line_items: [{
+            description: `Final Balance - ${invoice.line_items[0]?.description.replace(/^Booking Deposit \(\d+%\) - /, '')}`,
+            quantity: 1,
+            unit_price: balanceAmount,
+            amount: balanceAmount
+          }],
+          subtotal: balanceAmount,
+          total_amount: balanceAmount,
+          currency: invoice.currency,
+          issue_date: new Date().toISOString().split('T')[0],
+          due_date: null, // Due on arrival
+          payment_terms: 'Balance payable in cash upon arrival or before first day of service.',
+          notes: `Related Deposit Invoice: ${invoice.invoice_number}`
+        })
+      })
+
+      if (response.ok) {
+        const newInvoice = await response.json()
+        router.push(`/invoices/${newInvoice.id}`)
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to create final invoice')
+      }
+    } catch (error) {
+      console.error('Error creating final invoice:', error)
+      alert('Failed to create final invoice')
+    } finally {
+      setCreatingFinalInvoice(false)
+    }
+  }
+
   const getCurrencySymbol = (currency: string) => {
     const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
     return symbols[currency] || currency
@@ -295,6 +388,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     return invoice.status
   }
 
+  // Check if we can create a final invoice
+  const canCreateFinalInvoice = () => {
+    if (!invoice) return false
+    return (
+      invoice.invoice_type === 'deposit' &&
+      invoice.status === 'paid' &&
+      !childInvoice
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -317,6 +420,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const displayStatus = getDisplayStatus()
   const statusConfig = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.draft
   const StatusIcon = statusConfig.icon
+  const typeConfig = TYPE_CONFIG[invoice.invoice_type] || TYPE_CONFIG.standard
+  const TypeIcon = typeConfig.icon
+
+  // Calculate full trip cost for display
+  const fullTripCost = invoice.invoice_type === 'deposit' 
+    ? (Number(invoice.total_amount) * 100) / invoice.deposit_percent
+    : invoice.invoice_type === 'final' && linkedInvoice
+      ? (Number(linkedInvoice.total_amount) * 100) / linkedInvoice.deposit_percent
+      : Number(invoice.total_amount)
 
   return (
     <div className="p-6">
@@ -332,6 +444,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-semibold text-gray-900">{invoice.invoice_number}</h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${typeConfig.bg} ${typeConfig.color}`}>
+                <TypeIcon className="h-3.5 w-3.5" />
+                {typeConfig.label}
+                {invoice.invoice_type !== 'standard' && ` (${invoice.deposit_percent}%)`}
+              </span>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.color}`}>
                 <StatusIcon className="h-3.5 w-3.5" />
                 {statusConfig.label}
@@ -342,7 +459,6 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Download PDF Button */}
           <button
             onClick={handleDownloadPDF}
             disabled={generatingPDF}
@@ -370,6 +486,27 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               Mark as Sent
             </button>
           )}
+
+          {canCreateFinalInvoice() && (
+            <button
+              onClick={handleCreateFinalInvoice}
+              disabled={creatingFinalInvoice}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            >
+              {creatingFinalInvoice ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Receipt className="h-4 w-4" />
+                  Create Final Invoice
+                </>
+              )}
+            </button>
+          )}
+
           {Number(invoice.balance_due) > 0 && (
             <button
               onClick={() => setShowPaymentModal(true)}
@@ -381,6 +518,73 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           )}
         </div>
       </div>
+
+      {/* Linked Invoice Banner */}
+      {(linkedInvoice || childInvoice) && (
+        <div className={`mb-6 p-4 rounded-lg border ${
+          invoice.invoice_type === 'final' 
+            ? 'bg-amber-50 border-amber-200' 
+            : 'bg-emerald-50 border-emerald-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <LinkIcon className={`h-5 w-5 ${invoice.invoice_type === 'final' ? 'text-amber-600' : 'text-emerald-600'}`} />
+              <div>
+                <p className={`text-sm font-medium ${invoice.invoice_type === 'final' ? 'text-amber-800' : 'text-emerald-800'}`}>
+                  {invoice.invoice_type === 'final' ? 'Deposit Invoice' : 'Final Invoice'}
+                </p>
+                <p className={`text-xs ${invoice.invoice_type === 'final' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {linkedInvoice?.invoice_number || childInvoice?.invoice_number} • 
+                  {' '}{getCurrencySymbol(linkedInvoice?.currency || childInvoice?.currency || 'EUR')}
+                  {Number(linkedInvoice?.total_amount || childInvoice?.total_amount).toFixed(2)} • 
+                  {' '}{STATUS_CONFIG[linkedInvoice?.status || childInvoice?.status || 'draft'].label}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/invoices/${linkedInvoice?.id || childInvoice?.id}`}
+              className={`flex items-center gap-1 text-sm font-medium ${
+                invoice.invoice_type === 'final' 
+                  ? 'text-amber-700 hover:text-amber-800' 
+                  : 'text-emerald-700 hover:text-emerald-800'
+              }`}
+            >
+              View
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Trip Cost Summary (for deposit/final invoices) */}
+      {invoice.invoice_type !== 'standard' && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Trip Cost Breakdown</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs text-gray-500">Full Trip Cost</p>
+              <p className="text-lg font-bold text-gray-900">
+                {getCurrencySymbol(invoice.currency)}{fullTripCost.toFixed(2)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Deposit ({invoice.deposit_percent}%)</p>
+              <p className="text-lg font-bold text-amber-600">
+                {getCurrencySymbol(invoice.currency)}{((fullTripCost * invoice.deposit_percent) / 100).toFixed(2)}
+                {invoice.invoice_type === 'deposit' && linkedInvoice === null && childInvoice === null && invoice.status === 'paid' && (
+                  <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Paid</span>
+                )}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Balance Due on Arrival</p>
+              <p className="text-lg font-bold text-emerald-600">
+                {getCurrencySymbol(invoice.currency)}{(fullTripCost - (fullTripCost * invoice.deposit_percent) / 100).toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -420,7 +624,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   <div>
                     <p className="text-xs text-gray-500">Due Date</p>
                     <p className={`text-sm font-medium ${displayStatus === 'overdue' ? 'text-red-600' : 'text-gray-900'}`}>
-                      {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : '-'}
+                      {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'On Arrival'}
                     </p>
                   </div>
                 </div>
@@ -479,7 +683,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   </tr>
                 )}
                 <tr className="border-t-2 border-gray-200">
-                  <td colSpan={3} className="px-5 py-4 text-sm font-semibold text-gray-900 text-right">Total</td>
+                  <td colSpan={3} className="px-5 py-4 text-sm font-semibold text-gray-900 text-right">
+                    {invoice.invoice_type === 'deposit' ? 'Deposit Amount' : 
+                     invoice.invoice_type === 'final' ? 'Balance Due' : 'Total'}
+                  </td>
                   <td className="px-5 py-4 text-lg font-bold text-gray-900 text-right">
                     {getCurrencySymbol(invoice.currency)}{Number(invoice.total_amount).toFixed(2)}
                   </td>
@@ -516,7 +723,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Payment Summary</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">Total Amount</span>
+                <span className="text-sm text-gray-500">
+                  {invoice.invoice_type === 'deposit' ? 'Deposit Amount' : 
+                   invoice.invoice_type === 'final' ? 'Balance Amount' : 'Total Amount'}
+                </span>
                 <span className="text-sm font-medium text-gray-900">
                   {getCurrencySymbol(invoice.currency)}{Number(invoice.total_amount).toFixed(2)}
                 </span>
@@ -546,8 +756,28 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 Record Payment
               </button>
             )}
+
+            {/* Create Final Invoice Button */}
+            {canCreateFinalInvoice() && (
+              <button
+                onClick={handleCreateFinalInvoice}
+                disabled={creatingFinalInvoice}
+                className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {creatingFinalInvoice ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Receipt className="h-4 w-4" />
+                    Create Final Invoice
+                  </>
+                )}
+              </button>
+            )}
             
-            {/* Download PDF in sidebar too */}
             <button
               onClick={handleDownloadPDF}
               disabled={generatingPDF}

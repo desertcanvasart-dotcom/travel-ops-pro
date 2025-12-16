@@ -11,13 +11,18 @@ import {
   ChevronDown,
   Send,
   Download,
-  AlertCircle
+  AlertCircle,
+  Receipt,
+  Wallet
 } from 'lucide-react'
 import Link from 'next/link'
 
 interface Invoice {
   id: string
   invoice_number: string
+  invoice_type: 'standard' | 'deposit' | 'final'
+  deposit_percent: number
+  parent_invoice_id: string | null
   client_id: string
   itinerary_id: string | null
   client_name: string
@@ -69,6 +74,9 @@ interface FormData {
   itinerary_id: string
   client_name: string
   client_email: string
+  invoice_type: 'standard' | 'deposit' | 'final'
+  deposit_percent: number
+  full_trip_cost: number
   line_items: LineItem[]
   subtotal: number
   tax_rate: number
@@ -88,6 +96,9 @@ const initialFormData: FormData = {
   itinerary_id: '',
   client_name: '',
   client_email: '',
+  invoice_type: 'standard',
+  deposit_percent: 10,
+  full_trip_cost: 0,
   line_items: [{ description: '', quantity: 1, unit_price: 0, amount: 0 }],
   subtotal: 0,
   tax_rate: 0,
@@ -112,6 +123,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   cancelled: { label: 'Cancelled', color: 'text-gray-500', bg: 'bg-gray-100' }
 }
 
+const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+  standard: { label: 'Standard', color: 'text-gray-600', bg: 'bg-gray-50', icon: FileText },
+  deposit: { label: 'Deposit', color: 'text-amber-700', bg: 'bg-amber-50', icon: Wallet },
+  final: { label: 'Final', color: 'text-emerald-700', bg: 'bg-emerald-50', icon: Receipt }
+}
+
 export default function InvoicesContent() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -119,6 +136,7 @@ export default function InvoicesContent() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formData, setFormData] = useState<FormData>(initialFormData)
   const [saving, setSaving] = useState(false)
@@ -127,6 +145,7 @@ export default function InvoicesContent() {
     try {
       const params = new URLSearchParams()
       if (statusFilter) params.append('status', statusFilter)
+      if (typeFilter) params.append('type', typeFilter)
       
       const response = await fetch(`/api/invoices?${params}`)
       if (response.ok) {
@@ -138,7 +157,7 @@ export default function InvoicesContent() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [statusFilter, typeFilter])
 
   const fetchClients = async () => {
     try {
@@ -146,7 +165,6 @@ export default function InvoicesContent() {
       if (response.ok) {
         const data = await response.json()
         
-        // Handle multiple API response formats
         let clientsData: any[] = []
         if (data.success && Array.isArray(data.data)) {
           clientsData = data.data
@@ -156,11 +174,8 @@ export default function InvoicesContent() {
           clientsData = data.clients
         }
         
-        // Map clients - handle both name formats (name OR first_name + last_name)
         const mappedClients = clientsData
           .map((c: any) => {
-            // If client already has a 'name' field, use it
-            // Otherwise combine first_name + last_name
             const clientName = c.name 
               || `${c.first_name || ''} ${c.last_name || ''}`.trim() 
               || c.full_name 
@@ -172,7 +187,7 @@ export default function InvoicesContent() {
               email: c.email || ''
             }
           })
-          .filter((c: Client) => c.id && c.name) // Filter out invalid entries
+          .filter((c: Client) => c.id && c.name)
         
         setClients(mappedClients)
       } else {
@@ -190,7 +205,6 @@ export default function InvoicesContent() {
       const response = await fetch('/api/itineraries')
       if (response.ok) {
         const data = await response.json()
-        // Handle both formats: { success, data } or direct array
         const itinerariesData = data.success ? data.data : (Array.isArray(data) ? data : [])
         setItineraries(itinerariesData || [])
       }
@@ -219,11 +233,26 @@ export default function InvoicesContent() {
   const handleItineraryChange = (itineraryId: string) => {
     const itinerary = itineraries.find(i => i.id === itineraryId)
     if (itinerary) {
-      // Find matching client or use itinerary's client info
       const matchingClient = clients.find(c => 
         c.name === itinerary.client_name || 
         c.email === itinerary.client_email
       )
+      
+      const fullCost = itinerary.total_cost
+      const invoiceType = formData.invoice_type
+      const depositPercent = formData.deposit_percent
+
+      let calculatedAmount = fullCost
+      let lineItemDescription = `Tour Package - ${itinerary.itinerary_code}`
+
+      if (invoiceType === 'deposit') {
+        calculatedAmount = (fullCost * depositPercent) / 100
+        lineItemDescription = `Booking Deposit (${depositPercent}%) - ${itinerary.itinerary_code}`
+      } else if (invoiceType === 'final') {
+        const depositAmount = (fullCost * depositPercent) / 100
+        calculatedAmount = fullCost - depositAmount
+        lineItemDescription = `Final Balance - ${itinerary.itinerary_code}`
+      }
       
       setFormData(prev => ({
         ...prev,
@@ -231,22 +260,100 @@ export default function InvoicesContent() {
         client_id: matchingClient?.id || prev.client_id,
         client_name: itinerary.client_name || prev.client_name,
         client_email: itinerary.client_email || prev.client_email,
+        full_trip_cost: fullCost,
         line_items: [{
-          description: `Tour Package - ${itinerary.itinerary_code}`,
+          description: lineItemDescription,
           quantity: 1,
-          unit_price: itinerary.total_cost,
-          amount: itinerary.total_cost
+          unit_price: calculatedAmount,
+          amount: calculatedAmount
         }],
-        subtotal: itinerary.total_cost,
-        total_amount: itinerary.total_cost
+        subtotal: calculatedAmount,
+        total_amount: calculatedAmount
       }))
     } else {
-      // Clear itinerary selection
       setFormData(prev => ({
         ...prev,
-        itinerary_id: ''
+        itinerary_id: '',
+        full_trip_cost: 0
       }))
     }
+  }
+
+  const handleInvoiceTypeChange = (type: 'standard' | 'deposit' | 'final') => {
+    const fullCost = formData.full_trip_cost
+    const depositPercent = formData.deposit_percent
+    
+    let calculatedAmount = fullCost
+    let paymentTerms = 'Payment due within 14 days'
+    let lineItemDescription = formData.line_items[0]?.description || 'Tour Package'
+    
+    // Extract base description (remove any prefix)
+    const baseDesc = lineItemDescription
+      .replace(/^Booking Deposit \(\d+%\) - /, '')
+      .replace(/^Final Balance - /, '')
+      .replace(/^Tour Package - /, '')
+    
+    if (type === 'deposit') {
+      calculatedAmount = (fullCost * depositPercent) / 100
+      paymentTerms = 'Deposit required to confirm booking. Non-refundable once services are confirmed.'
+      lineItemDescription = `Booking Deposit (${depositPercent}%) - ${baseDesc}`
+    } else if (type === 'final') {
+      const depositAmount = (fullCost * depositPercent) / 100
+      calculatedAmount = fullCost - depositAmount
+      paymentTerms = 'Balance payable in cash upon arrival or before first day of service.'
+      lineItemDescription = `Final Balance - ${baseDesc}`
+    } else {
+      lineItemDescription = `Tour Package - ${baseDesc}`
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      invoice_type: type,
+      payment_terms: paymentTerms,
+      line_items: [{
+        description: lineItemDescription,
+        quantity: 1,
+        unit_price: calculatedAmount,
+        amount: calculatedAmount
+      }],
+      subtotal: calculatedAmount,
+      total_amount: calculatedAmount
+    }))
+  }
+
+  const handleDepositPercentChange = (percent: number) => {
+    const fullCost = formData.full_trip_cost
+    const invoiceType = formData.invoice_type
+    
+    let calculatedAmount = fullCost
+    let lineItemDescription = formData.line_items[0]?.description || 'Tour Package'
+    
+    const baseDesc = lineItemDescription
+      .replace(/^Booking Deposit \(\d+%\) - /, '')
+      .replace(/^Final Balance - /, '')
+      .replace(/^Tour Package - /, '')
+
+    if (invoiceType === 'deposit') {
+      calculatedAmount = (fullCost * percent) / 100
+      lineItemDescription = `Booking Deposit (${percent}%) - ${baseDesc}`
+    } else if (invoiceType === 'final') {
+      const depositAmount = (fullCost * percent) / 100
+      calculatedAmount = fullCost - depositAmount
+      lineItemDescription = `Final Balance - ${baseDesc}`
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      deposit_percent: percent,
+      line_items: [{
+        description: lineItemDescription,
+        quantity: 1,
+        unit_price: calculatedAmount,
+        amount: calculatedAmount
+      }],
+      subtotal: calculatedAmount,
+      total_amount: calculatedAmount
+    }))
   }
 
   const updateLineItem = (index: number, field: keyof LineItem, value: string | number) => {
@@ -254,12 +361,10 @@ export default function InvoicesContent() {
       const newItems = [...prev.line_items]
       newItems[index] = { ...newItems[index], [field]: value }
       
-      // Recalculate amount
       if (field === 'quantity' || field === 'unit_price') {
         newItems[index].amount = newItems[index].quantity * newItems[index].unit_price
       }
       
-      // Recalculate totals
       const subtotal = newItems.reduce((sum, item) => sum + item.amount, 0)
       const taxAmount = subtotal * (prev.tax_rate / 100)
       const totalAmount = subtotal + taxAmount - prev.discount_amount
@@ -405,6 +510,8 @@ export default function InvoicesContent() {
   const overdueAmount = processedInvoices
     .filter(inv => inv.status === 'overdue')
     .reduce((sum, inv) => sum + Number(inv.balance_due), 0)
+  const depositCount = invoices.filter(inv => inv.invoice_type === 'deposit').length
+  const finalCount = invoices.filter(inv => inv.invoice_type === 'final').length
 
   if (loading) {
     return (
@@ -437,18 +544,32 @@ export default function InvoicesContent() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Total Invoices</span>
+            <span className="text-xs text-gray-500 font-medium">Total</span>
           </div>
           <p className="text-2xl font-bold text-gray-900 mt-2">{totalInvoices}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+            <span className="text-xs text-gray-500 font-medium">Deposits</span>
+          </div>
+          <p className="text-2xl font-bold text-amber-600 mt-2">{depositCount}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+            <span className="text-xs text-gray-500 font-medium">Finals</span>
+          </div>
+          <p className="text-2xl font-bold text-emerald-600 mt-2">{finalCount}</p>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Total Billed</span>
+            <span className="text-xs text-gray-500 font-medium">Billed</span>
           </div>
           <p className="text-2xl font-bold text-gray-900 mt-2">€{totalRevenue.toLocaleString()}</p>
         </div>
@@ -490,6 +611,20 @@ export default function InvoicesContent() {
 
         <div className="relative">
           <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white shadow-sm cursor-pointer"
+          >
+            <option value="">All Types</option>
+            <option value="standard">Standard</option>
+            <option value="deposit">Deposit</option>
+            <option value="final">Final</option>
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        </div>
+
+        <div className="relative">
+          <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white shadow-sm cursor-pointer"
@@ -512,11 +647,11 @@ export default function InvoicesContent() {
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Invoice #</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Type</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Client</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Issue Date</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Due Date</th>
               <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Total</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Paid</th>
               <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Balance</th>
               <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Status</th>
               <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Actions</th>
@@ -532,10 +667,21 @@ export default function InvoicesContent() {
             ) : (
               filteredInvoices.map((invoice) => {
                 const statusConfig = STATUS_CONFIG[invoice.status] || STATUS_CONFIG.draft
+                const typeConfig = TYPE_CONFIG[invoice.invoice_type] || TYPE_CONFIG.standard
+                const TypeIcon = typeConfig.icon
                 return (
                   <tr key={invoice.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2">
                       <span className="text-sm font-mono font-medium text-blue-600">{invoice.invoice_number}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${typeConfig.bg} ${typeConfig.color}`}>
+                        <TypeIcon className="h-3 w-3" />
+                        {typeConfig.label}
+                        {invoice.invoice_type !== 'standard' && (
+                          <span className="text-[10px] opacity-75">({invoice.deposit_percent}%)</span>
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-2">
                       <div>
@@ -556,11 +702,6 @@ export default function InvoicesContent() {
                     <td className="px-4 py-2 text-right">
                       <span className="text-sm font-medium text-gray-900">
                         €{Number(invoice.total_amount).toLocaleString()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <span className="text-sm text-green-600">
-                        €{Number(invoice.amount_paid).toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right">
@@ -623,6 +764,83 @@ export default function InvoicesContent() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              {/* Invoice Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Invoice Type</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {(['standard', 'deposit', 'final'] as const).map((type) => {
+                    const config = TYPE_CONFIG[type]
+                    const Icon = config.icon
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => handleInvoiceTypeChange(type)}
+                        className={`p-4 rounded-lg border-2 transition-all ${
+                          formData.invoice_type === type
+                            ? 'border-[#647C47] bg-[#647C47]/5'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <Icon className={`h-5 w-5 mx-auto mb-2 ${formData.invoice_type === type ? 'text-[#647C47]' : 'text-gray-400'}`} />
+                        <p className={`text-sm font-medium ${formData.invoice_type === type ? 'text-[#647C47]' : 'text-gray-600'}`}>
+                          {config.label}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {type === 'standard' && 'Full amount'}
+                          {type === 'deposit' && 'Booking deposit'}
+                          {type === 'final' && 'Remaining balance'}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Deposit Percentage (only for deposit/final) */}
+              {formData.invoice_type !== 'standard' && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">Deposit Percentage</p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        {formData.invoice_type === 'deposit' 
+                          ? 'Client pays this percentage to confirm booking'
+                          : 'Final invoice will be total minus this deposit'
+                        }
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={formData.deposit_percent}
+                        onChange={(e) => handleDepositPercentChange(parseInt(e.target.value) || 10)}
+                        min="1"
+                        max="100"
+                        className="w-20 px-3 py-2 text-sm text-center border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                      />
+                      <span className="text-sm font-medium text-amber-800">%</span>
+                    </div>
+                  </div>
+                  {formData.full_trip_cost > 0 && (
+                    <div className="mt-3 pt-3 border-t border-amber-200 grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-amber-600">Full Trip Cost</p>
+                        <p className="font-semibold text-amber-800">{formData.currency} {formData.full_trip_cost.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-amber-600">Deposit ({formData.deposit_percent}%)</p>
+                        <p className="font-semibold text-amber-800">{formData.currency} {((formData.full_trip_cost * formData.deposit_percent) / 100).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-amber-600">Balance</p>
+                        <p className="font-semibold text-amber-800">{formData.currency} {(formData.full_trip_cost - (formData.full_trip_cost * formData.deposit_percent) / 100).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Client & Itinerary Selection */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -649,7 +867,7 @@ export default function InvoicesContent() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Link to Itinerary (Optional)
+                    Link to Itinerary {formData.invoice_type !== 'standard' && <span className="text-amber-600">(Recommended)</span>}
                   </label>
                   <select
                     value={formData.itinerary_id}
@@ -854,7 +1072,7 @@ export default function InvoicesContent() {
                   disabled={saving}
                   className="px-5 py-2.5 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50 shadow-sm"
                 >
-                  {saving ? 'Creating...' : 'Create Invoice'}
+                  {saving ? 'Creating...' : `Create ${TYPE_CONFIG[formData.invoice_type].label} Invoice`}
                 </button>
               </div>
             </form>

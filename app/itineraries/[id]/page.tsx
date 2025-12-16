@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
@@ -12,6 +12,7 @@ import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp }
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ItineraryPL from '@/app/components/ItineraryPL'
 import { createClient } from '@/lib/supabase'
+import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 
 interface Itinerary {
   id: string
@@ -87,6 +88,8 @@ export default function ViewItineraryPage() {
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
   const [generatingInvoice, setGeneratingInvoice] = useState(false)
   const [existingInvoice, setExistingInvoice] = useState<ExistingInvoice | null>(null)
+  const [generatingCommissions, setGeneratingCommissions] = useState(false)
+  const [commissionResult, setCommissionResult] = useState<string | null>(null)
   
   // Cost Mode State
   const [costMode, setCostMode] = useState<'auto' | 'manual'>('auto')
@@ -145,7 +148,6 @@ export default function ViewItineraryPage() {
     }
   }
 
-  // Toggle cost mode
   const handleToggleCostMode = async () => {
     const newMode = costMode === 'auto' ? 'manual' : 'auto'
     setSavingCostMode(true)
@@ -173,20 +175,17 @@ export default function ViewItineraryPage() {
     }
   }
 
-  // Start editing a service cost
   const handleStartEditCost = (service: Service) => {
     if (costMode !== 'manual') return
     setEditingServiceId(service.id)
     setEditedCost(service.total_cost.toString())
   }
 
-  // Cancel editing
   const handleCancelEditCost = () => {
     setEditingServiceId(null)
     setEditedCost('')
   }
 
-  // Save edited cost
   const handleSaveServiceCost = async (serviceId: string, dayId: string) => {
     const newCost = parseFloat(editedCost)
     if (isNaN(newCost) || newCost < 0) {
@@ -204,7 +203,6 @@ export default function ViewItineraryPage() {
 
       if (error) throw error
 
-      // Update local state
       setDays(prevDays => prevDays.map(day => {
         if (day.id === dayId) {
           return {
@@ -217,7 +215,6 @@ export default function ViewItineraryPage() {
         return day
       }))
 
-      // Recalculate total cost
       let newTotalCost = 0
       days.forEach(day => {
         day.services.forEach(s => {
@@ -229,7 +226,6 @@ export default function ViewItineraryPage() {
         })
       })
 
-      // Update itinerary total
       await supabase
         .from('itineraries')
         .update({ total_cost: newTotalCost })
@@ -248,11 +244,34 @@ export default function ViewItineraryPage() {
       setSavingServiceCost(false)
     }
   }
+  const handleGenerateCommissions = async () => {
+    if (!itinerary) return
+    
+    setGeneratingCommissions(true)
+    try {
+      const response = await fetch(`/api/itineraries/${itinerary.id}/generate-commissions`, {
+        method: 'POST'
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setCommissionResult(`✅ ${result.message}`)
+        setTimeout(() => setCommissionResult(null), 5000)
+      } else {
+        alert(result.error || 'Failed to generate commissions')
+      }
+    } catch (error) {
+      console.error('Error generating commissions:', error)
+      alert('Failed to generate commissions')
+    } finally {
+      setGeneratingCommissions(false)
+    }
+  }
 
   const handleGenerateInvoice = async () => {
     if (!itinerary) return
 
-    // If invoice exists, navigate to it
     if (existingInvoice) {
       router.push(`/invoices/${existingInvoice.id}`)
       return
@@ -260,17 +279,14 @@ export default function ViewItineraryPage() {
 
     setGeneratingInvoice(true)
     try {
-      // First, try to find matching client by email or name
       let clientId = itinerary.client_id || null
       
       if (!clientId) {
-        // Fetch clients and try to match
         const clientsResponse = await fetch('/api/clients')
         if (clientsResponse.ok) {
           const clientsData = await clientsResponse.json()
           const clients = clientsData.success ? clientsData.data : (Array.isArray(clientsData) ? clientsData : [])
           
-          // Try to find matching client by email first, then by name
           const matchingClient = clients.find((c: any) => {
             const clientEmail = c.email?.toLowerCase()
             const clientName = c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim()
@@ -293,7 +309,6 @@ export default function ViewItineraryPage() {
         }
       }
   
-      // If still no client found, create one automatically
       if (!clientId && itinerary.client_name) {
         const nameParts = itinerary.client_name.trim().split(' ')
         const firstName = nameParts[0] || ''
@@ -318,7 +333,6 @@ export default function ViewItineraryPage() {
         }
       }
   
-      // Build line items from itinerary
       const lineItems = [{
         description: `${itinerary.trip_name} - ${itinerary.itinerary_code}`,
         quantity: 1,
@@ -419,9 +433,7 @@ export default function ViewItineraryPage() {
 
       const response = await fetch('/api/send-email', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itineraryId: itinerary.id,
           clientName: itinerary.client_name,
@@ -455,9 +467,7 @@ export default function ViewItineraryPage() {
     try {
       await fetch(`/api/itineraries/${params.id}/mark-sent`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sentVia: method,
           recipientEmail: itinerary?.client_email
@@ -558,11 +568,10 @@ export default function ViewItineraryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ⭐ COMPACT HEADER */}
+      {/* HEADER */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
         <div className="container mx-auto px-4 py-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            {/* Title Section */}
             <div className="flex items-center gap-3">
               <Link 
                 href="/itineraries"
@@ -625,6 +634,28 @@ export default function ViewItineraryPage() {
                   </>
                 )}
               </button>
+              <button
+                onClick={handleGenerateCommissions}
+                disabled={generatingCommissions}
+                className="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
+                title="Generate commission records from services"
+              >
+                {generatingCommissions ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Handshake className="w-4 h-4" />
+                    <span>Commissions</span>
+                  </>
+                )}
+              </button>
+                   <GenerateDocumentsButton 
+                  itineraryId={itinerary.id}
+                   itineraryCode={itinerary.itinerary_code}
+                    />
               <Link
                 href={`/documents/contract/${itinerary.id}`}
                 className="px-3 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-1.5"
@@ -668,11 +699,19 @@ export default function ViewItineraryPage() {
         </div>
       </header>
 
-      {/* Success Message */}
+      {/* Success Messages */}
       {sendSuccess && (
         <div className="container mx-auto px-4 pt-3">
           <div className="bg-green-50 border border-green-200 p-3 rounded-md">
             <p className="text-sm text-green-700 font-medium">{sendSuccess}</p>
+          </div>
+        </div>
+      )}
+
+      {commissionResult && (
+        <div className="container mx-auto px-4 pt-3">
+          <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-md">
+            <p className="text-sm text-emerald-700 font-medium">{commissionResult}</p>
           </div>
         </div>
       )}
@@ -744,7 +783,7 @@ export default function ViewItineraryPage() {
       )}
 
       <div className="container mx-auto px-4 py-4 space-y-4">
-        {/* ⭐ COMPACT INFO CARD */}
+        {/* INFO CARD */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
@@ -765,9 +804,7 @@ export default function ViewItineraryPage() {
               <p className="text-xs text-gray-600">
                 to {new Date(itinerary.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </p>
-              <p className="text-xs text-primary-600 font-medium mt-0.5">
-                {itinerary.total_days} days
-              </p>
+              <p className="text-xs text-primary-600 font-medium mt-0.5">{itinerary.total_days} days</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">Passengers</p>
@@ -775,25 +812,18 @@ export default function ViewItineraryPage() {
                 {itinerary.num_adults} {itinerary.num_adults === 1 ? 'adult' : 'adults'}
               </p>
               {itinerary.num_children > 0 && (
-                <p className="text-xs text-gray-600">
-                  {itinerary.num_children} {itinerary.num_children === 1 ? 'child' : 'children'}
-                </p>
+                <p className="text-xs text-gray-600">{itinerary.num_children} {itinerary.num_children === 1 ? 'child' : 'children'}</p>
               )}
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">Total Cost</p>
-              <p className="text-xl font-bold text-gray-900">
-                {itinerary.currency} {itinerary.total_cost.toFixed(2)}
-              </p>
+              <p className="text-xl font-bold text-gray-900">{itinerary.currency} {itinerary.total_cost.toFixed(2)}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
                   {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
                 </span>
                 {existingInvoice && (
-                  <Link 
-                    href={`/invoices/${existingInvoice.id}`}
-                    className="inline-block px-2 py-0.5 rounded border text-xs font-medium bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                  >
+                  <Link href={`/invoices/${existingInvoice.id}`} className="inline-block px-2 py-0.5 rounded border text-xs font-medium bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100">
                     {existingInvoice.invoice_number}
                   </Link>
                 )}
@@ -808,250 +838,93 @@ export default function ViewItineraryPage() {
           )}
         </div>
 
-        {/* ⭐ COST MODE TOGGLE */}
+        {/* COST MODE TOGGLE */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${costMode === 'auto' ? 'bg-blue-100' : 'bg-amber-100'}`}>
-                {costMode === 'auto' ? (
-                  <Calculator className="w-5 h-5 text-blue-600" />
-                ) : (
-                  <Settings className="w-5 h-5 text-amber-600" />
-                )}
+                {costMode === 'auto' ? <Calculator className="w-5 h-5 text-blue-600" /> : <Settings className="w-5 h-5 text-amber-600" />}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">
-                  Cost Calculation: {costMode === 'auto' ? 'Automatic' : 'Manual'}
-                </h3>
-                <p className="text-xs text-gray-600">
-                  {costMode === 'auto' 
-                    ? 'Costs are calculated from the rates database' 
-                    : 'Click on any cost to edit it manually'}
-                </p>
+                <h3 className="text-sm font-semibold text-gray-900">Cost Calculation: {costMode === 'auto' ? 'Automatic' : 'Manual'}</h3>
+                <p className="text-xs text-gray-600">{costMode === 'auto' ? 'Costs are calculated from the rates database' : 'Click on any cost to edit it manually'}</p>
               </div>
             </div>
-            
             <div className="flex items-center gap-2">
-              {costModeChanged && (
-                <span className="text-xs text-green-600 font-medium flex items-center gap-1">
-                  <Check className="w-3 h-3" />
-                  Saved
-                </span>
-              )}
-              <button
-                onClick={handleToggleCostMode}
-                disabled={savingCostMode}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  costMode === 'manual' ? 'bg-amber-600' : 'bg-gray-300'
-                } ${savingCostMode ? 'opacity-50' : ''}`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    costMode === 'manual' ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
+              {costModeChanged && <span className="text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
+              <button onClick={handleToggleCostMode} disabled={savingCostMode} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${costMode === 'manual' ? 'bg-amber-600' : 'bg-gray-300'} ${savingCostMode ? 'opacity-50' : ''}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${costMode === 'manual' ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
-              <span className="text-xs font-medium text-gray-700">
-                {costMode === 'manual' ? 'Manual' : 'Auto'}
-              </span>
+              <span className="text-xs font-medium text-gray-700">{costMode === 'manual' ? 'Manual' : 'Auto'}</span>
             </div>
           </div>
-          
           {costMode === 'manual' && (
             <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-xs text-amber-800">
-                <strong>Manual Mode:</strong> Click on any service cost below to edit it. Changes are saved immediately and profit/loss will update automatically.
-              </p>
+              <p className="text-xs text-amber-800"><strong>Manual Mode:</strong> Click on any service cost below to edit it. Changes are saved immediately.</p>
             </div>
           )}
         </div>
 
-        {/* ⭐ PROFIT & LOSS ANALYSIS */}
-        {days.length > 0 && (
-          <ItineraryPL
-            itineraryId={itinerary.id}
-            totalCost={itinerary.total_cost}
-            currency={itinerary.currency}
-            marginPercent={25}
-            days={days}
-          />
-        )}
+        {/* PROFIT & LOSS */}
+        {days.length > 0 && <ItineraryPL itineraryId={itinerary.id} totalCost={itinerary.total_cost} currency={itinerary.currency} marginPercent={25} days={days} />}
 
-        {/* ⭐ WHATSAPP ACTIONS - Compact */}
+        {/* WHATSAPP ACTIONS */}
         <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-              <span className="text-white text-lg">📱</span>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">WhatsApp Actions</h3>
-              <p className="text-xs text-gray-600">Send updates to {itinerary.client_name}</p>
-            </div>
+            <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center"><span className="text-white text-lg">📱</span></div>
+            <div><h3 className="text-sm font-semibold text-gray-900">WhatsApp Actions</h3><p className="text-xs text-gray-600">Send updates to {itinerary.client_name}</p></div>
           </div>
-
-          {!itinerary.client_phone && (
-            <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-              <p className="text-yellow-800 text-xs">
-                ⚠️ Client phone number required. Add it in edit mode.
-              </p>
-            </div>
-          )}
-
+          {!itinerary.client_phone && <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md"><p className="text-yellow-800 text-xs">⚠️ Client phone number required. Add it in edit mode.</p></div>}
           {itinerary.client_phone && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-              <WhatsAppButton 
-                itineraryId={itinerary.id}
-                type="quote"
-                clientPhone={itinerary.client_phone}
-                clientName={itinerary.client_name}
-                onSuccess={() => {
-                  setSendSuccess('Quote sent via WhatsApp! ✅')
-                  setTimeout(() => setSendSuccess(null), 5000)
-                  fetchItinerary()
-                }}
-              />
-
-              {itinerary.status === 'draft' && (
-                <WhatsAppButton 
-                  itineraryId={itinerary.id}
-                  type="status"
-                  status="confirmed"
-                  onSuccess={() => {
-                    setSendSuccess('Booking confirmation sent! ✅')
-                    setTimeout(() => setSendSuccess(null), 5000)
-                    fetchItinerary()
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700"
-                />
-              )}
-
-              {itinerary.status !== 'completed' && (
-                <WhatsAppButton 
-                  itineraryId={itinerary.id}
-                  type="status"
-                  status="pending_payment"
-                  onSuccess={() => {
-                    setSendSuccess('Payment reminder sent! ✅')
-                    setTimeout(() => setSendSuccess(null), 5000)
-                  }}
-                  className="bg-yellow-600 hover:bg-yellow-700"
-                />
-              )}
-
-              <WhatsAppButton 
-                itineraryId={itinerary.id}
-                type="status"
-                status="paid"
-                onSuccess={() => {
-                  setSendSuccess('Payment confirmation sent! ✅')
-                  setTimeout(() => setSendSuccess(null), 5000)
-                  fetchItinerary()
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700"
-              />
+              <WhatsAppButton itineraryId={itinerary.id} type="quote" clientPhone={itinerary.client_phone} clientName={itinerary.client_name} onSuccess={() => { setSendSuccess('Quote sent via WhatsApp! ✅'); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} />
+              {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess('Booking confirmation sent! ✅'); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
+              {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess('Payment reminder sent! ✅'); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
+              <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess('Payment confirmation sent! ✅'); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
             </div>
           )}
-
           {itinerary.client_phone && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex flex-wrap gap-2 text-xs">
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full">
-                  <span>📱</span>
-                  <span>{itinerary.client_phone}</span>
-                </div>
-                {itinerary.status === 'sent' && (
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 rounded-full">
-                    <span>✅</span>
-                    <span>Quote sent</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full"><span>📱</span><span>{itinerary.client_phone}</span></div>
+                {itinerary.status === 'sent' && <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 rounded-full"><span>✅</span><span>Quote sent</span></div>}
               </div>
             </div>
           )}
         </div>
 
-        {/* Resource Summary Card */}
-        <div>
-          <ResourceSummaryCard
-            guideId={itinerary.assigned_guide_id}
-            vehicleId={itinerary.assigned_vehicle_id}
-            guideNotes={itinerary.guide_notes}
-            vehicleNotes={itinerary.vehicle_notes}
-            pickupLocation={itinerary.pickup_location}
-            pickupTime={itinerary.pickup_time}
-            onEdit={() => {
-              document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })
-            }}
-          />
-        </div>
-
-        {/* Resource Assignment */}
+        {/* Resource Cards */}
+        <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />
         <div id="resource-assignment">
-        <ResourceAssignmentV2
-  itineraryId={itinerary.id}
-  startDate={itinerary.start_date}
-  endDate={itinerary.end_date}
-  numTravelers={itinerary.num_travelers || itinerary.num_adults}
-  clientName={itinerary.client_name}
-  tripName={itinerary.trip_name}
-  onUpdate={fetchItinerary}
-/>
+          <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={fetchItinerary} />
         </div>
 
-        {/* ⭐ COMPACT DAY CONTROLS */}
+        {/* DAY CONTROLS */}
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold text-gray-900">Daily Itinerary</h2>
           <div className="flex gap-2">
-            <button
-              onClick={expandAll}
-              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors"
-            >
-              Expand All
-            </button>
-            <button
-              onClick={collapseAll}
-              className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-            >
-              Collapse All
-            </button>
+            <button onClick={expandAll} className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors">Expand All</button>
+            <button onClick={collapseAll} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">Collapse All</button>
           </div>
         </div>
 
-        {/* ⭐ COMPACT DAYS LIST WITH EDITABLE COSTS */}
+        {/* DAYS LIST */}
         <div className="space-y-3">
           {days.map((day) => (
             <div key={day.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-              <button
-                onClick={() => toggleDay(day.day_number)}
-                className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors"
-              >
+              <button onClick={() => toggleDay(day.day_number)} className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-primary-600 text-white rounded-md flex items-center justify-center font-semibold text-sm">
-                    {day.day_number}
-                  </div>
+                  <div className="w-8 h-8 bg-primary-600 text-white rounded-md flex items-center justify-center font-semibold text-sm">{day.day_number}</div>
                   <div className="text-left">
                     <h3 className="text-sm font-semibold text-gray-900">{day.title || `Day ${day.day_number}`}</h3>
-                    <p className="text-xs text-gray-500">
-                      {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      {day.city && ` • ${day.city}`}
-                    </p>
+                    <p className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{day.city && ` • ${day.city}`}</p>
                   </div>
                 </div>
-                {expandedDays.has(day.day_number) ? (
-                  <ChevronUp className="w-4 h-4 text-gray-500" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-gray-500" />
-                )}
+                {expandedDays.has(day.day_number) ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
               </button>
-
               {expandedDays.has(day.day_number) && (
                 <div className="p-4">
-                  {day.description && (
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-700">{day.description}</p>
-                    </div>
-                  )}
-
+                  {day.description && <div className="mb-4"><p className="text-sm text-gray-700">{day.description}</p></div>}
                   {day.services && day.services.length > 0 ? (
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">Services Included</h4>
@@ -1062,56 +935,20 @@ export default function ViewItineraryPage() {
                               <span className="text-lg">{getServiceIcon(service.service_type)}</span>
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
-                                <p className="text-xs text-gray-500 capitalize">
-                                  {service.service_type.replace('_', ' ')} 
-                                  {service.quantity > 1 && ` • Qty: ${service.quantity}`}
-                                </p>
-                                {service.notes && (
-                                  <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>
-                                )}
+                                <p className="text-xs text-gray-500 capitalize">{service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • Qty: ${service.quantity}`}</p>
+                                {service.notes && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
                               </div>
                             </div>
                             <div className="text-right">
-                              {/* Editable cost field in manual mode */}
                               {costMode === 'manual' && editingServiceId === service.id ? (
                                 <div className="flex items-center gap-1">
                                   <span className="text-sm text-gray-500">{itinerary.currency}</span>
-                                  <input
-                                    type="number"
-                                    value={editedCost}
-                                    onChange={(e) => setEditedCost(e.target.value)}
-                                    className="w-20 px-2 py-1 text-sm font-semibold text-right border border-primary-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    autoFocus
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveServiceCost(service.id, day.id)
-                                      if (e.key === 'Escape') handleCancelEditCost()
-                                    }}
-                                  />
-                                  <button
-                                    onClick={() => handleSaveServiceCost(service.id, day.id)}
-                                    disabled={savingServiceCost}
-                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                  >
-                                    <Check className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={handleCancelEditCost}
-                                    className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
+                                  <input type="number" value={editedCost} onChange={(e) => setEditedCost(e.target.value)} className="w-20 px-2 py-1 text-sm font-semibold text-right border border-primary-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleSaveServiceCost(service.id, day.id); if (e.key === 'Escape') handleCancelEditCost() }} />
+                                  <button onClick={() => handleSaveServiceCost(service.id, day.id)} disabled={savingServiceCost} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-4 h-4" /></button>
+                                  <button onClick={handleCancelEditCost} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X className="w-4 h-4" /></button>
                                 </div>
                               ) : (
-                                <button
-                                  onClick={() => handleStartEditCost(service)}
-                                  disabled={costMode !== 'manual'}
-                                  className={`text-sm font-semibold ${
-                                    costMode === 'manual' 
-                                      ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' 
-                                      : 'text-gray-900 cursor-default'
-                                  }`}
-                                  title={costMode === 'manual' ? 'Click to edit' : 'Switch to Manual mode to edit'}
-                                >
+                                <button onClick={() => handleStartEditCost(service)} disabled={costMode !== 'manual'} className={`text-sm font-semibold ${costMode === 'manual' ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' : 'text-gray-900 cursor-default'}`} title={costMode === 'manual' ? 'Click to edit' : 'Switch to Manual mode to edit'}>
                                   {itinerary.currency} {service.total_cost.toFixed(2)}
                                 </button>
                               )}
@@ -1121,29 +958,16 @@ export default function ViewItineraryPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-6 text-gray-500">
-                      <p className="text-sm">No services added yet</p>
-                    </div>
+                    <div className="text-center py-6 text-gray-500"><p className="text-sm">No services added yet</p></div>
                   )}
-
-                  {day.overnight_city && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <p className="text-xs text-gray-600">
-                        🌙 Overnight in <span className="font-medium">{day.overnight_city}</span>
-                      </p>
-                    </div>
-                  )}
+                  {day.overnight_city && <div className="mt-3 pt-3 border-t border-gray-200"><p className="text-xs text-gray-600">🌙 Overnight in <span className="font-medium">{day.overnight_city}</span></p></div>}
                 </div>
               )}
             </div>
           ))}
         </div>
 
-        {days.length === 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center">
-            <p className="text-sm text-gray-500">No days planned yet</p>
-          </div>
-        )}
+        {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
       </div>
     </div>
   )
