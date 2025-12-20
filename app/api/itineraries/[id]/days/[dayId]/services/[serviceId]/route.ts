@@ -1,115 +1,144 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+// API Route: /api/itineraries/[id]/days/[dayId]/services/[serviceId]/route.ts
+// Updated to handle transport-specific fields
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; dayId: string; serviceId: string }> }
-) {
-  try {
-    const { serviceId } = await params
-
-    const { data, error } = await supabaseAdmin
-      .from('itinerary_services')  // ← FIXED
-      .select(`
-        *,
-        supplier:suppliers(id, name, type, default_commission_rate, commission_type)
-      `)
-      .eq('id', serviceId)
-      .single()
-
-    if (error) {
-      return NextResponse.json({ error: 'Service not found' }, { status: 404 })
-    }
-
-    return NextResponse.json({ success: true, data })
-  } catch (error) {
-    console.error('Error in service GET:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
 
 export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; dayId: string; serviceId: string }> }
+  request: Request,
+  { params }: { params: { id: string; dayId: string; serviceId: string } }
 ) {
   try {
-    const { serviceId } = await params
+    const supabase = createClient()
     const body = await request.json()
 
-    // If supplier_id changed, fetch new supplier details
-    let supplierData = null
-    if (body.supplier_id) {
-      const { data: supplier } = await supabaseAdmin
-        .from('suppliers')
-        .select('*')
-        .eq('id', body.supplier_id)
-        .single()
-      
-      supplierData = supplier
-      
-      // Update supplier_name if supplier selected
-      if (supplier && !body.supplier_name) {
-        body.supplier_name = supplier.name
-      }
-      
-      // Set commission rate from supplier if not manually set
-      if (supplier && body.commission_rate === undefined) {
-        body.commission_rate = supplier.default_commission_rate
-      }
+    // Extract all fields including transport-specific ones
+    const updateData: Record<string, any> = {
+      service_name: body.service_name,
+      service_code: body.service_code,
+      service_type: body.service_type,
+      quantity: body.quantity,
+      rate_eur: body.rate_eur,
+      rate_non_eur: body.rate_non_eur,
+      total_cost: body.total_cost,
+      notes: body.notes,
+      supplier_id: body.supplier_id,
+      supplier_name: body.supplier_name,
+      commission_rate: body.commission_rate,
+      commission_amount: body.commission_amount,
+      commission_status: body.commission_status,
+      client_price: body.client_price,
+      is_preferred_supplier: body.is_preferred_supplier,
+      // Transport-specific fields
+      vehicle_type: body.vehicle_type || null,
+      pickup_location: body.pickup_location || null,
+      dropoff_location: body.dropoff_location || null,
+      pickup_time: body.pickup_time || null,
     }
 
-    // Recalculate commission amount
-    if (body.commission_rate !== undefined && body.selling_price !== undefined) {
-      body.commission_amount = (Number(body.selling_price) * Number(body.commission_rate)) / 100
-    }
+    // Remove undefined values
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key]
+      }
+    })
 
-    const { data, error } = await supabaseAdmin
-      .from('itinerary_services')  // ← FIXED
-      .update(body)
-      .eq('id', serviceId)
-      .select(`
-        *,
-        supplier:suppliers(id, name, type, default_commission_rate, commission_type)
-      `)
+    const { data, error } = await supabase
+      .from('itinerary_services')
+      .update(updateData)
+      .eq('id', params.serviceId)
+      .eq('day_id', params.dayId)
+      .select()
       .single()
 
     if (error) {
       console.error('Error updating service:', error)
-      return NextResponse.json({ error: 'Failed to update service' }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
-    console.error('Error in service PUT:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Server error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 }
 
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; dayId: string; serviceId: string }> }
+  request: Request,
+  { params }: { params: { id: string; dayId: string; serviceId: string } }
 ) {
   try {
-    const { serviceId } = await params
+    const supabase = createClient()
 
-    const { error } = await supabaseAdmin
-      .from('itinerary_services')  // ← FIXED
+    const { error } = await supabase
+      .from('itinerary_services')
       .delete()
-      .eq('id', serviceId)
+      .eq('id', params.serviceId)
+      .eq('day_id', params.dayId)
 
     if (error) {
       console.error('Error deleting service:', error)
-      return NextResponse.json({ error: 'Failed to delete service' }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in service DELETE:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Server error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string; dayId: string; serviceId: string } }
+) {
+  try {
+    const supabase = createClient()
+
+    const { data, error } = await supabase
+      .from('itinerary_services')
+      .select(`
+        *,
+        suppliers (
+          id,
+          name,
+          type,
+          contact_name,
+          contact_phone,
+          contact_email,
+          city
+        )
+      `)
+      .eq('id', params.serviceId)
+      .eq('day_id', params.dayId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching service:', error)
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    console.error('Server error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 }

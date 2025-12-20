@@ -6,6 +6,28 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// All valid supplier fields (including new ones from migration)
+const VALID_FIELDS = [
+  'name', 'type', 'contact_name', 'contact_email', 'contact_phone',
+  'phone2', 'whatsapp', 'website', 'address', 'city', 'country',
+  'default_commission_rate', 'commission_type', 'payment_terms',
+  'bank_details', 'status', 'notes',
+  // New type-specific fields
+  'languages', 'vehicle_types', 'star_rating', 'property_type',
+  'cuisine_types', 'routes', 'ship_name', 'cabin_count', 'capacity'
+]
+
+// Filter object to only include valid fields
+function filterValidFields(obj: Record<string, any>): Record<string, any> {
+  const filtered: Record<string, any> = {}
+  for (const key of VALID_FIELDS) {
+    if (obj[key] !== undefined) {
+      filtered[key] = obj[key]
+    }
+  }
+  return filtered
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -17,14 +39,25 @@ export async function GET(request: NextRequest) {
       .select('*')
       .order('name', { ascending: true })
 
-    if (type) query = query.eq('type', type)
-    if (status) query = query.eq('status', status)
+    // Support comma-separated types (e.g., type=transport_company,transport,driver)
+    if (type) {
+      const types = type.split(',').map(t => t.trim()).filter(Boolean)
+      if (types.length === 1) {
+        query = query.eq('type', types[0])
+      } else if (types.length > 1) {
+        query = query.in('type', types)
+      }
+    }
+    
+    if (status) {
+      query = query.eq('status', status)
+    }
 
     const { data, error } = await query
 
     if (error) {
       console.error('Error fetching suppliers:', error)
-      return NextResponse.json({ error: 'Failed to fetch suppliers' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch suppliers', details: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: data || [] })
@@ -45,22 +78,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Filter to only valid fields and set defaults
     const newSupplier = {
-      name: body.name,
-      type: body.type,
-      contact_name: body.contact_name || null,
-      contact_email: body.contact_email || null,
-      contact_phone: body.contact_phone || null,
-      website: body.website || null,
-      address: body.address || null,
-      city: body.city || null,
+      ...filterValidFields(body),
       country: body.country || 'Egypt',
-      default_commission_rate: body.default_commission_rate || null,
-      commission_type: body.commission_type || null,
-      payment_terms: body.payment_terms || null,
-      bank_details: body.bank_details || null,
-      status: body.status || 'active',
-      notes: body.notes || null
+      status: body.status || 'active'
     }
 
     const { data, error } = await supabaseAdmin
@@ -71,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating supplier:', error)
-      return NextResponse.json({ error: 'Failed to create supplier' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to create supplier', details: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data }, { status: 201 })

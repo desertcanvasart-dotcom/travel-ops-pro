@@ -1,140 +1,66 @@
-// ============================================
-// API Route: /api/resources/restaurants/route.ts
-// ============================================
-// Restaurants collection operations: GET all, POST new
-// ============================================
-
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
-// GET - List all restaurants
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
-
-    const { searchParams } = new URL(request.url)
+    const searchParams = request.nextUrl.searchParams
+    const supplierId = searchParams.get('supplier_id')
     const city = searchParams.get('city')
-    const isActive = searchParams.get('is_active')
+    const cuisineType = searchParams.get('cuisine_type')
+    const mealType = searchParams.get('meal_type')
+    const activeOnly = searchParams.get('active_only') === 'true'
 
-    let query = supabase
-      .from('restaurant_contacts')
-      .select('*')
-      .order('name', { ascending: true })
+    let query = supabaseAdmin
+      .from('meal_rates')
+      .select(`
+        *,
+        supplier:supplier_id (id, name, city, contact_phone, contact_email, cuisine_types)
+      `)
+      .order('restaurant_name')
+      .order('meal_type')
 
-    if (city) {
-      query = query.ilike('city', `%${city}%`)
-    }
-
-    if (isActive !== null) {
-      query = query.eq('is_active', isActive === 'true')
-    }
+    if (supplierId) query = query.eq('supplier_id', supplierId)
+    if (city) query = query.eq('restaurant_city', city)
+    if (cuisineType) query = query.eq('cuisine_type', cuisineType)
+    if (mealType) query = query.eq('meal_type', mealType)
+    if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
 
-    if (error) {
-      console.error('Error fetching restaurants:', error)
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch restaurants' },
-        { status: 500 }
-      )
-    }
+    if (error) throw error
 
-    return NextResponse.json({
-      success: true,
-      data: data || [],
-      count: data?.length || 0
-    })
-
-  } catch (error) {
-    console.error('Error in restaurants GET:', error)
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: true, data })
+  } catch (error: any) {
+    console.error('Error fetching meal rates:', error)
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
 
-// POST - Create new restaurant
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
     const body = await request.json()
 
-    if (!body.name || !body.city) {
-      return NextResponse.json(
-        { success: false, error: 'Name and city are required' },
-        { status: 400 }
-      )
+    const newRate = {
+      ...body,
+      supplier_id: body.supplier_id || null
     }
 
-    const restaurantData = {
-      // Basic fields
-      name: body.name,
-      restaurant_type: body.restaurant_type || null,
-      cuisine_type: body.cuisine_type || null,
-      city: body.city,
-      address: body.address || null,
-      contact_person: body.contact_person || null,
-      phone: body.phone || null,
-      email: body.email || null,
-      whatsapp: body.whatsapp || null,
-      capacity: body.capacity || null,
-      meal_types: body.meal_types || [],
-      dietary_options: body.dietary_options || [],
-      notes: body.notes || null,
-      is_active: body.is_active !== undefined ? body.is_active : true,
-
-      // Rate fields - EUR
-      rate_per_person_eur: body.rate_per_person_eur || null,
-      rate_breakfast_eur: body.rate_breakfast_eur || null,
-      rate_lunch_eur: body.rate_lunch_eur || null,
-      rate_dinner_eur: body.rate_dinner_eur || null,
-
-      // Rate fields - Non-EUR
-      rate_per_person_non_eur: body.rate_per_person_non_eur || null,
-      rate_breakfast_non_eur: body.rate_breakfast_non_eur || null,
-      rate_lunch_non_eur: body.rate_lunch_non_eur || null,
-      rate_dinner_non_eur: body.rate_dinner_non_eur || null,
-
-      // Inclusions
-      drinks_included: body.drinks_included || false,
-      tip_included: body.tip_included || false,
-
-      // Discounts
-      child_discount_percent: body.child_discount_percent !== undefined ? body.child_discount_percent : 50,
-      group_discount_percent: body.group_discount_percent || null,
-      group_min_size: body.group_min_size || 10,
-
-      // Validity
-      rate_valid_from: body.rate_valid_from || null,
-      rate_valid_to: body.rate_valid_to || null
-    }
-
-    const { data, error } = await supabase
-      .from('restaurant_contacts')
-      .insert([restaurantData])
-      .select()
+    const { data, error } = await supabaseAdmin
+      .from('meal_rates')
+      .insert([newRate])
+      .select(`*, supplier:supplier_id (id, name, city)`)
       .single()
 
-    if (error) {
-      console.error('Error creating restaurant:', error)
-      return NextResponse.json(
-        { success: false, error: 'Failed to create restaurant' },
-        { status: 500 }
-      )
-    }
+    if (error) throw error
 
-    return NextResponse.json({
-      success: true,
-      data: data,
-      message: 'Restaurant created successfully'
-    }, { status: 201 })
-
-  } catch (error) {
-    console.error('Error in restaurants POST:', error)
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: true, data })
+  } catch (error: any) {
+    console.error('Error creating meal rate:', error)
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

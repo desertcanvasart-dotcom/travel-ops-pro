@@ -1,53 +1,58 @@
 // =====================================================
-// CONTENT LIBRARY - EDITOR PAGE
+// CONTENT LIBRARY - DYNAMIC EDITOR PAGE
 // =====================================================
-// 📁 COPY TO: app/content-library/[id]/page.tsx
+// 📁 REPLACE: app/content-library/[id]/page.tsx
 // =====================================================
 
 'use client'
 
 import { useState, useEffect, use } from 'react'
-import { createClient } from '@/app/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import {
-  ArrowLeft,
-  Save,
-  Trash2,
-  Plus,
-  X,
-  AlertCircle,
-  CheckCircle2,
+import { 
+  ArrowLeft, 
+  Save, 
   Loader2,
   Wallet,
   Star,
   Gem,
   Crown,
-  MapPin,
-  Clock,
-  Tag,
-  FileText,
-  Library
+  Plus,
+  X,
+  Check,
+  Info,
+  Landmark,
+  Hotel,
+  Sparkles,
+  UtensilsCrossed,
+  Car,
+  Ship,
+  Calendar,
+  MessageSquare
 } from 'lucide-react'
+import { 
+  CATEGORY_SCHEMAS, 
+  getCategorySchema, 
+  getSchemaBySlug,
+  getDefaultMetadata,
+  type CategorySchema,
+  type CategoryField 
+} from '@/lib/content-library/category-schemas'
 
-const TIERS = [
-  { id: 'budget', label: 'Budget', icon: Wallet, color: 'emerald' },
-  { id: 'standard', label: 'Standard', icon: Star, color: 'blue' },
-  { id: 'deluxe', label: 'Deluxe', icon: Gem, color: 'purple' },
-  { id: 'luxury', label: 'Luxury', icon: Crown, color: 'amber' },
-] as const
+// =====================================================
+// TYPES
+// =====================================================
 
-type Tier = 'budget' | 'standard' | 'deluxe' | 'luxury'
-
-interface Category {
+interface ContentCategory {
   id: string
   name: string
   slug: string
+  icon: string | null
 }
 
-interface Variation {
+interface ContentVariation {
   id?: string
-  tier: Tier
+  tier: 'budget' | 'standard' | 'deluxe' | 'luxury'
   title: string
   description: string
   highlights: string[]
@@ -56,8 +61,8 @@ interface Variation {
   is_active: boolean
 }
 
-interface ContentData {
-  id: string
+interface ContentItem {
+  id?: string
   category_id: string
   name: string
   slug: string
@@ -65,27 +70,455 @@ interface ContentData {
   location: string
   duration: string
   tags: string[]
+  metadata: Record<string, unknown>
   is_active: boolean
-  category?: Category
-  variations?: Variation[]
+  variations: ContentVariation[]
 }
+
+const TIERS = ['budget', 'standard', 'deluxe', 'luxury'] as const
+type Tier = typeof TIERS[number]
+
+const TIER_CONFIG: Record<Tier, { label: string; icon: typeof Wallet; color: string; bgColor: string }> = {
+  budget: { label: 'Budget', icon: Wallet, color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+  standard: { label: 'Standard', icon: Star, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+  deluxe: { label: 'Deluxe', icon: Gem, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+  luxury: { label: 'Luxury', icon: Crown, color: 'text-amber-600', bgColor: 'bg-amber-50' }
+}
+
+const CATEGORY_ICONS: Record<string, typeof Landmark> = {
+  'Landmark': Landmark,
+  'Hotel': Hotel,
+  'Sparkles': Sparkles,
+  'UtensilsCrossed': UtensilsCrossed,
+  'Car': Car,
+  'Ship': Ship,
+  'Calendar': Calendar,
+  'MessageSquare': MessageSquare
+}
+
+// =====================================================
+// DYNAMIC FORM FIELD COMPONENT
+// =====================================================
+
+interface DynamicFieldProps {
+  field: CategoryField
+  value: unknown
+  onChange: (name: string, value: unknown) => void
+}
+
+function DynamicField({ field, value, onChange }: DynamicFieldProps) {
+  const handleChange = (newValue: unknown) => {
+    onChange(field.name, newValue)
+  }
+
+  switch (field.type) {
+    case 'text':
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <input
+            type="text"
+            value={(value as string) || ''}
+            onChange={(e) => handleChange(e.target.value)}
+            placeholder={field.placeholder}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+          />
+          {field.helpText && (
+            <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              {field.helpText}
+            </p>
+          )}
+        </div>
+      )
+
+    case 'textarea':
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <textarea
+            value={(value as string) || ''}
+            onChange={(e) => handleChange(e.target.value)}
+            placeholder={field.placeholder}
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
+          />
+          {field.helpText && (
+            <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              {field.helpText}
+            </p>
+          )}
+        </div>
+      )
+
+    case 'number':
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <input
+            type="number"
+            value={(value as number) || ''}
+            onChange={(e) => handleChange(parseInt(e.target.value) || 0)}
+            min={field.min}
+            max={field.max}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+          />
+        </div>
+      )
+
+    case 'select':
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <select
+            value={(value as string) || ''}
+            onChange={(e) => handleChange(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] bg-white"
+          >
+            <option value="">Select...</option>
+            {(field.options as string[])?.map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </div>
+      )
+
+    case 'multi-select':
+      const selectedValues = (value as string[]) || []
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <div className="flex flex-wrap gap-2 p-3 border border-gray-200 rounded-lg min-h-[48px] bg-white">
+            {(field.options as string[])?.map((opt) => {
+              const isSelected = selectedValues.includes(opt)
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    if (isSelected) {
+                      handleChange(selectedValues.filter(v => v !== opt))
+                    } else {
+                      handleChange([...selectedValues, opt])
+                    }
+                  }}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-all whitespace-nowrap ${
+                    isSelected 
+                      ? 'bg-[#647C47] text-white shadow-sm' 
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {opt}
+                </button>
+              )
+            })}
+          </div>
+          {selectedValues.length > 0 && (
+            <p className="mt-1.5 text-xs text-gray-500">
+              {selectedValues.length} selected
+            </p>
+          )}
+        </div>
+      )
+
+    case 'checkboxes':
+      const checkedValues = (value as string[]) || []
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {(field.options as string[])?.map((opt) => {
+              const isChecked = checkedValues.includes(opt)
+              return (
+                <label
+                  key={opt}
+                  className={`flex items-center gap-3 px-3 py-2.5 border rounded-lg cursor-pointer transition-all ${
+                    isChecked 
+                      ? 'border-[#647C47] bg-[#647C47]/5 shadow-sm' 
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        handleChange([...checkedValues, opt])
+                      } else {
+                        handleChange(checkedValues.filter(v => v !== opt))
+                      }
+                    }}
+                    className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47] flex-shrink-0"
+                  />
+                  <span className="text-sm text-gray-700 leading-tight">{opt}</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )
+
+    case 'boolean':
+      return (
+        <div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={(value as boolean) || false}
+                onChange={(e) => handleChange(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`w-10 h-6 rounded-full transition-colors ${
+                value ? 'bg-[#647C47]' : 'bg-gray-200'
+              }`}>
+                <div className={`w-4 h-4 bg-white rounded-full shadow absolute top-1 transition-transform ${
+                  value ? 'translate-x-5' : 'translate-x-1'
+                }`} />
+              </div>
+            </div>
+            <span className="text-sm font-medium text-gray-700">{field.label}</span>
+          </label>
+        </div>
+      )
+
+    case 'time':
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <input
+            type="time"
+            value={(value as string) || ''}
+            onChange={(e) => handleChange(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+          />
+        </div>
+      )
+
+    case 'rating':
+      const rating = (value as number) || 0
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <div className="flex gap-1">
+            {Array.from({ length: field.max || 5 }).map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => handleChange(i + 1)}
+                className={`w-8 h-8 rounded transition-colors ${
+                  i < rating 
+                    ? 'bg-amber-400 text-white' 
+                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                }`}
+              >
+                <Star className="w-4 h-4 mx-auto" fill={i < rating ? 'currentColor' : 'none'} />
+              </button>
+            ))}
+            {rating > 0 && (
+              <button
+                type="button"
+                onClick={() => handleChange(0)}
+                className="ml-2 text-xs text-gray-400 hover:text-gray-600"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )
+
+    case 'list':
+      const listItems = (value as string[]) || []
+      const [newItem, setNewItem] = useState('')
+      return (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {field.label}
+            {field.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+          <div className="space-y-2">
+            {listItems.map((item, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={item}
+                  onChange={(e) => {
+                    const updated = [...listItems]
+                    updated[index] = e.target.value
+                    handleChange(updated)
+                  }}
+                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleChange(listItems.filter((_, i) => i !== index))}
+                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newItem}
+                onChange={(e) => setNewItem(e.target.value)}
+                placeholder={field.placeholder}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newItem.trim()) {
+                    e.preventDefault()
+                    handleChange([...listItems, newItem.trim()])
+                    setNewItem('')
+                  }
+                }}
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (newItem.trim()) {
+                    handleChange([...listItems, newItem.trim()])
+                    setNewItem('')
+                  }
+                }}
+                className="p-2 text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          {field.helpText && (
+            <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              {field.helpText}
+            </p>
+          )}
+        </div>
+      )
+
+    default:
+      return null
+  }
+}
+
+// =====================================================
+// LIST INPUT COMPONENT (for highlights, inclusions)
+// =====================================================
+
+interface ListInputProps {
+  label: string
+  items: string[]
+  onChange: (items: string[]) => void
+  placeholder?: string
+}
+
+function ListInput({ label, items, onChange, placeholder = 'Add item...' }: ListInputProps) {
+  const [newItem, setNewItem] = useState('')
+
+  const addItem = () => {
+    if (newItem.trim()) {
+      onChange([...items, newItem.trim()])
+      setNewItem('')
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <div className="space-y-2">
+        {items.map((item, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={item}
+              onChange={(e) => {
+                const updated = [...items]
+                updated[index] = e.target.value
+                onChange(updated)
+              }}
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+            />
+            <button
+              type="button"
+              onClick={() => onChange(items.filter((_, i) => i !== index))}
+              className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            placeholder={placeholder}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addItem()
+              }
+            }}
+            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+          />
+          <button
+            type="button"
+            onClick={addItem}
+            className="flex items-center gap-1 px-3 py-2 text-sm text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =====================================================
+// MAIN EDITOR COMPONENT
+// =====================================================
 
 export default function ContentEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const supabase = createClient()
+  const isNew = id === 'new'
 
+  const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
+  const [categories, setCategories] = useState<ContentCategory[]>([])
   const [activeTier, setActiveTier] = useState<Tier>('budget')
-  const [tagInput, setTagInput] = useState('')
+  const [categorySchema, setCategorySchema] = useState<CategorySchema | null>(null)
 
   // Form state
-  const [formData, setFormData] = useState<ContentData>({
-    id: '',
+  const [formData, setFormData] = useState<ContentItem>({
     category_id: '',
     name: '',
     slug: '',
@@ -93,95 +526,145 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
     location: '',
     duration: '',
     tags: [],
+    metadata: {},
     is_active: true,
+    variations: TIERS.map(tier => ({
+      tier,
+      title: '',
+      description: '',
+      highlights: [],
+      inclusions: [],
+      internal_notes: '',
+      is_active: true
+    }))
   })
 
-  const [variations, setVariations] = useState<Record<Tier, Variation>>({
-    budget: { tier: 'budget', title: '', description: '', highlights: [], inclusions: [], internal_notes: '', is_active: true },
-    standard: { tier: 'standard', title: '', description: '', highlights: [], inclusions: [], internal_notes: '', is_active: true },
-    deluxe: { tier: 'deluxe', title: '', description: '', highlights: [], inclusions: [], internal_notes: '', is_active: true },
-    luxury: { tier: 'luxury', title: '', description: '', highlights: [], inclusions: [], internal_notes: '', is_active: true },
-  })
+  const [tagInput, setTagInput] = useState('')
 
   useEffect(() => {
-    fetchCategories()
-    if (id !== 'new') {
-      fetchContent()
-    } else {
-      setLoading(false)
-    }
-  }, [id])
+    setMounted(true)
+  }, [])
 
-  async function fetchCategories() {
-    try {
-      const response = await fetch('/api/content-library/categories')
-      if (!response.ok) throw new Error('Failed to fetch categories')
-      const data = await response.json()
-      setCategories(data)
-    } catch (err) {
-      console.error('Error fetching categories:', err)
-    }
-  }
-
-  async function fetchContent() {
-    try {
-      const response = await fetch(`/api/content-library/${id}`)
-      if (!response.ok) throw new Error('Failed to fetch content')
-      const data = await response.json()
-
-      setFormData({
-        id: data.id,
-        category_id: data.category_id,
-        name: data.name,
-        slug: data.slug,
-        short_description: data.short_description || '',
-        location: data.location || '',
-        duration: data.duration || '',
-        tags: data.tags || [],
-        is_active: data.is_active,
-      })
-
-      // Map variations to state
-      if (data.variations) {
-        const variationMap = { ...variations }
-        data.variations.forEach((v: Variation) => {
-          variationMap[v.tier] = {
-            id: v.id,
-            tier: v.tier,
-            title: v.title || '',
-            description: v.description || '',
-            highlights: v.highlights || [],
-            inclusions: v.inclusions || [],
-            internal_notes: v.internal_notes || '',
-            is_active: v.is_active,
-          }
-        })
-        setVariations(variationMap)
+  // Load categories
+  useEffect(() => {
+    async function loadCategories() {
+      try {
+        const res = await fetch('/api/content-library/categories')
+        if (res.ok) {
+          const data = await res.json()
+          setCategories(data)
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error)
       }
-    } catch (err) {
-      console.error('Error fetching content:', err)
-      setError('Failed to load content')
-    } finally {
-      setLoading(false)
     }
-  }
+    loadCategories()
+  }, [])
 
-  function generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-  }
+  // Load content if editing
+  useEffect(() => {
+    async function loadContent() {
+      if (isNew) {
+        setLoading(false)
+        return
+      }
 
-  function handleNameChange(name: string) {
+      try {
+        const res = await fetch(`/api/content-library/${id}`)
+        if (res.ok) {
+          const data = await res.json()
+          
+          // Ensure all tiers exist
+          const variations = TIERS.map(tier => {
+            const existing = data.variations?.find((v: ContentVariation) => v.tier === tier)
+            return existing || {
+              tier,
+              title: '',
+              description: '',
+              highlights: [],
+              inclusions: [],
+              internal_notes: '',
+              is_active: true
+            }
+          })
+
+          setFormData({
+            ...data,
+            metadata: data.metadata || {},
+            variations
+          })
+
+          // Load schema for existing category
+          if (data.category?.slug) {
+            const schema = getSchemaBySlug(data.category.slug)
+            setCategorySchema(schema)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading content:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadContent()
+  }, [id, isNew])
+
+  // Update schema when category changes
+  useEffect(() => {
+    if (formData.category_id) {
+      const category = categories.find(c => c.id === formData.category_id)
+      if (category) {
+        const schema = getSchemaBySlug(category.slug)
+        setCategorySchema(schema)
+        
+        // Initialize default metadata if switching category
+        if (schema && Object.keys(formData.metadata).length === 0) {
+          setFormData(prev => ({
+            ...prev,
+            metadata: getDefaultMetadata(schema.slug)
+          }))
+        }
+      }
+    }
+  }, [formData.category_id, categories])
+
+  // Auto-generate slug
+  useEffect(() => {
+    if (isNew && formData.name) {
+      const slug = formData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+      setFormData(prev => ({ ...prev, slug }))
+    }
+  }, [formData.name, isNew])
+
+  // Get current variation
+  const currentVariation = formData.variations.find(v => v.tier === activeTier)
+
+  // Update variation
+  const updateVariation = (field: keyof ContentVariation, value: unknown) => {
     setFormData(prev => ({
       ...prev,
-      name,
-      slug: id === 'new' ? generateSlug(name) : prev.slug
+      variations: prev.variations.map(v =>
+        v.tier === activeTier ? { ...v, [field]: value } : v
+      )
     }))
   }
 
-  function handleAddTag() {
+  // Update metadata
+  const updateMetadata = (field: string, value: unknown) => {
+    setFormData(prev => ({
+      ...prev,
+      metadata: {
+        ...prev.metadata,
+        [field]: value
+      }
+    }))
+  }
+
+  // Add tag
+  const addTag = () => {
     if (tagInput.trim() && !formData.tags.includes(tagInput.trim().toLowerCase())) {
       setFormData(prev => ({
         ...prev,
@@ -191,202 +674,101 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  function handleRemoveTag(tag: string) {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag)
-    }))
-  }
-
-  function handleVariationChange(tier: Tier, field: keyof Variation, value: unknown) {
-    setVariations(prev => ({
-      ...prev,
-      [tier]: {
-        ...prev[tier],
-        [field]: value
-      }
-    }))
-  }
-
-  function handleAddHighlight(tier: Tier) {
-    const current = variations[tier].highlights
-    handleVariationChange(tier, 'highlights', [...current, ''])
-  }
-
-  function handleUpdateHighlight(tier: Tier, index: number, value: string) {
-    const current = [...variations[tier].highlights]
-    current[index] = value
-    handleVariationChange(tier, 'highlights', current)
-  }
-
-  function handleRemoveHighlight(tier: Tier, index: number) {
-    const current = variations[tier].highlights.filter((_, i) => i !== index)
-    handleVariationChange(tier, 'highlights', current)
-  }
-
-  function handleAddInclusion(tier: Tier) {
-    const current = variations[tier].inclusions
-    handleVariationChange(tier, 'inclusions', [...current, ''])
-  }
-
-  function handleUpdateInclusion(tier: Tier, index: number, value: string) {
-    const current = [...variations[tier].inclusions]
-    current[index] = value
-    handleVariationChange(tier, 'inclusions', current)
-  }
-
-  function handleRemoveInclusion(tier: Tier, index: number) {
-    const current = variations[tier].inclusions.filter((_, i) => i !== index)
-    handleVariationChange(tier, 'inclusions', current)
-  }
-
-  async function handleSave() {
+  // Save content
+  const handleSave = async () => {
     if (!formData.name || !formData.category_id) {
-      setError('Name and category are required')
+      alert('Please fill in required fields')
       return
     }
 
     setSaving(true)
-    setError(null)
-    setSuccess(null)
-
     try {
-      // Prepare variations (only ones with description)
-      const variationsToSave = Object.values(variations)
-        .filter(v => v.description.trim())
-        .map(v => ({
-          ...v,
-          highlights: v.highlights.filter(h => h.trim()),
-          inclusions: v.inclusions.filter(i => i.trim()),
-        }))
+      const url = isNew ? '/api/content-library' : `/api/content-library/${id}`
+      const method = isNew ? 'POST' : 'PUT'
 
-      if (id === 'new') {
-        // Create new content
-        const response = await fetch('/api/content-library', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            variations: variationsToSave
-          })
-        })
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
 
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Failed to create content')
-        }
-
-        const data = await response.json()
-        setSuccess('Content created successfully!')
-        
-        // Redirect to edit page
-        setTimeout(() => {
-          router.push(`/content-library/${data.id}`)
-        }, 1000)
+      if (res.ok) {
+        router.push('/content-library')
       } else {
-        // Update existing content
-        const response = await fetch(`/api/content-library/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            variations: variationsToSave
-          })
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Failed to update content')
-        }
-
-        setSuccess('Content saved successfully!')
-        setTimeout(() => setSuccess(null), 3000)
+        const error = await res.json()
+        alert(error.message || 'Error saving content')
       }
-    } catch (err) {
-      console.error('Save error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to save')
+    } catch (error) {
+      console.error('Error saving:', error)
+      alert('Error saving content')
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
+  // Check variation completeness
+  const getVariationStatus = (tier: Tier) => {
+    const variation = formData.variations.find(v => v.tier === tier)
+    if (!variation) return 'empty'
+    if (variation.description) return 'complete'
+    return 'empty'
+  }
+
+  if (!mounted || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#647C47]" />
       </div>
     )
   }
 
-  const currentVariation = variations[activeTier]
-  const filledTiers = Object.values(variations).filter(v => v.description.trim()).length
+  const selectedCategory = categories.find(c => c.id === formData.category_id)
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/content-library"
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">
-                  {id === 'new' ? 'New Content' : formData.name || 'Edit Content'}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  {filledTiers}/4 tier variations
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] disabled:opacity-50 transition-colors"
-              >
-                {saving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/content-library"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </Link>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">
+                {isNew ? 'New Content' : formData.name}
+              </h1>
+              <p className="text-sm text-gray-500">
+                {formData.variations.filter(v => v.description).length}/4 tier variations
+              </p>
             </div>
           </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#566b3d] transition-colors disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save
+          </button>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Messages */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-auto">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        )}
-
-        {success && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-700">
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-            <span>{success}</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Basic Info */}
-          <div className="lg:col-span-1 space-y-6">
+      {/* Content */}
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Basic Info & Category Fields */}
+          <div className="space-y-6">
             {/* Basic Information */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-gray-400" />
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <span className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">📄</span>
                 Basic Information
               </h2>
 
@@ -398,8 +780,12 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                   </label>
                   <select
                     value={formData.category_id}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category_id: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      category_id: e.target.value,
+                      metadata: {} // Reset metadata when category changes
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] bg-white"
                   >
                     <option value="">Select category...</option>
                     {categories.map(cat => (
@@ -416,267 +802,246 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                   <input
                     type="text"
                     value={formData.name}
-                    onChange={(e) => handleNameChange(e.target.value)}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="e.g., Pyramids of Giza"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   />
                 </div>
 
                 {/* Slug */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Slug
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
                   <input
                     type="text"
                     value={formData.slug}
                     onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value }))}
-                    placeholder="pyramids-of-giza"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-500 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   />
                 </div>
 
                 {/* Short Description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Short Description
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
                   <textarea
                     value={formData.short_description}
                     onChange={(e) => setFormData(prev => ({ ...prev, short_description: e.target.value }))}
-                    placeholder="Brief description for lists..."
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
+                    placeholder="Brief summary for listings..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
                   />
                 </div>
-              </div>
-            </div>
 
-            {/* Location & Duration */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-gray-400" />
-                Details
-              </h2>
+                {/* Location - Show for most categories */}
+                {categorySchema?.slug !== 'phrases-expressions' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <input
+                      type="text"
+                      value={formData.location}
+                      onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+                      placeholder="e.g., Giza, Cairo"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+                    />
+                  </div>
+                )}
 
-              <div className="space-y-4">
+                {/* Tags */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                    placeholder="e.g., Giza, Cairo"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    <Clock className="w-3.5 h-3.5 inline mr-1" />
-                    Duration
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.duration}
-                    onChange={(e) => setFormData(prev => ({ ...prev, duration: e.target.value }))}
-                    placeholder="e.g., 3-4 hours"
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Tags */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Tag className="w-4 h-4 text-gray-400" />
-                Tags
-              </h2>
-
-              <div className="flex flex-wrap gap-2 mb-3">
-                {formData.tags.map(tag => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-700 text-sm rounded-full"
-                  >
-                    {tag}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {formData.tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-md"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            tags: prev.tags.filter((_, i) => i !== index)
+                          }))}
+                          className="hover:text-red-500"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addTag()
+                        }
+                      }}
+                      placeholder="Add tag..."
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+                    />
                     <button
-                      onClick={() => handleRemoveTag(tag)}
-                      className="text-gray-400 hover:text-gray-600"
+                      type="button"
+                      onClick={addTag}
+                      className="px-3 py-2 text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <Plus className="w-4 h-4" />
                     </button>
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                  placeholder="Add tag..."
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-                />
-                <button
-                  onClick={handleAddTag}
-                  className="px-3 py-2 text-sm font-medium text-[#647C47] bg-[#647C47]/10 rounded-lg hover:bg-[#647C47]/20 transition-colors"
-                >
-                  Add
-                </button>
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* Category-Specific Fields */}
+            {categorySchema && categorySchema.fields.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 className="text-sm font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-[#647C47]/10 rounded flex items-center justify-center">
+                    {(() => {
+                      const IconComponent = CATEGORY_ICONS[categorySchema.icon] || Landmark
+                      return <IconComponent className="w-4 h-4 text-[#647C47]" />
+                    })()}
+                  </span>
+                  {categorySchema.label} Details
+                </h2>
+
+                <div className="space-y-6">
+                  {categorySchema.fields.map((field) => (
+                    <DynamicField
+                      key={field.name}
+                      field={field}
+                      value={formData.metadata[field.name]}
+                      onChange={updateMetadata}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column - Tier Variations */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl border border-gray-200">
               {/* Tier Tabs */}
-              <div className="border-b border-gray-200">
-                <div className="flex">
-                  {TIERS.map(tier => {
-                    const Icon = tier.icon
-                    const hasContent = variations[tier.id].description.trim()
-                    const isActive = activeTier === tier.id
-                    
-                    return (
-                      <button
-                        key={tier.id}
-                        onClick={() => setActiveTier(tier.id)}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                          isActive
-                            ? `border-${tier.color}-500 text-${tier.color}-700 bg-${tier.color}-50/50`
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        {tier.label}
-                        {hasContent && (
-                          <CheckCircle2 className={`w-3.5 h-3.5 text-${tier.color}-500`} />
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
+              <div className="flex border-b border-gray-200">
+                {TIERS.map((tier) => {
+                  const config = TIER_CONFIG[tier]
+                  const Icon = config.icon
+                  const status = getVariationStatus(tier)
+
+                  return (
+                    <button
+                      key={tier}
+                      onClick={() => setActiveTier(tier)}
+                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative ${
+                        activeTier === tier
+                          ? `${config.color} border-b-2 border-current`
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {config.label}
+                      {status === 'complete' && (
+                        <Check className="w-3.5 h-3.5 text-green-500" />
+                      )}
+                    </button>
+                  )
+                })}
               </div>
 
-              {/* Variation Form */}
-              <div className="p-5 space-y-5">
-                {/* Title */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Title (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={currentVariation.title}
-                    onChange={(e) => handleVariationChange(activeTier, 'title', e.target.value)}
-                    placeholder={`e.g., ${formData.name || 'Content'} ${TIERS.find(t => t.id === activeTier)?.label} Experience`}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-                  />
-                </div>
+              {/* Tier Content */}
+              <div className="p-6 space-y-6">
+                {currentVariation && (
+                  <>
+                    {/* Title */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Title (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={currentVariation.title}
+                        onChange={(e) => updateVariation('title', e.target.value)}
+                        placeholder={`${TIER_CONFIG[activeTier].label} experience title...`}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+                      />
+                    </div>
 
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={currentVariation.description}
-                    onChange={(e) => handleVariationChange(activeTier, 'description', e.target.value)}
-                    placeholder={`Write the ${activeTier} tier description. This is what the AI will use when generating itineraries...`}
-                    rows={6}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    {currentVariation.description.length} characters
-                  </p>
-                </div>
+                    {/* Description */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Description <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={currentVariation.description}
+                        onChange={(e) => updateVariation('description', e.target.value)}
+                        placeholder={`How you describe this at the ${activeTier} tier...`}
+                        rows={6}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        {currentVariation.description.length} characters
+                      </p>
+                    </div>
 
-                {/* Highlights */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Highlights
-                  </label>
-                  <div className="space-y-2">
-                    {currentVariation.highlights.map((highlight, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={highlight}
-                          onChange={(e) => handleUpdateHighlight(activeTier, index, e.target.value)}
-                          placeholder="Key selling point..."
-                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-                        />
-                        <button
-                          onClick={() => handleRemoveHighlight(activeTier, index)}
-                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => handleAddHighlight(activeTier)}
-                      className="flex items-center gap-1 text-sm text-[#647C47] hover:text-[#4f613a] transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Highlight
-                    </button>
-                  </div>
-                </div>
+                    {/* Highlights - Show if schema allows */}
+                    {categorySchema?.tierConfig.showHighlights !== false && (
+                      <ListInput
+                        label="Highlights"
+                        items={currentVariation.highlights}
+                        onChange={(items) => updateVariation('highlights', items)}
+                        placeholder="Add highlight..."
+                      />
+                    )}
 
-                {/* Inclusions */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Inclusions
-                  </label>
-                  <div className="space-y-2">
-                    {currentVariation.inclusions.map((inclusion, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={inclusion}
-                          onChange={(e) => handleUpdateInclusion(activeTier, index, e.target.value)}
-                          placeholder="What's included..."
-                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-                        />
-                        <button
-                          onClick={() => handleRemoveInclusion(activeTier, index)}
-                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => handleAddInclusion(activeTier)}
-                      className="flex items-center gap-1 text-sm text-[#647C47] hover:text-[#4f613a] transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Inclusion
-                    </button>
-                  </div>
-                </div>
+                    {/* Inclusions - Only show if schema allows */}
+                    {categorySchema?.tierConfig.showInclusions && (
+                      <ListInput
+                        label="Inclusions"
+                        items={currentVariation.inclusions}
+                        onChange={(items) => updateVariation('inclusions', items)}
+                        placeholder="Add inclusion..."
+                      />
+                    )}
 
-                {/* Internal Notes */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Internal Notes
-                    <span className="ml-2 text-xs text-gray-400 font-normal">(Team only)</span>
-                  </label>
-                  <textarea
-                    value={currentVariation.internal_notes}
-                    onChange={(e) => handleVariationChange(activeTier, 'internal_notes', e.target.value)}
-                    placeholder="Notes for your team (not included in generated content)..."
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none bg-amber-50/50"
-                  />
-                </div>
+                    {/* Internal Notes */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Internal Notes
+                      </label>
+                      <textarea
+                        value={currentVariation.internal_notes}
+                        onChange={(e) => updateVariation('internal_notes', e.target.value)}
+                        placeholder="Notes for your team (not shown in itineraries)..."
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none bg-amber-50/50"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Tips Card */}
+            <div className="mt-6 bg-[#647C47]/5 rounded-xl border border-[#647C47]/20 p-6">
+              <h3 className="text-sm font-semibold text-[#647C47] mb-2">
+                💡 Tier Writing Tips
+              </h3>
+              <div className="text-sm text-gray-600 space-y-2">
+                {activeTier === 'budget' && (
+                  <p>Focus on <strong>value and essentials</strong>. Highlight what's included, emphasize good-value experiences, and use straightforward language.</p>
+                )}
+                {activeTier === 'standard' && (
+                  <p>Balance <strong>comfort and experience</strong>. Mention quality aspects, comfortable arrangements, and reliable service without excessive luxury language.</p>
+                )}
+                {activeTier === 'deluxe' && (
+                  <p>Emphasize <strong>enhanced experiences and refinement</strong>. Highlight superior quality, added comforts, and exclusive touches that elevate the experience.</p>
+                )}
+                {activeTier === 'luxury' && (
+                  <p>Convey <strong>exclusivity and ultimate comfort</strong>. Use sophisticated language, emphasize private access, personalized service, and exceptional quality.</p>
+                )}
               </div>
             </div>
           </div>

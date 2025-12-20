@@ -1,7 +1,5 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -407,8 +405,8 @@ export default function AttractionsContent() {
   const activeAttractions = attractions.filter(a => a.is_active).length
   const inactiveAttractions = attractions.filter(a => !a.is_active).length
   const avgRate = attractions.length > 0 
-    ? (attractions.reduce((sum, a) => sum + a.eur_rate, 0) / attractions.length).toFixed(2)
-    : '0.00'
+  ? (attractions.reduce((sum, a) => sum + (a.eur_rate || 0), 0) / attractions.length).toFixed(2)
+  : '0.00'
 
   if (loading) {
     return (
@@ -633,17 +631,17 @@ export default function AttractionsContent() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">
-                        {attraction.fee_type === 'free' ? 'FREE' : `€${attraction.eur_rate.toFixed(2)}`}
+                      {attraction.fee_type === 'free' ? 'FREE' : `€${(attraction.eur_rate || 0).toFixed(2)}`}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-semibold text-primary-600">
-                        {attraction.fee_type === 'free' ? 'FREE' : `€${attraction.non_eur_rate.toFixed(2)}`}
+                      {attraction.fee_type === 'free' ? 'FREE' : `€${(attraction.non_eur_rate || 0).toFixed(2)}`}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm text-gray-600">
-                        {attraction.egyptian_rate ? `€${attraction.egyptian_rate.toFixed(2)}` : '-'}
+                      {attraction.egyptian_rate ? `€${attraction.egyptian_rate.toFixed(2)}` : '-'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">

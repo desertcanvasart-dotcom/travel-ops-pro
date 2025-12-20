@@ -18,7 +18,7 @@ export async function GET(
       .from('tasks')
       .select(`
         *,
-        assigned_member:team_members(id, name, role)
+        assigned_member:team_members(id, name, role, email)
       `)
       .eq('id', id)
       .single()
@@ -35,7 +35,7 @@ export async function GET(
   }
 }
 
-// PUT - Update task
+// PUT - Update task (with archive support)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -48,23 +48,31 @@ export async function PUT(
       updated_at: new Date().toISOString()
     }
 
+    // Standard fields
     if (body.title !== undefined) updateData.title = body.title
     if (body.description !== undefined) updateData.description = body.description
     if (body.due_date !== undefined) updateData.due_date = body.due_date
     if (body.priority !== undefined) updateData.priority = body.priority
+    if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to
+    if (body.linked_type !== undefined) updateData.linked_type = body.linked_type
+    if (body.linked_id !== undefined) updateData.linked_id = body.linked_id
+    if (body.notes !== undefined) updateData.notes = body.notes
+
+    // Status change with completed_at tracking
     if (body.status !== undefined) {
       updateData.status = body.status
-      // Set completed_at when marking as done
       if (body.status === 'done') {
         updateData.completed_at = new Date().toISOString()
       } else {
         updateData.completed_at = null
       }
     }
-    if (body.assigned_to !== undefined) updateData.assigned_to = body.assigned_to
-    if (body.linked_type !== undefined) updateData.linked_type = body.linked_type
-    if (body.linked_id !== undefined) updateData.linked_id = body.linked_id
-    if (body.notes !== undefined) updateData.notes = body.notes
+
+    // Archive/unarchive support
+    if (body.archived !== undefined) {
+      updateData.archived = body.archived
+      updateData.archived_at = body.archived ? new Date().toISOString() : null
+    }
 
     const { data, error } = await supabaseAdmin
       .from('tasks')
@@ -72,7 +80,7 @@ export async function PUT(
       .eq('id', id)
       .select(`
         *,
-        assigned_member:team_members(id, name, role)
+        assigned_member:team_members(id, name, role, email)
       `)
       .single()
 

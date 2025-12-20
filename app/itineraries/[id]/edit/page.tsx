@@ -3,7 +3,16 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, ChevronDown, ChevronRight, Trash2, User, Plane, Calendar, Users, FileText, Building, Percent } from 'lucide-react'
+import { ArrowLeft, Save, ChevronDown, ChevronRight, Trash2, User, Plane, Calendar, Users, FileText, Building, Percent, MapPin, Clock, Car } from 'lucide-react'
+
+// Constants
+const EGYPTIAN_CITIES = [
+  'Cairo', 'Giza', 'Alexandria', 'Luxor', 'Aswan', 'Hurghada', 
+  'Sharm El Sheikh', 'Dahab', 'Marsa Alam', 'Siwa', 'Fayoum',
+  'Port Said', 'Suez', 'Ismailia', 'El Gouna', 'Safaga'
+]
+
+const VEHICLE_TYPES = ['Sedan', 'Minivan', 'Van', 'Bus']
 
 interface Itinerary {
   id: string
@@ -48,12 +57,18 @@ interface Service {
   commission_rate?: number
   commission_amount?: number
   commission_status?: string
+  // Transport-specific fields
+  vehicle_type?: string
+  pickup_location?: string
+  dropoff_location?: string
+  pickup_time?: string
 }
 
 interface Supplier {
   id: string
   name: string
   type: string
+  city?: string
   default_commission_rate: number | null
   commission_type: string | null
 }
@@ -296,13 +311,19 @@ export default function EditItineraryPage() {
     return icons[type] || '📋'
   }
 
+  // Check if service is transport type
+  const isTransportService = (serviceType: string) => {
+    return ['transportation', 'transport', 'transfer'].includes(serviceType?.toLowerCase())
+  }
+
   // Filter suppliers by service type
   const getSuppliersByType = (serviceType: string) => {
     const typeMap: Record<string, string[]> = {
       accommodation: ['hotel'],
       hotel: ['hotel'],
-      transportation: ['transport', 'driver'],
-      transport: ['transport', 'driver'],
+      transportation: ['transport_company', 'transport', 'driver'],
+      transport: ['transport_company', 'transport', 'driver'],
+      transfer: ['transport_company', 'transport', 'driver'],
       guide: ['guide'],
       entrance: ['attraction'],
       meal: ['restaurant'],
@@ -312,7 +333,7 @@ export default function EditItineraryPage() {
       shopping: ['shop']
     }
     
-    const supplierTypes = typeMap[serviceType] || []
+    const supplierTypes = typeMap[serviceType?.toLowerCase()] || []
     if (supplierTypes.length === 0) return suppliers
     
     return suppliers.filter(s => supplierTypes.includes(s.type))
@@ -606,6 +627,76 @@ export default function EditItineraryPage() {
                               </button>
                             </div>
 
+                            {/* TRANSPORT-SPECIFIC FIELDS */}
+                            {isTransportService(service.service_type) && (
+                              <div className="mb-3 p-2 bg-cyan-50 rounded border border-cyan-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Car className="w-3.5 h-3.5 text-cyan-600" />
+                                  <span className="text-xs font-medium text-cyan-700">Transport Details</span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Vehicle Type</label>
+                                    <select
+                                      value={service.vehicle_type || ''}
+                                      onChange={(e) => handleServiceChange(day.id, service.id, 'vehicle_type', e.target.value)}
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-white"
+                                    >
+                                      <option value="">Select Type</option>
+                                      {VEHICLE_TYPES.map(type => (
+                                        <option key={type} value={type}>{type}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Pickup Location</label>
+                                    <input
+                                      type="text"
+                                      value={service.pickup_location || ''}
+                                      onChange={(e) => handleServiceChange(day.id, service.id, 'pickup_location', e.target.value)}
+                                      placeholder="e.g., Cairo Airport"
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Dropoff Location</label>
+                                    <input
+                                      type="text"
+                                      value={service.dropoff_location || ''}
+                                      onChange={(e) => handleServiceChange(day.id, service.id, 'dropoff_location', e.target.value)}
+                                      placeholder="e.g., Marriott Hotel"
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Pickup Time</label>
+                                    <input
+                                      type="time"
+                                      value={service.pickup_time || ''}
+                                      onChange={(e) => handleServiceChange(day.id, service.id, 'pickup_time', e.target.value)}
+                                      className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                                    />
+                                  </div>
+                                </div>
+                                {/* Route preview */}
+                                {service.pickup_location && service.dropoff_location && (
+                                  <div className="mt-2 flex items-center gap-2 text-xs text-cyan-700">
+                                    <MapPin className="w-3 h-3" />
+                                    <span className="font-medium">{service.pickup_location}</span>
+                                    <span>→</span>
+                                    <span className="font-medium">{service.dropoff_location}</span>
+                                    {service.pickup_time && (
+                                      <>
+                                        <span className="text-gray-400 mx-1">|</span>
+                                        <Clock className="w-3 h-3" />
+                                        <span>{service.pickup_time}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
                             {/* Supplier Selection */}
                             <div className="mb-3 p-2 bg-white rounded border border-gray-200">
                               <div className="flex items-center gap-2 mb-2">
@@ -614,16 +705,18 @@ export default function EditItineraryPage() {
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                 <div>
-                                  <label className="block text-xs text-gray-500 mb-1">Supplier</label>
+                                  <label className="block text-xs text-gray-500 mb-1">
+                                    {isTransportService(service.service_type) ? 'Transport Company' : 'Supplier'}
+                                  </label>
                                   <select
                                     value={service.supplier_id || ''}
                                     onChange={(e) => handleServiceChange(day.id, service.id, 'supplier_id', e.target.value || null)}
                                     className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
                                   >
-                                    <option value="">Select Supplier</option>
+                                    <option value="">Select {isTransportService(service.service_type) ? 'Company' : 'Supplier'}</option>
                                     {getSuppliersByType(service.service_type).map(s => (
                                       <option key={s.id} value={s.id}>
-                                        {s.name} {s.default_commission_rate ? `(${s.default_commission_rate}%)` : ''}
+                                        {s.name} {s.city ? `(${s.city})` : ''} {s.default_commission_rate ? `- ${s.default_commission_rate}%` : ''}
                                       </option>
                                     ))}
                                   </select>

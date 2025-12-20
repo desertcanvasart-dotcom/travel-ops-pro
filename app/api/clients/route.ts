@@ -45,3 +45,115 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+// POST /api/clients - Create new client
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+
+    // Validate required fields
+    if (!body.first_name) {
+      return NextResponse.json(
+        { success: false, error: 'First name is required' },
+        { status: 400 }
+      )
+    }
+
+    // Create client
+    const clientData = {
+      first_name: body.first_name,
+      last_name: body.last_name || body.first_name,
+      email: body.email || null,
+      phone: body.phone || null,
+      nationality: body.nationality || 'Unknown',
+      status: body.status || 'prospect',
+      client_type: body.client_type || 'individual',
+      passport_type: body.passport_type || 'other',
+      preferred_language: body.preferred_language || 'English',
+      client_source: body.client_source || 'whatsapp',
+      vip_status: body.vip_status || false
+    }
+
+    console.log('📝 Creating client:', clientData)
+
+    const { data: newClient, error: clientError } = await supabase
+      .from('clients')
+      .insert(clientData)
+      .select()
+      .single()
+
+    if (clientError) {
+      console.error('❌ Client insert error:', clientError)
+      return NextResponse.json(
+        { success: false, error: clientError.message, details: clientError },
+        { status: 500 }
+      )
+    }
+
+    console.log('✅ Client created:', newClient.id)
+
+    // Save preferences if provided
+    if (body.preferences) {
+      try {
+        await supabase
+          .from('client_preferences')
+          .insert({
+            client_id: newClient.id,
+            preferred_accommodation_type: body.preferences.accommodation_type || '3-star',
+            tour_pace_preference: body.preferences.tour_pace || 'moderate',
+            interests: body.preferences.interests || '',
+            special_needs: body.preferences.special_needs || null,
+            preferred_tier: body.preferences.tier || 'standard'
+          })
+        console.log('✅ Client preferences saved')
+      } catch (e) {
+        console.warn('⚠️ Could not save preferences:', e)
+      }
+    }
+
+    // Save note if provided
+    if (body.note) {
+      try {
+        await supabase
+          .from('client_notes')
+          .insert({
+            client_id: newClient.id,
+            note_text: body.note,
+            note_type: 'general',
+            is_internal: true
+          })
+        console.log('✅ Client note saved')
+      } catch (e) {
+        console.warn('⚠️ Could not save note:', e)
+      }
+    }
+
+    // Link WhatsApp conversation if phone provided
+    if (body.link_whatsapp_phone) {
+      try {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({
+            client_id: newClient.id,
+            client_name: `${clientData.first_name} ${clientData.last_name}`.trim()
+          })
+          .eq('phone_number', body.link_whatsapp_phone)
+        console.log('✅ WhatsApp conversation linked')
+      } catch (e) {
+        console.warn('⚠️ Could not link WhatsApp:', e)
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: newClient
+    }, { status: 201 })
+
+  } catch (error: any) {
+    console.error('❌ API error:', error)
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to create client' },
+      { status: 500 }
+    )
+  }
+}

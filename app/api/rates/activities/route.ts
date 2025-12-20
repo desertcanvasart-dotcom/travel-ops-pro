@@ -10,32 +10,30 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
-    const originCity = searchParams.get('origin_city')
-    const destinationCity = searchParams.get('destination_city')
-    const cabinType = searchParams.get('cabin_type')
+    const city = searchParams.get('city')
+    const category = searchParams.get('category')
     const activeOnly = searchParams.get('active_only') === 'true'
 
     let query = supabaseAdmin
-      .from('sleeping_train_rates')
+      .from('activity_rates')
       .select('*')
-      .order('origin_city')
+      .order('activity_name')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
-    if (originCity) query = query.eq('origin_city', originCity)
-    if (destinationCity) query = query.eq('destination_city', destinationCity)
-    if (cabinType) query = query.eq('cabin_type', cabinType)
+    if (city) query = query.eq('city', city)
+    if (category) query = query.eq('activity_category', category)
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
 
     if (error) {
-      console.error('GET sleeping_train_rates error:', error)
+      console.error('GET activity_rates error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: data || [] })
   } catch (error: any) {
-    console.error('GET sleeping_train_rates catch error:', error)
+    console.error('GET activity_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
@@ -45,38 +43,37 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const newRate = {
-      service_code: body.service_code || `SLP-${Date.now().toString(36).toUpperCase()}`,
-      origin_city: body.origin_city || null,
-      destination_city: body.destination_city || null,
-      cabin_type: body.cabin_type || null,
-      rate_oneway_eur: parseFloat(body.rate_oneway_eur) || 0,
-      rate_roundtrip_eur: body.rate_roundtrip_eur ? parseFloat(body.rate_roundtrip_eur) : null,
-      departure_time: body.departure_time || null,
-      arrival_time: body.arrival_time || null,
+      service_code: body.service_code || `ACT-${Date.now().toString(36).toUpperCase()}`,
+      activity_name: body.activity_name,
+      activity_category: body.activity_category || null,
+      activity_type: body.activity_type || null,
+      duration: body.duration || null,
+      city: body.city || null,
+      base_rate_eur: parseFloat(body.base_rate_eur) || 0,
+      base_rate_non_eur: parseFloat(body.base_rate_non_eur) || 0,
+      season: body.season || null,
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
-      season: body.season || null,
-      operator_name: body.operator_name || null,
       supplier_id: body.supplier_id || null,
-      description: body.description || null,
+      supplier_name: body.supplier_name || null,
       notes: body.notes || null,
       is_active: body.is_active !== false
     }
 
     const { data, error } = await supabaseAdmin
-      .from('sleeping_train_rates')
+      .from('activity_rates')
       .insert(newRate)
       .select('*')
       .single()
 
     if (error) {
-      console.error('POST sleeping_train_rates error:', error)
+      console.error('POST activity_rates error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    console.error('POST sleeping_train_rates catch error:', error)
+    console.error('POST activity_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

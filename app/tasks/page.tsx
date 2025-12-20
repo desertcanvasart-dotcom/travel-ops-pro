@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { 
   Search,
@@ -16,15 +16,27 @@ import {
   Calendar,
   User,
   Filter,
-  ChevronRight,
   Play,
   Link as LinkIcon,
   FileText,
   Users as UsersIcon,
   Receipt,
   MapPin,
-  ChevronDown,
-  Loader2
+  Loader2,
+  LayoutGrid,
+  List,
+  Table as TableIcon,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Archive,
+  ArchiveRestore,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 
 interface TeamMember {
@@ -63,8 +75,9 @@ interface Task {
   created_at: string
   updated_at: string
   completed_at: string
+  archived: boolean
+  archived_at?: string
   assigned_member?: TeamMember
-  // For display purposes
   linked_name?: string
 }
 
@@ -76,6 +89,7 @@ interface Summary {
   overdue: number
   due_today: number
   high_priority: number
+  archived: number
 }
 
 const PRIORITIES = [
@@ -97,6 +111,13 @@ const LINKED_TYPES = [
   { value: 'invoice', label: 'Invoice', icon: FileText, path: '/invoices' },
   { value: 'expense', label: 'Expense', icon: Receipt, path: '/expenses' }
 ]
+
+type ViewMode = 'kanban' | 'table' | 'list'
+type SortField = 'title' | 'status' | 'priority' | 'due_date' | 'assigned_to'
+type SortDirection = 'asc' | 'desc'
+
+const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 }
+const STATUS_ORDER = { todo: 0, in_progress: 1, done: 2 }
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -124,7 +145,17 @@ export default function TasksPage() {
     notes: ''
   })
   const [saving, setSaving] = useState(false)
-  const [loadingLinkedItems, setLoadingLinkedItems] = useState(false)
+
+  // View mode, pagination, sorting
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
+  const [sortField, setSortField] = useState<SortField>('due_date')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+
+  // Archive state
+  const [showArchived, setShowArchived] = useState(false)
+  const [archiving, setArchiving] = useState<string | null>(null)
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -133,6 +164,7 @@ export default function TasksPage() {
       if (priorityFilter) params.append('priority', priorityFilter)
       if (assigneeFilter) params.append('assignedTo', assigneeFilter)
       if (dueDateFilter) params.append('dueDate', dueDateFilter)
+      params.append('includeArchived', showArchived ? 'true' : 'false')
 
       const response = await fetch(`/api/tasks?${params}`)
       if (response.ok) {
@@ -147,7 +179,7 @@ export default function TasksPage() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, priorityFilter, assigneeFilter, dueDateFilter])
+  }, [statusFilter, priorityFilter, assigneeFilter, dueDateFilter, showArchived])
 
   const fetchTeamMembers = async () => {
     try {
@@ -168,7 +200,6 @@ export default function TasksPage() {
       const response = await fetch('/api/clients')
       if (response.ok) {
         const result = await response.json()
-        // Handle your API format: { clients: [...] }
         const data = result.clients || result.data || (Array.isArray(result) ? result : [])
         setClients(data)
       }
@@ -195,15 +226,18 @@ export default function TasksPage() {
     fetchTeamMembers()
   }, [fetchTasks])
 
-  // Fetch clients/itineraries when modal opens
   useEffect(() => {
     if (showModal) {
       if (clients.length === 0) fetchClients()
       if (itineraries.length === 0) fetchItineraries()
     }
-  }, [showModal])
+  }, [showModal, clients.length, itineraries.length])
 
-  // Create notification when task is assigned
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter, priorityFilter, assigneeFilter, dueDateFilter, itemsPerPage, showArchived])
+
   const createTaskNotification = async (taskId: string, taskTitle: string, assigneeId: string, isNewTask: boolean) => {
     try {
       const assignee = teamMembers.find(m => m.id === assigneeId)
@@ -253,7 +287,6 @@ export default function TasksPage() {
         const result = await response.json()
         const taskId = result.data?.id || editingTask?.id
 
-        // Send notification if task is assigned/reassigned
         if (formData.assigned_to && taskId) {
           const isNewAssignment = !editingTask || previousAssignee !== formData.assigned_to
           if (isNewAssignment) {
@@ -285,6 +318,53 @@ export default function TasksPage() {
       }
     } catch (error) {
       console.error('Error updating task status:', error)
+    }
+  }
+
+  const handleArchive = async (task: Task) => {
+    setArchiving(task.id)
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          archived: !task.archived,
+          archived_at: task.archived ? null : new Date().toISOString()
+        })
+      })
+      if (response.ok) {
+        fetchTasks()
+      }
+    } catch (error) {
+      console.error('Error archiving task:', error)
+    } finally {
+      setArchiving(null)
+    }
+  }
+
+  const handleBulkArchiveDone = async () => {
+    const doneTasks = tasks.filter(t => t.status === 'done' && !t.archived)
+    if (doneTasks.length === 0) return
+    
+    if (!confirm(`Archive ${doneTasks.length} completed task${doneTasks.length > 1 ? 's' : ''}?`)) return
+
+    setArchiving('bulk')
+    try {
+      await Promise.all(doneTasks.map(task => 
+        fetch(`/api/tasks/${task.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            archived: true,
+            archived_at: new Date().toISOString()
+          })
+        })
+      ))
+      fetchTasks()
+    } catch (error) {
+      console.error('Error bulk archiving:', error)
+    } finally {
+      setArchiving(null)
     }
   }
 
@@ -369,19 +449,66 @@ export default function TasksPage() {
 
   const hasActiveFilters = statusFilter || priorityFilter || assigneeFilter || dueDateFilter
 
-  const filteredTasks = tasks.filter(task => {
-    return task.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           task.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  })
+  // Filter tasks
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      const matchesSearch = task.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           task.description?.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesArchive = showArchived ? true : !task.archived
+      return matchesSearch && matchesArchive
+    })
+  }, [tasks, searchTerm, showArchived])
 
-  // Group tasks by status for kanban-style view
-  const tasksByStatus = {
-    todo: filteredTasks.filter(t => t.status === 'todo'),
-    in_progress: filteredTasks.filter(t => t.status === 'in_progress'),
-    done: filteredTasks.filter(t => t.status === 'done')
-  }
+  // Sort tasks
+  const sortedTasks = useMemo(() => {
+    return [...filteredTasks].sort((a, b) => {
+      let comparison = 0
 
-  // Get linked item display name
+      switch (sortField) {
+        case 'title':
+          comparison = (a.title || '').localeCompare(b.title || '')
+          break
+        case 'status':
+          comparison = (STATUS_ORDER[a.status as keyof typeof STATUS_ORDER] ?? 99) - 
+                       (STATUS_ORDER[b.status as keyof typeof STATUS_ORDER] ?? 99)
+          break
+        case 'priority':
+          comparison = (PRIORITY_ORDER[a.priority as keyof typeof PRIORITY_ORDER] ?? 99) - 
+                       (PRIORITY_ORDER[b.priority as keyof typeof PRIORITY_ORDER] ?? 99)
+          break
+        case 'due_date':
+          if (!a.due_date && !b.due_date) comparison = 0
+          else if (!a.due_date) comparison = 1
+          else if (!b.due_date) comparison = -1
+          else comparison = new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+          break
+        case 'assigned_to':
+          const nameA = a.assigned_member?.name || ''
+          const nameB = b.assigned_member?.name || ''
+          comparison = nameA.localeCompare(nameB)
+          break
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+  }, [filteredTasks, sortField, sortDirection])
+
+  // Pagination
+  const totalPages = Math.ceil(sortedTasks.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTasks = sortedTasks.slice(startIndex, endIndex)
+
+  // Tasks by status for kanban
+  const tasksByStatus = useMemo(() => ({
+    todo: filteredTasks.filter(t => t.status === 'todo' && !t.archived),
+    in_progress: filteredTasks.filter(t => t.status === 'in_progress' && !t.archived),
+    done: filteredTasks.filter(t => t.status === 'done' && !t.archived)
+  }), [filteredTasks])
+
+  const archivedTasks = filteredTasks.filter(t => t.archived)
+  const archivableDoneCount = tasks.filter(t => t.status === 'done' && !t.archived).length
+
   const getLinkedItemName = (type: string, id: string) => {
     if (type === 'client') {
       const client = clients.find(c => c.id === id)
@@ -392,6 +519,22 @@ export default function TasksPage() {
       return itinerary ? `${itinerary.itinerary_code} - ${itinerary.client_name}` : id
     }
     return id
+  }
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 text-gray-400" />
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="h-3 w-3 text-[#647C47]" />
+      : <ArrowDown className="h-3 w-3 text-[#647C47]" />
   }
 
   if (loading) {
@@ -416,68 +559,102 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Task
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`p-1.5 rounded ${viewMode === 'kanban' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Kanban View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Table View"
+            >
+              <TableIcon className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              title="List View"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Add Task
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
             <p className="text-xs text-gray-500 mb-1">Total</p>
-            <p className="text-2xl font-semibold text-gray-900">{summary.total}</p>
+            <p className="text-xl font-semibold text-gray-900">{summary.total}</p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
               <Circle className="h-3 w-3 text-gray-400" />
               <p className="text-xs text-gray-500">To Do</p>
             </div>
-            <p className="text-2xl font-semibold text-gray-600">{summary.todo}</p>
+            <p className="text-xl font-semibold text-gray-600">{summary.todo}</p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
               <Play className="h-3 w-3 text-blue-500" />
               <p className="text-xs text-gray-500">In Progress</p>
             </div>
-            <p className="text-2xl font-semibold text-blue-600">{summary.in_progress}</p>
+            <p className="text-xl font-semibold text-blue-600">{summary.in_progress}</p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
               <CheckCircle className="h-3 w-3 text-green-500" />
               <p className="text-xs text-gray-500">Done</p>
             </div>
-            <p className="text-2xl font-semibold text-green-600">{summary.done}</p>
+            <p className="text-xl font-semibold text-green-600">{summary.done}</p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
               <AlertCircle className="h-3 w-3 text-red-500" />
               <p className="text-xs text-gray-500">Overdue</p>
             </div>
-            <p className="text-2xl font-semibold text-red-600">{summary.overdue}</p>
+            <p className="text-xl font-semibold text-red-600">{summary.overdue}</p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
               <Clock className="h-3 w-3 text-amber-500" />
               <p className="text-xs text-gray-500">Due Today</p>
             </div>
-            <p className="text-2xl font-semibold text-amber-600">{summary.due_today}</p>
+            <p className="text-xl font-semibold text-amber-600">{summary.due_today}</p>
           </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-1">
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
               <AlertTriangle className="h-3 w-3 text-orange-500" />
               <p className="text-xs text-gray-500">High Priority</p>
             </div>
-            <p className="text-2xl font-semibold text-orange-600">{summary.high_priority}</p>
+            <p className="text-xl font-semibold text-orange-600">{summary.high_priority}</p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Archive className="h-3 w-3 text-gray-400" />
+              <p className="text-xs text-gray-500">Archived</p>
+            </div>
+            <p className="text-xl font-semibold text-gray-400">{summary.archived || 0}</p>
           </div>
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters Row */}
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -491,7 +668,7 @@ export default function TasksPage() {
         </div>
 
         {/* Quick Filters */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setDueDateFilter(dueDateFilter === 'overdue' ? '' : 'overdue')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
@@ -522,6 +699,37 @@ export default function TasksPage() {
           >
             This Week
           </button>
+
+          <div className="w-px h-5 bg-gray-200 mx-1" />
+
+          {/* Archive Toggle */}
+          <button
+            onClick={() => setShowArchived(!showArchived)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              showArchived 
+                ? 'bg-gray-700 text-white' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {showArchived ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+            {showArchived ? 'Showing Archived' : 'Show Archived'}
+          </button>
+
+          {/* Bulk Archive Done */}
+          {archivableDoneCount > 0 && (
+            <button
+              onClick={handleBulkArchiveDone}
+              disabled={archiving === 'bulk'}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
+            >
+              {archiving === 'bulk' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Archive className="h-3 w-3" />
+              )}
+              Archive Done ({archivableDoneCount})
+            </button>
+          )}
         </div>
 
         <button
@@ -605,95 +813,285 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Kanban-style Board */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {STATUSES.map(status => {
-          const StatusIcon = status.icon
-          const statusTasks = tasksByStatus[status.value as keyof typeof tasksByStatus] || []
-          
-          return (
-            <div key={status.value} className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <StatusIcon className={`h-4 w-4 ${status.color}`} />
-                  <h3 className="text-sm font-semibold text-gray-900">{status.label}</h3>
-                  <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
-                    {statusTasks.length}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {statusTasks.length === 0 ? (
-                  <div className="p-4 bg-white border border-dashed border-gray-200 rounded-lg text-center">
-                    <p className="text-xs text-gray-400">No tasks</p>
+      {/* Kanban View */}
+      {viewMode === 'kanban' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {STATUSES.map(status => {
+            const StatusIcon = status.icon
+            const statusTasks = tasksByStatus[status.value as keyof typeof tasksByStatus] || []
+            
+            return (
+              <div key={status.value} className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <StatusIcon className={`h-4 w-4 ${status.color}`} />
+                    <h3 className="text-sm font-semibold text-gray-900">{status.label}</h3>
+                    <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+                      {statusTasks.length}
+                    </span>
                   </div>
-                ) : (
-                  statusTasks.map(task => {
-                    const priorityConfig = getPriorityConfig(task.priority)
-                    const linkedConfig = getLinkedTypeConfig(task.linked_type)
-                    const taskIsOverdue = isOverdue(task)
-                    const taskIsDueToday = isDueToday(task)
+                </div>
 
-                    return (
-                      <div 
-                        key={task.id} 
-                        className={`bg-white border rounded-lg p-3 hover:shadow-sm transition-shadow ${
-                          taskIsOverdue ? 'border-red-200 bg-red-50/50' : 'border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h4 className="text-sm font-medium text-gray-900 flex-1">{task.title}</h4>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => handleEdit(task)}
-                              className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(task)}
-                              className="p-1 text-gray-400 hover:text-red-600 rounded"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
+                <div className="space-y-2 max-h-[calc(100vh-420px)] overflow-y-auto">
+                  {statusTasks.length === 0 ? (
+                    <div className="p-4 bg-white border border-dashed border-gray-200 rounded-lg text-center">
+                      <p className="text-xs text-gray-400">No tasks</p>
+                    </div>
+                  ) : (
+                    statusTasks.map(task => {
+                      const priorityConfig = getPriorityConfig(task.priority)
+                      const linkedConfig = getLinkedTypeConfig(task.linked_type)
+                      const taskIsOverdue = isOverdue(task)
+                      const taskIsDueToday = isDueToday(task)
+
+                      return (
+                        <div 
+                          key={task.id} 
+                          className={`bg-white border rounded-lg p-3 hover:shadow-sm transition-shadow ${
+                            taskIsOverdue ? 'border-red-200 bg-red-50/50' : 'border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <h4 className="text-sm font-medium text-gray-900 flex-1">{task.title}</h4>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleArchive(task)}
+                                disabled={archiving === task.id}
+                                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                                title="Archive"
+                              >
+                                {archiving === task.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Archive className="h-3 w-3" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleEdit(task)}
+                                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(task)}
+                                className="p-1 text-gray-400 hover:text-red-600 rounded"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
 
-                        {task.description && (
-                          <p className="text-xs text-gray-500 mb-2 line-clamp-2">{task.description}</p>
-                        )}
-
-                        <div className="flex items-center gap-2 flex-wrap mb-2">
-                          <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
-                            {priorityConfig.label}
-                          </span>
-                          
-                          {task.due_date && (
-                            <span className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded ${
-                              taskIsOverdue 
-                                ? 'bg-red-100 text-red-600' 
-                                : taskIsDueToday 
-                                  ? 'bg-amber-100 text-amber-600'
-                                  : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              <Calendar className="h-3 w-3" />
-                              {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
+                          {task.description && (
+                            <p className="text-xs text-gray-500 mb-2 line-clamp-2">{task.description}</p>
                           )}
-                        </div>
 
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {task.assigned_member && (
-                              <div className="flex items-center gap-1 text-xs text-gray-500">
-                                <User className="h-3 w-3" />
-                                <span>{task.assigned_member.name}</span>
-                              </div>
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
+                              {priorityConfig.label}
+                            </span>
+                            
+                            {task.due_date && (
+                              <span className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded ${
+                                taskIsOverdue 
+                                  ? 'bg-red-100 text-red-600' 
+                                  : taskIsDueToday 
+                                    ? 'bg-amber-100 text-amber-600'
+                                    : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                <Calendar className="h-3 w-3" />
+                                {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
                             )}
                           </div>
 
-                          {linkedConfig && task.linked_id && (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {task.assigned_member && (
+                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                  <User className="h-3 w-3" />
+                                  <span>{task.assigned_member.name}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {linkedConfig && task.linked_id && (
+                              <Link
+                                href={`${linkedConfig.path}/${task.linked_id}`}
+                                className="flex items-center gap-1 text-xs text-[#647C47] hover:underline"
+                              >
+                                <LinkIcon className="h-3 w-3" />
+                                {linkedConfig.label}
+                              </Link>
+                            )}
+                          </div>
+
+                          {/* Quick Status Change */}
+                          {status.value !== 'done' && (
+                            <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100">
+                              {status.value === 'todo' && (
+                                <button
+                                  onClick={() => handleStatusChange(task, 'in_progress')}
+                                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                >
+                                  <Play className="h-3 w-3" />
+                                  Start
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleStatusChange(task, 'done')}
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
+                              >
+                                <CheckCircle className="h-3 w-3" />
+                                Complete
+                              </button>
+                            </div>
+                          )}
+
+                          {status.value === 'done' && (
+                            <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100">
+                              <button
+                                onClick={() => handleStatusChange(task, 'todo')}
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                              >
+                                <Circle className="h-3 w-3" />
+                                Reopen
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Table View */}
+      {viewMode === 'table' && (
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('title')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Title
+                      <SortIcon field="title" />
+                    </div>
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('status')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Status
+                      <SortIcon field="status" />
+                    </div>
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('priority')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Priority
+                      <SortIcon field="priority" />
+                    </div>
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('due_date')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Due Date
+                      <SortIcon field="due_date" />
+                    </div>
+                  </th>
+                  <th 
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('assigned_to')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Assigned To
+                      <SortIcon field="assigned_to" />
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Linked To
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {paginatedTasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
+                      No tasks found
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedTasks.map(task => {
+                    const priorityConfig = getPriorityConfig(task.priority)
+                    const statusConfig = getStatusConfig(task.status)
+                    const linkedConfig = getLinkedTypeConfig(task.linked_type)
+                    const taskIsOverdue = isOverdue(task)
+                    const StatusIcon = statusConfig.icon
+
+                    return (
+                      <tr 
+                        key={task.id} 
+                        className={`hover:bg-gray-50 ${task.archived ? 'opacity-50 bg-gray-50' : ''} ${taskIsOverdue ? 'bg-red-50/50' : ''}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {task.archived && <Archive className="h-3 w-3 text-gray-400" />}
+                            <span className="text-sm font-medium text-gray-900">{task.title}</span>
+                          </div>
+                          {task.description && (
+                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className={`inline-flex items-center gap-1.5 text-xs font-medium ${statusConfig.color}`}>
+                            <StatusIcon className="h-3 w-3" />
+                            {statusConfig.label}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
+                            {priorityConfig.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {task.due_date ? (
+                            <span className={`text-xs ${taskIsOverdue ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                              {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">No date</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {task.assigned_member ? (
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-6 h-6 bg-[#647C47]/10 text-[#647C47] rounded-full flex items-center justify-center text-xs font-medium">
+                                {task.assigned_member.name.charAt(0)}
+                              </div>
+                              <span className="text-xs text-gray-600">{task.assigned_member.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {linkedConfig && task.linked_id ? (
                             <Link
                               href={`${linkedConfig.path}/${task.linked_id}`}
                               className="flex items-center gap-1 text-xs text-[#647C47] hover:underline"
@@ -701,51 +1099,348 @@ export default function TasksPage() {
                               <LinkIcon className="h-3 w-3" />
                               {linkedConfig.label}
                             </Link>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
                           )}
-                        </div>
-
-                        {/* Quick Status Change */}
-                        {status.value !== 'done' && (
-                          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100">
-                            {status.value === 'todo' && (
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            {!task.archived && task.status !== 'done' && (
                               <button
-                                onClick={() => handleStatusChange(task, 'in_progress')}
-                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                onClick={() => handleStatusChange(task, 'done')}
+                                className="p-1.5 text-gray-400 hover:text-green-600 rounded hover:bg-green-50"
+                                title="Mark Complete"
                               >
-                                <Play className="h-3 w-3" />
-                                Start
+                                <CheckCircle className="h-4 w-4" />
                               </button>
                             )}
                             <button
-                              onClick={() => handleStatusChange(task, 'done')}
-                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
+                              onClick={() => handleArchive(task)}
+                              disabled={archiving === task.id}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+                              title={task.archived ? 'Unarchive' : 'Archive'}
                             >
-                              <CheckCircle className="h-3 w-3" />
-                              Complete
+                              {archiving === task.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : task.archived ? (
+                                <ArchiveRestore className="h-4 w-4" />
+                              ) : (
+                                <Archive className="h-4 w-4" />
+                              )}
                             </button>
-                          </div>
-                        )}
-
-                        {status.value === 'done' && (
-                          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100">
                             <button
-                              onClick={() => handleStatusChange(task, 'todo')}
-                              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                              onClick={() => handleEdit(task)}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+                              title="Edit"
                             >
-                              <Circle className="h-3 w-3" />
-                              Reopen
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(task)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
-                        )}
-                      </div>
+                        </td>
+                      </tr>
                     )
                   })
                 )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Show</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="px-2 py-1 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span className="text-sm text-gray-600">per page</span>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600">
+                {sortedTasks.length > 0 ? `${startIndex + 1}-${Math.min(endIndex, sortedTasks.length)} of ${sortedTasks.length}` : '0 results'}
+              </span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="px-3 py-1 text-sm font-medium text-gray-700">
+                  {currentPage} / {totalPages || 1}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </button>
               </div>
             </div>
-          )
-        })}
-      </div>
+          </div>
+        </div>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
+        <div className="space-y-2">
+          {paginatedTasks.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+              <p className="text-sm text-gray-500">No tasks found</p>
+            </div>
+          ) : (
+            <>
+              {paginatedTasks.map(task => {
+                const priorityConfig = getPriorityConfig(task.priority)
+                const statusConfig = getStatusConfig(task.status)
+                const linkedConfig = getLinkedTypeConfig(task.linked_type)
+                const taskIsOverdue = isOverdue(task)
+                const StatusIcon = statusConfig.icon
+
+                return (
+                  <div 
+                    key={task.id}
+                    className={`bg-white border rounded-lg p-3 hover:shadow-sm transition-shadow ${
+                      task.archived ? 'opacity-50 border-gray-200' : taskIsOverdue ? 'border-red-200 bg-red-50/30' : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      {/* Status Icon */}
+                      <button
+                        onClick={() => !task.archived && handleStatusChange(task, task.status === 'done' ? 'todo' : 'done')}
+                        disabled={task.archived}
+                        className={`flex-shrink-0 ${task.archived ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                        <StatusIcon className={`h-5 w-5 ${statusConfig.color}`} />
+                      </button>
+
+                      {/* Title & Description */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {task.archived && <Archive className="h-3 w-3 text-gray-400" />}
+                          <h4 className={`text-sm font-medium ${task.status === 'done' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                            {task.title}
+                          </h4>
+                        </div>
+                        {task.description && (
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</p>
+                        )}
+                      </div>
+
+                      {/* Meta Info */}
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
+                          {priorityConfig.label}
+                        </span>
+
+                        {task.due_date && (
+                          <span className={`flex items-center gap-1 text-xs ${taskIsOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                            <Calendar className="h-3 w-3" />
+                            {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+
+                        {task.assigned_member && (
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
+                            <User className="h-3 w-3" />
+                            {task.assigned_member.name}
+                          </div>
+                        )}
+
+                        {linkedConfig && task.linked_id && (
+                          <Link
+                            href={`${linkedConfig.path}/${task.linked_id}`}
+                            className="flex items-center gap-1 text-xs text-[#647C47] hover:underline"
+                          >
+                            <LinkIcon className="h-3 w-3" />
+                            {linkedConfig.label}
+                          </Link>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => handleArchive(task)}
+                          disabled={archiving === task.id}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+                          title={task.archived ? 'Unarchive' : 'Archive'}
+                        >
+                          {archiving === task.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : task.archived ? (
+                            <ArchiveRestore className="h-4 w-4" />
+                          ) : (
+                            <Archive className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleEdit(task)}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(task)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Pagination for List View */}
+              <div className="flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">Show</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                    className="px-2 py-1 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <span className="text-sm text-gray-600">per page</span>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-600">
+                    {sortedTasks.length > 0 ? `${startIndex + 1}-${Math.min(endIndex, sortedTasks.length)} of ${sortedTasks.length}` : '0 results'}
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="px-3 py-1 text-sm font-medium text-gray-700">
+                      {currentPage} / {totalPages || 1}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Archived Tasks Section (shown only in kanban when showArchived is true) */}
+      {viewMode === 'kanban' && showArchived && archivedTasks.length > 0 && (
+        <div className="bg-gray-100 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Archive className="h-4 w-4 text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-700">Archived</h3>
+            <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+              {archivedTasks.length}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {archivedTasks.map(task => {
+              const priorityConfig = getPriorityConfig(task.priority)
+              
+              return (
+                <div 
+                  key={task.id} 
+                  className="bg-white/70 border border-gray-200 rounded-lg p-3 opacity-60 hover:opacity-100 transition-opacity"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h4 className="text-sm font-medium text-gray-700 flex-1 line-through">{task.title}</h4>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleArchive(task)}
+                        disabled={archiving === task.id}
+                        className="p-1 text-gray-400 hover:text-[#647C47] rounded"
+                        title="Unarchive"
+                      >
+                        {archiving === task.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <ArchiveRestore className="h-3 w-3" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(task)}
+                        className="p-1 text-gray-400 hover:text-red-600 rounded"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span className={`px-1.5 py-0.5 rounded ${priorityConfig.color}`}>
+                      {priorityConfig.label}
+                    </span>
+                    {task.archived_at && (
+                      <span>Archived {new Date(task.archived_at).toLocaleDateString()}</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {showModal && (
@@ -833,7 +1528,7 @@ export default function TasksPage() {
                 </select>
               </div>
 
-              {/* Link To Section - Improved */}
+              {/* Link To Section */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-gray-700">Link To</label>
                 
@@ -851,7 +1546,6 @@ export default function TasksPage() {
                     </select>
                   </div>
 
-                  {/* Dynamic dropdown based on linked_type */}
                   {formData.linked_type === 'client' && (
                     <div>
                       <select
@@ -887,7 +1581,6 @@ export default function TasksPage() {
                     </div>
                   )}
 
-                  {/* For Invoice and Expense, keep text input for now */}
                   {(formData.linked_type === 'invoice' || formData.linked_type === 'expense') && (
                     <div>
                       <input
@@ -901,7 +1594,6 @@ export default function TasksPage() {
                   )}
                 </div>
 
-                {/* Show selected item info */}
                 {formData.linked_type && formData.linked_id && (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                     <div className="flex items-center gap-2 text-sm">

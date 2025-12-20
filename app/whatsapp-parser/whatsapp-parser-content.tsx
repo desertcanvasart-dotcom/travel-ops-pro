@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   CheckCircle, AlertCircle, Users, Calendar, MapPin,
-  DollarSign, Languages, Loader2, MessageSquare, Sparkles,
+  Loader2, MessageSquare, Sparkles,
   User, Mail, Phone, Globe, ChevronRight, UserPlus, ArrowLeft,
   Crown, Star, Settings
 } from 'lucide-react'
@@ -94,6 +94,7 @@ const mapBudgetToTier = (budgetLevel: string): string => {
     'economy': 'budget',
     'standard': 'standard',
     'mid-range': 'standard',
+    'moderate': 'standard',
     'deluxe': 'deluxe',
     'superior': 'deluxe',
     'luxury': 'luxury',
@@ -114,15 +115,15 @@ const getTierColors = (tier: string) => {
 }
 
 // ============================================
-// MAIN EXPORT WITH SUSPENSE
+// MAIN EXPORT WITH SUSPENSE WRAPPER
 // ============================================
 
-export default function WhatsappParserPage() {
+export default function WhatsAppParserPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3"></div>
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-3" />
           <p className="text-sm text-gray-600">Loading WhatsApp Parser...</p>
         </div>
       </div>
@@ -150,44 +151,44 @@ function WhatsAppParserContent() {
   // STATE
   // ============================================
 
-  // User preferences (loaded from database)
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES)
   const [preferencesLoaded, setPreferencesLoaded] = useState(false)
-
-  // Conversation & Analysis
   const [conversation, setConversation] = useState('')
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Itinerary Generation
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedItinerary, setGeneratedItinerary] = useState<any>(null)
   const [selectedTier, setSelectedTier] = useState<string>('standard')
-
-  // Client Management
   const [existingClients, setExistingClients] = useState<ExistingClient[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [clientSaved, setClientSaved] = useState(false)
   const [isSavingClient, setIsSavingClient] = useState(false)
-
-  // UI State
   const [fromInbox, setFromInbox] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
 
-  // Refs
   const itinerarySuccessRef = useRef<HTMLDivElement>(null)
 
   // ============================================
   // EFFECTS
   // ============================================
 
-  // 1. Load user preferences on mount
+  // Load user preferences - with better error handling
   useEffect(() => {
     const loadUserPreferences = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        console.log('📋 Loading user preferences...')
+        
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        
+        if (authError) {
+          console.warn('⚠️ Auth error (continuing with defaults):', authError)
+          setPreferencesLoaded(true)
+          return
+        }
+        
         if (!user) {
+          console.log('ℹ️ No user logged in, using defaults')
           setPreferencesLoaded(true)
           return
         }
@@ -198,7 +199,14 @@ function WhatsAppParserContent() {
           .eq('user_id', user.id)
           .single()
 
-        if (data && !error) {
+        if (error) {
+          // Not found is OK - just use defaults
+          if (error.code === 'PGRST116') {
+            console.log('ℹ️ No preferences found, using defaults')
+          } else {
+            console.warn('⚠️ Preferences error (using defaults):', error)
+          }
+        } else if (data) {
           const prefs: UserPreferences = {
             default_cost_mode: data.default_cost_mode || 'auto',
             default_tier: data.default_tier || 'standard',
@@ -208,12 +216,11 @@ function WhatsAppParserContent() {
           setUserPreferences(prefs)
           setSelectedTier(prefs.default_tier)
           console.log('✅ Loaded user preferences:', prefs)
-        } else {
-          console.log('ℹ️ No user preferences found, using defaults')
         }
-      } catch (error) {
-        console.error('Error loading preferences:', error)
+      } catch (err) {
+        console.error('❌ Exception loading preferences:', err)
       } finally {
+        // ALWAYS set loaded to true
         setPreferencesLoaded(true)
       }
     }
@@ -221,48 +228,38 @@ function WhatsAppParserContent() {
     loadUserPreferences()
   }, [])
 
-  // 2. Load conversation from URL params (from WhatsApp Inbox)
+  // Load conversation from URL
   useEffect(() => {
     if (conversationParam) {
-      const isBase64 = new URLSearchParams(window.location.search).get("encoded") === "base64"
-      const decoded = isBase64
-        ? decodeURIComponent(escape(atob(conversationParam)))
-        : decodeURIComponent(conversationParam)
-      setConversation(decoded)
-      setFromInbox(true)
+      try {
+        const isBase64 = new URLSearchParams(window.location.search).get("encoded") === "base64"
+        const decoded = isBase64
+          ? decodeURIComponent(escape(atob(conversationParam)))
+          : decodeURIComponent(conversationParam)
+        setConversation(decoded)
+        setFromInbox(true)
+      } catch (e) {
+        console.error('Error decoding conversation:', e)
+        setConversation(conversationParam)
+        setFromInbox(true)
+      }
     }
     if (phoneParam) {
       setPhoneNumber(phoneParam)
     }
   }, [conversationParam, phoneParam])
 
-  // 3. Handle pre-selected client from URL
+  // Handle pre-selected client
   useEffect(() => {
     if (preSelectedClientId && !selectedClientId) {
       setSelectedClientId(preSelectedClientId)
       setClientSaved(true)
-      loadClientInfo(preSelectedClientId)
     }
   }, [preSelectedClientId])
 
   // ============================================
   // HELPER FUNCTIONS
   // ============================================
-
-  const loadClientInfo = async (clientId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('first_name, last_name, client_code')
-        .eq('id', clientId)
-        .single()
-
-      if (error) throw error
-      console.log('Pre-selected client:', data)
-    } catch (error) {
-      console.error('Error loading client:', error)
-    }
-  }
 
   const loadSample = () => {
     setConversation(SAMPLE_CONVERSATION)
@@ -309,36 +306,34 @@ function WhatsAppParserContent() {
         throw new Error(result.error || 'Failed to analyze conversation')
       }
 
-      // If we have phone from inbox, add it to extracted data
       if (phoneNumber && !result.data.client_phone) {
         result.data.client_phone = phoneNumber
       }
 
-      // Map budget_level to tier if AI extracted it
-      // But prefer user's default tier if AI didn't detect anything specific
       const aiDetectedTier = mapBudgetToTier(result.data.budget_level || '')
-      const finalTier = result.data.budget_level
-        ? aiDetectedTier
-        : userPreferences.default_tier
+      const finalTier = result.data.budget_level ? aiDetectedTier : userPreferences.default_tier
 
       result.data.tier = finalTier
       setSelectedTier(finalTier)
-
       setExtractedData(result.data)
 
-      // Search for existing clients by email or phone
+      // Search for existing clients
       if (result.data.client_email || result.data.client_phone) {
-        const { data: clients } = await supabase
-          .from('clients')
-          .select('id, client_code, first_name, last_name, email, phone')
-          .or(`email.eq.${result.data.client_email},phone.eq.${result.data.client_phone}`)
-          .limit(5)
+        try {
+          const { data: clients } = await supabase
+            .from('clients')
+            .select('id, client_code, first_name, last_name, email, phone')
+            .or(`email.eq.${result.data.client_email},phone.eq.${result.data.client_phone}`)
+            .limit(5)
 
-        if (clients && clients.length > 0) {
-          setExistingClients(clients.map(c => ({
-            ...c,
-            full_name: `${c.first_name || ''} ${c.last_name || ''}`.trim()
-          })))
+          if (clients && clients.length > 0) {
+            setExistingClients(clients.map(c => ({
+              ...c,
+              full_name: `${c.first_name || ''} ${c.last_name || ''}`.trim()
+            })))
+          }
+        } catch (e) {
+          console.warn('Could not search for existing clients:', e)
         }
       }
 
@@ -350,23 +345,36 @@ function WhatsAppParserContent() {
   }
 
   // ============================================
-  // SAVE AS NEW CLIENT
+  // SAVE AS NEW CLIENT - USES API ROUTE
   // ============================================
 
-  const saveAsNewClient = async () => {
-    if (!extractedData) return
+  const saveAsNewClient = async (): Promise<string | null> => {
+    if (!extractedData) {
+      setError('No extracted data available')
+      return null
+    }
+
+    const clientName = extractedData.client_name?.trim()
+    if (!clientName) {
+      setError('Client name is required. Please enter a name.')
+      return null
+    }
 
     setIsSavingClient(true)
     setError(null)
 
     try {
-      const nameParts = extractedData.client_name.trim().split(' ')
-      const firstName = nameParts[0] || ''
-      const lastName = nameParts.slice(1).join(' ') || nameParts[0]
+      const nameParts = clientName.split(' ')
+      const firstName = nameParts[0] || 'Unknown'
+      const lastName = nameParts.slice(1).join(' ') || firstName
 
-      const { data: newClient, error: clientError } = await supabase
-        .from('clients')
-        .insert({
+      console.log('💾 Saving new client via API:', { firstName, lastName })
+
+      // Use API route instead of direct Supabase (bypasses RLS)
+      const response = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           first_name: firstName,
           last_name: lastName,
           email: extractedData.client_email || null,
@@ -377,83 +385,88 @@ function WhatsAppParserContent() {
           passport_type: 'other',
           preferred_language: extractedData.conversation_language || 'English',
           client_source: 'whatsapp',
-          vip_status: selectedTier === 'luxury'
+          vip_status: selectedTier === 'luxury',
+          // Additional data for API to handle
+          preferences: {
+            accommodation_type: selectedTier === 'luxury' ? '5-star' : selectedTier === 'deluxe' ? '4-star' : '3-star',
+            tour_pace: 'moderate',
+            interests: extractedData.interests?.join(', ') || '',
+            special_needs: extractedData.special_requests?.join(', ') || null,
+            tier: selectedTier
+          },
+          note: `Client inquiry via WhatsApp. Interested in: ${extractedData.tour_name}. ${extractedData.cities?.join(', ') || 'Egypt'}. ${extractedData.num_adults} adults. Tier: ${selectedTier.toUpperCase()}.`,
+          link_whatsapp_phone: phoneNumber
         })
-        .select()
-        .single()
+      })
 
-      if (clientError) throw clientError
+      const result = await response.json()
 
-      if (newClient) {
-        await supabase
-          .from('client_preferences')
-          .insert({
-            client_id: newClient.id,
-            preferred_accommodation_type: selectedTier === 'luxury' ? '5-star' : selectedTier === 'deluxe' ? '4-star' : '3-star',
-            tour_pace_preference: 'moderate',
-            interests: extractedData.interests.join(', '),
-            dietary_restrictions: null,
-            special_needs: extractedData.special_requests.join(', ') || null,
-            preferred_tier: selectedTier
-          })
-
-        await supabase
-          .from('client_notes')
-          .insert({
-            client_id: newClient.id,
-            note_text: `Client inquiry via WhatsApp. Interested in: ${extractedData.tour_name}. ${extractedData.cities.join(', ')}. ${extractedData.num_adults} adults${extractedData.num_children > 0 ? `, ${extractedData.num_children} children` : ''}. Preferred tier: ${selectedTier.toUpperCase()}.`,
-            note_type: 'general',
-            is_internal: true
-          })
-
-        if (phoneNumber) {
-          await supabase
-            .from('whatsapp_conversations')
-            .update({
-              client_id: newClient.id,
-              client_name: `${firstName} ${lastName}`.trim()
-            })
-            .eq('phone_number', phoneNumber)
-        }
-
-        setSelectedClientId(newClient.id)
-        setClientSaved(true)
+      if (!response.ok || !result.success) {
+        console.error('❌ API error:', result)
+        setError(result.error || 'Failed to create client')
+        return null
       }
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save client')
+      const newClient = result.data
+      console.log('✅ Client created:', newClient.id)
+
+      setSelectedClientId(newClient.id)
+      setClientSaved(true)
+      
+      return newClient.id
+
+    } catch (err: any) {
+      console.error('❌ saveAsNewClient exception:', err)
+      setError(err.message || 'Failed to save client')
+      return null
     } finally {
       setIsSavingClient(false)
     }
   }
 
   // ============================================
-  // GENERATE ITINERARY
+  // GENERATE ITINERARY - FIXED
   // ============================================
 
   const generateItinerary = async () => {
     if (!extractedData) return
 
-    if (!selectedClientId) {
-      const shouldCreate = confirm('Create a new client profile before generating itinerary?')
-      if (shouldCreate) {
-        await saveAsNewClient()
-      }
-    }
-
     setIsGenerating(true)
     setError(null)
 
+    let clientIdToUse = selectedClientId
+
+    if (!clientIdToUse) {
+      const shouldCreate = window.confirm('No client selected. Create a new client profile before generating itinerary?')
+      
+      if (shouldCreate) {
+        console.log('📝 User confirmed - creating client...')
+        const newClientId = await saveAsNewClient()
+        
+        if (!newClientId) {
+          console.error('❌ Client creation failed')
+          setIsGenerating(false)
+          return
+        }
+        
+        clientIdToUse = newClientId
+        console.log('✅ Client created, ID:', clientIdToUse)
+      } else {
+        console.log('ℹ️ User declined - generating without client')
+      }
+    }
+
     try {
+      console.log('🚀 Generating itinerary...', { clientId: clientIdToUse, tier: selectedTier })
+
       const response = await fetch('/api/ai/generate-itinerary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...extractedData,
-          client_id: selectedClientId,
+          client_id: clientIdToUse,
           tier: selectedTier,
           budget_level: selectedTier,
-          // Pass user preferences
           cost_mode: userPreferences.default_cost_mode,
           margin_percent: userPreferences.default_margin_percent,
           currency: userPreferences.default_currency
@@ -466,27 +479,16 @@ function WhatsAppParserContent() {
         throw new Error(result.error || 'Failed to generate itinerary')
       }
 
+      console.log('✅ Itinerary generated:', result.data?.id)
       setGeneratedItinerary(result.data)
 
       setTimeout(() => {
         itinerarySuccessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 100)
 
-      if (selectedClientId) {
-        await supabase
-          .from('communication_history')
-          .insert({
-            client_id: selectedClientId,
-            communication_type: 'whatsapp',
-            direction: 'inbound',
-            subject: `Inquiry: ${extractedData.tour_name}`,
-            content: conversation.substring(0, 500),
-            communication_date: new Date().toISOString()
-          })
-      }
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Generation failed')
+    } catch (err: any) {
+      console.error('❌ generateItinerary error:', err)
+      setError(err.message || 'Generation failed')
     } finally {
       setIsGenerating(false)
     }
@@ -496,12 +498,13 @@ function WhatsAppParserContent() {
   // RENDER
   // ============================================
 
+  // Show loading only briefly, then continue with defaults
   if (!preferencesLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading preferences...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-600">Loading...</p>
         </div>
       </div>
     )
@@ -517,10 +520,7 @@ function WhatsAppParserContent() {
         <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4 mb-4">
           <div className="flex items-center gap-3 mb-3">
             {fromInbox && (
-              <Link
-                href="/whatsapp-inbox"
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
+              <Link href="/whatsapp-inbox" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                 <ArrowLeft className="w-5 h-5" />
               </Link>
             )}
@@ -532,25 +532,21 @@ function WhatsAppParserContent() {
               <p className="text-xs text-gray-600">
                 {fromInbox
                   ? 'Conversation loaded from WhatsApp Inbox → Analyze → Select Tier → Generate itinerary'
-                  : 'Paste conversation → AI extracts info → Select Tier → Generate itinerary → Save client'
-                }
+                  : 'Paste conversation → AI extracts info → Select Tier → Generate itinerary'}
               </p>
             </div>
 
-            {/* Preferences Indicator */}
             <Link
-             href="/settings?tab=preferences"
+              href="/settings?tab=preferences"
               className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Edit default preferences"
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">
-                Default: <strong className={tierColors.text}>{userPreferences.default_tier}</strong> • {userPreferences.default_currency} • {userPreferences.default_margin_percent}%
+                <strong className={tierColors.text}>{userPreferences.default_tier}</strong> • {userPreferences.default_currency}
               </span>
             </Link>
           </div>
 
-          {/* From Inbox Banner */}
           {fromInbox && (
             <div className="bg-[#25D366]/10 border border-[#25D366]/30 rounded-lg p-3 mb-3">
               <div className="flex items-center gap-2 text-[#25D366]">
@@ -565,34 +561,33 @@ function WhatsAppParserContent() {
 
           {/* Steps */}
           <div className="grid grid-cols-4 gap-3">
-            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+            <div className={`bg-white border rounded-lg p-3 shadow-sm ${extractedData ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-gray-400 text-lg">1️⃣</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                <span className="text-lg">1️⃣</span>
+                {extractedData && <CheckCircle className="w-4 h-4 text-green-600" />}
               </div>
               <div className="text-xs text-gray-600">Step 1</div>
               <div className="text-sm font-bold text-gray-900">Analyze</div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+            <div className={`bg-white border rounded-lg p-3 shadow-sm ${extractedData ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-gray-400 text-lg">2️⃣</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                <span className="text-lg">2️⃣</span>
               </div>
               <div className="text-xs text-gray-600">Step 2</div>
               <div className="text-sm font-bold text-gray-900">Select Tier</div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+            <div className={`bg-white border rounded-lg p-3 shadow-sm ${clientSaved ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-gray-400 text-lg">3️⃣</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                <span className="text-lg">3️⃣</span>
+                {clientSaved && <CheckCircle className="w-4 h-4 text-green-600" />}
               </div>
               <div className="text-xs text-gray-600">Step 3</div>
               <div className="text-sm font-bold text-gray-900">Save Client</div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+            <div className={`bg-white border rounded-lg p-3 shadow-sm ${generatedItinerary ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-gray-400 text-lg">4️⃣</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
+                <span className="text-lg">4️⃣</span>
+                {generatedItinerary && <CheckCircle className="w-4 h-4 text-green-600" />}
               </div>
               <div className="text-xs text-gray-600">Step 4</div>
               <div className="text-sm font-bold text-gray-900">Generate</div>
@@ -600,45 +595,25 @@ function WhatsAppParserContent() {
           </div>
         </div>
 
-        {/* MAIN CONTENT - TWO COLUMNS */}
+        {/* MAIN CONTENT */}
         <div className="grid grid-cols-2 gap-4">
 
-          {/* LEFT COLUMN: Input */}
+          {/* LEFT: Input */}
           <div className="space-y-4">
             <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-base font-bold text-gray-900">WhatsApp Conversation</h2>
                 {!fromInbox && (
-                  <button
-                    onClick={loadSample}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                  >
+                  <button onClick={loadSample} className="text-xs text-blue-600 hover:text-blue-700 font-medium">
                     Load Sample
                   </button>
                 )}
               </div>
 
-              {preSelectedClientId && clientSaved && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
-                  <div className="flex items-center gap-2 text-green-800">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-xs font-medium">
-                      Client linked! Any itinerary you generate will be automatically saved to this client.
-                    </span>
-                  </div>
-                </div>
-              )}
-
               <textarea
                 value={conversation}
                 onChange={(e) => setConversation(e.target.value)}
-                placeholder="Paste WhatsApp conversation here...
-
-Example:
-Client: Hi, we want to visit Egypt
-Agent: Great! When are you thinking?
-Client: Maybe next month, around 10 days
-..."
+                placeholder="Paste WhatsApp conversation here..."
                 className="w-full h-96 px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none font-mono shadow-sm"
               />
 
@@ -649,7 +624,7 @@ Client: Maybe next month, around 10 days
               >
                 {isAnalyzing ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     Analyzing...
                   </>
                 ) : (
@@ -662,32 +637,38 @@ Client: Maybe next month, around 10 days
             </div>
           </div>
 
-          {/* RIGHT COLUMN: Extracted Data & Actions */}
+          {/* RIGHT: Results */}
           <div className="space-y-4">
 
-            {/* Error Display */}
+            {/* Error */}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-xs text-red-800">{error}</p>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">Error</p>
+                    <p className="text-xs text-red-700 mt-1">{error}</p>
+                  </div>
+                </div>
               </div>
             )}
 
             {extractedData && (
               <>
-                {/* Extracted Data Card */}
+                {/* Extracted Data */}
                 <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                   <h2 className="text-base font-bold text-gray-900 mb-3">Extracted Information</h2>
-
                   <div className="space-y-2.5">
                     <div className="flex items-start gap-2">
                       <User className="w-4 h-4 text-gray-400 mt-0.5" />
                       <div className="flex-1">
-                        <div className="text-xs text-gray-600">Client Name</div>
+                        <div className="text-xs text-gray-600">Client Name <span className="text-red-500">*</span></div>
                         <input
                           type="text"
                           value={extractedData.client_name}
                           onChange={(e) => setExtractedData({ ...extractedData, client_name: e.target.value })}
                           className="text-sm font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-primary-500 outline-none w-full"
+                          placeholder="Enter client name"
                         />
                       </div>
                     </div>
@@ -757,35 +738,20 @@ Client: Maybe next month, around 10 days
                         <div className="text-sm font-medium text-gray-900">{extractedData.conversation_language}</div>
                       </div>
                     </div>
-
-                    {extractedData.special_requests.length > 0 && (
-                      <div className="flex items-start gap-2">
-                        <MessageSquare className="w-4 h-4 text-gray-400 mt-0.5" />
-                        <div className="flex-1">
-                          <div className="text-xs text-gray-600">Special Requests</div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {extractedData.special_requests.join(', ')}
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                {/* Service Tier Selection */}
+                {/* Tier Selection */}
                 <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Crown className="w-4 h-4 text-amber-600" />
                     <h3 className="text-sm font-bold text-gray-900">Service Tier</h3>
-                    {extractedData.budget_level && extractedData.budget_level !== 'standard' && (
+                    {extractedData.budget_level && (
                       <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
                         AI detected: {extractedData.budget_level}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-600 mb-3">
-                    Select the service tier for this itinerary. AI will use matching suppliers.
-                  </p>
 
                   <div className="grid grid-cols-2 gap-2">
                     {TIER_OPTIONS.map((tier) => (
@@ -794,102 +760,68 @@ Client: Maybe next month, around 10 days
                         onClick={() => setSelectedTier(tier.value)}
                         className={`p-3 rounded-lg border-2 text-left transition-all ${
                           selectedTier === tier.value
-                            ? tier.value === 'luxury'
-                              ? 'border-amber-500 bg-amber-50'
-                              : tier.value === 'deluxe'
-                              ? 'border-purple-500 bg-purple-50'
-                              : tier.value === 'standard'
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-500 bg-gray-50'
+                            ? tier.value === 'luxury' ? 'border-amber-500 bg-amber-50'
+                            : tier.value === 'deluxe' ? 'border-purple-500 bg-purple-50'
+                            : tier.value === 'standard' ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-500 bg-gray-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           {tier.value === 'luxury' && <Crown className="w-4 h-4 text-amber-600" />}
                           {tier.value === 'deluxe' && <Star className="w-4 h-4 text-purple-600" />}
-                          <span className={`text-sm font-semibold ${
-                            selectedTier === tier.value ? 'text-gray-900' : 'text-gray-700'
-                          }`}>
-                            {tier.label}
-                          </span>
+                          <span className="text-sm font-semibold">{tier.label}</span>
                           {tier.value === userPreferences.default_tier && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded">
-                              default
-                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded">default</span>
                           )}
                         </div>
                         <p className="text-xs text-gray-500">{tier.description}</p>
                       </button>
                     ))}
                   </div>
-
-                  {/* Preferred Suppliers Info */}
-                  <div className="mt-3 p-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                      <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                      <span>Preferred suppliers will be prioritized within the selected tier</span>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Existing Clients Warning */}
+                {/* Existing Clients */}
                 {existingClients.length > 0 && !clientSaved && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <h3 className="text-sm font-bold text-gray-900 mb-2">⚠️ Existing Clients Found</h3>
-                    <p className="text-xs text-gray-600 mb-3">
-                      We found {existingClients.length} client(s) with matching email/phone:
-                    </p>
-
                     <div className="space-y-2 mb-3">
                       {existingClients.map((client) => (
                         <div
                           key={client.id}
-                          onClick={() => setSelectedClientId(client.id)}
+                          onClick={() => { setSelectedClientId(client.id); setClientSaved(true); }}
                           className={`p-2 border-2 rounded-lg cursor-pointer transition-all ${
-                            selectedClientId === client.id
-                              ? 'border-primary-500 bg-primary-50'
-                              : 'border-gray-200 hover:border-gray-300'
+                            selectedClientId === client.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
                           <div className="text-sm font-medium">{client.full_name}</div>
-                          <div className="text-xs text-gray-600">
-                            {client.client_code} • {client.email}
-                          </div>
+                          <div className="text-xs text-gray-600">{client.client_code} • {client.email}</div>
                         </div>
                       ))}
                     </div>
-
-                    {selectedClientId && (
-                      <button
-                        onClick={viewClientProfile}
-                        className="w-full px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2"
-                      >
-                        View Client Profile
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
-                    )}
                   </div>
                 )}
 
-                {/* Save as New Client */}
+                {/* Save New Client */}
                 {!clientSaved && (
                   <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                     <h3 className="text-sm font-bold text-gray-900 mb-2 flex items-center gap-2">
                       <UserPlus className="w-4 h-4 text-purple-600" />
                       Save as New Client
                     </h3>
-                    <p className="text-xs text-gray-600 mb-3">
-                      Create a new client profile in your CRM with this information
-                    </p>
+                    <p className="text-xs text-gray-600 mb-3">Create a new client profile in your CRM</p>
 
                     <button
-                      onClick={saveAsNewClient}
-                      disabled={isSavingClient}
+                      onClick={async () => {
+                        const id = await saveAsNewClient()
+                        if (id) console.log('✅ Saved:', id)
+                      }}
+                      disabled={isSavingClient || !extractedData.client_name?.trim()}
                       className="w-full px-4 py-2 text-sm bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {isSavingClient ? (
                         <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <Loader2 className="w-4 h-4 animate-spin" />
                           Saving...
                         </>
                       ) : (
@@ -899,6 +831,10 @@ Client: Maybe next month, around 10 days
                         </>
                       )}
                     </button>
+
+                    {!extractedData.client_name?.trim() && (
+                      <p className="text-xs text-amber-600 mt-2">⚠️ Please enter a client name first</p>
+                    )}
                   </div>
                 )}
 
@@ -908,11 +844,10 @@ Client: Maybe next month, around 10 days
                     <div className="flex items-center gap-2 mb-3">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <h3 className="text-sm font-bold text-gray-900">Client Saved Successfully!</h3>
-                        <p className="text-xs text-gray-600">New client added to your CRM</p>
+                        <h3 className="text-sm font-bold text-gray-900">Client Saved!</h3>
+                        <p className="text-xs text-gray-600">Added to CRM</p>
                       </div>
                     </div>
-
                     <button
                       onClick={viewClientProfile}
                       className="w-full px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
@@ -927,31 +862,19 @@ Client: Maybe next month, around 10 days
                 <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
                   <h3 className="text-sm font-bold text-gray-900 mb-2">Generate Itinerary</h3>
                   <p className="text-xs text-gray-600 mb-3">
-                    AI will create a complete day-by-day itinerary using{' '}
-                    <span className={`font-semibold ${tierColors.text}`}>
-                      {selectedTier.toUpperCase()}
-                    </span>
-                    {' '}tier suppliers
+                    AI will create a day-by-day itinerary using <span className={`font-semibold ${tierColors.text}`}>{selectedTier.toUpperCase()}</span> tier suppliers
                   </p>
 
-                  {/* Settings Preview */}
                   <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
                     <Settings className="w-3 h-3" />
-                    <span>
-                      {userPreferences.default_cost_mode === 'auto' ? 'Auto-calculate' : 'Manual'} costs
-                      • {userPreferences.default_margin_percent}% margin
-                      • {userPreferences.default_currency}
-                    </span>
+                    <span>{userPreferences.default_cost_mode === 'auto' ? 'Auto-calculate' : 'Manual'} • {userPreferences.default_margin_percent}% margin • {userPreferences.default_currency}</span>
                   </div>
 
-                  {/* Selected Tier Badge */}
-                  <div className="flex items-center gap-2 mb-3 p-2 bg-gray-50 rounded-lg">
-                    {selectedTier === 'luxury' && <Crown className="w-4 h-4 text-amber-600" />}
-                    {selectedTier === 'deluxe' && <Star className="w-4 h-4 text-purple-600" />}
-                    <span className="text-xs text-gray-600">
-                      Using <strong>{selectedTier}</strong> tier hotels, vehicles, guides, and restaurants
-                    </span>
-                  </div>
+                  {!clientSaved && (
+                    <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-xs text-amber-700">⚠️ No client selected. You'll be prompted to create one.</p>
+                    </div>
+                  )}
 
                   <button
                     onClick={generateItinerary}
@@ -960,8 +883,8 @@ Client: Maybe next month, around 10 days
                   >
                     {isGenerating ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Generating {selectedTier} itinerary...
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generating...
                       </>
                     ) : (
                       <>
@@ -972,7 +895,7 @@ Client: Maybe next month, around 10 days
                   </button>
                 </div>
 
-                {/* Generated Itinerary Success */}
+                {/* Generated Success */}
                 {generatedItinerary && (
                   <div ref={itinerarySuccessRef} className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-3">
@@ -981,71 +904,19 @@ Client: Maybe next month, around 10 days
                         <h3 className="text-sm font-bold text-gray-900">Itinerary Generated!</h3>
                         <p className="text-xs text-gray-600">
                           {generatedItinerary.itinerary_code} • {userPreferences.default_currency} {generatedItinerary.total_cost?.toFixed(2) || '0.00'}
-                          {generatedItinerary.tier && (
-                            <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${
-                              generatedItinerary.tier === 'luxury' ? 'bg-amber-100 text-amber-700' :
-                              generatedItinerary.tier === 'deluxe' ? 'bg-purple-100 text-purple-700' :
-                              generatedItinerary.tier === 'standard' ? 'bg-blue-100 text-blue-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {generatedItinerary.tier.toUpperCase()}
-                            </span>
-                          )}
                         </p>
                       </div>
                     </div>
-
-                    {/* Show selected suppliers if available */}
-                    {generatedItinerary.selected_suppliers && (
-                      <div className="mb-3 p-2 bg-white rounded-lg border border-green-200">
-                        <div className="text-xs text-gray-600 mb-1 font-medium">Selected Suppliers:</div>
-                        <div className="space-y-1">
-                          {generatedItinerary.selected_suppliers.hotel && (
-                            <div className="flex items-center gap-1 text-xs">
-                              <span className="text-gray-500">🏨</span>
-                              <span>{generatedItinerary.selected_suppliers.hotel.name}</span>
-                              {generatedItinerary.selected_suppliers.hotel.is_preferred && (
-                                <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                              )}
-                            </div>
-                          )}
-                          {generatedItinerary.selected_suppliers.vehicle && (
-                            <div className="flex items-center gap-1 text-xs">
-                              <span className="text-gray-500">🚗</span>
-                              <span>{generatedItinerary.selected_suppliers.vehicle.name}</span>
-                              {generatedItinerary.selected_suppliers.vehicle.is_preferred && (
-                                <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                              )}
-                            </div>
-                          )}
-                          {generatedItinerary.selected_suppliers.guide && (
-                            <div className="flex items-center gap-1 text-xs">
-                              <span className="text-gray-500">🎯</span>
-                              <span>{generatedItinerary.selected_suppliers.guide.name}</span>
-                              {generatedItinerary.selected_suppliers.guide.is_preferred && (
-                                <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
                     <div className="flex gap-2">
                       <button
                         onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
                         className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2"
                       >
-                        View Itinerary
-                        <ChevronRight className="w-3 h-3" />
+                        View Itinerary <ChevronRight className="w-3 h-3" />
                       </button>
                       {fromInbox && (
-                        <Link
-                          href="/whatsapp-inbox"
-                          className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                          Back to Inbox
+                        <Link href="/whatsapp-inbox" className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4" /> Back
                         </Link>
                       )}
                     </div>

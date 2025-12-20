@@ -12,7 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Building2
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -31,11 +32,23 @@ interface TransportationRate {
   season: string | null
   rate_valid_from: string
   rate_valid_to: string
+  supplier_id: string | null  // NEW: linked to suppliers table
   supplier_name: string | null
   notes: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+  // Joined supplier data
+  suppliers?: { id: string; name: string; city?: string } | null
+}
+
+// NEW: Supplier interface for dropdown
+interface Supplier {
+  id: string
+  name: string
+  type: string
+  city?: string
+  status?: string
 }
 
 interface FormData {
@@ -51,6 +64,7 @@ interface FormData {
   season: string
   rate_valid_from: string
   rate_valid_to: string
+  supplier_id: string  // NEW: linked supplier
   supplier_name: string
   notes: string
   is_active: boolean
@@ -69,6 +83,7 @@ const initialFormData: FormData = {
   season: '',
   rate_valid_from: new Date().toISOString().split('T')[0],
   rate_valid_to: '2099-12-31',
+  supplier_id: '',  // NEW
   supplier_name: '',
   notes: '',
   is_active: true
@@ -102,11 +117,13 @@ export default function TransportationContent() {
   const dialog = useConfirmDialog()
   
   const [rates, setRates] = useState<TransportationRate[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])  // NEW: suppliers list
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [cityFilter, setCityFilter] = useState('')
   const [serviceTypeFilter, setServiceTypeFilter] = useState('')
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState('')
+  const [supplierFilter, setSupplierFilter] = useState('')  // NEW: filter by supplier
   const [showInactive, setShowInactive] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingRate, setEditingRate] = useState<TransportationRate | null>(null)
@@ -118,12 +135,30 @@ export default function TransportationContent() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
 
+  // NEW: Fetch suppliers for dropdown
+  const fetchSuppliers = useCallback(async () => {
+    try {
+      const response = await fetch('/api/suppliers?status=active')
+      if (response.ok) {
+        const result = await response.json()
+        // Filter to only transport-related suppliers
+        const transportSuppliers = (result.data || []).filter((s: Supplier) => 
+          ['transport_company', 'transport', 'driver'].includes(s.type)
+        )
+        setSuppliers(transportSuppliers)
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error)
+    }
+  }, [])
+
   const fetchRates = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       if (cityFilter) params.append('city', cityFilter)
       if (serviceTypeFilter) params.append('serviceType', serviceTypeFilter)
       if (vehicleTypeFilter) params.append('vehicleType', vehicleTypeFilter)
+      if (supplierFilter) params.append('supplier_id', supplierFilter)  // NEW
       if (!showInactive) params.append('activeOnly', 'true')
       
       const response = await fetch(`/api/resources/transportation?${params}`)
@@ -136,16 +171,17 @@ export default function TransportationContent() {
     } finally {
       setLoading(false)
     }
-  }, [cityFilter, serviceTypeFilter, vehicleTypeFilter, showInactive])
+  }, [cityFilter, serviceTypeFilter, vehicleTypeFilter, supplierFilter, showInactive])
 
   useEffect(() => {
     fetchRates()
-  }, [fetchRates])
+    fetchSuppliers()  // NEW: fetch suppliers on mount
+  }, [fetchRates, fetchSuppliers])
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, cityFilter, serviceTypeFilter, vehicleTypeFilter, showInactive, itemsPerPage])
+  }, [searchTerm, cityFilter, serviceTypeFilter, vehicleTypeFilter, supplierFilter, showInactive, itemsPerPage])
 
   // Check if service type needs destination city
   const needsDestinationCity = (serviceType: string) => {
@@ -205,6 +241,16 @@ export default function TransportationContent() {
     }))
   }
 
+  // NEW: Handle supplier selection - auto-fill supplier_name
+  const handleSupplierChange = (supplierId: string) => {
+    const supplier = suppliers.find(s => s.id === supplierId)
+    setFormData(prev => ({
+      ...prev,
+      supplier_id: supplierId,
+      supplier_name: supplier?.name || ''
+    }))
+  }
+
   const openAddModal = () => {
     setEditingRate(null)
     setFormData(initialFormData)
@@ -228,7 +274,8 @@ export default function TransportationContent() {
       season: rate.season || '',
       rate_valid_from: rate.rate_valid_from,
       rate_valid_to: rate.rate_valid_to,
-      supplier_name: rate.supplier_name || '',
+      supplier_id: rate.supplier_id || '',  // NEW
+      supplier_name: rate.supplier_name || rate.suppliers?.name || '',
       notes: rate.notes || '',
       is_active: rate.is_active
     })
@@ -271,10 +318,16 @@ export default function TransportationContent() {
         ? `/api/resources/transportation/${editingRate.id}`
         : '/api/resources/transportation'
       
+      // NEW: Include supplier_id in submission, set to null if empty
+      const submitData = {
+        ...formData,
+        supplier_id: formData.supplier_id || null
+      }
+      
       const response = await fetch(url, {
         method: editingRate ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submitData)
       })
 
       const result = await response.json()
@@ -324,7 +377,8 @@ export default function TransportationContent() {
       rate.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rate.vehicle_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (rate.destination_city && rate.destination_city.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (rate.supplier_name && rate.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()))
+      (rate.supplier_name && rate.supplier_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (rate.suppliers?.name && rate.suppliers.name.toLowerCase().includes(searchTerm.toLowerCase()))  // NEW: search joined supplier
     return matchesSearch
   })
 
@@ -351,6 +405,7 @@ export default function TransportationContent() {
   const inactiveRates = totalRates - activeRates
   const uniqueCities = [...new Set(rates.map(r => r.city))].length
   const uniqueVehicleTypes = [...new Set(rates.map(r => r.vehicle_type))].length
+  const linkedToSuppliers = rates.filter(r => r.supplier_id).length  // NEW: stat
 
   if (loading) {
     return (
@@ -377,8 +432,8 @@ export default function TransportationContent() {
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-3">
+      {/* Stats Cards - UPDATED: added linked suppliers stat */}
+      <div className="grid grid-cols-6 gap-3">
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
@@ -414,9 +469,17 @@ export default function TransportationContent() {
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{uniqueVehicleTypes}</p>
         </div>
+        {/* NEW: Linked to Suppliers stat */}
+        <div className="bg-white rounded-lg border border-gray-200 p-3">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+            <span className="text-xs text-gray-500">Linked</span>
+          </div>
+          <p className="text-xl font-semibold text-gray-900 mt-1">{linkedToSuppliers}</p>
+        </div>
       </div>
 
-      {/* Search and Filters */}
+      {/* Search and Filters - UPDATED: added supplier filter */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -471,6 +534,21 @@ export default function TransportationContent() {
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
 
+        {/* NEW: Supplier filter dropdown */}
+        <div className="relative">
+          <select
+            value={supplierFilter}
+            onChange={(e) => setSupplierFilter(e.target.value)}
+            className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
+          >
+            <option value="">All Suppliers</option>
+            {suppliers.map(supplier => (
+              <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        </div>
+
         <button
           onClick={() => setShowInactive(!showInactive)}
           className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
@@ -483,12 +561,13 @@ export default function TransportationContent() {
         </button>
       </div>
 
-      {/* Table */}
+      {/* Table - UPDATED: added Supplier column */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Service Code</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Supplier</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Service Type</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Vehicle</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Capacity</th>
@@ -501,17 +580,29 @@ export default function TransportationContent() {
           <tbody className="divide-y divide-gray-100">
             {paginatedRates.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
+                <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
                   No transportation rates found
                 </td>
               </tr>
             ) : (
               paginatedRates.map((rate) => {
                 const isIntercity = needsDestinationCity(rate.service_type)
+                const supplierName = rate.suppliers?.name || rate.supplier_name
                 return (
                   <tr key={rate.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2">
                       <span className="text-sm font-mono text-gray-900">{rate.service_code}</span>
+                    </td>
+                    {/* NEW: Supplier column */}
+                    <td className="px-4 py-2">
+                      {supplierName ? (
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5 text-gray-400" />
+                          <span className="text-sm text-gray-700">{supplierName}</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-2">
                       <span className="text-sm text-gray-600">
@@ -663,7 +754,7 @@ export default function TransportationContent() {
         )}
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal - UPDATED: added supplier dropdown */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -686,6 +777,48 @@ export default function TransportationContent() {
                   {error}
                 </div>
               )}
+
+              {/* NEW: Supplier Selection - at the top for prominence */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-cyan-600" />
+                  Transport Company (Supplier)
+                </h3>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                    Link to Supplier
+                  </label>
+                  <select
+                    value={formData.supplier_id}
+                    onChange={(e) => handleSupplierChange(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                  >
+                    <option value="">Select supplier (optional)</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.name}{supplier.city ? ` (${supplier.city})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Link this rate to a transport company for better tracking. 
+                    <a href="/suppliers?type=transport_company" className="text-[#647C47] hover:underline ml-1">
+                      Manage suppliers →
+                    </a>
+                  </p>
+                </div>
+
+                {/* Show selected supplier info */}
+                {formData.supplier_id && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-cyan-50 border border-cyan-100 rounded-md">
+                    <Building2 className="h-4 w-4 text-cyan-600" />
+                    <span className="text-sm text-cyan-800">
+                      Linked to: <strong>{formData.supplier_name}</strong>
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Basic Info */}
               <div className="space-y-4">
@@ -910,18 +1043,24 @@ export default function TransportationContent() {
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Additional Information</h3>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                    Supplier Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.supplier_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
-                    placeholder="e.g., Cairo Cars Co."
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                  />
-                </div>
+                {/* Legacy supplier name field - hidden if supplier_id is set */}
+                {!formData.supplier_id && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                      Supplier Name (Legacy)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.supplier_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
+                      placeholder="e.g., Cairo Cars Co. (prefer using dropdown above)"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      For backwards compatibility. Prefer using the supplier dropdown above.
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-1.5">

@@ -100,17 +100,14 @@ const navigation: NavSection[] = [
     items: [
       { label: 'All Clients', href: '/clients', icon: Users },
       { label: 'Add Client', href: '/clients/new', icon: UserPlus, roles: ['admin', 'manager', 'agent'] },
+      // UPDATED: Simplified Contacts - only Clients and Staff
+      // Hotels, Cruises, Guides, Restaurants, Transportation moved to Suppliers page
       { 
         label: 'Contacts', 
         href: '/contacts', 
         icon: Contact,
         children: [
-          { label: 'All Contacts', href: '/contacts' },
-          { label: 'Hotels & Lodges', href: '/contacts?type=accommodation', icon: Building2 },
-          { label: 'Nile Cruises', href: '/contacts?type=cruise', icon: Ship },
-          { label: 'Tour Guides', href: '/contacts?type=guide', icon: Compass },
-          { label: 'Restaurants', href: '/contacts?type=restaurant', icon: UtensilsCrossed },
-          { label: 'Transportation', href: '/contacts?type=transportation', icon: Car },
+          { label: 'Clients', href: '/contacts?type=client', icon: Users },
           { label: 'Staff', href: '/contacts?type=staff', icon: UserCog },
         ]
       },
@@ -176,14 +173,15 @@ const navigation: NavSection[] = [
     key: 'rates',
     roles: ['admin', 'manager'], // Only admin and manager
     items: [
-      { label: 'Hotels', href: '/hotels', icon: Hotel },
+      { label: 'Hotels', href: '/rates/hotels', icon: Hotel },
       { label: 'Nile Cruises', href: '/rates/cruises', icon: Ship },
       { label: 'Sleeping Trains', href: '/rates/sleeping-train', icon: BedDouble },
       { label: 'Trains', href: '/rates/trains', icon: Train },
       { label: 'Restaurants', href: '/restaurants', icon: UtensilsCrossed },
-      { label: 'Attractions', href: '/attractions', icon: Ticket },
-      { label: 'Tour Guides', href: '/guides', icon: Users },       
-      { label: 'Transportation', href: '/transportation', icon: Truck },
+      { label: 'Attractions', href: '/rates/attractions', icon: Building },
+      { label: 'Tour Guides', href: '/rates/guides', icon: Users },   
+      { label: 'Activities', href: '/rates/activities', icon: Ticket },    
+      { label: 'Transportation', href: '/rates/transportation', icon: Truck },
       { label: 'Airport Services', href: '/rates/airport-services', icon: Plane },
       { label: 'Hotel Services', href: '/rates/hotel-services', icon: ConciergeBell },
       { label: 'Tipping', href: '/rates/tipping', icon: DollarSign },

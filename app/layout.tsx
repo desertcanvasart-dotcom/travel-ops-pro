@@ -22,8 +22,8 @@ export default function RootLayout({
   const isPublicPage = publicPages.includes(pathname)
 
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
           <ConfirmDialogProvider>
             {isPublicPage ? (
