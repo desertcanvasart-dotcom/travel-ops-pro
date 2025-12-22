@@ -86,10 +86,9 @@ const CUISINE_TYPES = [
 const CRUISE_ROUTES = ['Luxor to Aswan', 'Aswan to Luxor', 'Round Trip', 'Esna to Aswan', 'Lake Nasser']
 
 // Supplier type configuration
-const TYPE_CONFIG: Record<string, { icon: any; label: string; singular: string; color: string; borderColor: string }> = {
+  const TYPE_CONFIG: Record<string, { icon: any; label: string; singular: string; color: string; borderColor: string }> = {
   hotel: { icon: Building2, label: 'Hotels', singular: 'Hotel', color: 'bg-blue-100 text-blue-700', borderColor: 'border-blue-200' },
   transport_company: { icon: Car, label: 'Transport', singular: 'Transport Company', color: 'bg-cyan-100 text-cyan-700', borderColor: 'border-cyan-200' },
-  transport: { icon: Car, label: 'Transport', singular: 'Transport', color: 'bg-cyan-100 text-cyan-700', borderColor: 'border-cyan-200' },
   driver: { icon: Car, label: 'Drivers', singular: 'Driver', color: 'bg-teal-100 text-teal-700', borderColor: 'border-teal-200' },
   guide: { icon: Compass, label: 'Guides', singular: 'Guide', color: 'bg-green-100 text-green-700', borderColor: 'border-green-200' },
   cruise: { icon: Ship, label: 'Cruises', singular: 'Cruise', color: 'bg-indigo-100 text-indigo-700', borderColor: 'border-indigo-200' },
