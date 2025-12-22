@@ -28,6 +28,13 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 // INTERFACES
 // ============================================
 
+interface Supplier {
+  id: string
+  name: string
+  type: string
+  city?: string
+}
+
 interface Cruise {
   id: string
   cruise_code: string
@@ -48,6 +55,7 @@ interface Cruise {
   is_active: boolean
   tier: string | null
   is_preferred: boolean
+  supplier_id: string | null
   created_at: string
 }
 
@@ -195,6 +203,7 @@ export default function CruisesPage() {
   const dialog = useConfirmDialog()
   
   const [cruises, setCruises] = useState<Cruise[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -227,7 +236,8 @@ export default function CruisesPage() {
     notes: '',
     is_active: true,
     tier: 'standard',
-    is_preferred: false
+    is_preferred: false,
+    supplier_id: ''
   })
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -251,8 +261,21 @@ export default function CruisesPage() {
     }
   }
 
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch('/api/suppliers?type=cruise')
+      const data = await response.json()
+      if (data.success) {
+        setSuppliers(data.data)
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error)
+    }
+  }
+
   useEffect(() => {
     fetchCruises()
+    fetchSuppliers()
   }, [])
 
   // Reset to first page when filters change
@@ -271,6 +294,15 @@ export default function CruisesPage() {
   const handleCheckbox = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target
     setFormData(prev => ({ ...prev, [name]: checked }))
+  }
+
+  const handleSupplierChange = (supplierId: string) => {
+    const supplier = suppliers.find(s => s.id === supplierId)
+    setFormData(prev => ({
+      ...prev,
+      supplier_id: supplierId,
+      ship_name: supplier?.name || prev.ship_name
+    }))
   }
 
   const generateCode = () => {
@@ -300,7 +332,8 @@ export default function CruisesPage() {
       notes: '',
       is_active: true,
       tier: 'standard',
-      is_preferred: false
+      is_preferred: false,
+      supplier_id: ''
     })
     setShowModal(true)
   }
@@ -325,7 +358,8 @@ export default function CruisesPage() {
       notes: cruise.notes || '',
       is_active: cruise.is_active,
       tier: cruise.tier || 'standard',
-      is_preferred: cruise.is_preferred || false
+      is_preferred: cruise.is_preferred || false,
+      supplier_id: cruise.supplier_id || ''
     })
     setShowModal(true)
   }
@@ -337,7 +371,8 @@ export default function CruisesPage() {
       ...formData,
       cruise_code: formData.cruise_code || generateCode(),
       route_name: formData.route_name || `${formData.embark_city} to ${formData.disembark_city}`,
-      rate_triple_eur: formData.rate_triple_eur || null
+      rate_triple_eur: formData.rate_triple_eur || null,
+      supplier_id: formData.supplier_id || null
     }
 
     try {
@@ -428,7 +463,6 @@ export default function CruisesPage() {
       </div>
     )
   }
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Toasts */}
@@ -460,6 +494,9 @@ export default function CruisesPage() {
                 <Plus className="w-4 h-4" />
                 Add Cruise
               </button>
+              <Link href="/suppliers?type=cruise" className="px-3 py-1.5 text-sm border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 font-medium">
+                Cruise Suppliers
+              </Link>
               <Link href="/rates" className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
                 ← Rates Hub
               </Link>
@@ -687,6 +724,24 @@ export default function CruisesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              {/* Supplier Selection - NEW */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Supplier (Cruise Company)</label>
+                <select
+                  value={formData.supplier_id}
+                  onChange={(e) => handleSupplierChange(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                >
+                  <option value="">Select Supplier (Optional)</option>
+                  {suppliers.map(supplier => (
+                    <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Link to a cruise supplier for tracking. <Link href="/suppliers?type=cruise" className="text-blue-600 hover:underline">Manage cruise suppliers →</Link>
+                </p>
+              </div>
+
               {/* Ship Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>

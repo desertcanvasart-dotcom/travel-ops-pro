@@ -273,15 +273,30 @@ export default function ResourceAssignmentV2({
       setLoading(false)
     }
   }
-
   const fetchAvailableResources = async () => {
     const resources: Record<string, Resource[]> = {}
     
     for (const type of RESOURCE_TYPES) {
       try {
         const response = await fetch(`${type.apiEndpoint}?is_active=true`)
-        const data = await response.json()
         
+        // Handle 404 or other errors gracefully
+        if (!response.ok) {
+          console.log(`Resource API not available: ${type.apiEndpoint}`)
+          resources[type.key] = []
+          continue
+        }
+        
+        const data = await response.json()
+        resources[type.key] = Array.isArray(data) ? data : (data.data || [])
+      } catch (error) {
+        console.log(`Error fetching ${type.key}:`, error)
+        resources[type.key] = []
+      }
+    }
+    
+    setAvailableResources(resources)
+  }
         // Handle different response formats
         if (data.success && data.data) {
           resources[type.key] = data.data

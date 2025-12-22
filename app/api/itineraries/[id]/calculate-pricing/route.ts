@@ -1,0 +1,621 @@
+// ============================================
+// CALCULATE PRICING API
+// File: app/api/itineraries/[id]/calculate-pricing/route.ts
+// 
+// Recalculates pricing for an existing itinerary
+// after edits in the Editor page.
+// Works with your schema: services → itinerary_day_id
+// ============================================
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+// ============================================
+// TYPES
+// ============================================
+
+interface DayService {
+  guide: boolean
+  lunch: boolean
+  dinner: boolean
+  hotel: boolean
+  water: boolean
+  tips: boolean
+}
+
+interface DayInput {
+  day_number: number
+  city: string
+  attractions: string[]
+  services: DayService
+  overnight_city: string | null
+}
+
+interface PricingRequest {
+  tier: string
+  package_type: string
+  days: DayInput[]
+  num_adults: number
+  num_children: number
+  nationality_type: 'eur' | 'non-eur'
+}
+
+// ============================================
+// MARKUP
+// ============================================
+
+const DEFAULT_MARGIN_PERCENT = parseFloat(process.env.MARKUP_PERCENTAGE || '25')
+
+function applyMarkup(cost: number, marginPercent: number = DEFAULT_MARGIN_PERCENT): number {
+  return cost * (1 + marginPercent / 100)
+}
+
+// ============================================
+// RATE FETCHING
+// ============================================
+
+async function getTransportationRate(city: string, tier: string, pax: number) {
+  let vehicleType = 'sedan'
+  if (pax > 3) vehicleType = 'minivan'
+  if (pax > 7) vehicleType = 'minibus'
+  if (pax > 15) vehicleType = 'bus'
+
+  // Try transportation_rates table first
+  const { data: rate } = await supabaseAdmin
+    .from('transportation_rates')
+    .select('*')
+    .eq('is_active', true)
+    .ilike('city', `%${city}%`)
+    .gte('capacity_max', pax)
+    .order('capacity_min', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (rate) {
+    return {
+      rate: rate.base_rate_eur || 50,
+      supplier_id: rate.supplier_id || null,
+      supplier_name: rate.supplier_name || null,
+      name: `${rate.vehicle_type || vehicleType} - ${city}`,
+      code: rate.service_code || `TRANS-${city.substring(0,3).toUpperCase()}`
+    }
+  }
+
+  // Try vehicles table
+  const { data: vehicle } = await supabaseAdmin
+    .from('vehicles')
+    .select('*')
+    .eq('is_active', true)
+    .gte('capacity_max', pax)
+    .order('capacity_min', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (vehicle) {
+    return {
+      rate: vehicle.daily_rate_eur || 50,
+      supplier_id: vehicle.id,
+      supplier_name: vehicle.company_name || null,
+      name: `${vehicle.vehicle_type} - ${city}`,
+      code: vehicle.id || `TRANS-${city.substring(0,3).toUpperCase()}`
+    }
+  }
+
+  // Fallback
+  const fallback: Record<string, number> = {
+    'Cairo': 52, 'Giza': 52, 'Luxor': 45, 'Aswan': 45,
+    'Alexandria': 60, 'Hurghada': 55
+  }
+  
+  return {
+    rate: fallback[city] || 50,
+    supplier_id: null,
+    supplier_name: null,
+    name: `${vehicleType} - ${city}`,
+    code: `TRANS-${city.substring(0,3).toUpperCase()}`
+  }
+}
+
+async function getGuideRate(city: string, tier: string, language: string = 'English') {
+  // Try guide_rates table
+  const { data: rate } = await supabaseAdmin
+    .from('guide_rates')
+    .select('*')
+    .eq('is_active', true)
+    .ilike('guide_language', `%${language}%`)
+    .limit(1)
+    .single()
+
+  if (rate) {
+    return {
+      rate: rate.base_rate_eur || rate.full_day_rate_eur || 50,
+      supplier_id: rate.supplier_id || null,
+      supplier_name: rate.guide_name || null,
+      name: `${language} Speaking Guide - ${city}`,
+      code: rate.service_code || `GUIDE-${language.substring(0,2).toUpperCase()}`
+    }
+  }
+
+  // Try guides table
+  const { data: guide } = await supabaseAdmin
+    .from('guides')
+    .select('*')
+    .eq('is_active', true)
+    .contains('languages', [language])
+    .limit(1)
+    .single()
+
+  if (guide) {
+    return {
+      rate: guide.daily_rate_eur || 55,
+      supplier_id: guide.id,
+      supplier_name: guide.name || null,
+      name: `${language} Speaking Guide - ${city}`,
+      code: guide.id || `GUIDE-${language.substring(0,2).toUpperCase()}`
+    }
+  }
+
+  // Fallback
+  return {
+    rate: 50,
+    supplier_id: null,
+    supplier_name: null,
+    name: `${language} Speaking Guide - ${city}`,
+    code: `GUIDE-${language.substring(0,2).toUpperCase()}`
+  }
+}
+
+async function getEntranceFee(attractionName: string, isEuroPassport: boolean) {
+  // Try entrance_fees table first
+  const { data: fee } = await supabaseAdmin
+    .from('entrance_fees')
+    .select('*')
+    .eq('is_active', true)
+    .ilike('attraction_name', `%${attractionName}%`)
+    .limit(1)
+    .single()
+
+  if (fee) {
+    const rateEur = fee.eur_rate || 0
+    const rateNonEur = fee.non_eur_rate || fee.eur_rate || 0
+    return {
+      rate: isEuroPassport ? rateEur : rateNonEur,
+      rateEur,
+      rateNonEur,
+      name: fee.attraction_name,
+      code: `ENT-${fee.attraction_name.substring(0,5).toUpperCase().replace(/\s/g, '')}`
+    }
+  }
+
+  // Try activity_rates table
+  const { data: activity } = await supabaseAdmin
+    .from('activity_rates')
+    .select('*')
+    .eq('is_active', true)
+    .ilike('activity_name', `%${attractionName}%`)
+    .limit(1)
+    .single()
+
+  if (activity) {
+    const rateEur = activity.base_rate_eur || 0
+    const rateNonEur = activity.base_rate_non_eur || activity.base_rate_eur || 0
+    return {
+      rate: isEuroPassport ? rateEur : rateNonEur,
+      rateEur,
+      rateNonEur,
+      name: activity.activity_name,
+      code: activity.activity_code || `ENT-${activity.activity_name.substring(0,5).toUpperCase().replace(/\s/g, '')}`
+    }
+  }
+
+  return {
+    rate: 15,
+    rateEur: 15,
+    rateNonEur: 15,
+    name: attractionName,
+    code: `ENT-${attractionName.substring(0,5).toUpperCase().replace(/\s/g, '')}`
+  }
+}
+
+async function getMealRate(city: string, mealType: 'lunch' | 'dinner', tier: string) {
+  const { data: rate } = await supabaseAdmin
+    .from('meal_rates')
+    .select('*')
+    .eq('is_active', true)
+    .limit(1)
+    .single()
+
+  const tierMultiplier: Record<string, number> = {
+    'budget': 0.8, 'standard': 1.0, 'deluxe': 1.3, 'luxury': 1.6
+  }
+
+  if (rate) {
+    const baseRate = mealType === 'lunch' 
+      ? (rate.lunch_rate_eur || 12) 
+      : (rate.dinner_rate_eur || 18)
+    return {
+      rate: Math.round(baseRate * (tierMultiplier[tier] || 1)),
+      supplier_name: null,
+      name: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} - ${city}`,
+      code: mealType === 'lunch' ? 'LUNCH' : 'DINNER'
+    }
+  }
+
+  const fallback = mealType === 'lunch' ? 12 : 18
+  return {
+    rate: Math.round(fallback * (tierMultiplier[tier] || 1)),
+    supplier_name: null,
+    name: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} - ${city}`,
+    code: mealType === 'lunch' ? 'LUNCH' : 'DINNER'
+  }
+}
+
+async function getHotelRate(city: string, tier: string) {
+  const { data: hotel } = await supabaseAdmin
+    .from('hotel_contacts')
+    .select('*')
+    .eq('is_active', true)
+    .ilike('city', `%${city}%`)
+    .eq('tier', tier)
+    .order('is_preferred', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (hotel) {
+    return {
+      rate: hotel.rate_double_eur || 80,
+      supplier_id: hotel.id,
+      supplier_name: hotel.name,
+      name: `${hotel.name} - Double Room`,
+      code: hotel.id || `HTL-${city.substring(0,3).toUpperCase()}`
+    }
+  }
+
+  // Fallback without tier filter
+  const { data: anyHotel } = await supabaseAdmin
+    .from('hotel_contacts')
+    .select('*')
+    .eq('is_active', true)
+    .ilike('city', `%${city}%`)
+    .order('is_preferred', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (anyHotel) {
+    return {
+      rate: anyHotel.rate_double_eur || 80,
+      supplier_id: anyHotel.id,
+      supplier_name: anyHotel.name,
+      name: `${anyHotel.name} - Double Room`,
+      code: anyHotel.id || `HTL-${city.substring(0,3).toUpperCase()}`
+    }
+  }
+
+  const fallbackRates: Record<string, number> = {
+    'budget': 45, 'standard': 80, 'deluxe': 120, 'luxury': 180
+  }
+
+  return {
+    rate: fallbackRates[tier] || 80,
+    supplier_id: null,
+    supplier_name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Hotel`,
+    name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Hotel - ${city}`,
+    code: `HTL-${city.substring(0,3).toUpperCase()}`
+  }
+}
+
+async function getTippingRate(tier: string) {
+  const { data: rates } = await supabaseAdmin
+    .from('tipping_rates')
+    .select('*')
+    .eq('is_active', true)
+
+  let dailyTips = 15
+  if (rates && rates.length > 0) {
+    dailyTips = rates.reduce((sum, t) => {
+      if (t.rate_unit === 'per_day') {
+        return sum + (t.rate_eur || 0)
+      }
+      return sum
+    }, 0)
+    if (dailyTips === 0) dailyTips = 15
+  }
+
+  const tierMultiplier: Record<string, number> = {
+    'budget': 0.8, 'standard': 1.0, 'deluxe': 1.2, 'luxury': 1.5
+  }
+
+  return {
+    rate: Math.round(dailyTips * (tierMultiplier[tier] || 1)),
+    name: 'Daily Tips',
+    code: 'DAILY-TIPS'
+  }
+}
+
+// ============================================
+// MAIN HANDLER
+// ============================================
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Next.js 15: params is now a Promise
+    const { id: itineraryId } = await params
+    const body: PricingRequest = await request.json()
+    
+    const { tier, package_type, days, num_adults, num_children, nationality_type } = body
+    const totalPax = num_adults + num_children
+    const isEuroPassport = nationality_type === 'eur'
+
+    console.log(`[Pricing] Starting for itinerary ${itineraryId}`)
+    console.log(`[Pricing] ${days.length} days, ${totalPax} pax, tier: ${tier}, package: ${package_type}`)
+
+    // Get itinerary to check margin
+    const { data: itinerary } = await supabaseAdmin
+      .from('itineraries')
+      .select('margin_percent, currency')
+      .eq('id', itineraryId)
+      .single()
+
+    const marginPercent = itinerary?.margin_percent || DEFAULT_MARGIN_PERCENT
+    const currency = itinerary?.currency || 'EUR'
+
+    // Get existing days (to get their IDs)
+    const { data: existingDays, error: daysError } = await supabaseAdmin
+      .from('itinerary_days')
+      .select('id, day_number')
+      .eq('itinerary_id', itineraryId)
+      .order('day_number')
+
+    if (daysError || !existingDays?.length) {
+      throw new Error('No itinerary days found. Save the draft first.')
+    }
+
+    const dayIdMap = new Map<number, string>()
+    existingDays.forEach(day => dayIdMap.set(day.day_number, day.id))
+
+    // Delete existing services
+    const dayIds = existingDays.map(d => d.id)
+    await supabaseAdmin
+      .from('itinerary_services')
+      .delete()
+      .in('itinerary_day_id', dayIds)
+
+    // Calculate services
+    const allServices: any[] = []
+    let totalSupplierCost = 0
+    let totalClientPrice = 0
+
+    const tipping = await getTippingRate(tier)
+    const waterRate = 2
+    const roomsNeeded = Math.ceil(totalPax / 2)
+
+    // Determine what to include based on package type
+    let includeAccommodation = true
+    if (package_type === 'day-trips' || package_type === 'tours-only') {
+      includeAccommodation = false
+    }
+
+    for (const day of days) {
+      const dayId = dayIdMap.get(day.day_number)
+      if (!dayId) continue
+
+      const { city, attractions, services, overnight_city } = day
+
+      // TRANSPORTATION
+      const transport = await getTransportationRate(city, tier, totalPax)
+      const transportClient = applyMarkup(transport.rate, marginPercent)
+      allServices.push({
+        itinerary_day_id: dayId,
+        service_type: 'transportation',
+        service_code: transport.code,
+        service_name: transport.name,
+        supplier_name: transport.supplier_name,
+        quantity: 1,
+        rate_eur: transport.rate,
+        rate_non_eur: transport.rate,
+        total_cost: transport.rate,
+        client_price: transportClient,
+        notes: `Full day - ${city}`
+      })
+      totalSupplierCost += transport.rate
+      totalClientPrice += transportClient
+
+      // GUIDE
+      if (services.guide) {
+        const guide = await getGuideRate(city, tier)
+        const guideClient = applyMarkup(guide.rate, marginPercent)
+        allServices.push({
+          itinerary_day_id: dayId,
+          service_type: 'guide',
+          service_code: guide.code,
+          service_name: guide.name,
+          supplier_name: guide.supplier_name,
+          quantity: 1,
+          rate_eur: guide.rate,
+          rate_non_eur: guide.rate,
+          total_cost: guide.rate,
+          client_price: guideClient,
+          notes: `Full day - ${city}`
+        })
+        totalSupplierCost += guide.rate
+        totalClientPrice += guideClient
+      }
+
+      // ENTRANCE FEES
+      for (const attraction of attractions) {
+        const entrance = await getEntranceFee(attraction, isEuroPassport)
+        const entranceTotal = entrance.rate * totalPax
+        // No markup on entrance fees typically
+        allServices.push({
+          itinerary_day_id: dayId,
+          service_type: 'entrance',
+          service_code: entrance.code,
+          service_name: entrance.name,
+          quantity: totalPax,
+          rate_eur: entrance.rateEur,
+          rate_non_eur: entrance.rateNonEur,
+          total_cost: entranceTotal,
+          client_price: entranceTotal,
+          notes: `${isEuroPassport ? 'EUR' : 'non-EUR'} rate`
+        })
+        totalSupplierCost += entranceTotal
+        totalClientPrice += entranceTotal
+      }
+
+      // LUNCH
+      if (services.lunch) {
+        const meal = await getMealRate(city, 'lunch', tier)
+        const mealTotal = meal.rate * totalPax
+        const mealClient = applyMarkup(mealTotal, marginPercent)
+        allServices.push({
+          itinerary_day_id: dayId,
+          service_type: 'meal',
+          service_code: meal.code,
+          service_name: meal.name,
+          supplier_name: meal.supplier_name,
+          quantity: totalPax,
+          rate_eur: meal.rate,
+          rate_non_eur: meal.rate,
+          total_cost: mealTotal,
+          client_price: mealClient,
+          notes: 'Lunch'
+        })
+        totalSupplierCost += mealTotal
+        totalClientPrice += mealClient
+      }
+
+      // DINNER
+      if (services.dinner) {
+        const meal = await getMealRate(city, 'dinner', tier)
+        const mealTotal = meal.rate * totalPax
+        const mealClient = applyMarkup(mealTotal, marginPercent)
+        allServices.push({
+          itinerary_day_id: dayId,
+          service_type: 'meal',
+          service_code: `${meal.code}-DINNER`,
+          service_name: meal.name.replace('Lunch', 'Dinner'),
+          supplier_name: meal.supplier_name,
+          quantity: totalPax,
+          rate_eur: meal.rate,
+          rate_non_eur: meal.rate,
+          total_cost: mealTotal,
+          client_price: mealClient,
+          notes: 'Dinner'
+        })
+        totalSupplierCost += mealTotal
+        totalClientPrice += mealClient
+      }
+
+      // WATER (standard inclusion)
+      const waterTotal = waterRate * totalPax
+      allServices.push({
+        itinerary_day_id: dayId,
+        service_type: 'supplies',
+        service_code: 'WATER',
+        service_name: 'Water Bottles',
+        quantity: totalPax,
+        rate_eur: waterRate,
+        rate_non_eur: waterRate,
+        total_cost: waterTotal,
+        client_price: waterTotal,
+        notes: 'Bottled water'
+      })
+      totalSupplierCost += waterTotal
+      totalClientPrice += waterTotal
+
+      // TIPS (standard inclusion)
+      const tipsClient = applyMarkup(tipping.rate, marginPercent)
+      allServices.push({
+        itinerary_day_id: dayId,
+        service_type: 'tips',
+        service_code: tipping.code,
+        service_name: tipping.name,
+        quantity: 1,
+        rate_eur: tipping.rate,
+        rate_non_eur: tipping.rate,
+        total_cost: tipping.rate,
+        client_price: tipsClient,
+        notes: 'Driver and guide tips'
+      })
+      totalSupplierCost += tipping.rate
+      totalClientPrice += tipsClient
+
+      // HOTEL
+      const isLastDay = day.day_number === days.length
+      if (services.hotel && overnight_city && includeAccommodation && !isLastDay) {
+        const hotel = await getHotelRate(overnight_city, tier)
+        const hotelTotal = hotel.rate * roomsNeeded
+        const hotelClient = applyMarkup(hotelTotal, marginPercent)
+        allServices.push({
+          itinerary_day_id: dayId,
+          service_type: 'accommodation',
+          service_code: hotel.code,
+          service_name: `${hotel.supplier_name} (${roomsNeeded} room${roomsNeeded > 1 ? 's' : ''})`,
+          supplier_name: hotel.supplier_name,
+          quantity: roomsNeeded,
+          rate_eur: hotel.rate,
+          rate_non_eur: hotel.rate,
+          total_cost: hotelTotal,
+          client_price: hotelClient,
+          notes: `Overnight at ${overnight_city}`
+        })
+        totalSupplierCost += hotelTotal
+        totalClientPrice += hotelClient
+      }
+    }
+
+    // Insert services
+    if (allServices.length > 0) {
+      const { error: insertError } = await supabaseAdmin
+        .from('itinerary_services')
+        .insert(allServices)
+
+      if (insertError) {
+        console.error('[Pricing] Insert error:', insertError)
+        throw insertError
+      }
+    }
+
+    // Update itinerary totals
+    await supabaseAdmin
+      .from('itineraries')
+      .update({
+        total_cost: totalClientPrice,
+        total_revenue: totalClientPrice,
+        tier: tier,
+        package_type: package_type,
+        status: 'quoted',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', itineraryId)
+
+    console.log(`[Pricing] Complete: €${totalClientPrice.toFixed(2)} (${allServices.length} services)`)
+
+    return NextResponse.json({
+      success: true,
+      itinerary_id: itineraryId,
+      supplier_cost: totalSupplierCost,
+      total_cost: totalClientPrice,
+      margin: totalClientPrice - totalSupplierCost,
+      margin_percent: marginPercent,
+      currency,
+      services_count: allServices.length,
+      per_person: Math.round(totalClientPrice / totalPax * 100) / 100
+    })
+
+  } catch (error: any) {
+    console.error('[Pricing] Error:', error)
+    return NextResponse.json(
+      { success: false, error: error.message || 'Pricing calculation failed' },
+      { status: 500 }
+    )
+  }
+}

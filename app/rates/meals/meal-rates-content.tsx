@@ -860,18 +860,38 @@ export default function MealRatesContent() {
                   Restaurant & Meal Details
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Restaurant Name *</label>
-                    <input
-                      type="text"
-                      name="restaurant_name"
-                      value={formData.restaurant_name}
-                      onChange={handleChange}
-                      required
-                      placeholder="e.g., Naguib Mahfouz Café"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
+                  {/* Supplier Selection */}
+<div className="col-span-2">
+  <label className="block text-xs font-medium text-gray-600 mb-1">Supplier (Restaurant)</label>
+  <select
+    value={formData.supplier_id}
+    onChange={(e) => handleSupplierChange(e.target.value)}
+    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+  >
+    <option value="">Select Supplier (Optional)</option>
+    {suppliers.map(supplier => (
+      <option key={supplier.id} value={supplier.id}>
+        {supplier.name} {supplier.city && `(${supplier.city})`}
+      </option>
+    ))}
+  </select>
+  <p className="text-xs text-gray-500 mt-1">
+    Link to a restaurant supplier for tracking. <a href="/suppliers?type=restaurant" className="text-primary-600 hover:underline">Manage restaurants →</a>
+  </p>
+</div>
+
+<div className="col-span-2">
+  <label className="block text-xs font-medium text-gray-600 mb-1">Restaurant Name *</label>
+  <input
+    type="text"
+    name="restaurant_name"
+    value={formData.restaurant_name}
+    onChange={handleChange}
+    required
+    placeholder="e.g., Naguib Mahfouz Café"
+    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+  />
+</div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
                     <input

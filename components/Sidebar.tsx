@@ -177,7 +177,7 @@ const navigation: NavSection[] = [
       { label: 'Nile Cruises', href: '/rates/cruises', icon: Ship },
       { label: 'Sleeping Trains', href: '/rates/sleeping-train', icon: BedDouble },
       { label: 'Trains', href: '/rates/trains', icon: Train },
-      { label: 'Restaurants', href: '/restaurants', icon: UtensilsCrossed },
+      { label: 'Meals', href: '/rates/meals', icon: UtensilsCrossed },
       { label: 'Attractions', href: '/rates/attractions', icon: Building },
       { label: 'Tour Guides', href: '/rates/guides', icon: Users },   
       { label: 'Activities', href: '/rates/activities', icon: Ticket },    

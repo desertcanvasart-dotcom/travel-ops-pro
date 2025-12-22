@@ -423,11 +423,11 @@ export default function FollowupDashboard() {
                         <Link
                           href={`/clients/${followup.client_id}`}
                           className="text-base font-bold text-gray-900 hover:text-primary-600"
-                        >
-                          {followup.client.first_name} {followup.client.last_name}
-                        </Link>
-                        <span className="text-xs text-gray-500">
-                          {followup.client.client_code}
+                          >
+                            {followup.client?.first_name || 'Unknown'} {followup.client?.last_name || 'Client'}
+                          </Link>
+                          <span className="text-xs text-gray-500">
+                            {followup.client?.client_code || 'No client linked'}
                         </span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(followup.priority)}`}>
                           {followup.priority}
@@ -456,23 +456,24 @@ export default function FollowupDashboard() {
                       )}
                     
                       {/* Contact Info */}
-                      <div className="flex items-center gap-3 mt-2 text-xs">
-                        {followup.client.phone && (
-                          <a
-                            href={`tel:${followup.client.phone}`}
-                            className="flex items-center gap-1 text-primary-600 hover:text-primary-700"
-                          >
+                        <div className="flex items-center gap-3 mt-2 text-xs">
+                        {followup.client?.phone && (
+  
+                        <a  href={`tel:${followup.client?.phone}`}
+                          className="flex items-center gap-1 text-primary-600 hover:text-primary-700"
+                                >
                             <Phone className="w-3 h-3" />
-                            {followup.client.phone}
-                          </a>
-                        )}
-                        {followup.client.email && (
+                          {followup.client?.phone}
+                              </a>
+                         )}
+
+                        {followup.client?.email && (
                           <a
-                            href={`mailto:${followup.client.email}`}
+                            href={`mailto:${followup.client?.email}`}
                             className="flex items-center gap-1 text-primary-600 hover:text-primary-700"
                           >
                             <Mail className="w-3 h-3" />
-                            {followup.client.email}
+                            {followup.client?.email}
                           </a>
                         )}
                       </div>

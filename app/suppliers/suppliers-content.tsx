@@ -7,7 +7,7 @@ import {
   ShoppingBag, MapPin, Users, Briefcase, X, Edit, Trash2, Eye, Loader2, AlertCircle,
   Phone, Mail, MessageCircle, Percent, LayoutGrid, List, Table2, ChevronUp, ChevronDown,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, Download,
-  Star, Globe, DollarSign, FileText, Calendar, Check
+  Star, Globe, DollarSign, FileText, Calendar, Check, Link2, Building
 } from 'lucide-react'
 
 // Types
@@ -39,6 +39,11 @@ interface Supplier {
   ship_name?: string
   cabin_count?: number
   capacity?: number
+  // Hierarchical fields
+  parent_supplier_id?: string | null
+  is_property?: boolean
+  parent_supplier?: { id: string; name: string } | null
+  children_count?: number
   created_at: string
 }
 
@@ -102,6 +107,9 @@ const STATUS_COLORS: Record<string, string> = {
   inactive: 'bg-gray-100 text-gray-500',
   pending: 'bg-yellow-100 text-yellow-700'
 }
+
+// Types that support hierarchy (company -> properties)
+const HIERARCHICAL_TYPES = ['hotel', 'restaurant', 'cruise']
 
 // Multi-select component
 function MultiSelect({ options, value, onChange, placeholder }: { 
@@ -188,6 +196,8 @@ export default function SuppliersContent() {
   
   const [selectedType, setSelectedType] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [showPropertiesOnly, setShowPropertiesOnly] = useState(false)
+  const [showCompaniesOnly, setShowCompaniesOnly] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
@@ -206,8 +216,9 @@ export default function SuppliersContent() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   
   // View modal tabs
-  const [viewTab, setViewTab] = useState<'details' | 'rates' | 'documents'>('details')
+  const [viewTab, setViewTab] = useState<'details' | 'rates' | 'properties' | 'documents'>('details')
   const [supplierRates, setSupplierRates] = useState<TransportRate[]>([])
+  const [childProperties, setChildProperties] = useState<Supplier[]>([])
   const [loadingRates, setLoadingRates] = useState(false)
 
   useEffect(() => {
@@ -258,6 +269,25 @@ export default function SuppliersContent() {
     }
   }
 
+  const fetchChildProperties = async (parentId: string) => {
+    try {
+      const children = suppliers.filter(s => s.parent_supplier_id === parentId)
+      setChildProperties(children)
+    } catch (error) {
+      console.error('Error fetching child properties:', error)
+      setChildProperties([])
+    }
+  }
+
+  // Get potential parent companies for a given type
+  const getParentCompanies = (type: string) => {
+    return suppliers.filter(s => 
+      s.type === type && 
+      !s.is_property && 
+      !s.parent_supplier_id
+    )
+  }
+
   // Filter and sort
   const filteredSuppliers = suppliers
     .filter(supplier => {
@@ -268,7 +298,9 @@ export default function SuppliersContent() {
         supplier.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         supplier.contact_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         supplier.city?.toLowerCase().includes(searchQuery.toLowerCase())
-      return matchesType && matchesStatus && matchesSearch
+      const matchesPropertyFilter = !showPropertiesOnly || supplier.is_property
+      const matchesCompanyFilter = !showCompaniesOnly || (!supplier.is_property && !supplier.parent_supplier_id)
+      return matchesType && matchesStatus && matchesSearch && matchesPropertyFilter && matchesCompanyFilter
     })
     .sort((a, b) => {
       let aVal = '', bVal = ''
@@ -289,13 +321,14 @@ export default function SuppliersContent() {
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedSuppliers = filteredSuppliers.slice(startIndex, startIndex + itemsPerPage)
 
-  useEffect(() => { setCurrentPage(1) }, [searchQuery, selectedType, selectedStatus, itemsPerPage])
+  useEffect(() => { setCurrentPage(1) }, [searchQuery, selectedType, selectedStatus, itemsPerPage, showPropertiesOnly, showCompaniesOnly])
 
   const stats = suppliers.reduce((acc, s) => {
     acc[s.type] = (acc[s.type] || 0) + 1
     acc.all = (acc.all || 0) + 1
+    if (s.is_property) acc.properties = (acc.properties || 0) + 1
     return acc
-  }, { all: 0 } as Record<string, number>)
+  }, { all: 0, properties: 0 } as Record<string, number>)
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -313,16 +346,32 @@ export default function SuppliersContent() {
 
   const getTypeConfig = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.other
 
+  // Get parent supplier name
+  const getParentName = (parentId: string | null | undefined) => {
+    if (!parentId) return null
+    const parent = suppliers.find(s => s.id === parentId)
+    return parent?.name || null
+  }
+
   const handleAdd = () => {
     const defaultType = selectedType !== 'all' ? selectedType : 'hotel'
-    setFormData({ status: 'active', type: defaultType })
+    setFormData({ 
+      status: 'active', 
+      type: defaultType,
+      is_property: false,
+      parent_supplier_id: null
+    })
     setError(null)
     setShowAddModal(true)
   }
 
   const handleEdit = (supplier: Supplier) => {
     setSelectedSupplier(supplier)
-    setFormData({ ...supplier })
+    setFormData({ 
+      ...supplier,
+      is_property: supplier.is_property || false,
+      parent_supplier_id: supplier.parent_supplier_id || null
+    })
     setError(null)
     setShowEditModal(true)
     setOpenMenuId(null)
@@ -332,12 +381,18 @@ export default function SuppliersContent() {
     setSelectedSupplier(supplier)
     setViewTab('details')
     setSupplierRates([])
+    setChildProperties([])
     setShowViewModal(true)
     setOpenMenuId(null)
     
     // Fetch rates for transport companies
     if (['transport_company', 'transport', 'driver'].includes(supplier.type)) {
       fetchSupplierRates(supplier.id)
+    }
+    
+    // Fetch child properties if this is a parent company
+    if (!supplier.is_property && !supplier.parent_supplier_id && HIERARCHICAL_TYPES.includes(supplier.type)) {
+      fetchChildProperties(supplier.id)
     }
   }
 
@@ -354,7 +409,11 @@ export default function SuppliersContent() {
       const response = await fetch('/api/suppliers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          parent_supplier_id: formData.parent_supplier_id || null,
+          is_property: formData.is_property || false
+        })
       })
       if (!response.ok) throw new Error((await response.json()).error || 'Failed to create')
       setShowAddModal(false)
@@ -375,7 +434,11 @@ export default function SuppliersContent() {
       const response = await fetch(`/api/suppliers/${selectedSupplier.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          parent_supplier_id: formData.parent_supplier_id || null,
+          is_property: formData.is_property || false
+        })
       })
       if (!response.ok) throw new Error((await response.json()).error || 'Failed to update')
       setShowEditModal(false)
@@ -408,8 +471,19 @@ export default function SuppliersContent() {
 
   const handleExport = () => {
     const csv = [
-      ['Name', 'Type', 'Contact', 'Email', 'Phone', 'City', 'Commission', 'Status'].join(','),
-      ...filteredSuppliers.map(s => [s.name, s.type, s.contact_name, s.contact_email, s.contact_phone, s.city, s.default_commission_rate, s.status].map(v => `"${v || ''}"`).join(','))
+      ['Name', 'Type', 'Is Property', 'Parent Company', 'Contact', 'Email', 'Phone', 'City', 'Commission', 'Status'].join(','),
+      ...filteredSuppliers.map(s => [
+        s.name, 
+        s.type, 
+        s.is_property ? 'Yes' : 'No',
+        getParentName(s.parent_supplier_id) || '',
+        s.contact_name, 
+        s.contact_email, 
+        s.contact_phone, 
+        s.city, 
+        s.default_commission_rate, 
+        s.status
+      ].map(v => `"${v || ''}"`).join(','))
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const a = document.createElement('a')
@@ -423,6 +497,18 @@ export default function SuppliersContent() {
     const baseFields = [
       { name: 'Supplier Name', key: 'name', type: 'text', required: true },
       { name: 'Type', key: 'type', type: 'select', required: true, options: Object.keys(TYPE_CONFIG).filter(k => k !== 'other') },
+    ]
+    
+    // Add hierarchical fields for supported types
+    const hierarchyFields: any[] = []
+    if (HIERARCHICAL_TYPES.includes(type)) {
+      hierarchyFields.push(
+        { name: 'Is Property', key: 'is_property', type: 'checkbox', description: 'Check if this is an individual property (e.g., specific hotel) rather than a company/chain' },
+        { name: 'Parent Company', key: 'parent_supplier_id', type: 'parent_select', description: 'Link to parent company (e.g., Marriott International for Cairo Marriott)' }
+      )
+    }
+
+    const contactFields = [
       { name: 'Contact Person', key: 'contact_name', type: 'text' },
       { name: 'Email', key: 'contact_email', type: 'email' },
       { name: 'Phone', key: 'contact_phone', type: 'tel' },
@@ -461,13 +547,75 @@ export default function SuppliersContent() {
     }
 
     const extraFields = typeFields[type] || []
-    // Insert type-specific fields after 'type' field
-    const typeIndex = baseFields.findIndex(f => f.key === 'type')
-    return [...baseFields.slice(0, typeIndex + 1), ...extraFields, ...baseFields.slice(typeIndex + 1), { name: 'Notes', key: 'notes', type: 'textarea' }]
+    
+    return [
+      ...baseFields, 
+      ...hierarchyFields,
+      ...extraFields, 
+      ...contactFields, 
+      { name: 'Notes', key: 'notes', type: 'textarea' }
+    ]
   }
 
   const renderFormField = (field: any) => {
     const value = formData[field.key]
+    
+    // Parent company selector
+    if (field.type === 'parent_select') {
+      const parentCompanies = getParentCompanies(formData.type || 'hotel')
+      const isDisabled = !formData.is_property
+      
+      return (
+        <div>
+          <select
+            value={value || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, [field.key]: e.target.value || null }))}
+            disabled={isDisabled}
+            className={`w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <option value="">No parent (standalone)</option>
+            {parentCompanies.map(company => (
+              <option key={company.id} value={company.id}>
+                {company.name} {company.city && `(${company.city})`}
+              </option>
+            ))}
+          </select>
+          {isDisabled && (
+            <p className="text-xs text-gray-500 mt-1">Enable "Is Property" to link to a parent company</p>
+          )}
+        </div>
+      )
+    }
+    
+    // Checkbox for is_property
+    if (field.type === 'checkbox') {
+      return (
+        <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <input
+            type="checkbox"
+            checked={value || false}
+            onChange={(e) => {
+              setFormData(prev => ({ 
+                ...prev, 
+                [field.key]: e.target.checked,
+                // Clear parent if unchecking
+                parent_supplier_id: e.target.checked ? prev.parent_supplier_id : null
+              }))
+            }}
+            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 mt-0.5"
+          />
+          <div>
+            <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+              <Building className="w-4 h-4 text-blue-600" />
+              This is an individual property
+            </span>
+            {field.description && (
+              <p className="text-xs text-gray-600 mt-0.5">{field.description}</p>
+            )}
+          </div>
+        </div>
+      )
+    }
     
     if (field.type === 'multiselect') {
       return (
@@ -594,8 +742,8 @@ export default function SuppliersContent() {
 
       {/* Search & Filters */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-        <div className="flex gap-3">
-          <div className="flex-1 relative">
+        <div className="flex gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px] relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -615,6 +763,26 @@ export default function SuppliersContent() {
             <option value="inactive">Inactive</option>
             <option value="pending">Pending</option>
           </select>
+          
+          {/* Property/Company filter - only show for hierarchical types */}
+          {HIERARCHICAL_TYPES.includes(selectedType) && (
+            <>
+              <button
+                onClick={() => { setShowPropertiesOnly(!showPropertiesOnly); setShowCompaniesOnly(false) }}
+                className={`h-10 px-3 text-sm rounded-lg font-medium transition-colors ${showPropertiesOnly ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+              >
+                <Building className="w-4 h-4 inline mr-1.5" />
+                Properties Only
+              </button>
+              <button
+                onClick={() => { setShowCompaniesOnly(!showCompaniesOnly); setShowPropertiesOnly(false) }}
+                className={`h-10 px-3 text-sm rounded-lg font-medium transition-colors ${showCompaniesOnly ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+              >
+                <Briefcase className="w-4 h-4 inline mr-1.5" />
+                Companies Only
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -640,6 +808,7 @@ export default function SuppliersContent() {
                 {paginatedSuppliers.map((supplier) => {
                   const config = getTypeConfig(supplier.type)
                   const Icon = config.icon
+                  const parentName = getParentName(supplier.parent_supplier_id)
                   return (
                     <div key={supplier.id} className={`bg-white rounded-lg border ${config.borderColor} p-4 hover:shadow-md transition-all cursor-pointer group`} onClick={() => handleView(supplier)}>
                       <div className="flex items-start justify-between mb-3">
@@ -648,8 +817,21 @@ export default function SuppliersContent() {
                             <Icon className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="text-sm font-semibold text-gray-900">{supplier.name}</h3>
-                            <p className="text-xs text-gray-500">{config.singular}{supplier.city && ` • ${supplier.city}`}</p>
+                            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                              {supplier.name}
+                              {supplier.is_property && (
+                                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] font-medium">Property</span>
+                              )}
+                            </h3>
+                            <p className="text-xs text-gray-500">
+                              {config.singular}{supplier.city && ` • ${supplier.city}`}
+                            </p>
+                            {parentName && (
+                              <p className="text-xs text-purple-600 flex items-center gap-1 mt-0.5">
+                                <Link2 className="w-3 h-3" />
+                                {parentName}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="relative">
@@ -720,9 +902,9 @@ export default function SuppliersContent() {
                     <tr className="bg-gray-50 border-b border-gray-200">
                       <th className="text-left px-4 py-3"><button onClick={() => handleSort('name')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Name <SortIcon field="name" /></button></th>
                       <th className="text-left px-4 py-3"><button onClick={() => handleSort('type')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Type <SortIcon field="type" /></button></th>
+                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">Parent</span></th>
                       <th className="text-left px-4 py-3"><button onClick={() => handleSort('city')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">City <SortIcon field="city" /></button></th>
                       <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">Contact</span></th>
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('commission')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Commission <SortIcon field="commission" /></button></th>
                       <th className="text-left px-4 py-3"><button onClick={() => handleSort('status')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Status <SortIcon field="status" /></button></th>
                       <th className="text-right px-4 py-3"><span className="text-xs font-semibold text-gray-600">Actions</span></th>
                     </tr>
@@ -731,13 +913,35 @@ export default function SuppliersContent() {
                     {paginatedSuppliers.map((supplier) => {
                       const config = getTypeConfig(supplier.type)
                       const Icon = config.icon
+                      const parentName = getParentName(supplier.parent_supplier_id)
                       return (
                         <tr key={supplier.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleView(supplier)}>
-                          <td className="px-4 py-3"><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-lg ${config.color} flex items-center justify-center`}><Icon className="w-4 h-4" /></div><span className="text-sm font-medium text-gray-900">{supplier.name}</span></div></td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg ${config.color} flex items-center justify-center`}><Icon className="w-4 h-4" /></div>
+                              <div>
+                                <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                                  {supplier.name}
+                                  {supplier.is_property && (
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px]">Property</span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
                           <td className="px-4 py-3"><span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${config.color}`}>{config.label}</span></td>
+                          <td className="px-4 py-3">
+                            {parentName ? (
+                              <span className="text-xs text-purple-600 flex items-center gap-1">
+                                <Link2 className="w-3 h-3" />
+                                {parentName}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3"><span className="text-sm text-gray-600">{supplier.city || '—'}</span></td>
                           <td className="px-4 py-3">{supplier.contact_email ? <a href={`mailto:${supplier.contact_email}`} onClick={(e) => e.stopPropagation()} className="text-sm text-primary-600 hover:underline">{supplier.contact_email}</a> : <span className="text-sm text-gray-400">—</span>}</td>
-                          <td className="px-4 py-3"><span className="text-sm font-medium text-gray-900">{supplier.default_commission_rate != null ? `${supplier.default_commission_rate}%` : '—'}</span></td>
                           <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[supplier.status]}`}>{supplier.status}</span></td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
@@ -759,11 +963,19 @@ export default function SuppliersContent() {
                 {paginatedSuppliers.map((supplier) => {
                   const config = getTypeConfig(supplier.type)
                   const Icon = config.icon
+                  const parentName = getParentName(supplier.parent_supplier_id)
                   return (
                     <div key={supplier.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 cursor-pointer group" onClick={() => handleView(supplier)}>
                       <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center flex-shrink-0`}><Icon className="w-5 h-5" /></div>
                       <div className="flex-1 min-w-0 grid grid-cols-5 gap-4">
-                        <div><p className="text-sm font-medium text-gray-900 truncate">{supplier.name}</p><p className="text-xs text-gray-500">{config.label}</p></div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-1.5">
+                            {supplier.name}
+                            {supplier.is_property && <Building className="w-3 h-3 text-blue-500" />}
+                          </p>
+                          <p className="text-xs text-gray-500">{config.label}</p>
+                          {parentName && <p className="text-xs text-purple-600 truncate">{parentName}</p>}
+                        </div>
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">{supplier.city && <><MapPin className="w-3.5 h-3.5 text-gray-400" />{supplier.city}</>}</div>
                         <div>{supplier.contact_email && <a href={`mailto:${supplier.contact_email}`} onClick={(e) => e.stopPropagation()} className="text-sm text-gray-600 hover:text-primary-600 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-gray-400" /><span className="truncate">{supplier.contact_email}</span></a>}</div>
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">{supplier.default_commission_rate != null && <><Percent className="w-3.5 h-3.5 text-gray-400" />{supplier.default_commission_rate}%</>}</div>
@@ -809,222 +1021,263 @@ export default function SuppliersContent() {
 
       {openMenuId && <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />}
 
-      {/* ADD MODAL */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-base font-semibold text-gray-900">Add New Supplier</h3>
-              <button onClick={() => setShowAddModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1 space-y-4">
-              {error && <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
-              <div className="grid grid-cols-2 gap-4">
-                {getFormFields(formData.type || 'hotel').map(field => (
-                  <div key={field.key} className={field.type === 'textarea' || field.type === 'multiselect' ? 'col-span-2' : ''}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">{field.name}{field.required && <span className="text-red-500 ml-1">*</span>}</label>
-                    {renderFormField(field)}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">Cancel</button>
-              <button onClick={handleSaveNew} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />} Add Supplier
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT MODAL */}
-      {showEditModal && selectedSupplier && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      {/* Add/Edit Modal */}
+      {(showAddModal || showEditModal) && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                {(() => { const c = getTypeConfig(selectedSupplier.type); return <div className={`w-8 h-8 rounded-lg ${c.color} flex items-center justify-center`}><c.icon className="w-4 h-4" /></div> })()}
-                <h3 className="text-base font-semibold text-gray-900">Edit Supplier</h3>
+                {formData.type && (() => {
+                  const config = getTypeConfig(formData.type)
+                  const Icon = config.icon
+                  return <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center`}><Icon className="w-5 h-5" /></div>
+                })()}
+                <h2 className="text-lg font-semibold text-gray-900">{showAddModal ? 'Add Supplier' : 'Edit Supplier'}</h2>
               </div>
-              <button onClick={() => setShowEditModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
+              <button onClick={() => { setShowAddModal(false); setShowEditModal(false); setError(null) }} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="p-6 overflow-y-auto flex-1 space-y-4">
-              {error && <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
-              <div className="grid grid-cols-2 gap-4">
-                {getFormFields(formData.type || selectedSupplier.type).map(field => (
-                  <div key={field.key} className={field.type === 'textarea' || field.type === 'multiselect' ? 'col-span-2' : ''}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">{field.name}{field.required && <span className="text-red-500 ml-1">*</span>}</label>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                  <AlertCircle className="w-4 h-4" /> {error}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {getFormFields(formData.type || 'hotel').map((field) => (
+                  <div key={field.key} className={field.type === 'textarea' || field.key === 'is_property' || field.key === 'parent_supplier_id' ? 'md:col-span-2' : ''}>
+                    {field.type !== 'checkbox' && (
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {field.name} {field.required && <span className="text-red-500">*</span>}
+                      </label>
+                    )}
                     {renderFormField(field)}
+                    {field.description && field.type !== 'checkbox' && (
+                      <p className="text-xs text-gray-500 mt-1">{field.description}</p>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">Cancel</button>
-              <button onClick={handleSaveEdit} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save Changes
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button onClick={() => { setShowAddModal(false); setShowEditModal(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={showAddModal ? handleSaveNew : handleSaveEdit} disabled={saving || !formData.name} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* VIEW MODAL WITH TABS */}
+      {/* View Modal */}
       {showViewModal && selectedSupplier && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                {(() => { const c = getTypeConfig(selectedSupplier.type); return <div className={`w-10 h-10 rounded-lg ${c.color} flex items-center justify-center`}><c.icon className="w-5 h-5" /></div> })()}
+                {(() => {
+                  const config = getTypeConfig(selectedSupplier.type)
+                  const Icon = config.icon
+                  return <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center`}><Icon className="w-5 h-5" /></div>
+                })()}
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">{selectedSupplier.name}</h3>
-                  <p className="text-xs text-gray-500">{getTypeConfig(selectedSupplier.type).singular}{selectedSupplier.city && ` • ${selectedSupplier.city}`}</p>
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    {selectedSupplier.name}
+                    {selectedSupplier.is_property && (
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs font-medium">Property</span>
+                    )}
+                  </h2>
+                  <p className="text-sm text-gray-500">{getTypeConfig(selectedSupplier.type).singular}</p>
+                  {selectedSupplier.parent_supplier_id && (
+                    <p className="text-xs text-purple-600 flex items-center gap-1 mt-0.5">
+                      <Link2 className="w-3 h-3" />
+                      Part of {getParentName(selectedSupplier.parent_supplier_id)}
+                    </p>
+                  )}
                 </div>
               </div>
-              <button onClick={() => setShowViewModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setShowViewModal(false); handleEdit(selectedSupplier) }} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Edit className="w-5 h-5" /></button>
+                <button onClick={() => setShowViewModal(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              </div>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 px-5">
-              <button onClick={() => setViewTab('details')} className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${viewTab === 'details' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                Details
-              </button>
-              {['transport_company', 'transport', 'driver'].includes(selectedSupplier.type) && (
-                <button onClick={() => { setViewTab('rates'); if (supplierRates.length === 0) fetchSupplierRates(selectedSupplier.id) }} className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${viewTab === 'rates' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                  Rates
-                </button>
-              )}
-              <button onClick={() => setViewTab('documents')} className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${viewTab === 'documents' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                Documents
-              </button>
+            <div className="px-6 border-b border-gray-200">
+              <div className="flex gap-6">
+                <button onClick={() => setViewTab('details')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'details' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Details</button>
+                {['transport_company', 'transport', 'driver'].includes(selectedSupplier.type) && (
+                  <button onClick={() => setViewTab('rates')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'rates' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    Rates {supplierRates.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs">{supplierRates.length}</span>}
+                  </button>
+                )}
+                {!selectedSupplier.is_property && !selectedSupplier.parent_supplier_id && HIERARCHICAL_TYPES.includes(selectedSupplier.type) && (
+                  <button onClick={() => { setViewTab('properties'); fetchChildProperties(selectedSupplier.id) }} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'properties' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    Properties {childProperties.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">{childProperties.length}</span>}
+                  </button>
+                )}
+                <button onClick={() => setViewTab('documents')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'documents' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Documents</button>
+              </div>
             </div>
-            
-            <div className="p-5 overflow-y-auto flex-1">
-              {/* DETAILS TAB */}
-              {viewTab === 'details' && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[selectedSupplier.status]}`}>{selectedSupplier.status}</span>
-                    {selectedSupplier.default_commission_rate != null && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700"><Percent className="w-3 h-3" />{selectedSupplier.default_commission_rate}%</span>
-                    )}
-                    {selectedSupplier.star_rating && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-700">
-                        {Array.from({ length: parseInt(selectedSupplier.star_rating) }).map((_, i) => <Star key={i} className="w-3 h-3 fill-yellow-500" />)}
-                      </span>
-                    )}
-                  </div>
 
-                  {selectedSupplier.contact_name && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"><Users className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">Contact Person</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.contact_name}</p></div></div>
-                  )}
-                  {selectedSupplier.contact_email && (
-                    <a href={`mailto:${selectedSupplier.contact_email}`} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100"><Mail className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">Email</p><p className="text-sm font-medium text-primary-600">{selectedSupplier.contact_email}</p></div></a>
-                  )}
-                  {selectedSupplier.contact_phone && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                      <Phone className="w-4 h-4 text-gray-400" />
-                      <div className="flex-1"><p className="text-xs text-gray-500">Phone</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.contact_phone}{selectedSupplier.phone2 && ` / ${selectedSupplier.phone2}`}</p></div>
-                      <div className="flex items-center gap-2">
-                        <a href={`tel:${selectedSupplier.contact_phone}`} className="p-2 bg-primary-100 text-primary-600 rounded-lg hover:bg-primary-200"><Phone className="w-4 h-4" /></a>
-                        {selectedSupplier.whatsapp && <a href={`https://wa.me/${selectedSupplier.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200"><MessageCircle className="w-4 h-4" /></a>}
-                      </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+              {viewTab === 'details' && (
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><Users className="w-4 h-4 text-gray-400" /> Contact Information</h3>
+                    <div className="space-y-3">
+                      {selectedSupplier.contact_name && <div><p className="text-xs text-gray-500">Contact Person</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.contact_name}</p></div>}
+                      {selectedSupplier.contact_email && <div><p className="text-xs text-gray-500">Email</p><a href={`mailto:${selectedSupplier.contact_email}`} className="text-sm font-medium text-primary-600 hover:underline">{selectedSupplier.contact_email}</a></div>}
+                      {selectedSupplier.contact_phone && <div><p className="text-xs text-gray-500">Phone</p><a href={`tel:${selectedSupplier.contact_phone}`} className="text-sm font-medium text-gray-900">{selectedSupplier.contact_phone}</a></div>}
+                      {selectedSupplier.phone2 && <div><p className="text-xs text-gray-500">Phone 2</p><a href={`tel:${selectedSupplier.phone2}`} className="text-sm font-medium text-gray-900">{selectedSupplier.phone2}</a></div>}
+                      {selectedSupplier.whatsapp && <div><p className="text-xs text-gray-500">WhatsApp</p><a href={`https://wa.me/${selectedSupplier.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" className="text-sm font-medium text-green-600 hover:underline flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5" />{selectedSupplier.whatsapp}</a></div>}
+                      {selectedSupplier.website && <div><p className="text-xs text-gray-500">Website</p><a href={selectedSupplier.website} target="_blank" className="text-sm font-medium text-primary-600 hover:underline flex items-center gap-1"><Globe className="w-3.5 h-3.5" />{selectedSupplier.website}</a></div>}
                     </div>
-                  )}
-                  {selectedSupplier.address && (
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg"><MapPin className="w-4 h-4 text-gray-400 mt-0.5" /><div><p className="text-xs text-gray-500">Address</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.address}</p></div></div>
-                  )}
-                  {selectedSupplier.website && (
-                    <a href={selectedSupplier.website} target="_blank" className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100"><Globe className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">Website</p><p className="text-sm font-medium text-primary-600">{selectedSupplier.website}</p></div></a>
-                  )}
-                  
-                  {/* Type-specific fields */}
-                  {selectedSupplier.languages && selectedSupplier.languages.length > 0 && (
-                    <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-2">Languages</p><div className="flex flex-wrap gap-1">{selectedSupplier.languages.map(l => <span key={l} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{l}</span>)}</div></div>
-                  )}
-                  {selectedSupplier.vehicle_types && selectedSupplier.vehicle_types.length > 0 && (
-                    <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-2">Vehicle Types</p><div className="flex flex-wrap gap-1">{selectedSupplier.vehicle_types.map(v => <span key={v} className="px-2 py-0.5 bg-cyan-100 text-cyan-700 rounded text-xs">{v}</span>)}</div></div>
-                  )}
-                  {selectedSupplier.cuisine_types && selectedSupplier.cuisine_types.length > 0 && (
-                    <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-2">Cuisine Types</p><div className="flex flex-wrap gap-1">{selectedSupplier.cuisine_types.map(c => <span key={c} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">{c}</span>)}</div></div>
-                  )}
-                  {selectedSupplier.routes && selectedSupplier.routes.length > 0 && (
-                    <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-2">Routes</p><div className="flex flex-wrap gap-1">{selectedSupplier.routes.map(r => <span key={r} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">{r}</span>)}</div></div>
-                  )}
-                  {selectedSupplier.ship_name && (
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"><Ship className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">Ship Name</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.ship_name}</p></div></div>
-                  )}
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> Location & Details</h3>
+                    <div className="space-y-3">
+                      {selectedSupplier.city && <div><p className="text-xs text-gray-500">City</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.city}</p></div>}
+                      {selectedSupplier.address && <div><p className="text-xs text-gray-500">Address</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.address}</p></div>}
+                      {selectedSupplier.star_rating && <div><p className="text-xs text-gray-500">Star Rating</p><div className="flex items-center gap-1">{Array.from({ length: parseInt(selectedSupplier.star_rating) || 0 }).map((_, i) => <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />)}</div></div>}
+                      <div><p className="text-xs text-gray-500">Status</p><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[selectedSupplier.status]}`}>{selectedSupplier.status}</span></div>
+                    </div>
+                  </div>
+                  <div className="col-span-2 space-y-4 pt-4 border-t border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> Financial</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      {selectedSupplier.default_commission_rate != null && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">Commission Rate</p><p className="text-lg font-semibold text-gray-900">{selectedSupplier.default_commission_rate}%</p></div>}
+                      {selectedSupplier.payment_terms && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">Payment Terms</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.payment_terms?.replace(/_/g, ' ')}</p></div>}
+                    </div>
+                  </div>
                   {selectedSupplier.notes && (
-                    <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Notes</p><p className="text-sm text-gray-700">{selectedSupplier.notes}</p></div>
+                    <div className="col-span-2 space-y-2 pt-4 border-t border-gray-100">
+                      <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-4 h-4 text-gray-400" /> Notes</h3>
+                      <p className="text-sm text-gray-600 whitespace-pre-wrap">{selectedSupplier.notes}</p>
+                    </div>
                   )}
                 </div>
               )}
 
-              {/* RATES TAB */}
               {viewTab === 'rates' && (
                 <div>
                   {loadingRates ? (
                     <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 text-primary-600 animate-spin" /></div>
                   ) : supplierRates.length === 0 ? (
-                    <div className="text-center py-8">
+                    <div className="text-center py-8 text-gray-500">
                       <DollarSign className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500 mb-3">No rates linked to this supplier</p>
-                      <a href="/rates/transportation" className="text-sm text-primary-600 hover:underline">Go to Transportation Rates →</a>
+                      <p>No rates found for this supplier</p>
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead><tr className="bg-gray-50"><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Service</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Vehicle</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Route</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">EUR Rate</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Non-EUR</th></tr></thead>
+                      <tbody>{supplierRates.map(rate => (<tr key={rate.id} className="border-t border-gray-100"><td className="px-3 py-2 text-sm font-medium">{rate.service_code}</td><td className="px-3 py-2 text-sm">{rate.vehicle_type}</td><td className="px-3 py-2 text-sm">{rate.city}{rate.destination_city && ` → ${rate.destination_city}`}</td><td className="px-3 py-2 text-sm text-right font-medium text-green-600">€{rate.base_rate_eur}</td><td className="px-3 py-2 text-sm text-right">€{rate.base_rate_non_eur}</td></tr>))}</tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {viewTab === 'properties' && (
+                <div>
+                  {childProperties.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Building className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                      <p>No properties linked to this company</p>
+                      <button 
+                        onClick={() => { 
+                          setShowViewModal(false)
+                          setFormData({ 
+                            status: 'active', 
+                            type: selectedSupplier.type,
+                            is_property: true,
+                            parent_supplier_id: selectedSupplier.id
+                          })
+                          setShowAddModal(true)
+                        }} 
+                        className="mt-3 text-sm text-primary-600 hover:underline"
+                      >
+                        + Add a property
+                      </button>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {supplierRates.map(rate => (
-                        <div key={rate.id} className="p-3 bg-gray-50 rounded-lg flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{rate.service_code}</p>
-                            <p className="text-xs text-gray-500">{rate.service_type} • {rate.vehicle_type} • {rate.city}{rate.destination_city && ` → ${rate.destination_city}`}</p>
+                      {childProperties.map(property => {
+                        const config = getTypeConfig(property.type)
+                        const Icon = config.icon
+                        return (
+                          <div 
+                            key={property.id} 
+                            className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
+                            onClick={() => {
+                              setSelectedSupplier(property)
+                              setViewTab('details')
+                            }}
+                          >
+                            <div className={`w-8 h-8 rounded-lg ${config.color} flex items-center justify-center`}>
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900">{property.name}</p>
+                              <p className="text-xs text-gray-500">{property.city || 'No city'} • {property.contact_email || 'No email'}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[property.status]}`}>{property.status}</span>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-green-600">€{rate.base_rate_eur}</p>
-                            <p className="text-xs text-gray-500">{rate.capacity_min}-{rate.capacity_max} pax</p>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
+                      <button 
+                        onClick={() => { 
+                          setShowViewModal(false)
+                          setFormData({ 
+                            status: 'active', 
+                            type: selectedSupplier.type,
+                            is_property: true,
+                            parent_supplier_id: selectedSupplier.id
+                          })
+                          setShowAddModal(true)
+                        }} 
+                        className="w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors"
+                      >
+                        + Add another property
+                      </button>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* DOCUMENTS TAB */}
               {viewTab === 'documents' && (
-                <div className="text-center py-8">
+                <div className="text-center py-8 text-gray-500">
                   <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500 mb-3">Documents will appear here</p>
-                  <a href={`/documents/supplier?supplierId=${selectedSupplier.id}`} className="text-sm text-primary-600 hover:underline">View all documents →</a>
+                  <p>Document management coming soon</p>
                 </div>
               )}
-            </div>
-            
-            <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => { setShowViewModal(false); handleDeleteClick(selectedSupplier) }} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">Delete</button>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowViewModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">Close</button>
-                <button onClick={() => { setShowViewModal(false); handleEdit(selectedSupplier) }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"><Edit className="w-4 h-4" /> Edit</button>
-              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* DELETE MODAL */}
+      {/* Delete Modal */}
       {showDeleteModal && selectedSupplier && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center"><Trash2 className="w-6 h-6 text-red-600" /></div>
-              <div><h3 className="text-base font-semibold text-gray-900">Delete Supplier</h3><p className="text-sm text-gray-500">This cannot be undone.</p></div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center"><Trash2 className="w-5 h-5 text-red-600" /></div>
+              <div><h3 className="text-lg font-semibold text-gray-900">Delete Supplier</h3><p className="text-sm text-gray-500">This action cannot be undone</p></div>
             </div>
             <p className="text-sm text-gray-600 mb-6">Are you sure you want to delete <strong>{selectedSupplier.name}</strong>?</p>
-            {error && <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-              <button onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{saving && <Loader2 className="w-4 h-4 animate-spin" />} Delete</button>
+            {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+            <div className="flex items-center justify-end gap-3">
+              <button onClick={() => { setShowDeleteModal(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {saving ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
           </div>
         </div>
