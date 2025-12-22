@@ -4,11 +4,13 @@
 // 
 // Recalculates pricing for an existing itinerary
 // after edits in the Editor page.
-// Works with your schema: services → itinerary_day_id
+// NOW USES USER PREFERENCES for margin, tier, etc.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,13 +47,94 @@ interface PricingRequest {
   nationality_type: 'eur' | 'non-eur'
 }
 
+interface UserPreferences {
+  default_cost_mode: 'auto' | 'manual'
+  default_tier: string
+  default_margin_percent: number
+  default_currency: string
+}
+
 // ============================================
-// MARKUP
+// DEFAULT VALUES (fallback if no user prefs)
 // ============================================
 
-const DEFAULT_MARGIN_PERCENT = parseFloat(process.env.MARKUP_PERCENTAGE || '25')
+const DEFAULT_MARGIN_PERCENT = 25
+const DEFAULT_TIER = 'standard'
+const DEFAULT_CURRENCY = 'EUR'
 
-function applyMarkup(cost: number, marginPercent: number = DEFAULT_MARGIN_PERCENT): number {
+// ============================================
+// GET USER PREFERENCES
+// ============================================
+
+async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+
+    if (error || !data) {
+      console.log('[Pricing] No user preferences found, using defaults')
+      return null
+    }
+
+    console.log('[Pricing] User preferences loaded:', {
+      margin: data.default_margin_percent,
+      tier: data.default_tier,
+      cost_mode: data.default_cost_mode
+    })
+
+    return {
+      default_cost_mode: data.default_cost_mode || 'auto',
+      default_tier: data.default_tier || DEFAULT_TIER,
+      default_margin_percent: data.default_margin_percent ?? DEFAULT_MARGIN_PERCENT,
+      default_currency: data.default_currency || DEFAULT_CURRENCY
+    }
+  } catch (error) {
+    console.error('[Pricing] Error fetching user preferences:', error)
+    return null
+  }
+}
+
+// ============================================
+// GET CURRENT USER FROM SESSION
+// ============================================
+
+async function getCurrentUserId(): Promise<string | null> {
+  try {
+    const cookieStore = await cookies()
+    
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+            })
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+    return user?.id || null
+  } catch (error) {
+    console.error('[Pricing] Error getting current user:', error)
+    return null
+  }
+}
+
+// ============================================
+// MARKUP FUNCTION
+// ============================================
+
+function applyMarkup(cost: number, marginPercent: number): number {
   return cost * (1 + marginPercent / 100)
 }
 
@@ -357,15 +440,45 @@ export async function POST(
     console.log(`[Pricing] Starting for itinerary ${itineraryId}`)
     console.log(`[Pricing] ${days.length} days, ${totalPax} pax, tier: ${tier}, package: ${package_type}`)
 
-    // Get itinerary to check margin
+    // ============================================
+    // GET USER PREFERENCES
+    // ============================================
+    const userId = await getCurrentUserId()
+    let userPrefs: UserPreferences | null = null
+    
+    if (userId) {
+      userPrefs = await getUserPreferences(userId)
+    }
+
+    // ============================================
+    // GET ITINERARY & DETERMINE MARGIN
+    // ============================================
     const { data: itinerary } = await supabaseAdmin
       .from('itineraries')
-      .select('margin_percent, currency')
+      .select('margin_percent, currency, created_by')
       .eq('id', itineraryId)
       .single()
 
-    const marginPercent = itinerary?.margin_percent || DEFAULT_MARGIN_PERCENT
-    const currency = itinerary?.currency || 'EUR'
+    // Priority: 1) Itinerary-specific margin, 2) User preferences, 3) Default
+    let marginPercent: number
+    if (itinerary?.margin_percent !== null && itinerary?.margin_percent !== undefined) {
+      marginPercent = itinerary.margin_percent
+      console.log(`[Pricing] Using itinerary margin: ${marginPercent}%`)
+    } else if (userPrefs?.default_margin_percent !== null && userPrefs?.default_margin_percent !== undefined) {
+      marginPercent = userPrefs.default_margin_percent
+      console.log(`[Pricing] Using user preference margin: ${marginPercent}%`)
+      
+      // Also save this margin to the itinerary for future reference
+      await supabaseAdmin
+        .from('itineraries')
+        .update({ margin_percent: marginPercent })
+        .eq('id', itineraryId)
+    } else {
+      marginPercent = DEFAULT_MARGIN_PERCENT
+      console.log(`[Pricing] Using default margin: ${marginPercent}%`)
+    }
+
+    const currency = itinerary?.currency || userPrefs?.default_currency || DEFAULT_CURRENCY
 
     // Get existing days (to get their IDs)
     const { data: existingDays, error: daysError } = await supabaseAdmin
@@ -584,31 +697,44 @@ export async function POST(
       }
     }
 
+    // Calculate profit
+    const profit = totalClientPrice - totalSupplierCost
+    const actualMarginPercent = totalSupplierCost > 0 
+      ? ((profit / totalSupplierCost) * 100).toFixed(1) 
+      : '0'
+
     // Update itinerary totals
     await supabaseAdmin
       .from('itineraries')
       .update({
         total_cost: totalClientPrice,
         total_revenue: totalClientPrice,
+        supplier_cost: totalSupplierCost,
+        profit: profit,
+        margin_percent: marginPercent,
         tier: tier,
         package_type: package_type,
+        currency: currency,
         status: 'quoted',
         updated_at: new Date().toISOString()
       })
       .eq('id', itineraryId)
 
-    console.log(`[Pricing] Complete: €${totalClientPrice.toFixed(2)} (${allServices.length} services)`)
+    console.log(`[Pricing] Complete: Cost €${totalSupplierCost.toFixed(2)} → Client €${totalClientPrice.toFixed(2)} (${marginPercent}% margin = €${profit.toFixed(2)} profit)`)
 
     return NextResponse.json({
       success: true,
       itinerary_id: itineraryId,
       supplier_cost: totalSupplierCost,
       total_cost: totalClientPrice,
-      margin: totalClientPrice - totalSupplierCost,
+      profit: profit,
+      margin: profit,
       margin_percent: marginPercent,
+      actual_margin_percent: actualMarginPercent,
       currency,
       services_count: allServices.length,
-      per_person: Math.round(totalClientPrice / totalPax * 100) / 100
+      per_person: Math.round(totalClientPrice / totalPax * 100) / 100,
+      preferences_used: !!userPrefs
     })
 
   } catch (error: any) {

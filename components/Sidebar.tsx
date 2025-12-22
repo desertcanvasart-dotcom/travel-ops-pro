@@ -15,20 +15,16 @@ import {
   ChevronDown,
   MessageSquare,
   FileText,
-  MapPin,
   Calendar, 
   CheckSquare,
-  UserPlus,
   Menu,
   X,
   User,
   Truck,
-  Box,
   TrendingUp,
   Hotel,
   UtensilsCrossed,
   Plane,
-  BellRing,
   Coins,
   LogOut,
   Mail,
@@ -39,21 +35,20 @@ import {
   Wallet,
   BarChart3,
   CreditCard,
-  Bell,
   LayoutTemplate,
   ConciergeBell,
   Train,
   BedDouble,
   Ship,
-  Building2,
-  Compass,
-  Car,
+  Building,
   UserCog,
   Shield,
   BookOpen,
   Wand2,
   Handshake,
-  Building
+  Send,
+  Route,
+  Package
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -65,21 +60,21 @@ interface NavSubItem {
   label: string
   href: string
   icon?: any
-  roles?: UserRole[] // Which roles can see this item
+  roles?: UserRole[]
 }
 
 interface NavItem {
   label: string
   href: string
   icon: any
-  roles?: UserRole[] // Which roles can see this item
+  roles?: UserRole[]
   children?: NavSubItem[]
 }
 
 interface NavSection {
   title: string
   key: string
-  roles?: UserRole[] // Which roles can see this section
+  roles?: UserRole[]
   items: NavItem[]
 }
 
@@ -94,14 +89,11 @@ const navigation: NavSection[] = [
     ]
   },
   {
-    title: 'Clients & Partners',
-    key: 'clients',
-    roles: ['admin', 'manager', 'agent'], // Not visible to viewers
+    title: 'CRM',
+    key: 'crm',
+    roles: ['admin', 'manager', 'agent'],
     items: [
-      { label: 'All Clients', href: '/clients', icon: Users },
-      { label: 'Add Client', href: '/clients/new', icon: UserPlus, roles: ['admin', 'manager', 'agent'] },
-      // UPDATED: Simplified Contacts - only Clients and Staff
-      // Hotels, Cruises, Guides, Restaurants, Transportation moved to Suppliers page
+      { label: 'Clients', href: '/clients', icon: Users },
       { 
         label: 'Contacts', 
         href: '/contacts', 
@@ -112,67 +104,46 @@ const navigation: NavSection[] = [
         ]
       },
       { label: 'Follow-ups', href: '/followups', icon: CheckSquare },
+      { label: 'Calendar', href: '/calendar', icon: Calendar },
     ]
   },
   {
-    title: 'Sales',
-    key: 'sales',
+    title: 'Communication',
+    key: 'communication',
     roles: ['admin', 'manager', 'agent'],
     items: [
       { label: 'Inbox', href: '/inbox', icon: Mail },
       { label: 'WhatsApp', href: '/whatsapp-inbox', icon: MessageSquare },
-      { label: 'Parser', href: '/whatsapp-parser', icon: MessageSquare },
+      { label: 'WhatsApp Parser', href: '/whatsapp-parser', icon: Send },
       { label: 'Message Templates', href: '/templates', icon: FileText },
-      { label: 'Calendar', href: '/calendar', icon: Calendar },
-      { label: 'Itineraries', href: '/itineraries', icon: FileText },
-      { label: 'Packages', href: '/tours', icon: Library },
-      { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
-    ]
-  },
-     
-  {
-    title: 'Content',
-    key: 'content',
-    roles: ['admin', 'manager'],
-    items: [
-      { label: 'Content Library', href: '/content-library', icon: Library },
-      { label: 'Writing Rules', href: '/content-library/rules', icon: BookOpen },
-      { label: 'AI Prompts', href: '/content-library/prompts', icon: Wand2 },
-      { label: 'Documents', href: '/documents', icon: FileText },
-    ]
-  },
-  
-  {
-    title: 'Accounting',
-    key: 'accounting',
-    roles: ['admin', 'manager'], // Only admin and manager
-    items: [
-      { label: 'Invoices', href: '/invoices', icon: FileText },
-      { label: 'Payments', href: '/payments', icon: DollarSign },
-      { label: 'Reminders', href: '/reminders', icon: Bell },
-      { label: 'Expenses', href: '/expenses', icon: Receipt },
-      { label: 'Commissions', href: '/commissions', icon: Handshake },
-      { label: 'Suppliers', href: '/suppliers', icon: Building },
-      { label: 'Receivables', href: '/accounts-receivable', icon: Wallet, roles: ['admin', 'manager'] },
-      { label: 'Payables', href: '/accounts-payable', icon: CreditCard, roles: ['admin', 'manager'] },
-      { label: 'Profit & Loss', href: '/profit-loss', icon: TrendingUp, roles: ['admin', 'manager'] },
-      { label: 'Reports', href: '/financial-reports', icon: BarChart3, roles: ['admin', 'manager'] },
     ]
   },
   {
-    title: 'Task Management',
-    key: 'tasks',
+    title: 'Trip Planning',
+    key: 'trips',
     roles: ['admin', 'manager', 'agent'],
     items: [
-      { label: 'Tasks', href: '/tasks', icon: CheckSquare },
-      { label: 'Team Members', href: '/team-members', icon: Users, roles: ['admin', 'manager'] },
+      { label: 'Itineraries', href: '/itineraries', icon: Route },
+      { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
+      { label: 'Packages', href: '/tours', icon: Package },
     ]
   },
   {
-    title: 'Rates Management',
-    key: 'rates',
-    roles: ['admin', 'manager'], // Only admin and manager
+    title: 'Operations',
+    key: 'operations',
+    roles: ['admin', 'manager'],
     items: [
+      { label: 'Suppliers', href: '/suppliers', icon: Building },
+      { label: 'Team Members', href: '/team-members', icon: Users },
+      { label: 'Tasks', href: '/tasks', icon: CheckSquare },
+    ]
+  },
+  {
+    title: 'Rates & Pricing',
+    key: 'rates',
+    roles: ['admin', 'manager'],
+    items: [
+      { label: 'Rates Hub', href: '/rates', icon: Coins },
       { label: 'Hotels', href: '/rates/hotels', icon: Hotel },
       { label: 'Nile Cruises', href: '/rates/cruises', icon: Ship },
       { label: 'Sleeping Trains', href: '/rates/sleeping-train', icon: BedDouble },
@@ -185,13 +156,45 @@ const navigation: NavSection[] = [
       { label: 'Airport Services', href: '/rates/airport-services', icon: Plane },
       { label: 'Hotel Services', href: '/rates/hotel-services', icon: ConciergeBell },
       { label: 'Tipping', href: '/rates/tipping', icon: DollarSign },
-      { label: 'Rates Hub', href: '/rates', icon: Coins },
+    ]
+  },
+  {
+    title: 'Finance',
+    key: 'finance',
+    roles: ['admin', 'manager'],
+    items: [
+      { label: 'Invoices', href: '/invoices', icon: FileText },
+      { label: 'Payments', href: '/payments', icon: DollarSign },
+      { label: 'Receivables', href: '/accounts-receivable', icon: Wallet },
+      { label: 'Payables', href: '/accounts-payable', icon: CreditCard },
+      { label: 'Expenses', href: '/expenses', icon: Receipt },
+      { label: 'Commissions', href: '/commissions', icon: Handshake },
+      { label: 'Profit & Loss', href: '/profit-loss', icon: TrendingUp },
+    ]
+  },
+  {
+    title: 'Content',
+    key: 'content',
+    roles: ['admin', 'manager'],
+    items: [
+      { label: 'Content Library', href: '/content-library', icon: Library },
+      { label: 'Writing Rules', href: '/content-library/rules', icon: BookOpen },
+      { label: 'AI Prompts', href: '/content-library/prompts', icon: Wand2 },
+      { label: 'Documents', href: '/documents', icon: FileText },
+    ]
+  },
+  {
+    title: 'Reports',
+    key: 'reports',
+    roles: ['admin', 'manager'],
+    items: [
+      { label: 'Reports', href: '/financial-reports', icon: BarChart3 },
     ]
   },
   {
     title: 'Settings',
     key: 'settings',
-    roles: ['admin'], // Only admin
+    roles: ['admin'],
     items: [
       { label: 'Settings', href: '/settings', icon: Settings },
       { label: 'User Management', href: '/users', icon: Shield },
@@ -223,13 +226,13 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const { role, canAccess } = useRole()
   
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const [expandedSections, setExpandedSections] = useState<string[]>(['main', 'sales'])
+  const [expandedSections, setExpandedSections] = useState<string[]>(['main', 'crm', 'trips'])
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Contacts'])
   const [currentUrl, setCurrentUrl] = useState('')
 
   // Filter navigation based on user role
   const filteredNavigation = navigation.filter(section => {
-    if (!section.roles) return true // No restriction
+    if (!section.roles) return true
     return canAccess(section.roles)
   }).map(section => ({
     ...section,
@@ -245,7 +248,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        setExpandedSections(parsed.sections || ['main', 'sales'])
+        setExpandedSections(parsed.sections || ['main', 'crm', 'trips'])
         setExpandedMenus(parsed.menus || ['Contacts'])
       } catch {
         // Use defaults if parsing fails

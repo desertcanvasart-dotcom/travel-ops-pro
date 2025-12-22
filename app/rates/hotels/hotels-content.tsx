@@ -27,7 +27,8 @@ import {
   ChevronsRight,
   AlertCircle,
   CheckCircle2,
-  Crown
+  Crown,
+  ExternalLink
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -481,15 +482,15 @@ export default function HotelsContent() {
     }))
   }
 
-  // Handle supplier selection
-  const handleSupplierChange = (supplierId: string) => {
+  // Handle supplier/property selection - auto-fills property_name, city, supplier_name
+  const handlePropertySelect = (supplierId: string) => {
     const supplier = suppliers.find(s => s.id === supplierId)
     setFormData(prev => ({
       ...prev,
       supplier_id: supplierId,
+      property_name: supplier?.name || '',
       supplier_name: supplier?.name || '',
-      // Auto-fill city from supplier if not set
-      city: prev.city || supplier?.city || ''
+      city: supplier?.city || prev.city || ''
     }))
   }
 
@@ -561,6 +562,18 @@ export default function HotelsContent() {
   // Open modal for editing
   const handleEdit = (rate: AccommodationRate) => {
     setEditingRate(rate)
+    
+    // Try to find matching supplier by name if supplier_id not set
+    let supplierId = rate.supplier_id || ''
+    if (!supplierId && rate.property_name) {
+      const matchingSupplier = suppliers.find(s => 
+        s.name.toLowerCase() === rate.property_name.toLowerCase()
+      )
+      if (matchingSupplier) {
+        supplierId = matchingSupplier.id
+      }
+    }
+    
     setFormData({
       service_code: rate.service_code || '',
       property_name: rate.property_name || '',
@@ -606,7 +619,7 @@ export default function HotelsContent() {
       rate_valid_from: rate.rate_valid_from || today,
       rate_valid_to: rate.rate_valid_to || nextYear,
       tier: rate.tier || 'standard',
-      supplier_id: rate.supplier_id || '',
+      supplier_id: supplierId,
       supplier_name: rate.supplier_name || rate.supplier?.name || '',
       notes: rate.notes || '',
       is_active: rate.is_active
@@ -688,9 +701,10 @@ export default function HotelsContent() {
   const handleExportCSV = () => {
     const headers = [
       'Service Code', 'Property Name', 'City', 'Board Basis', 'Tier',
-      'Base Rate EUR', 'Base Rate Non-EUR', 'Single Supp EUR', 'Single Supp Non-EUR',
-      'High Season EUR', 'High Season Non-EUR', 'Low Season EUR', 'Low Season Non-EUR',
-      'Season', 'Valid From', 'Valid To', 'Supplier', 'Active'
+      'Low Single EUR', 'Low Double EUR', 'Low Triple EUR', 'Low Suite EUR',
+      'High Single EUR', 'High Double EUR', 'High Triple EUR', 'High Suite EUR',
+      'Peak Single EUR', 'Peak Double EUR', 'Peak Triple EUR', 'Peak Suite EUR',
+      'Valid From', 'Valid To', 'Supplier', 'Active'
     ]
     
     const rows = filteredRates.map(r => [
@@ -699,15 +713,18 @@ export default function HotelsContent() {
       r.city || '',
       r.board_basis || '',
       r.tier || '',
-      r.base_rate_eur || '',
-      r.base_rate_non_eur || '',
-      r.single_supplement_eur || '',
-      r.single_supplement_non_eur || '',
-      r.high_season_rate_eur || '',
-      r.high_season_rate_non_eur || '',
-      r.low_season_rate_eur || '',
-      r.low_season_rate_non_eur || '',
-      r.season || '',
+      r.single_rate_eur || '',
+      r.double_rate_eur || '',
+      r.triple_rate_eur || '',
+      r.suite_rate_eur || '',
+      r.high_season_single_eur || '',
+      r.high_season_double_eur || '',
+      r.high_season_triple_eur || '',
+      r.high_season_suite_eur || '',
+      r.peak_season_single_eur || '',
+      r.peak_season_double_eur || '',
+      r.peak_season_triple_eur || '',
+      r.peak_season_suite_eur || '',
       r.rate_valid_from || '',
       r.rate_valid_to || '',
       r.supplier?.name || r.supplier_name || '',
@@ -796,6 +813,13 @@ export default function HotelsContent() {
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                href="/suppliers?type=hotel"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                <Building2 className="w-4 h-4" />
+                Hotel Suppliers
+              </Link>
               <button
                 onClick={handleExportCSV}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
@@ -1264,24 +1288,34 @@ export default function HotelsContent() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-4">
-              {/* Basic Information */}
+              {/* Basic Information - Property Selection from Suppliers */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">1</span>
-                  Basic Information
+                  Property Information
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Property Name *</label>
-                    <input
-                      type="text"
-                      name="property_name"
-                      value={formData.property_name}
-                      onChange={handleChange}
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Select Hotel *</label>
+                    <select
+                      value={formData.supplier_id}
+                      onChange={(e) => handlePropertySelect(e.target.value)}
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="e.g., Marriott Cairo"
-                    />
+                    >
+                      <option value="">Choose a hotel...</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} {s.city ? `(${s.city})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                      <Link href="/suppliers?type=hotel" className="text-primary-600 hover:underline flex items-center gap-1">
+                        <Plus className="w-3 h-3" /> Add new hotel
+                      </Link>
+                      <span>if not listed</span>
+                    </p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
@@ -1342,52 +1376,10 @@ export default function HotelsContent() {
                 </div>
               </div>
 
-              {/* Supplier Linking */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  Link to Supplier
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Select Hotel Supplier
-                    </label>
-                    <select
-                      value={formData.supplier_id}
-                      onChange={(e) => handleSupplierChange(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      <option value="">— No Supplier —</option>
-                      {suppliers.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} {s.city ? `(${s.city})` : ''}</option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Link this rate to a hotel supplier for contact info and reporting
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Supplier Name (Legacy)
-                    </label>
-                    <input
-                      type="text"
-                      name="supplier_name"
-                      value={formData.supplier_name}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm bg-gray-50"
-                      placeholder="Auto-filled from supplier"
-                      readOnly={!!formData.supplier_id}
-                    />
-                  </div>
-                </div>
-              </div>
-
               {/* Tier */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">3</span>
+                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">2</span>
                   Service Tier
                 </h3>
                 <div className="flex flex-wrap gap-2">
@@ -1418,7 +1410,7 @@ export default function HotelsContent() {
               {/* LOW SEASON RATES (May - September) */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
+                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">3</span>
                   Low Season Rates
                 </h3>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -1487,7 +1479,7 @@ export default function HotelsContent() {
               {/* HIGH SEASON RATES (October - April) */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">5</span>
+                  <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">4</span>
                   High Season Rates
                 </h3>
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -1556,7 +1548,7 @@ export default function HotelsContent() {
               {/* PEAK SEASON RATES (Christmas, Easter, NYE) */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold">6</span>
+                  <span className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold">5</span>
                   Peak Season Rates
                 </h3>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -1635,7 +1627,7 @@ export default function HotelsContent() {
               {/* Rate Card Validity */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">7</span>
+                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">6</span>
                   Rate Card Validity
                   <span className="text-xs font-normal text-gray-500 ml-2">(When this rate sheet expires)</span>
                 </h3>
