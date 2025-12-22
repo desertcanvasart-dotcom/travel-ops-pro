@@ -297,22 +297,6 @@ export default function ResourceAssignmentV2({
     
     setAvailableResources(resources)
   }
-        // Handle different response formats
-        if (data.success && data.data) {
-          resources[type.key] = data.data
-        } else if (Array.isArray(data)) {
-          resources[type.key] = data
-        } else {
-          resources[type.key] = []
-        }
-      } catch (error) {
-        console.error(`Error fetching ${type.key}:`, error)
-        resources[type.key] = []
-      }
-    }
-    
-    setAvailableResources(resources)
-  }
 
   const fetchAssignedResources = async () => {
     try {
