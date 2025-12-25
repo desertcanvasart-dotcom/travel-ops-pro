@@ -121,17 +121,6 @@ const navigation: NavSection[] = [
     ]
   },
   {
-    title: 'B2B',
-    key: 'b2b',
-    roles: ['admin', 'manager'],
-    items: [
-      { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
-      { label: 'Packages', href: '/tours', icon: Package },
-      { label: 'Partners', href: '/b2b/partners', icon: Handshake },
-      { label: 'Pricing Rules', href: '/b2b/pricing-rules', icon: Tags },
-    ]
-  },
-  {
     title: 'Operations',
     key: 'operations',
     roles: ['admin', 'manager'],
@@ -193,6 +182,17 @@ const navigation: NavSection[] = [
     roles: ['admin', 'manager'],
     items: [
       { label: 'Reports', href: '/financial-reports', icon: BarChart3 },
+    ]
+  },
+  {
+    title: 'B2B',
+    key: 'b2b',
+    roles: ['admin', 'manager'],
+    items: [
+      { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
+      { label: 'Packages', href: '/tours', icon: Package },
+      { label: 'Partners', href: '/b2b/partners', icon: Handshake },
+      { label: 'Pricing Rules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },
   {
