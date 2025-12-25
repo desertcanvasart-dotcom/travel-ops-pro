@@ -96,15 +96,7 @@ const navigation: NavSection[] = [
     roles: ['admin', 'manager', 'agent'],
     items: [
       { label: 'Clients', href: '/clients', icon: Users },
-      { 
-        label: 'Contacts', 
-        href: '/contacts', 
-        icon: Contact,
-        children: [
-          { label: 'Clients', href: '/contacts?type=client', icon: Users },
-          { label: 'Staff', href: '/contacts?type=staff', icon: UserCog },
-        ]
-      },
+      { label: 'Staff', href: '/contacts?type=staff', icon: UserCog },
       { label: 'Follow-ups', href: '/followups', icon: CheckSquare },
       { label: 'Calendar', href: '/calendar', icon: Calendar },
     ]
@@ -190,7 +182,7 @@ const navigation: NavSection[] = [
     roles: ['admin', 'manager'],
     items: [
       { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
-      { label: 'Packages', href: '/tours', icon: Package },
+      { label: 'Ready Made Packages', href: '/tours', icon: Package },
       { label: 'Partners', href: '/b2b/partners', icon: Handshake },
       { label: 'Pricing Rules', href: '/b2b/pricing-rules', icon: Tags },
     ]

@@ -18,7 +18,8 @@ import {
   Sparkles,
   MapPin,
   Mail,
-  CheckCircle
+  CheckCircle,
+  Package
 } from 'lucide-react'
 
 const supabase = createClient()
@@ -30,7 +31,6 @@ interface DashboardStats {
   overdueFollowups: number
   totalItineraries: number
   totalQuotes: number
-  totalTours: number
   quotesSent: number
   quotesConfirmed: number
   recentActivity: number
@@ -44,7 +44,6 @@ export default function DashboardPage() {
     overdueFollowups: 0,
     totalItineraries: 0,
     totalQuotes: 0,
-    totalTours: 0,
     quotesSent: 0,
     quotesConfirmed: 0,
     recentActivity: 0
@@ -85,11 +84,6 @@ export default function DashboardPage() {
       const quotesData = await quotesRes.json()
       const quotes = quotesData.data || []
 
-      // Get tours stats
-      const toursRes = await fetch('/api/tours/browse')
-      const toursData = await toursRes.json()
-      const tours = toursData.data || []
-
       // Get recent clients
       const recentClients = clients?.slice(0, 5) || []
 
@@ -125,7 +119,6 @@ export default function DashboardPage() {
         overdueFollowups,
         totalItineraries: quotes.length,
         totalQuotes: quotes.length,
-        totalTours: tours.length,
         quotesSent: quotes.filter((q: any) => q.status === 'sent' || q.status === 'confirmed').length,
         quotesConfirmed: quotes.filter((q: any) => q.status === 'confirmed').length,
         recentActivity: 0
@@ -193,13 +186,13 @@ export default function DashboardPage() {
           color="purple"
         />
 
-        {/* Active Clients */}
+        {/* Itineraries - Now reads from itineraries */}
         <StatCard
-          title="Tours Available"
-          value={stats.totalTours}
-          icon={MapPin}
-          subtitle="Ready to sell"
-          href="/tour-builder"
+          title="Itineraries"
+          value={stats.totalItineraries}
+          icon={Package}
+          subtitle="Available to sell"
+          href="/itineraries"
           color="orange"
         />
       </div>
@@ -284,10 +277,10 @@ export default function DashboardPage() {
             color="bg-primary-600"
           />
           <QuickActionButton
-            icon={MapPin}
-            label="Browse Itineraries"
+            icon={Package}
+            label="Ready Made Packages"
             href="/itineraries"
-            description="Explore tour catalog"
+            description="Browse available packages"
             color="bg-warning"
           />
         </div>
@@ -408,7 +401,7 @@ export default function DashboardPage() {
             <h3 className="text-base font-bold text-gray-900 mb-3">💡 Quick Tips</h3>
             <div className="space-y-2 text-xs text-gray-700">
               <p>• Use AI parser to extract client details from WhatsApp in seconds</p>
-              <p>• Browse tours catalog to find perfect matches quickly</p>
+              <p>• Browse ready made packages to find perfect matches quickly</p>
               <p>• Send quotes via WhatsApp or Email with one click</p>
               <p>• Track your conversion rates in Analytics</p>
             </div>
@@ -426,7 +419,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Tour Database</span>
+                <span className="text-xs text-gray-600">Ready Made Packages</span>
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-success" />
                   <span className="text-xs font-medium text-gray-700">Active</span>

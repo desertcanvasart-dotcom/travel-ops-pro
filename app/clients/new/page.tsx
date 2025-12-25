@@ -72,9 +72,15 @@ export default function NewClientPage() {
     setError('')
 
     try {
+      // Convert empty strings to null for date fields
+      const cleanedData = {
+        ...formData,
+        date_of_birth: formData.date_of_birth || null,
+      }
+
       const { data, error: insertError } = await supabase
         .from('clients')
-        .insert([formData])
+        .insert([cleanedData])
         .select()
         .single()
 
