@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// ============================================
+// TOUR DETAIL API - WITH VARIATION_ID
+// File: app/api/tours/[code]/route.ts
+// ============================================
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
@@ -12,12 +17,13 @@ export async function GET(
   try {
     const { code } = await params
 
-    // Fetch variation with all related data
+    // Fetch variation with all related data (removed tour_days - doesn't exist)
     const { data: variation, error: varError } = await supabase
       .from('tour_variations')
       .select(`
         *,
         tour_templates (
+          id,
           template_code,
           template_name,
           short_description,
@@ -33,7 +39,11 @@ export async function GET(
       .eq('variation_code', code)
       .single()
 
-    if (varError) throw varError
+    if (varError) {
+      console.error('Variation fetch error:', varError)
+      throw varError
+    }
+    
     if (!variation) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },
@@ -41,40 +51,63 @@ export async function GET(
       )
     }
 
-    // Fetch pricing
-    const { data: pricing } = await supabase
-      .from('variation_pricing')
-      .select('min_pax, max_pax, price_per_person, single_supplement')
+    // Fetch services from tour_variation_services (for B2B pricing)
+    const { data: variationServices } = await supabase
+      .from('tour_variation_services')
+      .select('*')
       .eq('variation_id', variation.id)
-      .order('min_pax', { ascending: true })
+      .order('sequence_order')
 
-    // Fetch services
-    const { data: services } = await supabase
+    // Also fetch legacy services if they exist
+    const { data: legacyServices } = await supabase
       .from('variation_services')
       .select('service_category, service_name, quantity_type, cost_per_unit, applies_to_day')
       .eq('variation_id', variation.id)
       .eq('is_mandatory', true)
       .order('service_category')
 
-    // Fetch daily itinerary
-    const { data: dailyItinerary } = await supabase
+    // Fetch daily itinerary from variation_daily_itinerary
+    const { data: varItinerary } = await supabase
       .from('variation_daily_itinerary')
       .select('*')
       .eq('variation_id', variation.id)
       .order('day_number', { ascending: true })
 
-    // Format response
+    const dailyItinerary = (varItinerary || []).map(day => ({
+      day_number: day.day_number,
+      day_title: day.day_title || day.title,
+      day_description: day.day_description || day.description,
+      city: day.city,
+      overnight_city: day.overnight_city,
+      breakfast_included: day.breakfast_included,
+      lunch_included: day.lunch_included,
+      dinner_included: day.dinner_included
+    }))
+
+    // Combine services - prefer new system, fall back to legacy
+    const services = variationServices && variationServices.length > 0
+      ? variationServices.map(s => ({
+          service_category: s.service_category,
+          service_name: s.service_name,
+          quantity_type: s.quantity_mode,
+          cost_per_unit: s.cost_per_unit
+        }))
+      : legacyServices || []
+
+    // Format response - INCLUDE variation_id for dynamic pricing
     const tourDetail = {
-      template_name: variation.tour_templates.template_name,
-      template_code: variation.tour_templates.template_code,
-      category_name: variation.tour_templates.tour_categories?.category_name || 'Uncategorized',
-      destination_name: variation.tour_templates.destinations?.destination_name || 'Various',
-      duration_days: variation.tour_templates.duration_days,
-      duration_nights: variation.tour_templates.duration_nights || 0,
-      short_description: variation.tour_templates.short_description,
-      long_description: variation.tour_templates.long_description,
-      highlights: variation.tour_templates.highlights || [],
-      main_attractions: variation.tour_templates.main_attractions || [],
+      variation_id: variation.id,  // <-- KEY ADDITION FOR DYNAMIC PRICING
+      template_id: variation.tour_templates?.id,
+      template_name: variation.tour_templates?.template_name,
+      template_code: variation.tour_templates?.template_code,
+      category_name: variation.tour_templates?.tour_categories?.category_name || 'Uncategorized',
+      destination_name: variation.tour_templates?.destinations?.destination_name || 'Various',
+      duration_days: variation.tour_templates?.duration_days,
+      duration_nights: variation.tour_templates?.duration_nights || 0,
+      short_description: variation.tour_templates?.short_description,
+      long_description: variation.tour_templates?.long_description,
+      highlights: variation.tour_templates?.highlights || [],
+      main_attractions: variation.tour_templates?.main_attractions || [],
       variation_name: variation.variation_name,
       variation_code: variation.variation_code,
       tier: variation.tier,
@@ -85,11 +118,12 @@ export async function GET(
       exclusions: variation.exclusions || [],
       optional_extras: variation.optional_extras || [],
       guide_type: variation.guide_type,
-      guide_languages: variation.guide_languages || [],
+      guide_languages: variation.guide_languages || ['English', 'Arabic'],
       vehicle_type: variation.vehicle_type,
-      pricing: pricing || [],
-      services: services || [],
-      daily_itinerary: dailyItinerary || []
+      services: services,
+      daily_itinerary: dailyItinerary,
+      // Flag to indicate if dynamic pricing is available
+      has_dynamic_pricing: variationServices && variationServices.length > 0
     }
 
     return NextResponse.json({

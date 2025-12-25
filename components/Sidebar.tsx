@@ -48,7 +48,9 @@ import {
   Handshake,
   Send,
   Route,
-  Package
+  Package,
+  Briefcase,
+  Tags
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -119,13 +121,14 @@ const navigation: NavSection[] = [
     ]
   },
   {
-    title: 'Trip Planning',
-    key: 'trips',
-    roles: ['admin', 'manager', 'agent'],
+    title: 'B2B',
+    key: 'b2b',
+    roles: ['admin', 'manager'],
     items: [
-      { label: 'Itineraries', href: '/itineraries', icon: Route },
       { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
       { label: 'Packages', href: '/tours', icon: Package },
+      { label: 'Partners', href: '/b2b/partners', icon: Handshake },
+      { label: 'Pricing Rules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },
   {
@@ -134,6 +137,7 @@ const navigation: NavSection[] = [
     roles: ['admin', 'manager'],
     items: [
       { label: 'Suppliers', href: '/suppliers', icon: Building },
+      { label: 'Itineraries', href: '/itineraries', icon: Route },
       { label: 'Team Members', href: '/team-members', icon: Users },
       { label: 'Tasks', href: '/tasks', icon: CheckSquare },
     ]

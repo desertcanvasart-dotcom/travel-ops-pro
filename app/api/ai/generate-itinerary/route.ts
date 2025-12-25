@@ -59,7 +59,385 @@ function normalizeTier(value: string | null | undefined): ServiceTier {
 }
 
 // ============================================
-// CONTENT LIBRARY INTEGRATION
+// CRUISE DETECTION SYSTEM
+// ============================================
+
+interface CruiseDetectionResult {
+  isCruise: boolean
+  cruiseType: 'nile-cruise' | 'lake-nasser' | null
+  route: string | null
+  detectedDuration: number | null
+  startCity: string | null
+  endCity: string | null
+  keywords: string[]
+}
+
+function detectCruiseRequest(
+  tourRequested: string,
+  interests: string[],
+  cities: string[],
+  specialRequests: string[]
+): CruiseDetectionResult {
+  const allText = [
+    tourRequested || '',
+    ...(interests || []),
+    ...(cities || []),
+    ...(specialRequests || [])
+  ].join(' ').toLowerCase()
+
+  // Cruise keywords
+  const cruiseKeywords = [
+    'nile cruise', 'cruise', 'river cruise', 'boat cruise',
+    'felucca', 'dahabiya', 'sailing', 'cruise ship',
+    'lake nasser', 'floating hotel'
+  ]
+
+  const matchedKeywords = cruiseKeywords.filter(keyword => allText.includes(keyword))
+  const isCruise = matchedKeywords.length > 0
+
+  if (!isCruise) {
+    return {
+      isCruise: false,
+      cruiseType: null,
+      route: null,
+      detectedDuration: null,
+      startCity: null,
+      endCity: null,
+      keywords: []
+    }
+  }
+
+  // Detect cruise type
+  let cruiseType: 'nile-cruise' | 'lake-nasser' = 'nile-cruise'
+  if (allText.includes('lake nasser') || allText.includes('abu simbel cruise')) {
+    cruiseType = 'lake-nasser'
+  }
+
+  // Detect route direction
+  let route: string | null = null
+  let startCity: string | null = null
+  let endCity: string | null = null
+
+  if (allText.includes('luxor to aswan') || allText.includes('luxor-aswan') || allText.includes('luxor aswan')) {
+    route = 'luxor-aswan'
+    startCity = 'Luxor'
+    endCity = 'Aswan'
+  } else if (allText.includes('aswan to luxor') || allText.includes('aswan-luxor') || allText.includes('aswan luxor')) {
+    route = 'aswan-luxor'
+    startCity = 'Aswan'
+    endCity = 'Luxor'
+  } else if (allText.includes('round trip') || allText.includes('round-trip')) {
+    route = 'round-trip'
+    startCity = 'Luxor'
+    endCity = 'Luxor'
+  } else if (cruiseType === 'lake-nasser') {
+    route = 'aswan-abu-simbel'
+    startCity = 'Aswan'
+    endCity = 'Abu Simbel'
+  }
+
+  // If no explicit route, infer from cities
+  if (!route && cities && cities.length > 0) {
+    const citiesLower = cities.map(c => c.toLowerCase())
+    if (citiesLower.includes('luxor') && citiesLower.includes('aswan')) {
+      route = 'luxor-aswan'
+      startCity = 'Luxor'
+      endCity = 'Aswan'
+    } else if (citiesLower.includes('luxor')) {
+      route = 'luxor-aswan'
+      startCity = 'Luxor'
+      endCity = 'Aswan'
+    } else if (citiesLower.includes('aswan')) {
+      route = 'aswan-luxor'
+      startCity = 'Aswan'
+      endCity = 'Luxor'
+    }
+  }
+
+  // Default route if still not determined
+  if (!route) {
+    route = 'luxor-aswan'
+    startCity = 'Luxor'
+    endCity = 'Aswan'
+  }
+
+  // Detect duration from text
+  let detectedDuration: number | null = null
+  const durationPatterns = [
+    { pattern: /(\d+)\s*night/i, addOne: true },
+    { pattern: /(\d+)\s*day/i, addOne: false },
+    { pattern: /(\d+)-night/i, addOne: true },
+    { pattern: /(\d+)-day/i, addOne: false }
+  ]
+
+  for (const { pattern, addOne } of durationPatterns) {
+    const match = allText.match(pattern)
+    if (match) {
+      const num = parseInt(match[1])
+      detectedDuration = addOne ? num + 1 : num
+      break
+    }
+  }
+
+  console.log(`🚢 CRUISE DETECTED:`, {
+    type: cruiseType,
+    route,
+    startCity,
+    endCity,
+    detectedDuration,
+    keywords: matchedKeywords
+  })
+
+  return {
+    isCruise: true,
+    cruiseType,
+    route,
+    detectedDuration,
+    startCity,
+    endCity,
+    keywords: matchedKeywords
+  }
+}
+
+// ============================================
+// CONTENT LIBRARY CRUISE LOOKUP
+// ============================================
+
+interface CruiseContentMatch {
+  found: boolean
+  content: any
+  variation: any
+  dayByDay: any[]
+  recommendedSuppliers: string[]
+}
+
+async function findCruiseContent(
+  cruiseDetection: CruiseDetectionResult,
+  tier: ServiceTier,
+  requestedDuration: number | null
+): Promise<CruiseContentMatch> {
+  const noMatch: CruiseContentMatch = {
+    found: false,
+    content: null,
+    variation: null,
+    dayByDay: [],
+    recommendedSuppliers: []
+  }
+
+  if (!cruiseDetection.isCruise) {
+    return noMatch
+  }
+
+  try {
+    // Build query based on detected cruise parameters
+    let query = supabaseAdmin
+      .from('content_library')
+      .select(`
+        *,
+        content_variations!inner (
+          id,
+          tier,
+          title,
+          description,
+          highlights,
+          inclusions,
+          day_by_day,
+          recommended_suppliers,
+          is_active
+        )
+      `)
+      .eq('is_cruise', true)
+      .eq('is_active', true)
+      .eq('content_variations.is_active', true)
+      .eq('content_variations.tier', tier)
+
+    // Filter by route if detected
+    if (cruiseDetection.route) {
+      query = query.eq('route', cruiseDetection.route)
+    }
+
+    // Filter by cruise type
+    if (cruiseDetection.cruiseType) {
+      query = query.eq('tour_type', cruiseDetection.cruiseType)
+    }
+
+    const { data: cruises, error } = await query
+
+    if (error || !cruises || cruises.length === 0) {
+      console.log('⚠️ No cruise content found in Content Library for route:', cruiseDetection.route)
+      
+      // Try without route filter as fallback
+      const { data: fallbackCruises } = await supabaseAdmin
+        .from('content_library')
+        .select(`
+          *,
+          content_variations!inner (
+            id,
+            tier,
+            title,
+            description,
+            highlights,
+            inclusions,
+            day_by_day,
+            recommended_suppliers,
+            is_active
+          )
+        `)
+        .eq('is_cruise', true)
+        .eq('is_active', true)
+        .eq('content_variations.is_active', true)
+        .eq('content_variations.tier', tier)
+        .limit(1)
+
+      if (!fallbackCruises || fallbackCruises.length === 0) {
+        console.log('⚠️ No cruise content found at all in Content Library')
+        return noMatch
+      }
+
+      const content = fallbackCruises[0]
+      const variation = content.content_variations[0]
+
+      console.log(`📚 Found fallback cruise: ${content.name} (${variation.tier} tier)`)
+
+      return {
+        found: true,
+        content,
+        variation,
+        dayByDay: variation.day_by_day || [],
+        recommendedSuppliers: variation.recommended_suppliers || []
+      }
+    }
+
+    // Find best match based on duration if specified
+    let bestMatch = cruises[0]
+    if (requestedDuration) {
+      const durationMatch = cruises.find(c => c.duration_days === requestedDuration)
+      if (durationMatch) {
+        bestMatch = durationMatch
+      }
+    }
+
+    const variation = bestMatch.content_variations[0]
+
+    console.log(`📚 Found cruise content: ${bestMatch.name} (${variation.tier} tier, ${bestMatch.duration_days} days)`)
+
+    return {
+      found: true,
+      content: bestMatch,
+      variation,
+      dayByDay: variation.day_by_day || [],
+      recommendedSuppliers: variation.recommended_suppliers || []
+    }
+
+  } catch (err) {
+    console.error('⚠️ Error querying cruise content:', err)
+    return noMatch
+  }
+}
+
+// ============================================
+// CRUISE RATE LOOKUP
+// ============================================
+
+interface CruiseRate {
+  found: boolean
+  perPersonPerNight: number
+  shipName: string
+  supplierId: string | null
+  cabinType: string
+}
+
+async function getCruiseRate(
+  tier: ServiceTier,
+  recommendedSuppliers: string[],
+  supabase: any
+): Promise<CruiseRate> {
+  const defaultRates: Record<ServiceTier, number> = {
+    'budget': 150,
+    'standard': 200,
+    'deluxe': 300,
+    'luxury': 500
+  }
+
+  const noRate: CruiseRate = {
+    found: false,
+    perPersonPerNight: defaultRates[tier],
+    shipName: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Nile Cruise`,
+    supplierId: null,
+    cabinType: 'Standard Cabin'
+  }
+
+  try {
+    // If we have recommended suppliers, try to match
+    if (recommendedSuppliers && recommendedSuppliers.length > 0) {
+      const { data: matchedShips } = await supabase
+        .from('nile_cruises')
+        .select('*')
+        .eq('is_active', true)
+        .in('ship_name', recommendedSuppliers)
+        .limit(1)
+
+      if (matchedShips && matchedShips.length > 0) {
+        const ship = matchedShips[0]
+        return {
+          found: true,
+          perPersonPerNight: ship.rate_per_person_eur || ship.double_cabin_rate_eur || defaultRates[tier],
+          shipName: ship.ship_name,
+          supplierId: ship.supplier_id || ship.id,
+          cabinType: ship.cabin_type || 'Standard Cabin'
+        }
+      }
+    }
+
+    // Fallback: find any cruise matching tier
+    const { data: tierCruises } = await supabase
+      .from('nile_cruises')
+      .select('*')
+      .eq('is_active', true)
+      .eq('tier', tier)
+      .order('is_preferred', { ascending: false })
+      .limit(1)
+
+    if (tierCruises && tierCruises.length > 0) {
+      const ship = tierCruises[0]
+      return {
+        found: true,
+        perPersonPerNight: ship.rate_per_person_eur || ship.double_cabin_rate_eur || defaultRates[tier],
+        shipName: ship.ship_name,
+        supplierId: ship.supplier_id || ship.id,
+        cabinType: ship.cabin_type || 'Standard Cabin'
+      }
+    }
+
+    // Final fallback: any active cruise
+    const { data: anyCruise } = await supabase
+      .from('nile_cruises')
+      .select('*')
+      .eq('is_active', true)
+      .order('is_preferred', { ascending: false })
+      .limit(1)
+
+    if (anyCruise && anyCruise.length > 0) {
+      const ship = anyCruise[0]
+      return {
+        found: true,
+        perPersonPerNight: ship.rate_per_person_eur || ship.double_cabin_rate_eur || defaultRates[tier],
+        shipName: ship.ship_name,
+        supplierId: ship.supplier_id || ship.id,
+        cabinType: ship.cabin_type || 'Standard Cabin'
+      }
+    }
+
+    return noRate
+
+  } catch (err) {
+    console.error('⚠️ Error fetching cruise rate:', err)
+    return noRate
+  }
+}
+
+// ============================================
+// CONTENT LIBRARY INTEGRATION (for non-cruise)
 // ============================================
 
 interface ContentItem {
@@ -109,6 +487,7 @@ async function fetchContentLibrary(
           short_description,
           location,
           tags,
+          is_cruise,
           content_categories!inner (
             name,
             slug
@@ -123,17 +502,17 @@ async function fetchContentLibrary(
       return []
     }
 
-    // Filter and transform content
+    // Filter and transform content - exclude cruises for land tours
     const content: ContentItem[] = variations
       .filter((v: any) => {
         const item = v.content_library
         if (!item) return false
+        if (item.is_cruise) return false // Exclude cruise content
         
         const itemTags = (item.tags || []).map((t: string) => t.toLowerCase())
         const itemLocation = (item.location || '').toLowerCase()
         const itemName = (item.name || '').toLowerCase()
         
-        // Match by location, tags, or name
         const matchesSearch = searchTags.length === 0 || searchTags.some(tag => 
           itemTags.includes(tag) ||
           itemLocation.includes(tag) ||
@@ -172,11 +551,9 @@ async function fetchWritingRules(): Promise<WritingRule[]> {
       .order('priority', { ascending: false })
 
     if (error || !rules) {
-      console.log('⚠️ No writing rules found')
       return []
     }
 
-    console.log(`📝 Found ${rules.length} writing rules`)
     return rules
   } catch (err) {
     console.error('⚠️ Error fetching writing rules:', err)
@@ -195,15 +572,12 @@ function buildContentContext(content: ContentItem[]): string {
     grouped[item.category_slug].push(item)
   })
 
-  let context = '\n\nCONTENT LIBRARY (Use these descriptions as inspiration for your writing):\n'
+  let context = '\n\nCONTENT LIBRARY:\n'
 
   for (const [category, items] of Object.entries(grouped)) {
     context += `\n[${items[0]?.category_name || category}]\n`
-    items.slice(0, 5).forEach(item => { // Limit to 5 per category to avoid token overflow
-      context += `• ${item.name}: ${item.description?.substring(0, 200) || 'No description'}${item.description && item.description.length > 200 ? '...' : ''}\n`
-      if (item.highlights && item.highlights.length > 0) {
-        context += `  Highlights: ${item.highlights.slice(0, 3).join(', ')}\n`
-      }
+    items.slice(0, 5).forEach(item => {
+      context += `• ${item.name}: ${item.description?.substring(0, 200) || ''}...\n`
     })
   }
 
@@ -213,20 +587,14 @@ function buildContentContext(content: ContentItem[]): string {
 function buildWritingRulesContext(rules: WritingRule[]): string {
   if (rules.length === 0) return ''
 
-  let context = '\n\nWRITING STYLE GUIDELINES:\n'
+  let context = '\n\nWRITING STYLE:\n'
 
   const enforceRules = rules.filter(r => r.rule_type === 'enforce').slice(0, 5)
-  const preferRules = rules.filter(r => r.rule_type === 'prefer').slice(0, 5)
   const avoidRules = rules.filter(r => r.rule_type === 'avoid').slice(0, 5)
 
   if (enforceRules.length > 0) {
     context += 'MUST follow:\n'
     enforceRules.forEach(r => context += `- ${r.rule_text}\n`)
-  }
-
-  if (preferRules.length > 0) {
-    context += 'Preferred style:\n'
-    preferRules.forEach(r => context += `- ${r.rule_text}\n`)
   }
 
   if (avoidRules.length > 0) {
@@ -256,28 +624,15 @@ async function getUserPreferences(supabase: any): Promise<{
   try {
     const { data: { user } } = await supabase.auth.getUser()
     
-    if (!user) {
-      console.log('⚙️ No authenticated user, using default preferences')
-      return defaults
-    }
+    if (!user) return defaults
 
-    const { data: prefs, error } = await supabase
+    const { data: prefs } = await supabase
       .from('user_preferences')
       .select('*')
       .eq('user_id', user.id)
       .single()
 
-    if (error || !prefs) {
-      console.log('⚙️ No user preferences found, using defaults')
-      return defaults
-    }
-
-    console.log('⚙️ Loaded user preferences:', {
-      cost_mode: prefs.default_cost_mode,
-      tier: prefs.default_tier,
-      margin: prefs.default_margin_percent,
-      currency: prefs.default_currency
-    })
+    if (!prefs) return defaults
 
     return {
       default_cost_mode: prefs.default_cost_mode || defaults.default_cost_mode,
@@ -286,20 +641,18 @@ async function getUserPreferences(supabase: any): Promise<{
       default_currency: prefs.default_currency || defaults.default_currency
     }
   } catch (error) {
-    console.error('⚠️ Error fetching user preferences:', error)
     return defaults
   }
 }
 
+// ============================================
+// MAIN API HANDLER
+// ============================================
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    
     const supabase = createClient()
-    
-    // ============================================
-    // FETCH USER PREFERENCES FIRST
-    // ============================================
     const userPrefs = await getUserPreferences(supabase)
     
     const {
@@ -307,104 +660,81 @@ export async function POST(request: NextRequest) {
       client_email,
       client_phone,
       tour_requested,
-      tour_name, // Alternative field name from WhatsApp parser
+      tour_name,
       start_date,
       duration_days: raw_duration_days,
       num_adults,
       num_children,
       language = 'English',
-      conversation_language, // From WhatsApp parser
+      conversation_language,
       interests = [],
-      cities = [], // Cities from WhatsApp parser
+      cities = [],
       special_requests = [],
       budget_level = 'standard',
       tier: raw_tier = null,
       hotel_name,
-      hotel_location,
       city = 'Cairo',
-      transportation_service = 'day_tour',
       client_id = null,
       nationality = null,
       is_euro_passport = null,
       include_lunch = true,
       include_dinner = false,
       include_accommodation = true,
-      attractions = [],
       margin_percent = userPrefs.default_margin_percent,
       currency = userPrefs.default_currency,
       cost_mode = userPrefs.default_cost_mode,
-      // Package type from WhatsApp parser
       package_type = 'full-package',
-      // ⭐ NEW: Skip pricing flag for edit-first workflow
       skip_pricing = false
     } = body
 
-    // Use tour_name if tour_requested not provided
     const finalTourName = tour_requested || tour_name || 'Egypt Tour'
-    
-    // Use conversation_language if language not explicitly set
     const finalLanguage = language !== 'English' ? language : (conversation_language || 'English')
+    const tier: ServiceTier = raw_tier ? normalizeTier(raw_tier) : budget_level !== 'standard' ? normalizeTier(budget_level) : userPrefs.default_tier
 
-    // Normalize tier
-    const tier: ServiceTier = raw_tier 
-      ? normalizeTier(raw_tier) 
-      : budget_level !== 'standard' 
-        ? normalizeTier(budget_level)
-        : userPrefs.default_tier
-
-    // Validate date
     if (!isValidDate(start_date)) {
       return NextResponse.json(
-        { success: false, error: 'Please provide a valid start date before generating the itinerary' },
+        { success: false, error: 'Please provide a valid start date' },
         { status: 400 }
       )
     }
 
-    const duration_days = parseInt(raw_duration_days) || 1
+    // ============================================
+    // CRUISE DETECTION
+    // ============================================
+    const cruiseDetection = detectCruiseRequest(finalTourName, interests, cities, special_requests)
 
-    console.log('🤖 Starting AI itinerary generation for:', client_name)
-    console.log(`📅 Start date: ${start_date}, Duration: ${duration_days} days`)
-    console.log(`🎯 Service Tier: ${tier.toUpperCase()}`)
-    console.log(`📦 Package Type: ${package_type}`)
-    console.log(`💰 Margin: ${margin_percent}%`)
-    console.log(`💱 Currency: ${currency}`)
-    console.log(`📊 Cost Mode: ${cost_mode}`)
-    console.log(`🏨 Include accommodation: ${include_accommodation}`)
-    console.log(`🌍 Cities: ${cities.join(', ') || city}`)
-    // ⭐ NEW: Log skip_pricing mode
-    console.log(`✏️ Skip Pricing (Edit First): ${skip_pricing}`)
+    let duration_days = parseInt(raw_duration_days) || 1
+    
+    // Adjust duration for cruise if needed
+    if (cruiseDetection.isCruise && duration_days === 1) {
+      duration_days = cruiseDetection.detectedDuration || (cruiseDetection.cruiseType === 'lake-nasser' ? 4 : 5)
+      console.log(`🚢 Adjusted cruise duration to ${duration_days} days`)
+    }
+
+    let effectiveCity = city
+    if (cruiseDetection.isCruise && cruiseDetection.startCity) {
+      effectiveCity = cruiseDetection.startCity
+    } else if (cities.length > 0) {
+      effectiveCity = cities[0]
+    }
+
+    console.log('🤖 Starting itinerary generation:', {
+      client: client_name,
+      isCruise: cruiseDetection.isCruise,
+      tier,
+      duration: duration_days,
+      startCity: effectiveCity
+    })
 
     const totalPax = num_adults + num_children
 
-    // ============================================
-    // FETCH CONTENT LIBRARY
-    // ============================================
-    const searchCities = cities.length > 0 ? cities : [city]
-    const contentLibrary = await fetchContentLibrary(tier, searchCities, interests)
-    const writingRules = await fetchWritingRules()
-    
-    const contentContext = buildContentContext(contentLibrary)
-    const writingContext = buildWritingRulesContext(writingRules)
-
-    // Determine EUR vs non-EUR passport
+    // Passport type
     let isEuroPassport = is_euro_passport
     if (isEuroPassport === null && nationality) {
-      const euCountries = [
-        'austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark',
-        'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland',
-        'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands',
-        'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden',
-        'norway', 'iceland', 'liechtenstein', 'switzerland'
-      ]
-      isEuroPassport = euCountries.some(c => 
-        nationality.toLowerCase().includes(c)
-      )
+      const euCountries = ['austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark', 'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland', 'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands', 'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden', 'norway', 'iceland', 'liechtenstein', 'switzerland']
+      isEuroPassport = euCountries.some(c => nationality.toLowerCase().includes(c))
     }
-    if (isEuroPassport === null) {
-      isEuroPassport = false
-    }
-
-    console.log(`🌍 Passport type: ${isEuroPassport ? 'EUR' : 'non-EUR'} (nationality: ${nationality || 'unknown'})`)
+    isEuroPassport = isEuroPassport ?? false
 
     // Calculate dates
     const startDateObj = new Date(start_date)
@@ -416,384 +746,313 @@ export async function POST(request: NextRequest) {
     const tierPrefix = tier.charAt(0).toUpperCase()
     const itinerary_code = `ITN-${tierPrefix}-${year}-${randomNum}`
 
-    // ============================================
-    // DETERMINE WHAT TO INCLUDE BASED ON PACKAGE TYPE
-    // ============================================
-    let includeAccommodationFinal = include_accommodation
-    let includeAirportTransfers = false
-    let includePortTransfers = false
-
-    switch (package_type) {
-      case 'day-trips':
-        includeAccommodationFinal = false
-        break
-      case 'tours-only':
-        includeAccommodationFinal = false
-        break
-      case 'land-package':
-        includeAccommodationFinal = true
-        includeAirportTransfers = false
-        break
-      case 'full-package':
-        includeAccommodationFinal = true
-        includeAirportTransfers = true
-        break
-      case 'cruise-land':
-        includeAccommodationFinal = true
-        break
-      case 'shore-excursions':
-        includeAccommodationFinal = false
-        includePortTransfers = true
-        break
-    }
-
-    console.log(`📦 Package config: accommodation=${includeAccommodationFinal}, airport=${includeAirportTransfers}, port=${includePortTransfers}`)
+    const marginMultiplier = 1 + (margin_percent / 100)
+    const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
 
     // ============================================
-    // FETCH ALL AVAILABLE RATES WITH TIER FILTERING
+    // CRUISE PATH
     // ============================================
-    
-    // 1. Transportation rates
-    console.log(`🚗 Fetching vehicles for tier: ${tier}...`)
-    
-    const { data: vehicles } = await supabase
-      .from('vehicles')
-      .select('*')
-      .eq('is_active', true)
-      .eq('tier', tier)
-      .order('is_preferred', { ascending: false })
-      .order('capacity_min', { ascending: true })
-
-    let availableVehicles = vehicles
-    if (!availableVehicles || availableVehicles.length === 0) {
-      console.log(`⚠️ No vehicles found for tier ${tier}, falling back to all active vehicles`)
-      const { data: fallbackVehicles } = await supabase
-        .from('vehicles')
-        .select('*')
-        .eq('is_active', true)
-        .order('is_preferred', { ascending: false })
-        .order('capacity_min', { ascending: true })
-      availableVehicles = fallbackVehicles
-    }
-
-    let selectedVehicle = null
-    if (availableVehicles && availableVehicles.length > 0) {
-      selectedVehicle = availableVehicles.find(v => 
-        totalPax >= toNumber(v.capacity_min, 1) && 
-        totalPax <= toNumber(v.capacity_max, 99)
-      ) || availableVehicles[availableVehicles.length - 1]
+    if (cruiseDetection.isCruise) {
+      console.log('🚢 Processing as CRUISE itinerary...')
       
-      console.log(`✅ Selected vehicle: ${selectedVehicle.vehicle_type} (tier: ${selectedVehicle.tier}, preferred: ${selectedVehicle.is_preferred})`)
-    }
-
-    const { data: vehicleRates } = await supabase
-      .from('transportation_rates')
-      .select('*')
-      .eq('is_active', true)
-      .eq('service_type', 'day_tour')
-      .eq('city', city)
-      .order('capacity_min')
-
-    let vehicleRate = null
-    if (vehicleRates && vehicleRates.length > 0) {
-      vehicleRate = vehicleRates.find(v => 
-        totalPax >= toNumber(v.capacity_min, 1) && 
-        totalPax <= toNumber(v.capacity_max, 99)
-      ) || vehicleRates[vehicleRates.length - 1]
-      console.log(`✅ Vehicle rate: €${vehicleRate.base_rate_eur}/day`)
-    }
-
-    // 2. Guide rates
-    console.log(`🎯 Fetching guides for tier: ${tier}, language: ${finalLanguage}...`)
-    
-    const { data: guides } = await supabase
-      .from('guides')
-      .select('*')
-      .eq('is_active', true)
-      .eq('tier', tier)
-      .contains('languages', [finalLanguage])
-      .order('is_preferred', { ascending: false })
-      .limit(5)
-
-    let availableGuides = guides
-    if (!availableGuides || availableGuides.length === 0) {
-      console.log(`⚠️ No guides found for tier ${tier} with ${finalLanguage}, trying without tier filter`)
-      const { data: fallbackGuides } = await supabase
-        .from('guides')
-        .select('*')
-        .eq('is_active', true)
-        .contains('languages', [finalLanguage])
-        .order('is_preferred', { ascending: false })
-        .limit(5)
-      availableGuides = fallbackGuides
-    }
-
-    let selectedGuide = null
-    if (availableGuides && availableGuides.length > 0) {
-      selectedGuide = availableGuides[0]
-      console.log(`✅ Selected guide: ${selectedGuide.name} (tier: ${selectedGuide.tier}, preferred: ${selectedGuide.is_preferred})`)
-    }
-
-    const { data: guideRates } = await supabase
-      .from('guide_rates')
-      .select('*')
-      .eq('is_active', true)
-      .eq('guide_language', finalLanguage)
-      .limit(1)
-
-    let guideRate = null
-    if (guideRates && guideRates.length > 0) {
-      guideRate = guideRates[0]
-      console.log(`✅ Guide rate: €${guideRate.base_rate_eur}/day`)
-    }
-
-    // 3. ALL entrance fees
-    console.log('🏛️ Fetching all entrance fees...')
-    const { data: allEntranceFees } = await supabase
-      .from('entrance_fees')
-      .select('*')
-      .eq('is_active', true)
-
-    console.log(`✅ Loaded ${allEntranceFees?.length || 0} entrance fees`)
-
-    // 4. Meal rates
-    console.log(`🍽️ Fetching restaurants for tier: ${tier}...`)
-    
-    const { data: restaurants } = await supabase
-      .from('restaurant_contacts')
-      .select('*')
-      .eq('is_active', true)
-      .eq('tier', tier)
-      .order('is_preferred', { ascending: false })
-      .limit(10)
-
-    let recommendedRestaurants = restaurants
-    if (!recommendedRestaurants || recommendedRestaurants.length === 0) {
-      const { data: fallbackRestaurants } = await supabase
-        .from('restaurant_contacts')
-        .select('*')
-        .eq('is_active', true)
-        .order('is_preferred', { ascending: false })
-        .limit(10)
-      recommendedRestaurants = fallbackRestaurants
-    }
-
-    const { data: mealRates } = await supabase
-      .from('meal_rates')
-      .select('*')
-      .eq('is_active', true)
-      .limit(1)
-
-    let lunchRate = 12
-    let dinnerRate = 18
-    if (mealRates && mealRates.length > 0) {
-      lunchRate = toNumber(mealRates[0].lunch_rate_eur, 12)
-      dinnerRate = toNumber(mealRates[0].dinner_rate_eur, 18)
-    }
-
-    const tierMealMultiplier: Record<ServiceTier, number> = {
-      'budget': 0.8,
-      'standard': 1.0,
-      'deluxe': 1.3,
-      'luxury': 1.6
-    }
-    lunchRate = Math.round(lunchRate * tierMealMultiplier[tier])
-    dinnerRate = Math.round(dinnerRate * tierMealMultiplier[tier])
-    console.log(`✅ Meal rates (tier-adjusted): Lunch €${lunchRate}, Dinner €${dinnerRate}`)
-
-    // 5. Accommodation rates
-    console.log(`🏨 Fetching hotels for tier: ${tier}...`)
-    let hotelRate = 0
-    let hotelName_final = hotel_name || 'Standard Hotel'
-    let selectedHotel = null
-    
-    if (includeAccommodationFinal) {
-      const { data: hotelContacts, error: hcError } = await supabase
-        .from('hotel_contacts')
-        .select('*')
-        .ilike('city', city)
-        .eq('is_active', true)
-        .eq('tier', tier)
-        .order('is_preferred', { ascending: false })
-        .order('star_rating', { ascending: false })
-        .limit(5)
-
-      if (hotelContacts && hotelContacts.length > 0) {
-        selectedHotel = hotelContacts[0]
-        hotelRate = toNumber(selectedHotel.rate_double_eur, 80)
-        hotelName_final = selectedHotel.name || hotelName_final
-        console.log(`✅ Selected hotel: ${hotelName_final} @ €${hotelRate}/night`)
-      } else {
-        const { data: fallbackHotels } = await supabase
-          .from('hotel_contacts')
-          .select('*')
-          .ilike('city', city)
-          .eq('is_active', true)
-          .order('is_preferred', { ascending: false })
-          .order('star_rating', { ascending: tier === 'luxury' ? false : true })
-          .limit(5)
-
-        if (fallbackHotels && fallbackHotels.length > 0) {
-          selectedHotel = fallbackHotels[0]
-          hotelRate = toNumber(selectedHotel.rate_double_eur, 80)
-          hotelName_final = selectedHotel.name || hotelName_final
-        } else {
-          const defaultRates: Record<ServiceTier, number> = {
-            'budget': 45,
-            'standard': 80,
-            'deluxe': 120,
-            'luxury': 180
-          }
-          hotelRate = defaultRates[tier]
+      const cruiseContent = await findCruiseContent(cruiseDetection, tier, duration_days)
+      
+      if (cruiseContent.found && cruiseContent.dayByDay.length > 0) {
+        console.log(`📚 Using Content Library cruise: ${cruiseContent.content.name}`)
+        
+        // Use Content Library duration if available
+        if (cruiseContent.content.duration_days) {
+          duration_days = cruiseContent.content.duration_days
         }
+        
+        const cruiseRate = await getCruiseRate(tier, cruiseContent.recommendedSuppliers, supabase)
+        console.log(`💰 Cruise rate: €${cruiseRate.perPersonPerNight}/person/night on ${cruiseRate.shipName}`)
+
+        const nights = duration_days - 1
+        
+        // Create itinerary
+        const { data: itinerary, error: itineraryError } = await supabase
+          .from('itineraries')
+          .insert({
+            itinerary_code,
+            client_name,
+            client_email: client_email || null,
+            client_phone: client_phone || null,
+            trip_name: cruiseContent.variation.title || cruiseContent.content.name,
+            start_date,
+            end_date: endDate.toISOString().split('T')[0],
+            total_days: duration_days,
+            num_adults,
+            num_children,
+            currency,
+            total_cost: 0,
+            total_revenue: 0,
+            margin_percent,
+            status: skip_pricing ? 'draft' : 'quoted',
+            tier,
+            package_type: 'nile-cruise',
+            cost_mode,
+            notes: special_requests.length > 0 ? special_requests.join('; ') : null,
+            client_id
+          })
+          .select()
+          .single()
+
+        if (itineraryError) throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
+
+        console.log('✅ Created cruise itinerary:', itinerary.id)
+
+        let totalSupplierCost = 0
+        let totalClientPrice = 0
+
+        // Create days from Content Library
+        for (const dayData of cruiseContent.dayByDay) {
+          const dayDate = new Date(startDateObj)
+          dayDate.setDate(startDateObj.getDate() + dayData.day_number - 1)
+
+          const { data: day, error: dayError } = await supabase
+            .from('itinerary_days')
+            .insert({
+              itinerary_id: itinerary.id,
+              day_number: dayData.day_number,
+              date: dayDate.toISOString().split('T')[0],
+              title: dayData.title,
+              description: dayData.description,
+              city: dayData.city || effectiveCity,
+              overnight_city: dayData.overnight || `On board - ${dayData.city}`,
+              attractions: dayData.attractions || [],
+              guide_required: true,
+              lunch_included: dayData.meals?.includes('lunch') ?? true,
+              dinner_included: dayData.meals?.includes('dinner') ?? true,
+              hotel_included: false
+            })
+            .select()
+            .single()
+
+          if (dayError) {
+            console.error(`❌ Error creating day ${dayData.day_number}:`, dayError)
+            continue
+          }
+
+          if (skip_pricing) continue
+
+          // Add cruise service (per night)
+          const isLastDay = dayData.day_number === duration_days
+          if (!isLastDay) {
+            const nightCost = cruiseRate.perPersonPerNight * totalPax
+            const nightClientPrice = withMargin(nightCost)
+
+            await supabase.from('itinerary_services').insert({
+              itinerary_day_id: day.id,
+              service_type: 'cruise',
+              service_code: cruiseRate.supplierId || 'CRUISE',
+              service_name: `${cruiseRate.shipName} - Full Board`,
+              supplier_name: cruiseRate.shipName,
+              quantity: totalPax,
+              rate_eur: cruiseRate.perPersonPerNight,
+              rate_non_eur: cruiseRate.perPersonPerNight,
+              total_cost: nightCost,
+              client_price: nightClientPrice,
+              notes: `Night ${dayData.day_number}: ${dayData.overnight || 'On board'}`
+            })
+
+            totalSupplierCost += nightCost
+            totalClientPrice += nightClientPrice
+          }
+
+          // Add entrance fees
+          if (dayData.attractions?.length > 0) {
+            const { data: entranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
+            
+            let dayEntranceTotal = 0
+            const matchedAttractions: string[] = []
+
+            for (const attractionName of dayData.attractions) {
+              const fee = entranceFees?.find((ef: any) =>
+                ef.attraction_name.toLowerCase().includes(attractionName.toLowerCase()) ||
+                attractionName.toLowerCase().includes(ef.attraction_name.toLowerCase())
+              )
+
+              if (fee) {
+                const feePerPerson = isEuroPassport ? toNumber(fee.eur_rate, 0) : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
+                dayEntranceTotal += feePerPerson * totalPax
+                matchedAttractions.push(fee.attraction_name)
+              }
+            }
+
+            if (dayEntranceTotal > 0) {
+              await supabase.from('itinerary_services').insert({
+                itinerary_day_id: day.id,
+                service_type: 'entrance',
+                service_code: 'ENTRANCE-FEES',
+                service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'} rates)`,
+                quantity: totalPax,
+                rate_eur: dayEntranceTotal / totalPax,
+                rate_non_eur: dayEntranceTotal / totalPax,
+                total_cost: dayEntranceTotal,
+                client_price: withMargin(dayEntranceTotal),
+                notes: `Sites: ${matchedAttractions.join(', ')}`
+              })
+
+              totalSupplierCost += dayEntranceTotal
+              totalClientPrice += withMargin(dayEntranceTotal)
+            }
+          }
+        }
+
+        // Update totals
+        if (!skip_pricing) {
+          await supabase.from('itineraries').update({
+            total_cost: totalClientPrice,
+            total_revenue: totalClientPrice,
+            supplier_cost: totalSupplierCost,
+            profit: totalClientPrice - totalSupplierCost
+          }).eq('id', itinerary.id)
+        }
+
+        console.log('🎉 Cruise itinerary complete!')
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            id: itinerary.id,
+            itinerary_id: itinerary.id,
+            itinerary_code: itinerary.itinerary_code,
+            trip_name: cruiseContent.variation.title || cruiseContent.content.name,
+            tier,
+            package_type: 'nile-cruise',
+            is_cruise: true,
+            cruise_ship: cruiseRate.shipName,
+            mode: skip_pricing ? 'draft' : 'quoted',
+            redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
+            currency,
+            total_days: duration_days,
+            ...(skip_pricing ? {} : {
+              supplier_cost: totalSupplierCost,
+              total_cost: totalClientPrice,
+              margin: totalClientPrice - totalSupplierCost,
+              per_person_cost: Math.round(totalClientPrice / totalPax * 100) / 100,
+              content_library_used: true,
+              cruise_content: cruiseContent.content.name
+            })
+          }
+        })
+      } else {
+        console.log('⚠️ No cruise content in Content Library, falling back to AI generation')
+        // Fall through to standard AI generation
       }
     }
 
-    // 6. Tipping rates
-    const { data: tippingRates } = await supabase
-      .from('tipping_rates')
-      .select('*')
-      .eq('is_active', true)
+    // ============================================
+    // STANDARD LAND TOUR PATH
+    // ============================================
+    console.log('🏛️ Processing as LAND TOUR itinerary...')
 
-    let dailyTips = 15
-    if (tippingRates && tippingRates.length > 0) {
-      dailyTips = tippingRates.reduce((sum, t) => {
-        if (t.rate_unit === 'per_day') {
-          return sum + toNumber(t.rate_eur, 0)
-        }
-        return sum
-      }, 0)
-      if (dailyTips === 0) dailyTips = 15
+    const searchCities = cities.length > 0 ? cities : [effectiveCity]
+    const contentLibrary = await fetchContentLibrary(tier, searchCities, interests)
+    const writingRules = await fetchWritingRules()
+    const contentContext = buildContentContext(contentLibrary)
+    const writingContext = buildWritingRulesContext(writingRules)
+
+    // Determine inclusions based on package type
+    let includeAccommodationFinal = include_accommodation
+    if (package_type === 'day-trips' || package_type === 'tours-only') {
+      includeAccommodationFinal = false
     }
 
-    const tierTipsMultiplier: Record<ServiceTier, number> = {
-      'budget': 0.8,
-      'standard': 1.0,
-      'deluxe': 1.2,
-      'luxury': 1.5
+    // Fetch rates
+    const { data: vehicles } = await supabase.from('vehicles').select('*').eq('is_active', true).eq('tier', tier).order('is_preferred', { ascending: false })
+    let selectedVehicle = vehicles?.find((v: any) => totalPax >= toNumber(v.capacity_min, 1) && totalPax <= toNumber(v.capacity_max, 99)) || vehicles?.[vehicles.length - 1]
+    
+    const { data: guides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [finalLanguage]).limit(5)
+    let selectedGuide = guides?.[0]
+
+    const { data: allEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
+    
+    const { data: mealRates } = await supabase.from('meal_rates').select('*').eq('is_active', true).limit(1)
+    const tierMealMultiplier: Record<ServiceTier, number> = { 'budget': 0.8, 'standard': 1.0, 'deluxe': 1.3, 'luxury': 1.6 }
+    let lunchRate = Math.round(toNumber(mealRates?.[0]?.lunch_rate_eur, 12) * tierMealMultiplier[tier])
+    let dinnerRate = Math.round(toNumber(mealRates?.[0]?.dinner_rate_eur, 18) * tierMealMultiplier[tier])
+
+    let hotelRate = 0
+    let hotelName_final = hotel_name || 'Standard Hotel'
+    let selectedHotel = null
+
+    if (includeAccommodationFinal) {
+      const { data: hotels } = await supabase.from('hotel_contacts').select('*').ilike('city', effectiveCity).eq('is_active', true).eq('tier', tier).order('is_preferred', { ascending: false }).limit(5)
+      if (hotels?.length) {
+        selectedHotel = hotels[0]
+        hotelRate = toNumber(selectedHotel.rate_double_eur, 80)
+        hotelName_final = selectedHotel.name
+      } else {
+        const defaultRates: Record<ServiceTier, number> = { 'budget': 45, 'standard': 80, 'deluxe': 120, 'luxury': 180 }
+        hotelRate = defaultRates[tier]
+      }
     }
+
+    const { data: tippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
+    let dailyTips = tippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 15
+    const tierTipsMultiplier: Record<ServiceTier, number> = { 'budget': 0.8, 'standard': 1.0, 'deluxe': 1.2, 'luxury': 1.5 }
     dailyTips = Math.round(dailyTips * tierTipsMultiplier[tier])
 
-    // ============================================
-    // GENERATE ITINERARY WITH AI
-    // ============================================
-    
-    const attractionNames = allEntranceFees?.map(a => a.attraction_name).join(', ') || ''
-
+    // Generate with AI
+    const attractionNames = allEntranceFees?.map((a: any) => a.attraction_name).join(', ') || ''
     const tierDescriptions: Record<ServiceTier, string> = {
-      'budget': 'cost-effective options, basic comfort, good value',
-      'standard': 'comfortable mid-range options, good quality-price ratio',
-      'deluxe': 'superior quality, enhanced comfort, premium experiences',
-      'luxury': 'top-tier experiences, finest accommodations, VIP treatment'
+      'budget': 'cost-effective, good value',
+      'standard': 'comfortable mid-range',
+      'deluxe': 'superior quality, premium',
+      'luxury': 'top-tier, VIP treatment'
     }
 
-    const packageTypeDescriptions: Record<string, string> = {
-      'day-trips': 'Day trips only - client returns to their own hotel each day, no accommodation included',
-      'tours-only': 'Tours only - client has their own hotel booked separately, include only daily tours',
-      'land-package': 'Land package - include accommodation but NO airport transfers',
-      'full-package': 'Full package - include EVERYTHING: accommodation, airport transfers, all tours',
-      'cruise-land': 'Cruise + Land package - combine Nile cruise with land-based touring',
-      'shore-excursions': 'Shore excursions - client arriving by cruise ship, pickup from PORT, time-constrained'
-    }
+    const prompt = `Create a ${duration_days}-day Egypt itinerary.
 
-    // Build enhanced prompt with Content Library context
-    const prompt = `You are an expert Egypt travel planner for Travel2Egypt. Create a detailed ${duration_days}-day itinerary.
+CLIENT: ${client_name}
+TOUR: ${finalTourName}
+DATE: ${start_date}
+TRAVELERS: ${num_adults} adults${num_children > 0 ? `, ${num_children} children` : ''}
+TIER: ${tier.toUpperCase()} (${tierDescriptions[tier]})
+CITIES: ${cities.length > 0 ? cities.join(', ') : effectiveCity}
+${interests.length > 0 ? `INTERESTS: ${interests.join(', ')}` : ''}
 
-CLIENT DETAILS:
-- Name: ${client_name}
-- Tour requested: ${finalTourName}
-- Start date: ${start_date}
-- Duration: ${duration_days} days
-- Travelers: ${num_adults} adults${num_children > 0 ? `, ${num_children} children` : ''}
-- Language: ${finalLanguage}
-- Service Tier: ${tier.toUpperCase()} (${tierDescriptions[tier]})
-- Package Type: ${package_type.toUpperCase()} (${packageTypeDescriptions[package_type] || 'Standard package'})
-${hotel_name ? `- Client's Hotel: ${hotel_name}` : includeAccommodationFinal ? `- Recommended Hotel: ${hotelName_final}` : '- No accommodation needed'}
-${interests.length > 0 ? `- Interests: ${interests.join(', ')}` : ''}
-${special_requests.length > 0 ? `- Special requests: ${special_requests.join(', ')}` : ''}
-${cities.length > 0 ? `- Cities to visit: ${cities.join(', ')}` : ''}
-
-SELECTED SUPPLIERS:
-${selectedVehicle ? `- Vehicle: ${selectedVehicle.vehicle_type} (${selectedVehicle.tier} tier${selectedVehicle.is_preferred ? ', preferred' : ''})` : '- Vehicle: Standard vehicle'}
-${selectedGuide ? `- Guide: ${selectedGuide.name} (${selectedGuide.tier} tier${selectedGuide.is_preferred ? ', preferred' : ''})` : '- Guide: Professional guide'}
-${selectedHotel && includeAccommodationFinal ? `- Hotel: ${selectedHotel.name} (${selectedHotel.tier} tier${selectedHotel.is_preferred ? ', preferred' : ''})` : ''}
-
-AVAILABLE ATTRACTIONS (use exact names):
-${attractionNames}
+AVAILABLE ATTRACTIONS: ${attractionNames}
 ${contentContext}
 ${writingContext}
 
-Create a day-by-day itinerary appropriate for ${tier.toUpperCase()} tier and ${package_type} package type.
-
-Return JSON in this EXACT format:
+Return JSON:
 {
-  "trip_name": "descriptive trip name",
+  "trip_name": "descriptive name",
   "days": [
     {
       "day_number": 1,
-      "title": "Day 1: Title describing main activities",
-      "description": "Detailed description using the writing style guidelines above",
-      "attractions": ["Exact Attraction Name 1", "Exact Attraction Name 2"],
-      "city": "${city}",
-      "includes_hotel": ${includeAccommodationFinal && duration_days > 1 ? 'true' : 'false'}
+      "title": "Day 1: Title",
+      "description": "Detailed description",
+      "attractions": ["Exact Attraction Name"],
+      "city": "${effectiveCity}",
+      "includes_hotel": ${includeAccommodationFinal && duration_days > 1}
     }
   ]
 }
 
-IMPORTANT:
-- Use EXACT attraction names from the list above
-- Set "includes_hotel" to ${includeAccommodationFinal ? 'true for all nights except the last day' : 'false (this is a ' + package_type + ' package)'}
-- For ${tier.toUpperCase()} tier: ${tier === 'luxury' ? 'focus on exclusive experiences and VIP access' : tier === 'budget' ? 'prioritize essential sites and efficient routing' : 'balance quality with value'}
-- For ${package_type}: ${packageTypeDescriptions[package_type] || ''}`
-
-    console.log('🤖 Generating itinerary content with OpenAI...')
-    console.log(`📚 Including ${contentLibrary.length} content items and ${writingRules.length} writing rules in context`)
+Use EXACT attraction names. Set includes_hotel ${includeAccommodationFinal ? 'true except last day' : 'false'}.`
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        {
-          role: 'system',
-          content: 'You are an expert Egypt travel planner. Always respond with valid JSON only. Use the provided content library descriptions as inspiration for your writing style.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
+        { role: 'system', content: 'Expert Egypt travel planner. Respond with valid JSON only.' },
+        { role: 'user', content: prompt }
       ],
       temperature: 0.7,
       response_format: { type: 'json_object' }
     })
 
-    console.log('✅ Received itinerary content from OpenAI')
-
-    const responseText = completion.choices[0].message.content || '{}'
-    let cleanedResponse = responseText.trim()
-    if (cleanedResponse.startsWith('```json')) {
-      cleanedResponse = cleanedResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '')
-    } else if (cleanedResponse.startsWith('```')) {
-      cleanedResponse = cleanedResponse.replace(/```\n?/g, '')
+    let responseText = completion.choices[0].message.content || '{}'
+    if (responseText.startsWith('```')) {
+      responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '')
     }
 
-    const itineraryData = JSON.parse(cleanedResponse)
+    const itineraryData = JSON.parse(responseText)
 
-    console.log('📊 Parsed itinerary:', {
-      trip_name: itineraryData.trip_name,
-      days_count: itineraryData.days?.length || 0
-    })
-
-// ============================================
-// END OF PART 1 - CONTINUE IN PART 2
-// ============================================
-// ============================================
-// PART 2 - PASTE DIRECTLY AFTER PART 1
-// (Remove this comment block after pasting)
-// ============================================
-
-    // ============================================
-    // INSERT ITINERARY
-    // ============================================
-    
+    // Create itinerary
     const { data: itinerary, error: itineraryError } = await supabase
       .from('itineraries')
       .insert({
@@ -802,64 +1061,41 @@ IMPORTANT:
         client_email: client_email || null,
         client_phone: client_phone || null,
         trip_name: itineraryData.trip_name,
-        start_date: start_date,
+        start_date,
         end_date: endDate.toISOString().split('T')[0],
         total_days: duration_days,
         num_adults,
         num_children,
-        currency: currency,
+        currency,
         total_cost: 0,
         total_revenue: 0,
-        margin_percent: margin_percent,
+        margin_percent,
         status: 'draft',
-        tier: tier,
-        package_type: package_type,
-        cost_mode: cost_mode,
+        tier,
+        package_type,
+        cost_mode,
         notes: special_requests.length > 0 ? special_requests.join('; ') : null,
-        user_id: null,
-        client_id: client_id
+        client_id
       })
       .select()
       .single()
 
-    if (itineraryError) {
-      console.error('❌ Error inserting itinerary:', itineraryError)
-      throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
-    }
+    if (itineraryError) throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
 
-    console.log('✅ Created itinerary:', itinerary.id)
-
-    // ============================================
-    // INSERT DAYS WITH SERVICES
-    // ============================================
-    
-    const marginMultiplier = 1 + (margin_percent / 100)
-    const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
-    
     let totalSupplierCost = 0
     let totalClientPrice = 0
 
-    const vehiclePerDay = vehicleRate 
-      ? toNumber(vehicleRate.base_rate_eur, 0) 
-      : (selectedVehicle ? toNumber(selectedVehicle.daily_rate_eur, 50) : 50)
-    
-    const guidePerDay = guideRate 
-      ? toNumber(guideRate.base_rate_eur, 0) 
-      : (selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 55) : 55)
-    
-    const waterPerPersonPerDay = 2
+    const vehiclePerDay = selectedVehicle ? toNumber(selectedVehicle.daily_rate_eur, 50) : 50
+    const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 55) : 55
     const roomsNeeded = Math.ceil(totalPax / 2)
 
     for (const dayData of itineraryData.days) {
-      console.log(`📅 Creating day ${dayData.day_number}...`)
-
       const dayDate = new Date(startDateObj)
       dayDate.setDate(startDateObj.getDate() + dayData.day_number - 1)
 
       const isLastDay = dayData.day_number === duration_days
       const includesHotelForDay = dayData.includes_hotel !== false && !isLastDay && includeAccommodationFinal
 
-      // ⭐ UPDATED: Insert day with new fields for editor
       const { data: day, error: dayError } = await supabase
         .from('itinerary_days')
         .insert({
@@ -868,9 +1104,8 @@ IMPORTANT:
           date: dayDate.toISOString().split('T')[0],
           title: dayData.title,
           description: dayData.description,
-          city: dayData.city || city,
-          overnight_city: dayData.city || city,
-          // ⭐ NEW FIELDS for editor functionality
+          city: dayData.city || effectiveCity,
+          overnight_city: dayData.city || effectiveCity,
           attractions: dayData.attractions || [],
           guide_required: true,
           lunch_included: include_lunch,
@@ -880,101 +1115,79 @@ IMPORTANT:
         .select()
         .single()
 
-      if (dayError) {
-        console.error(`❌ Error inserting day ${dayData.day_number}:`, dayError)
-        throw new Error(`Failed to create day: ${dayError.message}`)
-      }
+      if (dayError) throw new Error(`Failed to create day: ${dayError.message}`)
 
-      // ⭐ SKIP SERVICES IF skip_pricing IS TRUE
-      if (skip_pricing) {
-        console.log(`⏭️ Skipping services for day ${dayData.day_number} (edit-first mode)`)
-        continue // Skip to next day, don't create services
-      }
+      if (skip_pricing) continue
 
-      // ============================================
-      // CREATE SERVICES (only if NOT skip_pricing)
-      // ============================================
-      const services = []
+      // Services
+      const services: any[] = []
 
-      // 1. TRANSPORTATION
-      const vehicleCost = toNumber(vehiclePerDay, 0)
-      const vehicleName = selectedVehicle?.vehicle_type || vehicleRate?.vehicle_type || 'Vehicle'
+      // Transport
       services.push({
         service_type: 'transportation',
-        service_code: selectedVehicle?.id || vehicleRate?.service_code || 'TRANS-001',
-        service_name: `${vehicleName} Transportation`,
+        service_code: selectedVehicle?.id || 'TRANS',
+        service_name: `${selectedVehicle?.vehicle_type || 'Vehicle'} Transportation`,
         supplier_name: selectedVehicle?.company_name || null,
         quantity: 1,
-        rate_eur: vehicleCost,
-        rate_non_eur: vehicleCost,
-        total_cost: vehicleCost,
-        client_price: withMargin(vehicleCost),
-        notes: `${vehicleName} from ${city}${selectedVehicle?.is_preferred ? ' (Preferred)' : ''}`
+        rate_eur: vehiclePerDay,
+        rate_non_eur: vehiclePerDay,
+        total_cost: vehiclePerDay,
+        client_price: withMargin(vehiclePerDay),
+        notes: `From ${dayData.city || effectiveCity}`
       })
-      totalSupplierCost += vehicleCost
-      totalClientPrice += withMargin(vehicleCost)
+      totalSupplierCost += vehiclePerDay
+      totalClientPrice += withMargin(vehiclePerDay)
 
-      // 2. GUIDE
-      const guideCost = toNumber(guidePerDay, 0)
+      // Guide
       services.push({
         service_type: 'guide',
-        service_code: selectedGuide?.id || guideRate?.service_code || `GUIDE-${finalLanguage.substring(0,2).toUpperCase()}`,
+        service_code: selectedGuide?.id || 'GUIDE',
         service_name: `${finalLanguage} Speaking Guide`,
         supplier_name: selectedGuide?.name || null,
         quantity: 1,
-        rate_eur: guideCost,
-        rate_non_eur: guideCost,
-        total_cost: guideCost,
-        client_price: withMargin(guideCost),
-        notes: `Professional ${finalLanguage} speaking guide${selectedGuide?.is_preferred ? ' (Preferred)' : ''}`
+        rate_eur: guidePerDay,
+        rate_non_eur: guidePerDay,
+        total_cost: guidePerDay,
+        client_price: withMargin(guidePerDay),
+        notes: `Professional ${finalLanguage} guide`
       })
-      totalSupplierCost += guideCost
-      totalClientPrice += withMargin(guideCost)
+      totalSupplierCost += guidePerDay
+      totalClientPrice += withMargin(guidePerDay)
 
-      // 3. TIPS
-      const tipsCost = toNumber(dailyTips, 15)
+      // Tips
       services.push({
         service_type: 'tips',
-        service_code: 'DAILY-TIPS',
+        service_code: 'TIPS',
         service_name: 'Daily Tips',
         quantity: 1,
-        rate_eur: tipsCost,
-        rate_non_eur: tipsCost,
-        total_cost: tipsCost,
-        client_price: tipsCost,
+        rate_eur: dailyTips,
+        rate_non_eur: dailyTips,
+        total_cost: dailyTips,
+        client_price: dailyTips,
         notes: 'Driver and guide tips'
       })
-      totalSupplierCost += tipsCost
-      totalClientPrice += tipsCost
+      totalSupplierCost += dailyTips
+      totalClientPrice += dailyTips
 
-      // 4. ENTRANCE FEES
-      const dayAttractions = dayData.attractions || []
+      // Entrance fees
       let dayEntranceTotal = 0
       const matchedAttractions: string[] = []
-
-      if (dayAttractions.length > 0 && allEntranceFees) {
-        for (const attractionName of dayAttractions) {
-          const entranceFee = allEntranceFees.find(ef => 
-            ef.attraction_name.toLowerCase().includes(attractionName.toLowerCase()) ||
-            attractionName.toLowerCase().includes(ef.attraction_name.toLowerCase())
-          )
-
-          if (entranceFee) {
-            const feePerPerson = isEuroPassport 
-              ? toNumber(entranceFee.eur_rate, 0)
-              : toNumber(entranceFee.non_eur_rate, entranceFee.eur_rate || 0)
-            
-            dayEntranceTotal += feePerPerson * totalPax
-            matchedAttractions.push(entranceFee.attraction_name)
-          }
+      for (const attr of dayData.attractions || []) {
+        const fee = allEntranceFees?.find((ef: any) =>
+          ef.attraction_name.toLowerCase().includes(attr.toLowerCase()) ||
+          attr.toLowerCase().includes(ef.attraction_name.toLowerCase())
+        )
+        if (fee) {
+          const feePerPerson = isEuroPassport ? toNumber(fee.eur_rate, 0) : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
+          dayEntranceTotal += feePerPerson * totalPax
+          matchedAttractions.push(fee.attraction_name)
         }
       }
-
       if (dayEntranceTotal > 0) {
         services.push({
           service_type: 'entrance',
-          service_code: 'ENTRANCE-FEES',
-          service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'} rates)`,
+          service_code: 'ENTRANCE',
+          service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'})`,
           quantity: totalPax,
           rate_eur: dayEntranceTotal / totalPax,
           rate_non_eur: dayEntranceTotal / totalPax,
@@ -986,31 +1199,27 @@ IMPORTANT:
         totalClientPrice += withMargin(dayEntranceTotal)
       }
 
-      // 5. LUNCH
+      // Lunch
       if (include_lunch) {
-        const lunchCost = toNumber(lunchRate, 12) * totalPax
-        const lunchRestaurant = recommendedRestaurants?.find(r => r.city?.toLowerCase() === city.toLowerCase())
+        const lunchCost = lunchRate * totalPax
         services.push({
           service_type: 'meal',
           service_code: 'LUNCH',
           service_name: 'Lunch',
-          supplier_name: lunchRestaurant?.name || null,
           quantity: totalPax,
           rate_eur: lunchRate,
           rate_non_eur: lunchRate,
           total_cost: lunchCost,
           client_price: withMargin(lunchCost),
-          notes: lunchRestaurant 
-            ? `Lunch at ${lunchRestaurant.name}${lunchRestaurant.is_preferred ? ' (Preferred)' : ''}`
-            : 'Lunch at local restaurant'
+          notes: 'Lunch at local restaurant'
         })
         totalSupplierCost += lunchCost
         totalClientPrice += withMargin(lunchCost)
       }
 
-      // 6. DINNER
+      // Dinner
       if (include_dinner) {
-        const dinnerCost = toNumber(dinnerRate, 18) * totalPax
+        const dinnerCost = dinnerRate * totalPax
         services.push({
           service_type: 'meal',
           service_code: 'DINNER',
@@ -1020,29 +1229,29 @@ IMPORTANT:
           rate_non_eur: dinnerRate,
           total_cost: dinnerCost,
           client_price: withMargin(dinnerCost),
-          notes: 'Dinner at restaurant'
+          notes: 'Dinner'
         })
         totalSupplierCost += dinnerCost
         totalClientPrice += withMargin(dinnerCost)
       }
 
-      // 7. WATER
-      const waterCost = waterPerPersonPerDay * totalPax
+      // Water
+      const waterCost = 2 * totalPax
       services.push({
         service_type: 'supplies',
         service_code: 'WATER',
         service_name: 'Water Bottles',
         quantity: totalPax,
-        rate_eur: waterPerPersonPerDay,
-        rate_non_eur: waterPerPersonPerDay,
+        rate_eur: 2,
+        rate_non_eur: 2,
         total_cost: waterCost,
         client_price: waterCost,
-        notes: 'Bottled water throughout the day'
+        notes: 'Bottled water'
       })
       totalSupplierCost += waterCost
       totalClientPrice += waterCost
 
-      // 8. HOTEL (based on package type)
+      // Hotel
       if (includesHotelForDay && hotelRate > 0) {
         const hotelCost = hotelRate * roomsNeeded
         services.push({
@@ -1055,72 +1264,34 @@ IMPORTANT:
           rate_non_eur: hotelRate,
           total_cost: hotelCost,
           client_price: withMargin(hotelCost),
-          notes: `Overnight at ${hotelName_final}${selectedHotel?.is_preferred ? ' (Preferred)' : ''}`
+          notes: `Overnight at ${hotelName_final}`
         })
         totalSupplierCost += hotelCost
         totalClientPrice += withMargin(hotelCost)
       }
 
-      // INSERT ALL SERVICES
-      for (const serviceData of services) {
-        const { error: serviceError } = await supabase
-          .from('itinerary_services')
-          .insert({
-            itinerary_day_id: day.id,
-            service_type: serviceData.service_type,
-            service_code: serviceData.service_code,
-            service_name: serviceData.service_name,
-            supplier_name: serviceData.supplier_name || null,
-            quantity: serviceData.quantity,
-            rate_eur: toNumber(serviceData.rate_eur, 0),
-            rate_non_eur: toNumber(serviceData.rate_non_eur, 0),
-            total_cost: toNumber(serviceData.total_cost, 0),
-            client_price: toNumber(serviceData.client_price, 0),
-            notes: serviceData.notes
-          })
-
-        if (serviceError) {
-          console.error('❌ Error adding service:', serviceError)
-        }
-      }
-
-      console.log(`✅ Added ${services.length} services to day ${dayData.day_number}`)
-    }
-
-    // ============================================
-    // UPDATE ITINERARY TOTALS (CONDITIONAL)
-    // ============================================
-    
-    if (skip_pricing) {
-      // ⭐ SKIP_PRICING MODE: Keep as draft, no totals
-      console.log('📝 Itinerary created in DRAFT mode (edit-first, no pricing yet)')
-    } else {
-      // NORMAL MODE: Update with calculated totals
-      const { error: updateError } = await supabase
-        .from('itineraries')
-        .update({
-          total_cost: totalClientPrice,
-          total_revenue: totalClientPrice,
-          status: 'quoted'
+      // Insert services
+      for (const svc of services) {
+        await supabase.from('itinerary_services').insert({
+          itinerary_day_id: day.id,
+          ...svc
         })
-        .eq('id', itinerary.id)
-
-      if (updateError) {
-        console.error('❌ Error updating totals:', updateError)
       }
-
-      console.log('🎉 Itinerary generation completed with pricing!')
-      console.log(`💰 Total Supplier Cost: €${totalSupplierCost.toFixed(2)}`)
-      console.log(`💰 Total Client Price: €${totalClientPrice.toFixed(2)}`)
     }
 
-    console.log(`🎯 Service Tier: ${tier.toUpperCase()}`)
-    console.log(`📦 Package Type: ${package_type}`)
-    console.log(`📚 Content Library items used: ${contentLibrary.length}`)
+    // Update totals
+    if (!skip_pricing) {
+      await supabase.from('itineraries').update({
+        total_cost: totalClientPrice,
+        total_revenue: totalClientPrice,
+        supplier_cost: totalSupplierCost,
+        profit: totalClientPrice - totalSupplierCost,
+        status: 'quoted'
+      }).eq('id', itinerary.id)
+    }
 
-    // ============================================
-    // RETURN RESPONSE
-    // ============================================
+    console.log('🎉 Land tour itinerary complete!')
+
     return NextResponse.json({
       success: true,
       data: {
@@ -1128,57 +1299,18 @@ IMPORTANT:
         itinerary_id: itinerary.id,
         itinerary_code: itinerary.itinerary_code,
         trip_name: itineraryData.trip_name,
-        tier: tier,
-        package_type: package_type,
-        // ⭐ NEW: Mode indicator
+        tier,
+        package_type,
+        is_cruise: false,
         mode: skip_pricing ? 'draft' : 'quoted',
-        skip_pricing: skip_pricing,
-        // ⭐ NEW: Redirect hint for frontend
-        redirect_to: skip_pricing 
-          ? `/itineraries/${itinerary.id}/edit`
-          : `/itineraries/${itinerary.id}`,
-        // Include pricing only if calculated
-        ...(skip_pricing ? {
-          // Draft mode - minimal data
-          cost_mode: cost_mode,
-          currency: currency,
-          total_days: duration_days,
-          passport_type: isEuroPassport ? 'EUR' : 'non-EUR'
-        } : {
-          // Full mode - all pricing data
-          cost_mode: cost_mode,
-          currency: currency,
+        redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
+        currency,
+        total_days: duration_days,
+        ...(skip_pricing ? {} : {
           supplier_cost: totalSupplierCost,
           total_cost: totalClientPrice,
-          total_revenue: totalClientPrice,
           margin: totalClientPrice - totalSupplierCost,
-          margin_percent: margin_percent,
-          per_person_cost: Math.round(totalClientPrice / totalPax * 100) / 100,
-          total_days: duration_days,
-          passport_type: isEuroPassport ? 'EUR' : 'non-EUR',
-          content_items_used: contentLibrary.length,
-          writing_rules_applied: writingRules.length,
-          selected_suppliers: {
-            vehicle: selectedVehicle ? {
-              name: selectedVehicle.vehicle_type,
-              tier: selectedVehicle.tier,
-              is_preferred: selectedVehicle.is_preferred
-            } : null,
-            guide: selectedGuide ? {
-              name: selectedGuide.name,
-              tier: selectedGuide.tier,
-              is_preferred: selectedGuide.is_preferred
-            } : null,
-            hotel: selectedHotel ? {
-              name: selectedHotel.name,
-              tier: selectedHotel.tier,
-              is_preferred: selectedHotel.is_preferred,
-              rate: hotelRate
-            } : {
-              name: hotelName_final,
-              rate: hotelRate
-            }
-          }
+          per_person_cost: Math.round(totalClientPrice / totalPax * 100) / 100
         })
       }
     })
@@ -1186,10 +1318,7 @@ IMPORTANT:
   } catch (error: any) {
     console.error('❌ Error generating itinerary:', error)
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Failed to generate itinerary'
-      },
+      { success: false, error: error.message || 'Failed to generate itinerary' },
       { status: 500 }
     )
   }

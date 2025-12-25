@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { 
   Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -45,9 +45,49 @@ interface Cruise {
   disembark_city: string
   duration_nights: number
   cabin_type: 'standard' | 'deluxe' | 'suite'
+  // Legacy single-rate fields (kept for backward compatibility)
   rate_single_eur: number
   rate_double_eur: number
   rate_triple_eur: number | null
+  // Seasonal rates - Low Season
+  low_season_start: string | null
+  low_season_end: string | null
+  rate_low_single_eur: number
+  rate_low_double_eur: number
+  rate_low_triple_eur: number
+  rate_low_suite_eur: number
+  rate_low_single_non_eur: number
+  rate_low_double_non_eur: number
+  rate_low_triple_non_eur: number
+  rate_low_suite_non_eur: number
+  // Seasonal rates - High Season
+  high_season_start: string | null
+  high_season_end: string | null
+  rate_high_single_eur: number
+  rate_high_double_eur: number
+  rate_high_triple_eur: number
+  rate_high_suite_eur: number
+  rate_high_single_non_eur: number
+  rate_high_double_non_eur: number
+  rate_high_triple_non_eur: number
+  rate_high_suite_non_eur: number
+  // Seasonal rates - Peak Season
+  peak_season_1_start: string | null
+  peak_season_1_end: string | null
+  peak_season_2_start: string | null
+  peak_season_2_end: string | null
+  rate_peak_single_eur: number
+  rate_peak_double_eur: number
+  rate_peak_triple_eur: number
+  rate_peak_suite_eur: number
+  rate_peak_single_non_eur: number
+  rate_peak_double_non_eur: number
+  rate_peak_triple_non_eur: number
+  rate_peak_suite_non_eur: number
+  // Rate validity
+  rate_valid_from: string | null
+  rate_valid_to: string | null
+  // Other fields
   meals_included: string
   sightseeing_included: boolean
   description: string | null
@@ -63,6 +103,72 @@ interface Toast {
   id: string
   type: 'success' | 'error'
   message: string
+}
+
+// ============================================
+// FORM DATA INTERFACE
+// ============================================
+
+interface CruiseFormData {
+  cruise_code: string
+  ship_name: string
+  ship_category: 'standard' | 'deluxe' | 'luxury'
+  route_name: string
+  embark_city: string
+  disembark_city: string
+  duration_nights: number
+  cabin_type: 'standard' | 'deluxe' | 'suite'
+  // Legacy rates (for display/backward compatibility)
+  rate_single_eur: number
+  rate_double_eur: number
+  rate_triple_eur: number
+  // Low Season
+  low_season_start: string
+  low_season_end: string
+  rate_low_single_eur: number
+  rate_low_double_eur: number
+  rate_low_triple_eur: number
+  rate_low_suite_eur: number
+  rate_low_single_non_eur: number
+  rate_low_double_non_eur: number
+  rate_low_triple_non_eur: number
+  rate_low_suite_non_eur: number
+  // High Season
+  high_season_start: string
+  high_season_end: string
+  rate_high_single_eur: number
+  rate_high_double_eur: number
+  rate_high_triple_eur: number
+  rate_high_suite_eur: number
+  rate_high_single_non_eur: number
+  rate_high_double_non_eur: number
+  rate_high_triple_non_eur: number
+  rate_high_suite_non_eur: number
+  // Peak Season
+  peak_season_1_start: string
+  peak_season_1_end: string
+  peak_season_2_start: string
+  peak_season_2_end: string
+  rate_peak_single_eur: number
+  rate_peak_double_eur: number
+  rate_peak_triple_eur: number
+  rate_peak_suite_eur: number
+  rate_peak_single_non_eur: number
+  rate_peak_double_non_eur: number
+  rate_peak_triple_non_eur: number
+  rate_peak_suite_non_eur: number
+  // Rate validity
+  rate_valid_from: string
+  rate_valid_to: string
+  // Other
+  meals_included: string
+  sightseeing_included: boolean
+  description: string
+  notes: string
+  is_active: boolean
+  tier: string
+  is_preferred: boolean
+  supplier_id: string
 }
 
 // ============================================
@@ -144,7 +250,6 @@ function Pagination({
           <ChevronLeft className="h-4 w-4" />
         </button>
 
-        {/* Page numbers */}
         <div className="flex items-center gap-1 mx-2">
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
             let pageNum: number
@@ -196,6 +301,212 @@ function Pagination({
 }
 
 // ============================================
+// SEASONAL RATE SECTION COMPONENT
+// ============================================
+
+function SeasonalRateSection({
+  title,
+  seasonNumber,
+  startDate,
+  endDate,
+  startDate2,
+  endDate2,
+  onStartDateChange,
+  onEndDateChange,
+  onStartDate2Change,
+  onEndDate2Change,
+  rates,
+  onRateChange,
+  showSecondPeriod = false,
+  borderColor = 'border-gray-200',
+  bgColor = 'bg-white'
+}: {
+  title: string
+  seasonNumber: number
+  startDate: string
+  endDate: string
+  startDate2?: string
+  endDate2?: string
+  onStartDateChange: (value: string) => void
+  onEndDateChange: (value: string) => void
+  onStartDate2Change?: (value: string) => void
+  onEndDate2Change?: (value: string) => void
+  rates: {
+    single_eur: number
+    double_eur: number
+    triple_eur: number
+    suite_eur: number
+    single_non_eur: number
+    double_non_eur: number
+    triple_non_eur: number
+    suite_non_eur: number
+  }
+  onRateChange: (field: string, value: number) => void
+  showSecondPeriod?: boolean
+  borderColor?: string
+  bgColor?: string
+}) {
+  return (
+    <div className={`border ${borderColor} rounded-lg p-4 ${bgColor}`}>
+      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
+          {seasonNumber}
+        </span>
+        {title}
+      </h4>
+
+      {/* Date Range */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label className="block text-xs font-medium text-red-600 mb-1">From</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => onStartDateChange(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-green-600 mb-1">To</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => onEndDateChange(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+          />
+        </div>
+      </div>
+
+      {/* Second Period for Peak Season */}
+      {showSecondPeriod && (
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-orange-600 mb-1">Period 2 From (optional)</label>
+            <input
+              type="date"
+              value={startDate2 || ''}
+              onChange={(e) => onStartDate2Change?.(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-orange-600 mb-1">Period 2 To (optional)</label>
+            <input
+              type="date"
+              value={endDate2 || ''}
+              onChange={(e) => onEndDate2Change?.(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* EUR Passport Rates */}
+      <div className="mb-3">
+        <label className="block text-xs font-medium text-gray-500 mb-2">EUR Passport Holders</label>
+        <div className="grid grid-cols-4 gap-2">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Single (€)</label>
+            <input
+              type="number"
+              value={rates.single_eur}
+              onChange={(e) => onRateChange('single_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Double (€)</label>
+            <input
+              type="number"
+              value={rates.double_eur}
+              onChange={(e) => onRateChange('double_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Triple (€)</label>
+            <input
+              type="number"
+              value={rates.triple_eur}
+              onChange={(e) => onRateChange('triple_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Suite (€)</label>
+            <input
+              type="number"
+              value={rates.suite_eur}
+              onChange={(e) => onRateChange('suite_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Non-EUR Passport Rates */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2">Non-EUR Passport Holders</label>
+        <div className="grid grid-cols-4 gap-2">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Single (€)</label>
+            <input
+              type="number"
+              value={rates.single_non_eur}
+              onChange={(e) => onRateChange('single_non_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Double (€)</label>
+            <input
+              type="number"
+              value={rates.double_non_eur}
+              onChange={(e) => onRateChange('double_non_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Triple (€)</label>
+            <input
+              type="number"
+              value={rates.triple_non_eur}
+              onChange={(e) => onRateChange('triple_non_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Suite (€)</label>
+            <input
+              type="number"
+              value={rates.suite_non_eur}
+              onChange={(e) => onRateChange('suite_non_eur', parseFloat(e.target.value) || 0)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+              min="0"
+              step="0.01"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -218,18 +529,62 @@ export default function CruisesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
 
-  const [formData, setFormData] = useState({
+  // Default dates for seasons
+  const currentYear = new Date().getFullYear()
+  const nextYear = currentYear + 1
+
+  const getDefaultFormData = (): CruiseFormData => ({
     cruise_code: '',
     ship_name: '',
-    ship_category: 'deluxe' as 'standard' | 'deluxe' | 'luxury',
+    ship_category: 'deluxe',
     route_name: '',
     embark_city: 'Luxor',
     disembark_city: 'Aswan',
     duration_nights: 4,
-    cabin_type: 'standard' as 'standard' | 'deluxe' | 'suite',
+    cabin_type: 'standard',
+    // Legacy rates
     rate_single_eur: 0,
     rate_double_eur: 0,
     rate_triple_eur: 0,
+    // Low Season (May 1 - Sep 30)
+    low_season_start: `${currentYear}-05-01`,
+    low_season_end: `${currentYear}-09-30`,
+    rate_low_single_eur: 0,
+    rate_low_double_eur: 0,
+    rate_low_triple_eur: 0,
+    rate_low_suite_eur: 0,
+    rate_low_single_non_eur: 0,
+    rate_low_double_non_eur: 0,
+    rate_low_triple_non_eur: 0,
+    rate_low_suite_non_eur: 0,
+    // High Season (Oct 1 - Apr 30)
+    high_season_start: `${currentYear}-10-01`,
+    high_season_end: `${nextYear}-04-30`,
+    rate_high_single_eur: 0,
+    rate_high_double_eur: 0,
+    rate_high_triple_eur: 0,
+    rate_high_suite_eur: 0,
+    rate_high_single_non_eur: 0,
+    rate_high_double_non_eur: 0,
+    rate_high_triple_non_eur: 0,
+    rate_high_suite_non_eur: 0,
+    // Peak Season (Christmas/New Year, Easter)
+    peak_season_1_start: `${currentYear}-12-20`,
+    peak_season_1_end: `${nextYear}-01-05`,
+    peak_season_2_start: '',
+    peak_season_2_end: '',
+    rate_peak_single_eur: 0,
+    rate_peak_double_eur: 0,
+    rate_peak_triple_eur: 0,
+    rate_peak_suite_eur: 0,
+    rate_peak_single_non_eur: 0,
+    rate_peak_double_non_eur: 0,
+    rate_peak_triple_non_eur: 0,
+    rate_peak_suite_non_eur: 0,
+    // Rate validity
+    rate_valid_from: `${currentYear}-01-01`,
+    rate_valid_to: `${nextYear}-12-31`,
+    // Other
     meals_included: 'full_board',
     sightseeing_included: false,
     description: '',
@@ -239,6 +594,8 @@ export default function CruisesPage() {
     is_preferred: false,
     supplier_id: ''
   })
+
+  const [formData, setFormData] = useState<CruiseFormData>(getDefaultFormData())
 
   const showToast = (type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
@@ -278,7 +635,6 @@ export default function CruisesPage() {
     fetchSuppliers()
   }, [])
 
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm, selectedCategory, selectedCabin, filterTier, showInactive, itemsPerPage])
@@ -314,27 +670,7 @@ export default function CruisesPage() {
 
   const handleAddNew = () => {
     setEditingCruise(null)
-    setFormData({
-      cruise_code: '',
-      ship_name: '',
-      ship_category: 'deluxe',
-      route_name: '',
-      embark_city: 'Luxor',
-      disembark_city: 'Aswan',
-      duration_nights: 4,
-      cabin_type: 'standard',
-      rate_single_eur: 0,
-      rate_double_eur: 0,
-      rate_triple_eur: 0,
-      meals_included: 'full_board',
-      sightseeing_included: false,
-      description: '',
-      notes: '',
-      is_active: true,
-      tier: 'standard',
-      is_preferred: false,
-      supplier_id: ''
-    })
+    setFormData(getDefaultFormData())
     setShowModal(true)
   }
 
@@ -349,9 +685,49 @@ export default function CruisesPage() {
       disembark_city: cruise.disembark_city,
       duration_nights: cruise.duration_nights,
       cabin_type: cruise.cabin_type,
-      rate_single_eur: cruise.rate_single_eur,
-      rate_double_eur: cruise.rate_double_eur,
+      // Legacy rates
+      rate_single_eur: cruise.rate_single_eur || 0,
+      rate_double_eur: cruise.rate_double_eur || 0,
       rate_triple_eur: cruise.rate_triple_eur || 0,
+      // Low Season
+      low_season_start: cruise.low_season_start || `${currentYear}-05-01`,
+      low_season_end: cruise.low_season_end || `${currentYear}-09-30`,
+      rate_low_single_eur: cruise.rate_low_single_eur || cruise.rate_single_eur || 0,
+      rate_low_double_eur: cruise.rate_low_double_eur || cruise.rate_double_eur || 0,
+      rate_low_triple_eur: cruise.rate_low_triple_eur || cruise.rate_triple_eur || 0,
+      rate_low_suite_eur: cruise.rate_low_suite_eur || 0,
+      rate_low_single_non_eur: cruise.rate_low_single_non_eur || 0,
+      rate_low_double_non_eur: cruise.rate_low_double_non_eur || 0,
+      rate_low_triple_non_eur: cruise.rate_low_triple_non_eur || 0,
+      rate_low_suite_non_eur: cruise.rate_low_suite_non_eur || 0,
+      // High Season
+      high_season_start: cruise.high_season_start || `${currentYear}-10-01`,
+      high_season_end: cruise.high_season_end || `${nextYear}-04-30`,
+      rate_high_single_eur: cruise.rate_high_single_eur || 0,
+      rate_high_double_eur: cruise.rate_high_double_eur || 0,
+      rate_high_triple_eur: cruise.rate_high_triple_eur || 0,
+      rate_high_suite_eur: cruise.rate_high_suite_eur || 0,
+      rate_high_single_non_eur: cruise.rate_high_single_non_eur || 0,
+      rate_high_double_non_eur: cruise.rate_high_double_non_eur || 0,
+      rate_high_triple_non_eur: cruise.rate_high_triple_non_eur || 0,
+      rate_high_suite_non_eur: cruise.rate_high_suite_non_eur || 0,
+      // Peak Season
+      peak_season_1_start: cruise.peak_season_1_start || `${currentYear}-12-20`,
+      peak_season_1_end: cruise.peak_season_1_end || `${nextYear}-01-05`,
+      peak_season_2_start: cruise.peak_season_2_start || '',
+      peak_season_2_end: cruise.peak_season_2_end || '',
+      rate_peak_single_eur: cruise.rate_peak_single_eur || 0,
+      rate_peak_double_eur: cruise.rate_peak_double_eur || 0,
+      rate_peak_triple_eur: cruise.rate_peak_triple_eur || 0,
+      rate_peak_suite_eur: cruise.rate_peak_suite_eur || 0,
+      rate_peak_single_non_eur: cruise.rate_peak_single_non_eur || 0,
+      rate_peak_double_non_eur: cruise.rate_peak_double_non_eur || 0,
+      rate_peak_triple_non_eur: cruise.rate_peak_triple_non_eur || 0,
+      rate_peak_suite_non_eur: cruise.rate_peak_suite_non_eur || 0,
+      // Rate validity
+      rate_valid_from: cruise.rate_valid_from || `${currentYear}-01-01`,
+      rate_valid_to: cruise.rate_valid_to || `${nextYear}-12-31`,
+      // Other
       meals_included: cruise.meals_included || 'full_board',
       sightseeing_included: cruise.sightseeing_included,
       description: cruise.description || '',
@@ -367,12 +743,18 @@ export default function CruisesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Use low season rates as the "default" legacy rates for backward compatibility
     const submitData = {
       ...formData,
       cruise_code: formData.cruise_code || generateCode(),
       route_name: formData.route_name || `${formData.embark_city} to ${formData.disembark_city}`,
-      rate_triple_eur: formData.rate_triple_eur || null,
-      supplier_id: formData.supplier_id || null
+      // Set legacy rates from low season for backward compatibility
+      rate_single_eur: formData.rate_low_single_eur || formData.rate_single_eur,
+      rate_double_eur: formData.rate_low_double_eur || formData.rate_double_eur,
+      rate_triple_eur: formData.rate_low_triple_eur || formData.rate_triple_eur || null,
+      supplier_id: formData.supplier_id || null,
+      peak_season_2_start: formData.peak_season_2_start || null,
+      peak_season_2_end: formData.peak_season_2_end || null
     }
 
     try {
@@ -463,6 +845,7 @@ export default function CruisesPage() {
       </div>
     )
   }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Toasts */}
@@ -694,7 +1077,6 @@ export default function CruisesPage() {
             </table>
           </div>
 
-          {/* Pagination */}
           {totalItems > 0 && (
             <Pagination
               currentPage={currentPage}
@@ -713,8 +1095,8 @@ export default function CruisesPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
+          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
               <h2 className="text-lg font-bold text-gray-900">
                 {editingCruise ? 'Edit Cruise' : 'Add New Cruise'}
               </h2>
@@ -723,8 +1105,8 @@ export default function CruisesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
-              {/* Supplier Selection - NEW */}
+            <form onSubmit={handleSubmit} className="p-4 space-y-6">
+              {/* Section 1: Supplier Selection */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Supplier (Cruise Company)</label>
                 <select
@@ -742,7 +1124,7 @@ export default function CruisesPage() {
                 </p>
               </div>
 
-              {/* Ship Info */}
+              {/* Section 2: Ship Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Ship Name *</label>
@@ -771,7 +1153,7 @@ export default function CruisesPage() {
                 </div>
               </div>
 
-              {/* Route */}
+              {/* Section 3: Route */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Embark City *</label>
@@ -813,96 +1195,50 @@ export default function CruisesPage() {
                 </div>
               </div>
 
-              {/* Cabin & Rates */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Cabin Type *</label>
-                  <select
-                    name="cabin_type"
-                    value={formData.cabin_type}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  >
-                    {CABIN_TYPES.map(type => (
-                      <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Single Rate (€) *</label>
-                  <input
-                    type="number"
-                    name="rate_single_eur"
-                    value={formData.rate_single_eur}
-                    onChange={handleChange}
-                    min="0"
-                    step="0.01"
-                    required
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Double Rate (€) *</label>
-                  <input
-                    type="number"
-                    name="rate_double_eur"
-                    value={formData.rate_double_eur}
-                    onChange={handleChange}
-                    min="0"
-                    step="0.01"
-                    required
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Triple Rate (€)</label>
-                  <input
-                    type="number"
-                    name="rate_triple_eur"
-                    value={formData.rate_triple_eur}
-                    onChange={handleChange}
-                    min="0"
-                    step="0.01"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  />
-                </div>
+              {/* Section 4: Cabin Type */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Cabin Type *</label>
+                <select
+                  name="cabin_type"
+                  value={formData.cabin_type}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                >
+                  {CABIN_TYPES.map(type => (
+                    <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                  ))}
+                </select>
               </div>
 
-              {/* Service Tier & Preference */}
+              {/* Section 5: Service Tier & Preference */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Service Tier & Preference</h3>
-                
-                {/* Tier Selection */}
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-gray-600 mb-2">
-                    Service Tier
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {TIER_OPTIONS.map((tier) => (
-                      <button
-                        key={tier.value}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, tier: tier.value })}
-                        className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
-                          formData.tier === tier.value
-                            ? tier.value === 'luxury' 
-                              ? 'bg-amber-600 text-white'
-                              : tier.value === 'deluxe'
-                              ? 'bg-purple-600 text-white'
-                              : tier.value === 'standard'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
-                        {tier.label}
-                      </button>
-                    ))}
-                  </div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs">2</span>
+                  Service Tier
+                </h3>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {TIER_OPTIONS.map((tier) => (
+                    <button
+                      key={tier.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, tier: tier.value })}
+                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+                        formData.tier === tier.value
+                          ? tier.value === 'luxury' 
+                            ? 'bg-amber-600 text-white'
+                            : tier.value === 'deluxe'
+                            ? 'bg-purple-600 text-white'
+                            : tier.value === 'standard'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
+                      {tier.label}
+                    </button>
+                  ))}
                 </div>
-
-                {/* Preferred Toggle */}
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input
@@ -924,7 +1260,110 @@ export default function CruisesPage() {
                 </div>
               </div>
 
-              {/* Options */}
+              {/* Section 6: Low Season Rates */}
+              <SeasonalRateSection
+                title="Low Season Rates"
+                seasonNumber={3}
+                startDate={formData.low_season_start}
+                endDate={formData.low_season_end}
+                onStartDateChange={(value) => setFormData({ ...formData, low_season_start: value })}
+                onEndDateChange={(value) => setFormData({ ...formData, low_season_end: value })}
+                rates={{
+                  single_eur: formData.rate_low_single_eur,
+                  double_eur: formData.rate_low_double_eur,
+                  triple_eur: formData.rate_low_triple_eur,
+                  suite_eur: formData.rate_low_suite_eur,
+                  single_non_eur: formData.rate_low_single_non_eur,
+                  double_non_eur: formData.rate_low_double_non_eur,
+                  triple_non_eur: formData.rate_low_triple_non_eur,
+                  suite_non_eur: formData.rate_low_suite_non_eur
+                }}
+                onRateChange={(field, value) => setFormData({ ...formData, [`rate_low_${field}`]: value })}
+                borderColor="border-green-200"
+                bgColor="bg-green-50/30"
+              />
+
+              {/* Section 7: High Season Rates */}
+              <SeasonalRateSection
+                title="High Season Rates"
+                seasonNumber={4}
+                startDate={formData.high_season_start}
+                endDate={formData.high_season_end}
+                onStartDateChange={(value) => setFormData({ ...formData, high_season_start: value })}
+                onEndDateChange={(value) => setFormData({ ...formData, high_season_end: value })}
+                rates={{
+                  single_eur: formData.rate_high_single_eur,
+                  double_eur: formData.rate_high_double_eur,
+                  triple_eur: formData.rate_high_triple_eur,
+                  suite_eur: formData.rate_high_suite_eur,
+                  single_non_eur: formData.rate_high_single_non_eur,
+                  double_non_eur: formData.rate_high_double_non_eur,
+                  triple_non_eur: formData.rate_high_triple_non_eur,
+                  suite_non_eur: formData.rate_high_suite_non_eur
+                }}
+                onRateChange={(field, value) => setFormData({ ...formData, [`rate_high_${field}`]: value })}
+                borderColor="border-blue-200"
+                bgColor="bg-blue-50/30"
+              />
+
+              {/* Section 8: Peak Season Rates */}
+              <SeasonalRateSection
+                title="Peak Season Rates"
+                seasonNumber={5}
+                startDate={formData.peak_season_1_start}
+                endDate={formData.peak_season_1_end}
+                startDate2={formData.peak_season_2_start}
+                endDate2={formData.peak_season_2_end}
+                onStartDateChange={(value) => setFormData({ ...formData, peak_season_1_start: value })}
+                onEndDateChange={(value) => setFormData({ ...formData, peak_season_1_end: value })}
+                onStartDate2Change={(value) => setFormData({ ...formData, peak_season_2_start: value })}
+                onEndDate2Change={(value) => setFormData({ ...formData, peak_season_2_end: value })}
+                rates={{
+                  single_eur: formData.rate_peak_single_eur,
+                  double_eur: formData.rate_peak_double_eur,
+                  triple_eur: formData.rate_peak_triple_eur,
+                  suite_eur: formData.rate_peak_suite_eur,
+                  single_non_eur: formData.rate_peak_single_non_eur,
+                  double_non_eur: formData.rate_peak_double_non_eur,
+                  triple_non_eur: formData.rate_peak_triple_non_eur,
+                  suite_non_eur: formData.rate_peak_suite_non_eur
+                }}
+                onRateChange={(field, value) => setFormData({ ...formData, [`rate_peak_${field}`]: value })}
+                showSecondPeriod={true}
+                borderColor="border-orange-200"
+                bgColor="bg-orange-50/30"
+              />
+
+              {/* Section 9: Rate Card Validity */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs">6</span>
+                  Rate Card Validity
+                  <span className="text-xs font-normal text-gray-500">(When this rate sheet expires)</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <input
+                      type="date"
+                      value={formData.rate_valid_from}
+                      onChange={(e) => setFormData({ ...formData, rate_valid_from: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <input
+                      type="date"
+                      value={formData.rate_valid_to}
+                      onChange={(e) => setFormData({ ...formData, rate_valid_to: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 10: Options */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Cruise Code</label>
@@ -961,16 +1400,16 @@ export default function CruisesPage() {
                 </div>
               </div>
 
-              {/* Notes */}
+              {/* Section 11: Notes */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Description / Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
                 <textarea
-                  name="description"
-                  value={formData.description}
+                  name="notes"
+                  value={formData.notes}
                   onChange={handleChange}
                   rows={2}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  placeholder="Additional details..."
+                  placeholder="Additional information..."
                 />
               </div>
 
@@ -981,7 +1420,7 @@ export default function CruisesPage() {
                 </button>
                 <button type="submit" className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-2">
                   <Check className="w-4 h-4" />
-                  {editingCruise ? 'Update' : 'Create'}
+                  {editingCruise ? 'Update Rate' : 'Create Rate'}
                 </button>
               </div>
             </form>

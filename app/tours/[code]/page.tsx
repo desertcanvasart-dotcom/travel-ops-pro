@@ -1,5 +1,10 @@
 'use client'
 
+// ============================================
+// TOUR DETAIL PAGE WITH DYNAMIC PRICING
+// File: app/tours/[code]/page.tsx
+// ============================================
+
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -7,25 +12,25 @@ import {
   ArrowLeft,
   Calendar,
   Users,
-  MapPin,
-  Clock,
   Tag,
   Check,
   X,
   Plus,
   Star,
   Globe,
-  Car,
-  User,
   Loader2,
   ChevronDown,
   ChevronUp,
   Phone,
   Mail,
-  ExternalLink
+  ExternalLink,
+  Calculator,
+  TrendingUp,
+  AlertCircle
 } from 'lucide-react'
 
 interface TourDetail {
+  variation_id: string
   template_name: string
   template_code: string
   category_name: string
@@ -47,12 +52,6 @@ interface TourDetail {
   guide_type: string
   guide_languages: string[]
   vehicle_type: string
-  pricing: Array<{
-    min_pax: number
-    max_pax: number
-    price_per_person: number
-    single_supplement: number | null
-  }>
   daily_itinerary: Array<{
     day_number: number
     day_title: string
@@ -63,12 +62,41 @@ interface TourDetail {
     lunch_included: boolean
     dinner_included: boolean
   }>
+}
+
+interface PricingResult {
+  variation_id: string
+  variation_name: string
+  template_name: string
+  num_pax: number
+  travel_date: string
+  season: string
+  is_eur_passport: boolean
   services: Array<{
-    service_category: string
+    service_id: string
     service_name: string
-    quantity_type: string
-    cost_per_unit: number
+    service_category: string
+    rate_type: string | null
+    rate_source: string
+    quantity_mode: string
+    quantity: number
+    unit_cost: number
+    line_total: number
   }>
+  optional_services: Array<{
+    service_id: string
+    service_name: string
+    service_category: string
+    line_total: number
+  }>
+  subtotal_cost: number
+  optional_total: number
+  total_cost: number
+  margin_percent: number
+  margin_amount: number
+  selling_price: number
+  price_per_person: number
+  currency: string
 }
 
 export default function TourDetailPage() {
@@ -76,14 +104,33 @@ export default function TourDetailPage() {
   const [tour, setTour] = useState<TourDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedPax, setSelectedPax] = useState(2)
   const [expandedDays, setExpandedDays] = useState<number[]>([1])
+  
+  // Pricing state
+  const [selectedPax, setSelectedPax] = useState(2)
+  const [travelDate, setTravelDate] = useState(() => {
+    const date = new Date()
+    date.setDate(date.getDate() + 14) // Default 2 weeks from now
+    return date.toISOString().split('T')[0]
+  })
+  const [isEurPassport, setIsEurPassport] = useState(true)
+  const [pricing, setPricing] = useState<PricingResult | null>(null)
+  const [pricingLoading, setPricingLoading] = useState(false)
+  const [pricingError, setPricingError] = useState<string | null>(null)
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   useEffect(() => {
     if (params.code) {
       fetchTourDetail(params.code as string)
     }
   }, [params.code])
+
+  // Calculate price when tour loads or params change
+  useEffect(() => {
+    if (tour?.variation_id) {
+      calculatePrice()
+    }
+  }, [tour?.variation_id, selectedPax, travelDate, isEurPassport])
 
   const fetchTourDetail = async (code: string) => {
     try {
@@ -92,9 +139,6 @@ export default function TourDetailPage() {
 
       if (data.success) {
         setTour(data.data)
-        if (data.data.pricing.length > 0) {
-          setSelectedPax(data.data.pricing[0].min_pax)
-        }
       } else {
         setError('Tour not found')
       }
@@ -106,9 +150,39 @@ export default function TourDetailPage() {
     }
   }
 
-  const getSelectedPrice = () => {
-    if (!tour) return null
-    return tour.pricing.find(p => selectedPax >= p.min_pax && selectedPax <= p.max_pax)
+  const calculatePrice = async () => {
+    if (!tour?.variation_id) return
+    
+    setPricingLoading(true)
+    setPricingError(null)
+    
+    try {
+      const response = await fetch('/api/b2b/calculate-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          variation_id: tour.variation_id,
+          num_pax: selectedPax,
+          travel_date: travelDate,
+          is_eur_passport: isEurPassport,
+          margin_percent: 0, // Show net price to customers, margin handled elsewhere
+          include_optionals: false
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setPricing(data.data)
+      } else {
+        setPricingError(data.error || 'Failed to calculate price')
+      }
+    } catch (err) {
+      setPricingError('Error calculating price')
+      console.error(err)
+    } finally {
+      setPricingLoading(false)
+    }
   }
 
   const toggleDay = (dayNumber: number) => {
@@ -134,14 +208,24 @@ export default function TourDetailPage() {
       : { bg: 'bg-sky-50 border-sky-200', text: 'text-sky-700', icon: '👥', label: 'Shared' }
   }
 
+  const getSeasonBadge = (season: string) => {
+    const styles: Record<string, string> = {
+      low: 'bg-green-100 text-green-700',
+      high: 'bg-amber-100 text-amber-700',
+      peak: 'bg-red-100 text-red-700'
+    }
+    return styles[season] || 'bg-gray-100 text-gray-700'
+  }
+
   const getCategoryIcon = (category: string) => {
     const icons: Record<string, string> = {
-      accommodation: '🏨',
       transportation: '🚗',
       guide: '👨‍🏫',
-      entrance: '🎫',
+      activity: '🎫',
       meal: '🍽️',
-      activity: '🎭',
+      accommodation: '🏨',
+      cruise: '🚢',
+      entrance: '🎟️',
       transfer: '✈️'
     }
     return icons[category] || '📋'
@@ -178,7 +262,6 @@ export default function TourDetailPage() {
     )
   }
 
-  const selectedPrice = getSelectedPrice()
   const tierStyle = getTierStyle(tour.tier)
   const groupStyle = getGroupTypeStyle(tour.group_type)
 
@@ -234,7 +317,7 @@ export default function TourDetailPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
           </div>
           <p className="text-xs text-gray-500 mb-1">Category</p>
-          <p className="text-lg font-semibold text-gray-900 truncate">{tour.category_name}</p>
+          <p className="text-lg font-semibold text-gray-900 truncate">{tour.category_name || 'Uncategorized'}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -243,7 +326,7 @@ export default function TourDetailPage() {
           </div>
           <p className="text-xs text-gray-500 mb-1">Languages</p>
           <p className="text-lg font-semibold text-gray-900 truncate">
-            {tour.guide_languages?.length > 0 ? tour.guide_languages.join(', ') : 'English'}
+            {tour.guide_languages?.length > 0 ? tour.guide_languages.join(', ') : 'English, Arabic'}
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -253,7 +336,13 @@ export default function TourDetailPage() {
           </div>
           <p className="text-xs text-gray-500 mb-1">From</p>
           <p className="text-lg font-semibold text-[#647C47]">
-            €{tour.pricing[0]?.price_per_person || 'N/A'}
+            {pricingLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : pricing ? (
+              `€${pricing.price_per_person.toFixed(0)}`
+            ) : (
+              '€N/A'
+            )}
           </p>
         </div>
       </div>
@@ -412,34 +501,17 @@ export default function TourDetailPage() {
               </ul>
             </div>
           )}
-
-          {/* Services */}
-          {tour.services && tour.services.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Services Included</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {tour.services.map((service, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <span className="text-xl">{getCategoryIcon(service.service_category)}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{service.service_name}</p>
-                      <p className="text-xs text-gray-500 capitalize">
-                        {service.service_category.replace('_', ' ')}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Pricing Calculator */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Calculate Your Price</h3>
+        {/* Sidebar - Dynamic Pricing Calculator */}
+        <div className="space-y-6 sticky top-6">
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-[#647C47]" />
+              Calculate Your Price
+            </h3>
             
+            {/* Number of Travelers */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Number of Travelers
@@ -457,46 +529,129 @@ export default function TourDetailPage() {
               </select>
             </div>
 
-            {selectedPrice && (
-              <div className="bg-[#647C47]/5 border border-[#647C47]/20 p-4 rounded-lg mb-4">
-                <p className="text-xs text-gray-500 mb-1">Price per person</p>
-                <p className="text-3xl font-bold text-[#647C47]">
-                  €{selectedPrice.price_per_person.toFixed(0)}
-                </p>
-                <p className="text-sm text-gray-600 mt-2">
-                  Total: <span className="font-semibold">€{(selectedPrice.price_per_person * selectedPax).toFixed(0)}</span>
-                </p>
-                {selectedPax === 1 && selectedPrice.single_supplement && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    Includes single supplement of €{selectedPrice.single_supplement}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Pricing Tiers */}
+            {/* Travel Date */}
             <div className="mb-4">
-              <p className="text-xs font-medium text-gray-500 mb-2">Pricing by group size</p>
-              <div className="space-y-1">
-                {tour.pricing.map((price, idx) => (
-                  <div key={idx} className="flex justify-between text-sm py-1.5 px-2 rounded hover:bg-gray-50">
-                    <span className="text-gray-600">
-                      {price.min_pax === price.max_pax 
-                        ? `${price.min_pax} pax`
-                        : `${price.min_pax}-${price.max_pax} pax`
-                      }
-                    </span>
-                    <span className="font-medium text-gray-900">
-                      €{price.price_per_person}/pp
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Travel Date
+              </label>
+              <input
+                type="date"
+                value={travelDate}
+                onChange={(e) => setTravelDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none"
+              />
+            </div>
+
+            {/* Passport Type */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Passport Type
+              </label>
+              <select
+                value={isEurPassport ? 'eur' : 'non-eur'}
+                onChange={(e) => setIsEurPassport(e.target.value === 'eur')}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white"
+              >
+                <option value="eur">European Passport</option>
+                <option value="non-eur">Non-European Passport</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Affects entrance fees at some sites</p>
+            </div>
+
+            {/* Pricing Result */}
+            {pricingLoading ? (
+              <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-[#647C47] mr-2" />
+                <span className="text-sm text-gray-600">Calculating...</span>
+              </div>
+            ) : pricingError ? (
+              <div className="bg-red-50 border border-red-200 p-4 rounded-lg mb-4">
+                <div className="flex items-center gap-2 text-red-700 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  {pricingError}
+                </div>
+              </div>
+            ) : pricing ? (
+              <>
+                <div className="bg-[#647C47]/5 border border-[#647C47]/20 p-4 rounded-lg mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-gray-500">Price per person</p>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${getSeasonBadge(pricing.season)}`}>
+                      {pricing.season.charAt(0).toUpperCase() + pricing.season.slice(1)} Season
                     </span>
                   </div>
-                ))}
+                  <p className="text-3xl font-bold text-[#647C47]">
+                    €{pricing.price_per_person.toFixed(0)}
+                  </p>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#647C47]/20">
+                    <span className="text-sm text-gray-600">Total for {selectedPax} {selectedPax === 1 ? 'person' : 'people'}</span>
+                    <span className="text-lg font-semibold text-gray-900">€{pricing.selling_price.toFixed(0)}</span>
+                  </div>
+                </div>
+
+                {/* Toggle Breakdown */}
+                <button
+                  onClick={() => setShowBreakdown(!showBreakdown)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg mb-4"
+                >
+                  <span className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" />
+                    View Price Breakdown
+                  </span>
+                  {showBreakdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {/* Price Breakdown */}
+                {showBreakdown && pricing.services.length > 0 && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                    <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">Services Included</h4>
+                    <div className="space-y-2">
+                      {pricing.services.map((service, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-2 text-gray-600">
+                            <span>{getCategoryIcon(service.service_category)}</span>
+                            <span className="truncate max-w-[180px]">{service.service_name}</span>
+                          </span>
+                          <span className="text-gray-900 font-medium">€{service.line_total.toFixed(0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-medium">
+                      <span className="text-gray-700">Subtotal</span>
+                      <span className="text-gray-900">€{pricing.subtotal_cost.toFixed(0)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Optional Services */}
+                {showBreakdown && pricing.optional_services && pricing.optional_services.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                    <h4 className="text-xs font-semibold text-amber-700 mb-3 uppercase tracking-wide">Available Add-ons</h4>
+                    <div className="space-y-2">
+                      {pricing.optional_services.map((service, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-amber-800">{service.service_name}</span>
+                          <span className="text-amber-900 font-medium">+€{service.line_total.toFixed(0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 text-center">
+                <p className="text-sm text-gray-500">Select options above to calculate price</p>
               </div>
-            </div>
+            )}
 
             <button className="w-full bg-[#647C47] text-white py-3 rounded-lg hover:bg-[#4a5c35] transition-colors font-medium text-sm">
               Request This Tour
             </button>
+            
+            <p className="text-xs text-gray-400 text-center mt-3">
+              Prices calculated dynamically based on current rates
+            </p>
           </div>
 
           {/* Tour Info */}
@@ -509,7 +664,7 @@ export default function TourDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Category</span>
-                <span className="text-gray-900">{tour.category_name}</span>
+                <span className="text-gray-900">{tour.category_name || 'Uncategorized'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Duration</span>
@@ -526,15 +681,11 @@ export default function TourDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Guide</span>
-                <span className="text-gray-900 capitalize">{tour.guide_type?.replace('_', ' ') || 'Professional'}</span>
+                <span className="text-gray-900 capitalize">{tour.guide_type?.replace('_', ' ') || 'Specialist'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Languages</span>
-                <span className="text-gray-900">{tour.guide_languages?.join(', ') || 'English'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Group size</span>
-                <span className="text-gray-900">{tour.min_pax}-{tour.max_pax} pax</span>
+                <span className="text-gray-900">{tour.guide_languages?.join(', ') || 'English, Arabic'}</span>
               </div>
             </div>
           </div>

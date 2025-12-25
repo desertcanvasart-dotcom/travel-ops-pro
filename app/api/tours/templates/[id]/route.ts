@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Admin client for all operations (bypasses RLS)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // GET - Get single template with variations and days
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
     const { id } = await params
 
     // Get template with category
-    const { data: template, error: templateError } = await supabase
+    const { data: template, error: templateError } = await supabaseAdmin
       .from('tour_templates')
       .select(`
         *,
@@ -20,7 +25,15 @@ export async function GET(
       .eq('id', id)
       .single()
 
-    if (templateError || !template) {
+    if (templateError) {
+      console.error('Error fetching template:', templateError)
+      return NextResponse.json(
+        { success: false, error: templateError.message },
+        { status: 404 }
+      )
+    }
+
+    if (!template) {
       return NextResponse.json(
         { success: false, error: 'Template not found' },
         { status: 404 }
@@ -28,14 +41,14 @@ export async function GET(
     }
 
     // Get variations
-    const { data: variations } = await supabase
+    const { data: variations } = await supabaseAdmin
       .from('tour_variations')
       .select('*')
       .eq('template_id', id)
       .order('tier', { ascending: true })
 
-    // Get days with activities (note: tour_days uses tour_id to reference template)
-    const { data: days } = await supabase
+    // Get days with activities
+    const { data: days } = await supabaseAdmin
       .from('tour_days')
       .select(`
         *,
@@ -53,7 +66,7 @@ export async function GET(
       .order('day_number', { ascending: true })
 
     // Get pricing
-    const { data: pricing } = await supabase
+    const { data: pricing } = await supabaseAdmin
       .from('tour_pricing')
       .select('*')
       .eq('tour_id', id)
@@ -81,10 +94,9 @@ export async function GET(
 // PUT - Update template
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
     const { id } = await params
     const body = await request.json()
 
@@ -121,22 +133,24 @@ export async function PUT(
     // Add updated_at
     updateData.updated_at = new Date().toISOString()
 
-    const { data, error } = await supabase
+    console.log('Updating template:', id, 'with fields:', Object.keys(updateData))
+
+    // Update template
+    const { data, error } = await supabaseAdmin
       .from('tour_templates')
       .update(updateData)
       .eq('id', id)
       .select()
-      .single()
 
     if (error) {
       console.error('Error updating template:', error)
       return NextResponse.json(
-        { success: false, error: 'Failed to update template' },
+        { success: false, error: error.message || 'Failed to update template' },
         { status: 500 }
       )
     }
 
-    if (!data) {
+    if (!data || data.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Template not found' },
         { status: 404 }
@@ -145,7 +159,7 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      data: data,
+      data: data[0],
       message: 'Template updated successfully'
     })
 
@@ -161,20 +175,13 @@ export async function PUT(
 // DELETE - Delete template (and cascade to variations, days, activities, pricing)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
     const { id } = await params
 
-    // Check if template has any bookings/itineraries linked
-    // (You might want to add this check based on your business rules)
-
-    // Delete in order: activities -> days -> variations -> pricing -> template
-    // Note: If you have CASCADE DELETE set up in DB, you might only need to delete the template
-
-    // Get all days first (using tour_id)
-    const { data: days } = await supabase
+    // Get all days first
+    const { data: days } = await supabaseAdmin
       .from('tour_days')
       .select('id')
       .eq('tour_id', id)
@@ -183,32 +190,46 @@ export async function DELETE(
       const dayIds = days.map(d => d.id)
       
       // Delete activities for these days
-      await supabase
+      await supabaseAdmin
         .from('tour_day_activities')
         .delete()
         .in('tour_day_id', dayIds)
     }
 
-    // Delete days (using tour_id)
-    await supabase
+    // Delete days
+    await supabaseAdmin
       .from('tour_days')
       .delete()
       .eq('tour_id', id)
 
+    // Delete variation services first
+    const { data: variations } = await supabaseAdmin
+      .from('tour_variations')
+      .select('id')
+      .eq('template_id', id)
+
+    if (variations && variations.length > 0) {
+      const variationIds = variations.map(v => v.id)
+      await supabaseAdmin
+        .from('tour_variation_services')
+        .delete()
+        .in('variation_id', variationIds)
+    }
+
     // Delete variations
-    await supabase
+    await supabaseAdmin
       .from('tour_variations')
       .delete()
       .eq('template_id', id)
 
-    // Delete pricing (using tour_id)
-    await supabase
+    // Delete pricing
+    await supabaseAdmin
       .from('tour_pricing')
       .delete()
       .eq('tour_id', id)
 
     // Delete template
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('tour_templates')
       .delete()
       .eq('id', id)

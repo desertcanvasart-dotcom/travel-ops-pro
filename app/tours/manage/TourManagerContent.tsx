@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import {
   Map,
@@ -27,8 +27,11 @@ import {
   Users,
   Star,
   Layers,
-  MapPin
+  MapPin,
+  Calculator,
+  Link2
 } from 'lucide-react'
+import ServiceRateLinker from '@/components/ServiceRateLinker'
 
 // ============================================
 // INTERFACES
@@ -115,7 +118,6 @@ interface TourTemplate {
   default_transportation_service?: string
   transportation_city?: string
   created_at: string
-  // Joined data
   category?: TourCategory
   variations?: TourVariation[]
   days?: TourDay[]
@@ -142,6 +144,7 @@ const EGYPTIAN_CITIES = [
 
 const TOUR_TYPES = [
   { value: 'day_tour', label: 'Day Tour' },
+  { value: 'full_day', label: 'Full Day' },
   { value: 'multi_day', label: 'Multi-Day Tour' },
   { value: 'cruise', label: 'Nile Cruise' },
   { value: 'safari', label: 'Desert Safari' },
@@ -219,6 +222,9 @@ export default function TourManagerContent() {
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'basic' | 'days' | 'variations'>('basic')
   
+  // SERVICE RATE LINKER STATE
+  const [serviceLinkerVariation, setServiceLinkerVariation] = useState<string | null>(null)
+  
   const [formData, setFormData] = useState({
     template_code: '',
     template_name: '',
@@ -243,11 +249,9 @@ export default function TourManagerContent() {
     transportation_city: 'Cairo'
   })
 
-  // Helpers for highlights/attractions input
   const [highlightInput, setHighlightInput] = useState('')
   const [attractionInput, setAttractionInput] = useState('')
 
-  // Toast helpers
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
@@ -257,7 +261,6 @@ export default function TourManagerContent() {
     setToasts(prev => prev.filter(t => t.id !== id))
   }
 
-  // Fetch templates
   const fetchTemplates = async () => {
     try {
       const response = await fetch('/api/tours/templates')
@@ -271,7 +274,6 @@ export default function TourManagerContent() {
     }
   }
 
-  // Fetch categories
   const fetchCategories = async () => {
     try {
       const response = await fetch('/api/tours/categories')
@@ -288,7 +290,6 @@ export default function TourManagerContent() {
     Promise.all([fetchTemplates(), fetchCategories()]).finally(() => setLoading(false))
   }, [])
 
-  // Handle form changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
     setFormData(prev => ({
@@ -297,7 +298,6 @@ export default function TourManagerContent() {
     }))
   }
 
-  // Handle checkbox
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target
     setFormData(prev => ({
@@ -306,7 +306,6 @@ export default function TourManagerContent() {
     }))
   }
 
-  // Toggle city
   const toggleCity = (city: string) => {
     setFormData(prev => ({
       ...prev,
@@ -316,7 +315,6 @@ export default function TourManagerContent() {
     }))
   }
 
-  // Toggle best_for
   const toggleBestFor = (item: string) => {
     setFormData(prev => ({
       ...prev,
@@ -326,7 +324,6 @@ export default function TourManagerContent() {
     }))
   }
 
-  // Toggle meal
   const toggleMeal = (meal: string) => {
     setFormData(prev => ({
       ...prev,
@@ -336,7 +333,6 @@ export default function TourManagerContent() {
     }))
   }
 
-  // Add highlight
   const addHighlight = () => {
     if (highlightInput.trim()) {
       setFormData(prev => ({
@@ -347,7 +343,6 @@ export default function TourManagerContent() {
     }
   }
 
-  // Remove highlight
   const removeHighlight = (index: number) => {
     setFormData(prev => ({
       ...prev,
@@ -355,7 +350,6 @@ export default function TourManagerContent() {
     }))
   }
 
-  // Add attraction
   const addAttraction = () => {
     if (attractionInput.trim()) {
       setFormData(prev => ({
@@ -366,7 +360,6 @@ export default function TourManagerContent() {
     }
   }
 
-  // Remove attraction
   const removeAttraction = (index: number) => {
     setFormData(prev => ({
       ...prev,
@@ -374,7 +367,6 @@ export default function TourManagerContent() {
     }))
   }
 
-  // Generate template code
   const generateTemplateCode = () => {
     const city = formData.cities_covered[0] || 'EGYPT'
     const type = formData.tour_type.toUpperCase().replace('_', '-')
@@ -382,7 +374,6 @@ export default function TourManagerContent() {
     return `${city.substring(0, 3).toUpperCase()}-${type.substring(0, 3)}-${random}`
   }
 
-  // Open modal for new template
   const handleAddNew = () => {
     setEditingTemplate(null)
     setFormData({
@@ -412,7 +403,6 @@ export default function TourManagerContent() {
     setShowModal(true)
   }
 
-  // Open modal for editing
   const handleEdit = (template: TourTemplate) => {
     setEditingTemplate(template)
     setFormData({
@@ -442,7 +432,6 @@ export default function TourManagerContent() {
     setShowModal(true)
   }
 
-  // Duplicate template
   const handleDuplicate = async (template: TourTemplate) => {
     try {
       const response = await fetch('/api/tours/templates', {
@@ -471,11 +460,9 @@ export default function TourManagerContent() {
     }
   }
 
-  // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Auto-generate code if empty
     const dataToSubmit = {
       ...formData,
       template_code: formData.template_code || generateTemplateCode()
@@ -510,7 +497,6 @@ export default function TourManagerContent() {
     }
   }
 
-  // Delete template
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? This will also delete all variations and days.`)) return
     
@@ -532,7 +518,6 @@ export default function TourManagerContent() {
     }
   }
 
-  // Filter templates
   const filteredTemplates = templates.filter(template => {
     const matchesSearch = searchTerm === '' || 
       template.template_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -546,12 +531,10 @@ export default function TourManagerContent() {
     return matchesSearch && matchesCategory && matchesType && matchesActive
   })
 
-  // Stats
   const activeTemplates = templates.filter(t => t.is_active).length
   const totalVariations = templates.reduce((sum, t) => sum + (t.variations?.length || 0), 0)
   const featuredCount = templates.filter(t => t.is_featured).length
 
-  // Get tier badge
   const getTierBadge = (tier: string) => {
     const styles: Record<string, string> = {
       budget: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -570,7 +553,7 @@ export default function TourManagerContent() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-sm text-gray-600">Loading tour templates...</p>
         </div>
       </div>
@@ -586,42 +569,27 @@ export default function TourManagerContent() {
         ))}
       </div>
 
-      {/* Hidden file input for import */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv,.json"
-        className="hidden"
-      />
+      <input ref={fileInputRef} type="file" accept=".csv,.json" className="hidden" />
 
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="container mx-auto px-4 lg:px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Map className="w-5 h-5 text-primary-600" />
+              <Map className="w-5 h-5 text-green-600" />
               <h1 className="text-xl font-bold text-gray-900">Tour Programs Manager</h1>
-              <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
+              <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleAddNew}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-              >
+              <button onClick={handleAddNew} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg- green-700 transition-colors font-medium">
                 <Plus className="w-4 h-4" />
                 Add Template
               </button>
-              <Link 
-                href="/tours"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
+              <Link href="/tours" className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
                 <Eye className="w-4 h-4" />
                 Browse Tours
               </Link>
-              <Link 
-                href="/rates"
-                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
+              <Link href="/rates" className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
                 ← Resources
               </Link>
             </div>
@@ -640,7 +608,6 @@ export default function TourManagerContent() {
             <p className="text-xs text-gray-600">Templates</p>
             <p className="text-2xl font-bold text-gray-900">{templates.length}</p>
           </div>
-
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
             <div className="flex items-center gap-2 mb-2">
               <Layers className="w-4 h-4 text-gray-400" />
@@ -649,7 +616,6 @@ export default function TourManagerContent() {
             <p className="text-xs text-gray-600">Variations</p>
             <p className="text-2xl font-bold text-gray-900">{totalVariations}</p>
           </div>
-
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
             <div className="flex items-center gap-2 mb-2">
               <Check className="w-4 h-4 text-gray-400" />
@@ -658,7 +624,6 @@ export default function TourManagerContent() {
             <p className="text-xs text-gray-600">Active</p>
             <p className="text-2xl font-bold text-gray-900">{activeTemplates}</p>
           </div>
-
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
             <div className="flex items-center gap-2 mb-2">
               <Star className="w-4 h-4 text-gray-400" />
@@ -679,14 +644,14 @@ export default function TourManagerContent() {
                 placeholder="Search by name, code, or city..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
               />
             </div>
             <div className="md:w-48 relative">
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm appearance-none"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm appearance-none"
               >
                 <option value="all">All Categories</option>
                 {categories.map(cat => (
@@ -699,7 +664,7 @@ export default function TourManagerContent() {
               <select
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm appearance-none"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm appearance-none"
               >
                 <option value="all">All Types</option>
                 {TOUR_TYPES.map(type => (
@@ -711,40 +676,37 @@ export default function TourManagerContent() {
             <button
               onClick={() => setShowInactive(!showInactive)}
               className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
-                showInactive 
-                  ? 'bg-gray-100 border border-gray-300 text-gray-700' 
+                showInactive
+                  ? 'bg-gray-100 border border-gray-300 text-gray-700'
                   : 'bg-white border border-green-300 text-green-700'
               }`}
             >
               {showInactive ? 'Show All' : 'Active Only'}
             </button>
-            
-            {/* View Toggle */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
                 title="Table View"
               >
                 <Table2 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('cards')}
-                className={`p-1.5 rounded ${viewMode === 'cards' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`p-1.5 rounded ${viewMode === 'cards' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
                 title="Card View"
               >
                 <LayoutGrid className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('compact')}
-                className={`p-1.5 rounded ${viewMode === 'compact' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`p-1.5 rounded ${viewMode === 'compact' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-700'}`}
                 title="Compact View"
               >
                 <List className="w-4 h-4" />
               </button>
             </div>
           </div>
-          
           <div className="mt-3 pt-3 border-t border-gray-200">
             <p className="text-xs text-gray-600">
               Showing <span className="font-bold text-gray-900">{filteredTemplates.length}</span> of {templates.length} templates
@@ -752,7 +714,7 @@ export default function TourManagerContent() {
           </div>
         </div>
 
-        {/* Templates Display - Table View */}
+        {/* Table View */}
         {viewMode === 'table' && (
           <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
@@ -770,9 +732,8 @@ export default function TourManagerContent() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredTemplates.map((template, index) => (
-                    <>
-                      <tr 
-                        key={template.id} 
+                    <React.Fragment key={template.id}>
+                      <tr
                         className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors cursor-pointer`}
                         onClick={() => setExpandedTemplate(expandedTemplate === template.id ? null : template.id)}
                       >
@@ -799,9 +760,7 @@ export default function TourManagerContent() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
                             {template.cities_covered?.slice(0, 3).map(city => (
-                              <span key={city} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
-                                {city}
-                              </span>
+                              <span key={city} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">{city}</span>
                             ))}
                             {(template.cities_covered?.length || 0) > 3 && (
                               <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
@@ -811,15 +770,11 @@ export default function TourManagerContent() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <span className="text-sm font-medium text-purple-600">
-                            {template.variations?.length || 0}
-                          </span>
+                          <span className="text-sm font-medium text-purple-600">{template.variations?.length || 0}</span>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            template.is_active 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
+                            template.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                           }`}>
                             {template.is_active ? 'Active' : 'Inactive'}
                           </span>
@@ -828,7 +783,7 @@ export default function TourManagerContent() {
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => handleEdit(template)}
-                              className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                              className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                               title="Edit"
                             >
                               <Edit className="w-4 h-4" />
@@ -862,16 +817,28 @@ export default function TourManagerContent() {
                               {template.variations.map(variation => {
                                 const { style, icon } = getTierBadge(variation.tier)
                                 return (
-                                  <div 
-                                    key={variation.id} 
-                                    className={`px-3 py-2 rounded-lg border ${style} flex items-center gap-2`}
-                                  >
+                                  <div key={variation.id} className={`px-3 py-2 rounded-lg border ${style} flex items-center gap-2`}>
                                     <span>{icon}</span>
-                                    <div>
+                                    <div className="flex-1">
                                       <p className="text-xs font-medium">{variation.variation_name}</p>
-                                      <p className="text-xs opacity-75">
-                                        {variation.group_type} • {variation.min_pax}-{variation.max_pax} pax
-                                      </p>
+                                      <p className="text-xs opacity-75">{variation.group_type} • {variation.min_pax}-{variation.max_pax} pax</p>
+                                    </div>
+                                    <div className="flex items-center gap-1 ml-2">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setServiceLinkerVariation(variation.id) }}
+                                        className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                        title="Link Services to Rates"
+                                      >
+                                        <Link2 className="w-4 h-4" />
+                                      </button>
+                                      <Link
+                                        href={`/b2b/calculator/${variation.id}`}
+                                        className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"
+                                        title="Calculate Price"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Calculator className="w-4 h-4" />
+                                      </Link>
                                     </div>
                                   </div>
                                 )
@@ -880,17 +847,14 @@ export default function TourManagerContent() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                   {filteredTemplates.length === 0 && (
                     <tr>
                       <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                         <Map className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                         <p className="text-sm font-medium">No tour templates found</p>
-                        <button
-                          onClick={handleAddNew}
-                          className="mt-3 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                        >
+                        <button onClick={handleAddNew} className="mt-3 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg- green-700">
                           Create Your First Template
                         </button>
                       </td>
@@ -902,7 +866,7 @@ export default function TourManagerContent() {
           </div>
         )}
 
-        {/* Templates Display - Card View */}
+        {/* Card View */}
         {viewMode === 'cards' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredTemplates.map((template) => (
@@ -922,7 +886,6 @@ export default function TourManagerContent() {
                       </span>
                     </div>
                   </div>
-                  
                   <div className="space-y-2 text-sm mb-4">
                     <div className="flex items-center gap-2 text-gray-600">
                       <Calendar className="w-4 h-4" />
@@ -940,8 +903,6 @@ export default function TourManagerContent() {
                       <span>{template.variations?.length || 0} variations</span>
                     </div>
                   </div>
-
-                  {/* Variation badges */}
                   {template.variations && template.variations.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-3">
                       {template.variations.map(v => {
@@ -954,33 +915,28 @@ export default function TourManagerContent() {
                       })}
                     </div>
                   )}
-
                   {template.short_description && (
                     <p className="text-xs text-gray-500 line-clamp-2">{template.short_description}</p>
                   )}
                 </div>
-
                 <div className="flex border-t border-gray-200 divide-x divide-gray-200">
                   <button
                     onClick={() => handleEdit(template)}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                   >
-                    <Edit className="w-4 h-4" />
-                    Edit
+                    <Edit className="w-4 h-4" />Edit
                   </button>
                   <button
                     onClick={() => handleDuplicate(template)}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors"
                   >
-                    <Copy className="w-4 h-4" />
-                    Copy
+                    <Copy className="w-4 h-4" />Copy
                   </button>
                   <button
                     onClick={() => handleDelete(template.id, template.template_name)}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
+                    <Trash2 className="w-4 h-4" />Delete
                   </button>
                 </div>
               </div>
@@ -989,10 +945,7 @@ export default function TourManagerContent() {
               <div className="col-span-full bg-white rounded-lg shadow-md border border-gray-200 p-12 text-center">
                 <Map className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm font-medium text-gray-500">No tour templates found</p>
-                <button
-                  onClick={handleAddNew}
-                  className="mt-3 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                >
+                <button onClick={handleAddNew} className="mt-3 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg- green-700">
                   Create Your First Template
                 </button>
               </div>
@@ -1000,7 +953,7 @@ export default function TourManagerContent() {
           </div>
         )}
 
-        {/* Templates Display - Compact View */}
+        {/* Compact View */}
         {viewMode === 'compact' && (
           <div className="bg-white rounded-lg shadow-md border border-gray-200 divide-y divide-gray-100">
             {filteredTemplates.map((template) => (
@@ -1024,22 +977,13 @@ export default function TourManagerContent() {
                   {template.is_featured && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
                 </div>
                 <div className="flex items-center gap-1 ml-4">
-                  <button
-                    onClick={() => handleEdit(template)}
-                    className="p-1 text-gray-400 hover:text-primary-600 transition-colors"
-                  >
+                  <button onClick={() => handleEdit(template)} className="p-1 text-gray-400 hover:text-green-600 transition-colors">
                     <Edit className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => handleDuplicate(template)}
-                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                  >
+                  <button onClick={() => handleDuplicate(template)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
                     <Copy className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => handleDelete(template.id, template.template_name)}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                  >
+                  <button onClick={() => handleDelete(template.id, template.template_name)} className="p-1 text-gray-400 hover:text-red-600 transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -1049,10 +993,7 @@ export default function TourManagerContent() {
               <div className="p-12 text-center">
                 <Map className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm font-medium text-gray-500">No tour templates found</p>
-                <button
-                  onClick={handleAddNew}
-                  className="mt-3 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                >
+                <button onClick={handleAddNew} className="mt-3 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg- green-700">
                   Create Your First Template
                 </button>
               </div>
@@ -1069,19 +1010,15 @@ export default function TourManagerContent() {
               <h2 className="text-lg font-bold text-gray-900">
                 {editingTemplate ? 'Edit Tour Template' : 'Add New Tour Template'}
               </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-              >
+              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <form onSubmit={handleSubmit} className="p-4">
               {/* Basic Information */}
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-bold">1</span>
+                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">1</span>
                   Basic Information
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1093,7 +1030,7 @@ export default function TourManagerContent() {
                       value={formData.template_name}
                       onChange={handleChange}
                       required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                       placeholder="e.g., Memphis, Sakkara & Dahshur Day Trip"
                     />
                   </div>
@@ -1104,7 +1041,7 @@ export default function TourManagerContent() {
                       name="template_code"
                       value={formData.template_code}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm font-mono"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm font-mono"
                       placeholder="Auto-generated if empty"
                     />
                   </div>
@@ -1114,7 +1051,7 @@ export default function TourManagerContent() {
                       name="category_id"
                       value={formData.category_id}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                     >
                       <option value="">Select Category...</option>
                       {categories.map(cat => (
@@ -1128,7 +1065,7 @@ export default function TourManagerContent() {
                       name="tour_type"
                       value={formData.tour_type}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                     >
                       {TOUR_TYPES.map(type => (
                         <option key={type.value} value={type.value}>{type.label}</option>
@@ -1144,7 +1081,7 @@ export default function TourManagerContent() {
                       onChange={handleChange}
                       min="1"
                       required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                     />
                   </div>
                   <div>
@@ -1155,7 +1092,7 @@ export default function TourManagerContent() {
                       value={formData.duration_nights}
                       onChange={handleChange}
                       min="0"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                     />
                   </div>
                   <div>
@@ -1164,7 +1101,7 @@ export default function TourManagerContent() {
                       name="physical_level"
                       value={formData.physical_level}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600  focus:border-transparent shadow-sm"
                     >
                       {PHYSICAL_LEVELS.map(level => (
                         <option key={level.value} value={level.value}>{level.label}</option>
@@ -1187,7 +1124,7 @@ export default function TourManagerContent() {
                         type="checkbox"
                         checked={formData.cities_covered.includes(city)}
                         onChange={() => toggleCity(city)}
-                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-600"
                       />
                       <span className="text-xs text-gray-700">{city}</span>
                     </label>
@@ -1209,7 +1146,7 @@ export default function TourManagerContent() {
                       name="short_description"
                       value={formData.short_description}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                       placeholder="Brief summary for cards and listings"
                     />
                   </div>
@@ -1220,7 +1157,7 @@ export default function TourManagerContent() {
                       value={formData.long_description}
                       onChange={handleChange}
                       rows={4}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                       placeholder="Detailed tour description..."
                     />
                   </div>
@@ -1239,14 +1176,10 @@ export default function TourManagerContent() {
                     value={highlightInput}
                     onChange={(e) => setHighlightInput(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addHighlight())}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                     placeholder="Add a highlight and press Enter"
                   />
-                  <button
-                    type="button"
-                    onClick={addHighlight}
-                    className="px-3 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 text-sm font-medium"
-                  >
+                  <button type="button" onClick={addHighlight} className="px-3 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 text-sm font-medium">
                     Add
                   </button>
                 </div>
@@ -1274,14 +1207,10 @@ export default function TourManagerContent() {
                     value={attractionInput}
                     onChange={(e) => setAttractionInput(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addAttraction())}
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                     placeholder="Add an attraction and press Enter"
                   />
-                  <button
-                    type="button"
-                    onClick={addAttraction}
-                    className="px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm font-medium"
-                  >
+                  <button type="button" onClick={addAttraction} className="px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm font-medium">
                     Add
                   </button>
                 </div>
@@ -1310,7 +1239,7 @@ export default function TourManagerContent() {
                         type="checkbox"
                         checked={formData.best_for.includes(option)}
                         onChange={() => toggleBestFor(option)}
-                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-600"
                       />
                       <span className="text-xs text-gray-700">{option}</span>
                     </label>
@@ -1334,7 +1263,7 @@ export default function TourManagerContent() {
                             type="checkbox"
                             checked={formData.meals_included.includes(meal)}
                             onChange={() => toggleMeal(meal)}
-                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-600"
                           />
                           <span className="text-xs text-gray-700">{meal}</span>
                         </label>
@@ -1350,7 +1279,7 @@ export default function TourManagerContent() {
                           name="pickup_required"
                           checked={formData.pickup_required}
                           onChange={handleCheckboxChange}
-                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-600"
                         />
                         <span className="text-xs text-gray-700">Pickup Required</span>
                       </label>
@@ -1360,7 +1289,7 @@ export default function TourManagerContent() {
                           name="is_featured"
                           checked={formData.is_featured}
                           onChange={handleCheckboxChange}
-                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-600"
                         />
                         <span className="text-xs text-gray-700">Featured Tour ⭐</span>
                       </label>
@@ -1370,7 +1299,7 @@ export default function TourManagerContent() {
                           name="is_active"
                           checked={formData.is_active}
                           onChange={handleCheckboxChange}
-                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-600"
                         />
                         <span className="text-xs text-gray-700">Active</span>
                       </label>
@@ -1382,7 +1311,7 @@ export default function TourManagerContent() {
                       name="transportation_city"
                       value={formData.transportation_city}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                     >
                       {EGYPTIAN_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
@@ -1396,7 +1325,7 @@ export default function TourManagerContent() {
                       name="image_url"
                       value={formData.image_url}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
                       placeholder="https://..."
                     />
                   </div>
@@ -1414,7 +1343,7 @@ export default function TourManagerContent() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg- green-700 font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
                   {editingTemplate ? 'Update Template' : 'Create Template'}
@@ -1425,20 +1354,24 @@ export default function TourManagerContent() {
         </div>
       )}
 
+      {/* SERVICE RATE LINKER MODAL */}
+      {serviceLinkerVariation && (
+        <ServiceRateLinker
+          variationId={serviceLinkerVariation}
+          onClose={() => setServiceLinkerVariation(null)}
+          onSave={() => {
+            fetchTemplates()
+            showToast('success', 'Services saved successfully!')
+          }}
+        />
+      )}
+
       <style jsx>{`
         @keyframes slide-in {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
-        .animate-slide-in {
-          animation: slide-in 0.3s ease-out;
-        }
+        .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
     </div>
   )
