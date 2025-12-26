@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
   Search, Plus, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Building2
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 // ============================================
 // CONSTANTS
@@ -36,8 +37,18 @@ interface Attraction {
   category?: string
   notes?: string
   is_active: boolean
+  supplier_id?: string
+  supplier?: { id: string; name: string }
   created_at?: string
   updated_at?: string
+}
+
+interface Supplier {
+  id: string
+  name: string
+  type: string
+  city?: string
+  status: string
 }
 
 interface Toast {
@@ -172,6 +183,7 @@ export default function AttractionsContent() {
   const dialog = useConfirmDialog()
   
   const [attractions, setAttractions] = useState<Attraction[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCity, setSelectedCity] = useState('all')
@@ -203,7 +215,8 @@ export default function AttractionsContent() {
     rate_valid_to: nextYear,
     category: '',
     notes: '',
-    is_active: true
+    is_active: true,
+    supplier_id: ''
   })
 
   // Toast helper
@@ -216,7 +229,7 @@ export default function AttractionsContent() {
   // Fetch attractions
   const fetchAttractions = async () => {
     try {
-      const response = await fetch('/api/resources/attractions')
+      const response = await fetch('/api/rates/attractions')
       const data = await response.json()
       if (data.success) {
         setAttractions(data.data)
@@ -229,8 +242,27 @@ export default function AttractionsContent() {
     }
   }
 
+  // Fetch suppliers
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch('/api/suppliers')
+      const data = await response.json()
+      if (data.data) {
+        // Filter to attraction-related suppliers or show all
+        const attractionSuppliers = data.data.filter((s: Supplier) => 
+          s.status === 'active' && 
+          ['attraction', 'activity_provider', 'other'].includes(s.type)
+        )
+        setSuppliers(attractionSuppliers.length > 0 ? attractionSuppliers : data.data.filter((s: Supplier) => s.status === 'active'))
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error)
+    }
+  }
+
   useEffect(() => {
     fetchAttractions()
+    fetchSuppliers()
     
     const editId = searchParams.get('edit')
     if (editId) {
@@ -288,7 +320,8 @@ export default function AttractionsContent() {
       rate_valid_to: nextYear,
       category: '',
       notes: '',
-      is_active: true
+      is_active: true,
+      supplier_id: ''
     })
     setShowModal(true)
   }
@@ -311,7 +344,8 @@ export default function AttractionsContent() {
       rate_valid_to: attraction.rate_valid_to,
       category: attraction.category || '',
       notes: attraction.notes || '',
-      is_active: attraction.is_active
+      is_active: attraction.is_active,
+      supplier_id: attraction.supplier_id || ''
     })
     setShowModal(true)
   }
@@ -322,15 +356,21 @@ export default function AttractionsContent() {
     
     try {
       const url = editingAttraction 
-        ? `/api/resources/attractions/${editingAttraction.id}`
-        : '/api/resources/attractions'
+        ? `/api/rates/attractions/${editingAttraction.id}`
+        : '/api/rates/attractions'
       
       const method = editingAttraction ? 'PUT' : 'POST'
+      
+      // Clean up empty supplier_id
+      const submitData = {
+        ...formData,
+        supplier_id: formData.supplier_id || null
+      }
       
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submitData)
       })
       
       const data = await response.json()
@@ -357,7 +397,7 @@ export default function AttractionsContent() {
     if (!confirmed) return
     
     try {
-      const response = await fetch(`/api/resources/attractions/${id}`, {
+      const response = await fetch(`/api/rates/attractions/${id}`, {
         method: 'DELETE'
       })
       
@@ -373,6 +413,13 @@ export default function AttractionsContent() {
       console.error('Error deleting attraction:', error)
       await dialog.alert('Error', 'Failed to delete attraction. Please try again.', 'warning')
     }
+  }
+
+  // Get supplier name by ID
+  const getSupplierName = (supplierId?: string) => {
+    if (!supplierId) return null
+    const supplier = suppliers.find(s => s.id === supplierId)
+    return supplier?.name || null
   }
 
   // Filter attractions
@@ -598,12 +645,11 @@ export default function AttractionsContent() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Attraction</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Supplier</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Category</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Egyptian</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Child %</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
                 </tr>
@@ -616,6 +662,16 @@ export default function AttractionsContent() {
                         <p className="text-sm font-medium text-gray-900">{attraction.attraction_name}</p>
                         <p className="text-xs text-gray-500 font-mono">{attraction.service_code}</p>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {attraction.supplier_id ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                          <Building2 className="w-3 h-3" />
+                          {getSupplierName(attraction.supplier_id) || attraction.supplier?.name || 'Unknown'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {attraction.category && (
@@ -637,16 +693,6 @@ export default function AttractionsContent() {
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-semibold text-primary-600">
                       {attraction.fee_type === 'free' ? 'FREE' : `€${(attraction.non_eur_rate || 0).toFixed(2)}`}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">
-                      {attraction.egyptian_rate ? `€${attraction.egyptian_rate.toFixed(2)}` : '-'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="text-xs text-gray-600">
-                        {attraction.child_discount_percent ? `${attraction.child_discount_percent}%` : '-'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -678,7 +724,7 @@ export default function AttractionsContent() {
                 ))}
                 {paginatedAttractions.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-3xl text-gray-400">🎫</span>
                         <p className="text-sm font-medium">No attractions found</p>
@@ -762,19 +808,46 @@ export default function AttractionsContent() {
                     />
                   </div>
 
+                  {/* SUPPLIER FIELD - NEW */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5" />
+                        Supplier
+                      </span>
+                    </label>
+                    <select
+                      name="supplier_id"
+                      value={formData.supplier_id}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                    >
+                      <option value="">No supplier linked</option>
+                      {suppliers.map(supplier => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.name} {supplier.city && `(${supplier.city})`}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Link this attraction to a supplier for tracking</p>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       City *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="e.g., Giza"
-                    />
+                    >
+                      <option value="">Select city...</option>
+                      {EGYPT_CITIES.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
