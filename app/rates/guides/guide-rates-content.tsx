@@ -22,7 +22,11 @@ import {
   ChevronRight,
   LayoutGrid,
   List,
-  Table2
+  Table2,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Info
 } from 'lucide-react'
 
 // Egyptian cities
@@ -110,12 +114,20 @@ export default function GuideRatesContent() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
 
-  // Toast
-  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null)
+  // Delete Confirmation Modal
+  const [deleteModal, setDeleteModal] = useState<{ show: boolean; id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
-    setToast({ type, message })
-    setTimeout(() => setToast(null), 4000)
+  // Toast/Notification
+  const [notification, setNotification] = useState<{ 
+    type: 'success' | 'error' | 'info' | 'warning'
+    title: string
+    message: string 
+  } | null>(null)
+
+  const showNotification = (type: 'success' | 'error' | 'info' | 'warning', title: string, message: string) => {
+    setNotification({ type, title, message })
+    setTimeout(() => setNotification(null), 5000)
   }
 
   // Date helpers
@@ -268,42 +280,52 @@ export default function GuideRatesContent() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        showToast('error', data.error || 'Failed to save')
+        showNotification('error', 'Error', data.error || 'Failed to save rate')
         return
       }
 
       if (data.data) {
-        showToast('success', editingRate ? 'Rate updated!' : 'Rate created!')
+        showNotification('success', 'Success', editingRate ? 'Guide rate updated successfully!' : 'Guide rate created successfully!')
         setShowModal(false)
         fetchRates()
       } else {
-        showToast('error', 'No data returned')
+        showNotification('error', 'Error', 'No data returned')
       }
     } catch (error) {
       console.error('Error saving rate:', error)
-      showToast('error', 'Failed to save rate')
+      showNotification('error', 'Error', 'Failed to save rate. Please try again.')
     }
   }
 
-  const handleDelete = async (id: string, language: string) => {
-    if (!confirm(`Delete rate for ${language}?`)) return
+  // Open delete confirmation modal
+  const confirmDelete = (id: string, language: string) => {
+    setDeleteModal({ show: true, id, name: language })
+  }
 
+  // Actually perform delete
+  const handleDelete = async () => {
+    if (!deleteModal) return
+
+    setIsDeleting(true)
     try {
-      const response = await fetch(`/api/rates/guides/${id}`, {
+      const response = await fetch(`/api/rates/guides/${deleteModal.id}`, {
         method: 'DELETE'
       })
 
       const data = await response.json()
 
       if (data.success) {
-        showToast('success', 'Rate deleted!')
+        showNotification('success', 'Deleted', `"${deleteModal.name}" rate has been deleted successfully.`)
         fetchRates()
       } else {
-        showToast('error', data.error || 'Failed to delete')
+        showNotification('error', 'Cannot Delete', data.error || 'Failed to delete rate')
       }
     } catch (error) {
       console.error('Error deleting rate:', error)
-      showToast('error', 'Failed to delete')
+      showNotification('error', 'Error', 'Failed to delete rate. Please try again.')
+    } finally {
+      setIsDeleting(false)
+      setDeleteModal(null)
     }
   }
 
@@ -343,6 +365,16 @@ export default function GuideRatesContent() {
     return guide?.name || null
   }
 
+  // Get notification icon
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success': return <CheckCircle className="w-6 h-6 text-green-500" />
+      case 'error': return <XCircle className="w-6 h-6 text-red-500" />
+      case 'warning': return <AlertTriangle className="w-6 h-6 text-amber-500" />
+      default: return <Info className="w-6 h-6 text-blue-500" />
+    }
+  }
+
   // Prevent hydration mismatch
   if (!mounted) {
     return null
@@ -361,16 +393,83 @@ export default function GuideRatesContent() {
 
   return (
     <div className="p-4 lg:p-6 space-y-4 bg-gray-50 min-h-screen">
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border ${
-          toast.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
-          toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
-          'bg-blue-50 border-blue-200 text-blue-800'
-        }`}>
-          <div className="flex items-center gap-2">
-            {toast.type === 'success' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
-            <span className="text-sm font-medium">{toast.message}</span>
+      
+      {/* Centered Notification Modal */}
+      {notification && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 transform transition-all animate-in fade-in zoom-in duration-200`}>
+            <div className="flex flex-col items-center text-center">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${
+                notification.type === 'success' ? 'bg-green-100' :
+                notification.type === 'error' ? 'bg-red-100' :
+                notification.type === 'warning' ? 'bg-amber-100' :
+                'bg-blue-100'
+              }`}>
+                {getNotificationIcon(notification.type)}
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">{notification.title}</h3>
+              <p className="text-sm text-gray-600 mb-4">{notification.message}</p>
+              <button
+                onClick={() => setNotification(null)}
+                className={`px-6 py-2 rounded-lg text-sm font-medium text-white transition-colors ${
+                  notification.type === 'success' ? 'bg-green-600 hover:bg-green-700' :
+                  notification.type === 'error' ? 'bg-red-600 hover:bg-red-700' :
+                  notification.type === 'warning' ? 'bg-amber-600 hover:bg-amber-700' :
+                  'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal?.show && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 transform transition-all">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <Trash2 className="w-7 h-7 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Guide Rate?</h3>
+              <p className="text-sm text-gray-600 mb-1">
+                Are you sure you want to delete the rate for
+              </p>
+              <p className="text-sm font-semibold text-gray-900 mb-4">
+                "{deleteModal.name}"
+              </p>
+              <p className="text-xs text-gray-500 mb-6">
+                This action cannot be undone. The rate will be permanently removed.
+              </p>
+              <div className="flex items-center gap-3 w-full">
+                <button
+                  onClick={() => setDeleteModal(null)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -665,7 +764,7 @@ export default function GuideRatesContent() {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(rate.id, rate.guide_language)}
+                          onClick={() => confirmDelete(rate.id, rate.guide_language)}
                           className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -719,7 +818,7 @@ export default function GuideRatesContent() {
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(rate.id, rate.guide_language)}
+                      onClick={() => confirmDelete(rate.id, rate.guide_language)}
                       className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -752,7 +851,7 @@ export default function GuideRatesContent() {
                     <button onClick={() => handleEdit(rate)} className="p-1 text-gray-400 hover:text-primary-600">
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleDelete(rate.id, rate.guide_language)} className="p-1 text-gray-400 hover:text-red-600">
+                    <button onClick={() => confirmDelete(rate.id, rate.guide_language)} className="p-1 text-gray-400 hover:text-red-600">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -762,33 +861,84 @@ export default function GuideRatesContent() {
           </div>
         )}
 
-        {/* Pagination */}
+        {/* Enhanced Pagination */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-            <p className="text-xs text-gray-600">
-              Page {currentPage} of {totalPages}
+          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between bg-gray-50">
+            <p className="text-sm text-gray-600">
+              Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
+              <span className="text-gray-400 ml-2">({filteredRates.length} total)</span>
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              {/* First Page */}
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                First
+              </button>
+              
+              {/* Previous */}
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i
+                  } else {
+                    pageNum = currentPage - 2 + i
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-8 h-8 text-sm rounded border ${
+                        currentPage === pageNum
+                          ? 'bg-primary-600 text-white border-primary-600'
+                          : 'border-gray-300 hover:bg-gray-100'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Next */}
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="p-1.5 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
                 <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {/* Last Page */}
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                Last
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Modal */}
+      {/* Form Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">

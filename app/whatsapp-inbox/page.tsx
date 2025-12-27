@@ -5,9 +5,23 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   MessageSquare, Send, Search, Phone, User, Clock,
-  MoreVertical, Archive, Sparkles, RefreshCw, Plus,
-  CheckCheck, Check, AlertCircle, ArrowLeft, X
+  Sparkles, RefreshCw, Plus, CheckCheck, Check, 
+  AlertCircle, X, Languages, ChevronDown, Loader2
 } from 'lucide-react'
+
+// Supported languages
+const QUICK_LANGUAGES = [
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+  { code: 'fr', name: 'French', flag: '🇫🇷' },
+  { code: 'de', name: 'German', flag: '🇩🇪' },
+  { code: 'it', name: 'Italian', flag: '🇮🇹' },
+  { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
+  { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+  { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+  { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+  { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+]
 
 interface Conversation {
   id: string
@@ -51,8 +65,68 @@ export default function WhatsAppInboxPage() {
   const [showNewChat, setShowNewChat] = useState(false)
   const [newPhoneNumber, setNewPhoneNumber] = useState('')
 
+  // Translation state
+  const [translationEnabled, setTranslationEnabled] = useState(false)
+  const [translatedMessage, setTranslatedMessage] = useState('')
+  const [isTranslating, setIsTranslating] = useState(false)
+  const [customerLanguage, setCustomerLanguage] = useState('es')
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false)
+
+  // Get language info
+  const getLanguageInfo = (code: string) => {
+    return QUICK_LANGUAGES.find(l => l.code === code) || { code, name: code, flag: '🌐' }
+  }
+
+  // Simple translation function - calls API and returns result or null
+  const translateText = async (text: string, targetLang: string): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          targetLanguage: targetLang,
+          action: 'fromEnglish'
+        })
+      })
+
+      const data = await res.json()
+      
+      if (data.success && data.data?.translatedText) {
+        return data.data.translatedText
+      }
+      return null
+    } catch (error) {
+      console.error('Translation error:', error)
+      return null
+    }
+  }
+
+  // Handle translation when message or language changes
+  useEffect(() => {
+    // Skip if translation disabled or no message
+    if (!translationEnabled || !newMessage.trim()) {
+      setTranslatedMessage('')
+      setIsTranslating(false)
+      return
+    }
+
+    // Debounce translation
+    setIsTranslating(true)
+    const timer = setTimeout(async () => {
+      const result = await translateText(newMessage.trim(), customerLanguage)
+      setTranslatedMessage(result || '')
+      setIsTranslating(false)
+    }, 500)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [newMessage, customerLanguage, translationEnabled])
+
   // Fetch conversations
-  const fetchConversations = useCallback(async () => {
+  const fetchConversations = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/conversations?search=${searchQuery}`)
       if (res.ok) {
@@ -62,13 +136,13 @@ export default function WhatsAppInboxPage() {
     } catch (error) {
       console.error('Error fetching conversations:', error)
     } finally {
-      setLoading(false)
+      if (showLoader) setLoading(false)
     }
   }, [searchQuery])
 
-  // Fetch messages for selected conversation
-  const fetchMessages = useCallback(async (conversationId: string) => {
-    setMessagesLoading(true)
+  // Fetch messages
+  const fetchMessages = useCallback(async (conversationId: string, showLoader = true) => {
+    if (showLoader) setMessagesLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/messages?conversation_id=${conversationId}`)
       if (res.ok) {
@@ -78,11 +152,11 @@ export default function WhatsAppInboxPage() {
     } catch (error) {
       console.error('Error fetching messages:', error)
     } finally {
-      setMessagesLoading(false)
+      if (showLoader) setMessagesLoading(false)
     }
   }, [])
 
-  // Mark conversation as read
+  // Mark as read
   const markAsRead = async (conversationId: string) => {
     try {
       await fetch('/api/whatsapp/conversations', {
@@ -101,16 +175,30 @@ export default function WhatsAppInboxPage() {
   // Send message
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newMessage.trim() || !selectedConversation) return
+    if (!newMessage.trim() || !selectedConversation || sending) return
 
     setSending(true)
+    
     try {
+      // Use translated message if available, otherwise original
+      let messageToSend = newMessage.trim()
+      
+      if (translationEnabled && translatedMessage) {
+        messageToSend = translatedMessage
+      } else if (translationEnabled && !translatedMessage) {
+        // Try quick translation if none available
+        const quickResult = await translateText(newMessage.trim(), customerLanguage)
+        if (quickResult) {
+          messageToSend = quickResult
+        }
+      }
+
       const res = await fetch('/api/whatsapp/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: selectedConversation.id,
-          message: newMessage.trim()
+          message: messageToSend
         })
       })
 
@@ -118,20 +206,16 @@ export default function WhatsAppInboxPage() {
         const data = await res.json()
         setMessages(prev => [...prev, data.message])
         setNewMessage('')
+        setTranslatedMessage('')
         
-        // Update conversation list
         setConversations(prev => prev.map(c => 
           c.id === selectedConversation.id 
-            ? { ...c, last_message: newMessage.trim(), last_message_at: new Date().toISOString() }
+            ? { ...c, last_message: messageToSend, last_message_at: new Date().toISOString() }
             : c
         ))
-      } else {
-        const error = await res.json()
-        alert(error.error || 'Failed to send message')
       }
     } catch (error) {
       console.error('Error sending message:', error)
-      alert('Failed to send message')
     } finally {
       setSending(false)
     }
@@ -152,26 +236,24 @@ export default function WhatsAppInboxPage() {
         const data = await res.json()
         setShowNewChat(false)
         setNewPhoneNumber('')
-        fetchConversations()
+        fetchConversations(false)
         setSelectedConversation(data.conversation)
-        fetchMessages(data.conversation.id)
+        fetchMessages(data.conversation.id, true)
       }
     } catch (error) {
       console.error('Error starting conversation:', error)
     }
   }
 
-  // Parse conversation - send to WhatsApp parser
+  // Parse conversation
   const parseConversation = () => {
     if (!selectedConversation || messages.length === 0) return
 
-    // Build conversation text
     const conversationText = messages.map(m => {
       const sender = m.direction === 'inbound' ? 'Client' : 'Agent'
       return `${sender}: ${m.message_body}`
     }).join('\n')
 
-    // Encode and navigate to parser
     const encoded = encodeURIComponent(conversationText)
     const clientId = selectedConversation.client_id || ''
     router.push(`/whatsapp-parser?conversation=${encoded}&clientId=${clientId}&phone=${selectedConversation.phone_number}`)
@@ -180,33 +262,43 @@ export default function WhatsAppInboxPage() {
   // Select conversation
   const selectConversation = (conv: Conversation) => {
     setSelectedConversation(conv)
-    fetchMessages(conv.id)
+    fetchMessages(conv.id, true)
     if (conv.unread_count > 0) {
       markAsRead(conv.id)
     }
+    setNewMessage('')
+    setTranslatedMessage('')
   }
 
-  // Auto-scroll to bottom
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
   // Initial load
   useEffect(() => {
-    fetchConversations()
-  }, [fetchConversations])
+    fetchConversations(true)
+  }, [])
 
-  // Polling for new messages
+  // Search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchConversations(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Polling (silent)
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchConversations()
+      fetchConversations(false)
       if (selectedConversation) {
-        fetchMessages(selectedConversation.id)
+        fetchMessages(selectedConversation.id, false)
       }
-    }, 10000) // Every 10 seconds
+    }, 15000) // 15 seconds
 
     return () => clearInterval(interval)
-  }, [selectedConversation, fetchConversations, fetchMessages])
+  }, [selectedConversation?.id])
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString)
@@ -237,13 +329,12 @@ export default function WhatsAppInboxPage() {
     <div className="flex h-[calc(100vh-64px)] bg-gray-100">
       {/* Conversations List */}
       <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
-        {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-semibold text-gray-900">WhatsApp Inbox</h1>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => fetchConversations()}
+                onClick={() => fetchConversations(false)}
                 className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -269,7 +360,6 @@ export default function WhatsAppInboxPage() {
           </div>
         </div>
 
-        {/* Conversations */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center h-32">
@@ -408,6 +498,92 @@ export default function WhatsAppInboxPage() {
               )}
             </div>
 
+            {/* Translation Controls */}
+            <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setTranslationEnabled(!translationEnabled)
+                      setTranslatedMessage('')
+                    }}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      translationEnabled 
+                        ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Languages className="w-4 h-4" />
+                    {translationEnabled ? 'Translation ON' : 'Translate'}
+                  </button>
+
+                  {translationEnabled && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowLanguageSelector(!showLanguageSelector)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                      >
+                        <span>{getLanguageInfo(customerLanguage).flag}</span>
+                        <span>{getLanguageInfo(customerLanguage).name}</span>
+                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                      </button>
+
+                      {showLanguageSelector && (
+                        <div className="absolute bottom-full left-0 mb-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+                          {QUICK_LANGUAGES.filter(l => l.code !== 'en').map(lang => (
+                            <button
+                              key={lang.code}
+                              onClick={() => {
+                                setCustomerLanguage(lang.code)
+                                setShowLanguageSelector(false)
+                                setTranslatedMessage('')
+                              }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 ${
+                                customerLanguage === lang.code ? 'bg-blue-50 text-blue-700' : ''
+                              }`}
+                            >
+                              <span>{lang.flag}</span>
+                              <span>{lang.name}</span>
+                              {customerLanguage === lang.code && <Check className="w-4 h-4 ml-auto" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Status indicator */}
+                {translationEnabled && newMessage && (
+                  <div className="text-xs">
+                    {isTranslating ? (
+                      <span className="flex items-center gap-1 text-blue-600">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Translating...
+                      </span>
+                    ) : translatedMessage ? (
+                      <span className="flex items-center gap-1 text-green-600">
+                        <Check className="w-3.5 h-3.5" />
+                        Ready in {getLanguageInfo(customerLanguage).name}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">Type to translate</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Translation Preview */}
+              {translationEnabled && translatedMessage && !isTranslating && (
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs text-blue-600 font-medium mb-1">
+                    {getLanguageInfo(customerLanguage).flag} Will send:
+                  </p>
+                  <p className="text-sm text-gray-700">{translatedMessage}</p>
+                </div>
+              )}
+            </div>
+
             {/* Message Input */}
             <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
               <div className="flex items-center gap-3">
@@ -415,12 +591,15 @@ export default function WhatsAppInboxPage() {
                   type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type a message..."
+                  placeholder={translationEnabled 
+                    ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}` 
+                    : "Type a message..."
+                  }
                   className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-[#25D366]"
                 />
                 <button
                   type="submit"
-                  disabled={!newMessage.trim() || sending}
+                  disabled={!newMessage.trim() || sending || (translationEnabled && isTranslating)}
                   className="p-2.5 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sending ? (
@@ -440,6 +619,10 @@ export default function WhatsAppInboxPage() {
               </div>
               <h2 className="text-lg font-medium text-gray-900 mb-1">WhatsApp Business</h2>
               <p className="text-sm text-gray-500">Select a conversation to start messaging</p>
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
+                <Languages className="w-4 h-4" />
+                <span>Auto-translation powered by OpenAI</span>
+              </div>
             </div>
           </div>
         )}

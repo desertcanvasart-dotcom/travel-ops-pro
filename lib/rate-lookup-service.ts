@@ -2,7 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 // ============================================
 // ENHANCED RATE LOOKUP SERVICE
-// With Tier System & Preferred Supplier Support
+// With Tier System, Preferred Supplier Support,
+// and B2B/B2C Pricing Rules
 // ============================================
 
 // ============================================
@@ -10,6 +11,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 // ============================================
 
 export type ServiceTier = 'budget' | 'standard' | 'deluxe' | 'luxury'
+export type PricingMode = 'b2b' | 'b2c'
 
 const VALID_TIERS: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
 
@@ -34,8 +36,13 @@ export interface RateLookupParams {
   language: string
   is_euro_passport: boolean
   
-  // NEW: Service Tier
+  // Service Tier
   tier?: ServiceTier
+  
+  // NEW: Pricing Mode & Rules
+  mode?: PricingMode           // 'b2b' or 'b2c' - defaults to 'b2c'
+  checkPricingRules?: boolean  // Whether to apply pricing rules - defaults to false
+  marginPercent?: number       // For B2C retail markup - defaults to 25
   
   // Transportation
   city?: string
@@ -103,7 +110,6 @@ export interface VehicleRate {
   rate_per_day: number
   capacity_min: number
   capacity_max: number
-  // NEW: Tier fields
   tier: string | null
   is_preferred: boolean
 }
@@ -114,7 +120,6 @@ export interface GuideRate {
   languages: string[]
   daily_rate_eur: number
   city?: string
-  // NEW: Tier fields
   tier: string | null
   is_preferred: boolean
 }
@@ -135,7 +140,6 @@ export interface RestaurantRate {
   city: string
   lunch_rate_eur: number
   dinner_rate_eur: number
-  // NEW: Tier fields
   tier: string | null
   is_preferred: boolean
 }
@@ -148,7 +152,6 @@ export interface HotelRate {
   rate_double_eur: number
   rate_triple_eur: number
   star_rating?: number
-  // NEW: Tier fields
   tier: string | null
   is_preferred: boolean
 }
@@ -161,7 +164,6 @@ export interface AirportStaffRate {
   service_type: string
   direction: string
   rate_eur: number
-  // NEW: Tier fields
   tier: string | null
   is_preferred: boolean
 }
@@ -172,7 +174,6 @@ export interface HotelStaffRate {
   service_type: string
   hotel_category: string
   rate_eur: number
-  // NEW: Tier fields
   tier: string | null
   is_preferred: boolean
 }
@@ -190,7 +191,6 @@ export interface CruiseRate {
   rate_single_eur: number
   rate_double_eur: number
   rate_triple_eur: number | null
-  // NEW: Tier fields
   tier: string | null
   is_preferred: boolean
 }
@@ -317,6 +317,18 @@ export interface PricingBreakdown {
   }
 }
 
+// NEW: Pricing Rule Applied
+export interface PricingRuleApplied {
+  rule_id: string
+  rule_name: string
+  service_name: string
+  pricing_model: string
+  original_cost: number
+  adjusted_cost: number
+  savings: number
+  note: string
+}
+
 export interface PricingCalculation {
   success: boolean
   total_cost: number
@@ -325,6 +337,12 @@ export interface PricingCalculation {
   preferred_suppliers_count: number
   breakdown: PricingBreakdown
   rates_used: RatesUsed
+  // NEW: Pricing rules info
+  mode?: PricingMode
+  rules_applied?: PricingRuleApplied[]
+  supplier_cost?: number      // Cost before margin
+  margin_percent?: number
+  margin_amount?: number
   error?: string
 }
 
@@ -360,6 +378,174 @@ function normalizeTier(value: string | null | undefined): ServiceTier {
     'vip': 'luxury'
   }
   return tierMap[normalized] || 'standard'
+}
+
+// ============================================
+// NEW: PRICING RULES LOOKUP & APPLICATION
+// ============================================
+
+interface PricingRule {
+  id: string
+  service_name: string
+  service_category: string
+  pricing_model: 'per_unit' | 'tiered' | 'per_person'
+  unit_type: string | null
+  tier1_min_pax: number
+  tier1_max_pax: number | null
+  tier1_rate_eur: number
+  tier1_label: string | null
+  tier2_min_pax: number | null
+  tier2_max_pax: number | null
+  tier2_rate_eur: number | null
+  tier2_label: string | null
+  tier3_min_pax: number | null
+  tier3_max_pax: number | null
+  tier3_rate_eur: number | null
+  tier3_label: string | null
+  tier4_min_pax: number | null
+  tier4_max_pax: number | null
+  tier4_rate_eur: number | null
+  tier4_label: string | null
+  applies_to: 'b2b_only' | 'b2c_only' | 'both'
+  is_active: boolean
+}
+
+/**
+ * Look up applicable pricing rules based on mode (B2B/B2C)
+ */
+export async function getPricingRules(
+  supabase: SupabaseClient,
+  mode: PricingMode = 'b2c'
+): Promise<PricingRule[]> {
+  try {
+    const applicableTo = mode === 'b2b' 
+      ? ['b2b_only', 'both'] 
+      : ['b2c_only', 'both']
+
+    const { data, error } = await supabase
+      .from('b2b_pricing_rules')
+      .select('*')
+      .eq('is_active', true)
+      .in('applies_to', applicableTo)
+
+    if (error) {
+      console.error('Error fetching pricing rules:', error)
+      return []
+    }
+
+    return data || []
+  } catch (err) {
+    console.error('Error in getPricingRules:', err)
+    return []
+  }
+}
+
+/**
+ * Find matching pricing rule for a service
+ */
+function findMatchingRule(
+  serviceName: string,
+  rules: PricingRule[]
+): PricingRule | null {
+  if (!serviceName || rules.length === 0) return null
+  
+  const serviceNameLower = serviceName.toLowerCase()
+  
+  // Try exact match first
+  let match = rules.find(r => 
+    r.service_name.toLowerCase() === serviceNameLower
+  )
+  
+  // Try partial match (first word)
+  if (!match) {
+    const firstWord = serviceNameLower.split(' ')[0]
+    match = rules.find(r => 
+      r.service_name.toLowerCase().includes(firstWord) ||
+      firstWord.includes(r.service_name.toLowerCase().split(' ')[0])
+    )
+  }
+  
+  return match || null
+}
+
+/**
+ * Apply pricing rule to calculate adjusted cost
+ */
+function applyPricingRule(
+  rule: PricingRule,
+  numPax: number,
+  originalCost: number
+): { adjustedCost: number; note: string } {
+  const model = rule.pricing_model
+
+  switch (model) {
+    case 'per_unit': {
+      // Per boat, per vehicle - select tier based on group size
+      let rate: number
+      let label: string
+
+      if (numPax <= (rule.tier1_max_pax || 999)) {
+        rate = rule.tier1_rate_eur
+        label = rule.tier1_label || 'Small'
+      } else if (rule.tier2_max_pax && numPax <= rule.tier2_max_pax) {
+        rate = rule.tier2_rate_eur || rule.tier1_rate_eur
+        label = rule.tier2_label || 'Large'
+      } else {
+        // Need multiple units
+        const largeCapacity = rule.tier2_max_pax || rule.tier1_max_pax || 8
+        const largeRate = rule.tier2_rate_eur || rule.tier1_rate_eur
+        const unitsNeeded = Math.ceil(numPax / largeCapacity)
+        const totalCost = largeRate * unitsNeeded
+
+        return {
+          adjustedCost: totalCost,
+          note: `${unitsNeeded}x ${rule.tier2_label || rule.unit_type || 'unit'} @ €${largeRate}`
+        }
+      }
+
+      return {
+        adjustedCost: rate,
+        note: `${label}: €${rate} flat (${rule.unit_type || 'per unit'})`
+      }
+    }
+
+    case 'tiered': {
+      // Volume discounts - per person rate based on group size
+      let rate: number
+      let label: string
+
+      if (numPax <= (rule.tier1_max_pax || 2)) {
+        rate = rule.tier1_rate_eur
+        label = rule.tier1_label || `1-${rule.tier1_max_pax}`
+      } else if (numPax <= (rule.tier2_max_pax || 10)) {
+        rate = rule.tier2_rate_eur || rule.tier1_rate_eur
+        label = rule.tier2_label || `${(rule.tier1_max_pax || 2) + 1}-${rule.tier2_max_pax}`
+      } else if (numPax <= (rule.tier3_max_pax || 20)) {
+        rate = rule.tier3_rate_eur || rule.tier2_rate_eur || rule.tier1_rate_eur
+        label = rule.tier3_label || `${(rule.tier2_max_pax || 10) + 1}-${rule.tier3_max_pax}`
+      } else {
+        rate = rule.tier4_rate_eur || rule.tier3_rate_eur || rule.tier2_rate_eur || rule.tier1_rate_eur
+        label = rule.tier4_label || `${(rule.tier3_max_pax || 20) + 1}+`
+      }
+
+      const totalCost = rate * numPax
+      return {
+        adjustedCost: totalCost,
+        note: `${label}: €${rate}/pax × ${numPax} = €${totalCost}`
+      }
+    }
+
+    case 'per_person':
+    default: {
+      // Simple per person pricing
+      const rate = rule.tier1_rate_eur
+      const totalCost = rate * numPax
+      return {
+        adjustedCost: totalCost,
+        note: `€${rate}/person × ${numPax}`
+      }
+    }
+  }
 }
 
 // ============================================
@@ -406,7 +592,7 @@ export async function lookupRates(
       .select('*')
       .eq('is_active', true)
       .eq('tier', tier)
-      .order('is_preferred', { ascending: false }) // Preferred first!
+      .order('is_preferred', { ascending: false })
       .order('capacity_min', { ascending: true })
 
     // Fallback: If no vehicles match tier, get any active vehicles
@@ -468,17 +654,15 @@ export async function lookupRates(
     // ============================================
     console.log(`🎯 Looking up guides: language=${params.language}, tier=${tier}`)
     
-    // First try: Get guides matching tier and language, ordered by preferred
     let { data: guides } = await supabase
       .from('guides')
       .select('*')
       .eq('is_active', true)
       .eq('tier', tier)
       .contains('languages', [params.language])
-      .order('is_preferred', { ascending: false }) // Preferred first!
+      .order('is_preferred', { ascending: false })
       .limit(5)
 
-    // Fallback: If no guides match tier, get any active guides with the language
     if (!guides || guides.length === 0) {
       console.log(`⚠️ No guides found for tier ${tier} with ${params.language}, trying without tier filter`)
       const { data: fallbackGuides } = await supabase
@@ -492,10 +676,9 @@ export async function lookupRates(
     }
 
     if (guides && guides.length > 0) {
-      const selectedGuide = guides[0] // First one is preferred due to ordering
+      const selectedGuide = guides[0]
       console.log(`✅ Selected guide: ${selectedGuide.name} (tier: ${selectedGuide.tier}, preferred: ${selectedGuide.is_preferred})`)
       
-      // Get rate from guide_rates table
       const { data: guideRates } = await supabase
         .from('guide_rates')
         .select('*')
@@ -517,7 +700,6 @@ export async function lookupRates(
         is_preferred: selectedGuide.is_preferred || false
       }
     } else {
-      // Ultimate fallback: Use guide_rates table directly
       const { data: guideRates } = await supabase
         .from('guide_rates')
         .select('*')
@@ -591,7 +773,6 @@ export async function lookupRates(
     if (params.include_lunch || params.include_dinner) {
       console.log(`🍽️ Looking up restaurants: city=${params.city}, tier=${tier}`)
       
-      // First try: Get restaurants matching tier, ordered by preferred
       let { data: restaurants } = await supabase
         .from('restaurant_contacts')
         .select('*')
@@ -601,7 +782,6 @@ export async function lookupRates(
         .order('is_preferred', { ascending: false })
         .limit(5)
 
-      // Fallback: If no restaurants match tier
       if (!restaurants || restaurants.length === 0) {
         const { data: fallbackRestaurants } = await supabase
           .from('restaurant_contacts')
@@ -617,7 +797,6 @@ export async function lookupRates(
         const restaurant = restaurants[0]
         console.log(`✅ Selected restaurant: ${restaurant.name} (tier: ${restaurant.tier}, preferred: ${restaurant.is_preferred})`)
         
-        // Apply tier multiplier to base meal rates
         const tierMultiplier = TIER_MULTIPLIERS[tier]
         
         result.restaurant = {
@@ -630,7 +809,6 @@ export async function lookupRates(
           is_preferred: restaurant.is_preferred || false
         }
       } else {
-        // Fallback to meal_rates table
         const { data: mealRates } = await supabase
           .from('meal_rates')
           .select('*')
@@ -659,18 +837,16 @@ export async function lookupRates(
     if (params.include_accommodation) {
       console.log(`🏨 Looking up hotels: city=${params.city}, tier=${tier}`)
       
-      // First try: Get hotels matching tier, ordered by preferred
       let { data: hotels } = await supabase
         .from('hotel_contacts')
         .select('*')
         .eq('is_active', true)
         .eq('tier', tier)
         .ilike('city', params.city || 'Cairo')
-        .order('is_preferred', { ascending: false }) // Preferred first!
+        .order('is_preferred', { ascending: false })
         .order('star_rating', { ascending: false })
         .limit(5)
 
-      // Fallback: If no hotels match tier
       if (!hotels || hotels.length === 0) {
         console.log(`⚠️ No hotels found for tier ${tier}, falling back`)
         const { data: fallbackHotels } = await supabase
@@ -700,7 +876,6 @@ export async function lookupRates(
           is_preferred: hotel.is_preferred || false
         }
       } else {
-        // Use default rates based on tier
         const defaultRates: Record<ServiceTier, number> = {
           'budget': 45,
           'standard': 80,
@@ -745,7 +920,6 @@ export async function lookupRates(
         airportStaff = fallbackStaff
       }
 
-      // Get rate from airport_staff_rates
       const { data: staffRates } = await supabase
         .from('airport_staff_rates')
         .select('*')
@@ -795,7 +969,6 @@ export async function lookupRates(
         hotelStaff = fallbackStaff
       }
 
-      // Get rate from hotel_staff_rates
       const { data: staffRates } = await supabase
         .from('hotel_staff_rates')
         .select('*')
@@ -824,7 +997,6 @@ export async function lookupRates(
     if (params.include_cruise && params.cruise_embark_city && params.cruise_disembark_city) {
       console.log(`🚢 Looking up cruises: ${params.cruise_embark_city} → ${params.cruise_disembark_city}, tier=${tier}`)
       
-      // First try: Get cruises matching tier, ordered by preferred
       let { data: cruises } = await supabase
         .from('cruise_contacts')
         .select('*')
@@ -843,7 +1015,6 @@ export async function lookupRates(
         cruises = fallbackCruises
       }
 
-      // Get rate from nile_cruises table
       let cruiseQuery = supabase
         .from('nile_cruises')
         .select('*')
@@ -964,7 +1135,6 @@ export async function lookupRates(
 
     result.success = true
     
-    // Log summary of preferred suppliers found
     const preferredCount = [
       result.vehicle?.is_preferred,
       result.guide?.is_preferred,
@@ -996,9 +1166,18 @@ export async function calculatePricingFromRates(
   
   const { pax, num_adults, num_children, duration_days } = params
   const tier = normalizeTier(params.tier)
+  const mode = params.mode || 'b2c'
+  const marginPercent = params.marginPercent ?? 25
 
   // Get rates from database
   const rates = await lookupRates(supabase, params)
+
+  // Get pricing rules if enabled
+  let pricingRules: PricingRule[] = []
+  if (params.checkPricingRules) {
+    pricingRules = await getPricingRules(supabase, mode)
+    console.log(`📋 Loaded ${pricingRules.length} pricing rules for ${mode.toUpperCase()} mode`)
+  }
 
   const result: PricingCalculation = {
     success: false,
@@ -1020,10 +1199,13 @@ export async function calculatePricingFromRates(
       tips: { total: 0, per_day: 0, breakdown: [] },
       water: { total: 0, per_person: 0 }
     },
-    rates_used: rates
+    rates_used: rates,
+    mode,
+    rules_applied: []
   }
 
   let preferredCount = 0
+  const rulesApplied: PricingRuleApplied[] = []
 
   // ============================================
   // 1. TRANSPORTATION (Per Group)
@@ -1060,7 +1242,7 @@ export async function calculatePricingFromRates(
   }
 
   // ============================================
-  // 3. ENTRANCES (Per Person)
+  // 3. ENTRANCES (Per Person) - With Pricing Rules
   // ============================================
   if (rates.attractions.length > 0) {
     let totalEntrancePerPerson = 0
@@ -1069,6 +1251,31 @@ export async function calculatePricingFromRates(
       const adultFee = params.is_euro_passport 
         ? toNumber(attraction.entrance_fee_eur, 0) 
         : toNumber(attraction.entrance_fee_non_eur, attraction.entrance_fee_eur || 0)
+      
+      // Check for pricing rule override
+      if (params.checkPricingRules && pricingRules.length > 0) {
+        const rule = findMatchingRule(attraction.name, pricingRules)
+        if (rule) {
+          const originalCost = adultFee * pax
+          const { adjustedCost, note } = applyPricingRule(rule, pax, originalCost)
+          
+          rulesApplied.push({
+            rule_id: rule.id,
+            rule_name: rule.service_name,
+            service_name: attraction.name,
+            pricing_model: rule.pricing_model,
+            original_cost: originalCost,
+            adjusted_cost: adjustedCost,
+            savings: originalCost - adjustedCost,
+            note
+          })
+          
+          // Add adjusted cost instead of standard calculation
+          totalEntrancePerPerson += adjustedCost / pax
+          continue
+        }
+      }
+      
       totalEntrancePerPerson += adultFee
     }
     
@@ -1204,7 +1411,7 @@ export async function calculatePricingFromRates(
   }
 
   // ============================================
-  // 11. TIPPING (Already tier-adjusted in lookupRates)
+  // 11. TIPPING
   // ============================================
   let tipsTotal = 0
   const tipsBreakdown: { role: string; amount: number }[] = []
@@ -1255,7 +1462,7 @@ export async function calculatePricingFromRates(
   // ============================================
   // CALCULATE TOTALS
   // ============================================
-  result.total_cost = 
+  const supplierCost = 
     result.breakdown.transportation.total +
     result.breakdown.guide.total +
     result.breakdown.entrances.total +
@@ -1270,24 +1477,39 @@ export async function calculatePricingFromRates(
     result.breakdown.tips.total +
     result.breakdown.water.total
 
-  result.per_person_cost = pax > 0 ? result.total_cost / pax : 0
-  result.preferred_suppliers_count = preferredCount
+  // Apply margin for B2C mode
+  let totalCost = supplierCost
+  let marginAmount = 0
+  
+  if (mode === 'b2c' && marginPercent > 0) {
+    marginAmount = supplierCost * (marginPercent / 100)
+    totalCost = supplierCost + marginAmount
+  }
 
-  // Round to 2 decimals
-  result.total_cost = Math.round(result.total_cost * 100) / 100
-  result.per_person_cost = Math.round(result.per_person_cost * 100) / 100
+  result.total_cost = Math.round(totalCost * 100) / 100
+  result.per_person_cost = pax > 0 ? Math.round((totalCost / pax) * 100) / 100 : 0
+  result.preferred_suppliers_count = preferredCount
+  result.supplier_cost = Math.round(supplierCost * 100) / 100
+  result.margin_percent = marginPercent
+  result.margin_amount = Math.round(marginAmount * 100) / 100
+  result.rules_applied = rulesApplied
 
   result.success = true
   
-  console.log(`💰 PRICING SUMMARY (Tier: ${tier.toUpperCase()}):`)
-  console.log(`   Transportation: €${result.breakdown.transportation.total} (${result.breakdown.transportation.vehicle_type}${result.breakdown.transportation.is_preferred ? ' ⭐' : ''})`)
-  console.log(`   Guide: €${result.breakdown.guide.total} (${params.language}${result.breakdown.guide.is_preferred ? ' ⭐' : ''})`)
+  console.log(`💰 PRICING SUMMARY (Tier: ${tier.toUpperCase()}, Mode: ${mode.toUpperCase()}):`)
+  console.log(`   Transportation: €${result.breakdown.transportation.total}`)
+  console.log(`   Guide: €${result.breakdown.guide.total}`)
   console.log(`   Entrances: €${result.breakdown.entrances.total} (${result.breakdown.entrances.count} sites)`)
-  console.log(`   Meals: €${result.breakdown.meals.lunch_total + result.breakdown.meals.dinner_total}${result.breakdown.meals.is_preferred ? ' ⭐' : ''}`)
-  console.log(`   Accommodation: €${result.breakdown.accommodation.total}${result.breakdown.accommodation.is_preferred ? ' ⭐' : ''}`)
+  console.log(`   Meals: €${result.breakdown.meals.lunch_total + result.breakdown.meals.dinner_total}`)
+  console.log(`   Accommodation: €${result.breakdown.accommodation.total}`)
   console.log(`   Tips: €${result.breakdown.tips.total}`)
   console.log(`   Water: €${result.breakdown.water.total}`)
   console.log(`   ⭐ Preferred Suppliers: ${preferredCount}`)
+  console.log(`   📋 Pricing Rules Applied: ${rulesApplied.length}`)
+  if (mode === 'b2c') {
+    console.log(`   💵 Supplier Cost: €${result.supplier_cost}`)
+    console.log(`   📈 Margin (${marginPercent}%): €${result.margin_amount}`)
+  }
   console.log(`   TOTAL: €${result.total_cost}`)
   
   return result
@@ -1303,9 +1525,13 @@ export function getFallbackRates(params: {
   language: string
   is_euro_passport: boolean
   tier?: ServiceTier
+  mode?: PricingMode
+  marginPercent?: number
 }): PricingCalculation {
   const { pax, duration_days } = params
   const tier = normalizeTier(params.tier)
+  const mode = params.mode || 'b2c'
+  const marginPercent = params.marginPercent ?? 25
   const tierMultiplier = TIER_MULTIPLIERS[tier]
 
   // Base rates adjusted by tier
@@ -1323,7 +1549,15 @@ export function getFallbackRates(params: {
   const tipsTotal = tipPerDay * duration_days
   const waterTotal = waterPerPerson * pax * duration_days
 
-  const totalCost = transportTotal + guideTotal + entranceTotal + lunchTotal + tipsTotal + waterTotal
+  const supplierCost = transportTotal + guideTotal + entranceTotal + lunchTotal + tipsTotal + waterTotal
+  
+  // Apply margin for B2C
+  let totalCost = supplierCost
+  let marginAmount = 0
+  if (mode === 'b2c' && marginPercent > 0) {
+    marginAmount = supplierCost * (marginPercent / 100)
+    totalCost = supplierCost + marginAmount
+  }
 
   return {
     success: true,
@@ -1331,6 +1565,11 @@ export function getFallbackRates(params: {
     per_person_cost: totalCost / pax,
     tier_used: tier,
     preferred_suppliers_count: 0,
+    mode,
+    supplier_cost: supplierCost,
+    margin_percent: marginPercent,
+    margin_amount: marginAmount,
+    rules_applied: [],
     breakdown: {
       transportation: { 
         total: transportTotal, 

@@ -95,6 +95,15 @@ export async function DELETE(
 
     if (error) {
       console.error('DELETE meal_rate error:', error)
+      
+      // Check for foreign key constraint violation
+      if (error.code === '23503' || error.message.includes('foreign key constraint')) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'This meal rate cannot be deleted because it is being used in one or more tour itineraries. Please remove it from those tours first, or deactivate the rate instead of deleting it.'
+        }, { status: 409 }) // 409 Conflict
+      }
+      
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
