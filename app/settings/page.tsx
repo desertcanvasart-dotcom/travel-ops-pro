@@ -235,6 +235,34 @@ function SettingsContent() {
     }
   }
 
+  const fetchEmailSettings = async () => {
+    try {
+      const response = await fetch('/api/settings/email')
+      if (response.ok) {
+        const data = await response.json()
+        setEmailSettings(data)
+      } else {
+        // Set defaults if no settings exist
+        setEmailSettings({
+          gmail_connected: false,
+          gmail_email: '',
+          signature: '',
+          auto_reply_enabled: false,
+          auto_reply_message: ''
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching email settings:', error)
+      setEmailSettings({
+        gmail_connected: false,
+        gmail_email: '',
+        signature: '',
+        auto_reply_enabled: false,
+        auto_reply_message: ''
+      })
+    }
+  }
+
   const fetchNotificationPrefs = async () => {
     try {
       const response = await fetch('/api/settings/notifications')
