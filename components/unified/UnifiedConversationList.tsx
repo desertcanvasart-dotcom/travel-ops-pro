@@ -268,7 +268,7 @@ export function UnifiedConversationList({
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        setConversations(data.data || [])
+        setConversations(data.conversations || [])
       }
     } catch (error) {
       console.error('Error fetching conversations:', error)
