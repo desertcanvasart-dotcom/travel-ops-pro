@@ -130,6 +130,7 @@ export function UnifiedMessageThread({
   onConversationUpdate,
 }: UnifiedMessageThreadProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<UnifiedMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -222,10 +223,11 @@ export function UnifiedMessageThread({
     }
   }, [conversation?.id])
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change (container-based to avoid page scroll)
   useEffect(() => {
-    if (messagesEndRef.current && messages.length > 0) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    if (messagesContainerRef.current && messages.length > 0) {
+      const container = messagesContainerRef.current
+      container.scrollTop = container.scrollHeight
     }
   }, [messages])
 
@@ -573,7 +575,7 @@ export function UnifiedMessageThread({
       </div>
 
       {/* Messages */}
-      <div className={`flex-1 overflow-y-auto p-4 ${colors.bg}`}>
+      <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto p-4 ${colors.bg}`}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin" style={{ color: colors.accent }} />
@@ -661,7 +663,7 @@ export function UnifiedMessageThread({
                           )}
 
                           {/* Message content */}
-                          <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+                          <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed break-words overflow-hidden [overflow-wrap:anywhere] [word-break:break-word]">
                             {mainContent}
                           </div>
 
@@ -685,7 +687,7 @@ export function UnifiedMessageThread({
                                 {isQuoteExpanded ? 'Hide quoted' : 'Show quoted'} ({quotedContent.split('\n').length} lines)
                               </button>
                               {isQuoteExpanded && (
-                                <div className="mt-2 pl-3 border-l-2 border-gray-200 text-[12px] text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                <div className="mt-2 pl-3 border-l-2 border-gray-200 text-[12px] text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto break-words [overflow-wrap:anywhere] [word-break:break-word]">
                                   {quotedContent}
                                 </div>
                               )}
