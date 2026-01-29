@@ -7,8 +7,9 @@ import {
   Send, User, Clock, Loader2, CheckCheck, Check,
   AlertCircle, Plus, History, Paperclip, Download,
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
-  ExternalLink, Languages, Sparkles
+  ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X
 } from 'lucide-react'
+import { useAuth } from '@/app/contexts/AuthContext'
 import { ChannelBadge } from './ChannelBadge'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
 
@@ -60,6 +61,96 @@ const QUICK_LANGUAGES = [
 interface UnifiedMessageThreadProps {
   conversation: UnifiedConversation | null
   onConversationUpdate?: (conversation: UnifiedConversation) => void
+  onConversationDeleted?: (conversationId: string) => void
+}
+
+// Delete Confirmation Modal
+function DeleteConfirmationModal({
+  conversation,
+  onConfirm,
+  onCancel,
+  isDeleting
+}: {
+  conversation: UnifiedConversation
+  onConfirm: () => void
+  onCancel: () => void
+  isDeleting: boolean
+}) {
+  const displayName = conversation.client_name || conversation.contact_info?.split('@')[0] || 'Unknown'
+  const isEmail = conversation.channel === 'email'
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+        <div className="px-6 py-4 bg-red-50 border-b border-red-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Delete Conversation</h3>
+              <p className="text-sm text-gray-600">
+                {isEmail ? 'Move to trash' : 'Hide from inbox'}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          <p className="text-sm text-gray-700 mb-4">Are you sure you want to delete the conversation with:</p>
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                isEmail ? 'bg-blue-100' : 'bg-emerald-100'
+              }`}>
+                {isEmail ? (
+                  <Mail className="w-5 h-5 text-blue-600" />
+                ) : (
+                  <MessageSquare className="w-5 h-5 text-emerald-600" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">{displayName}</p>
+                <p className="text-sm text-gray-500">{conversation.contact_info}</p>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-xs text-amber-800">
+              <strong>Note:</strong> {isEmail
+                ? 'The email thread will be moved to trash in Gmail.'
+                : 'The conversation will be hidden from your inbox. Messages will reappear if the customer sends a new message.'}
+            </p>
+          </div>
+        </div>
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={isDeleting}
+            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:bg-red-300 flex items-center justify-center gap-2"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 interface Agent {
@@ -129,8 +220,10 @@ function AttachmentBadge({ attachment }: { attachment: EmailAttachment }) {
 export function UnifiedMessageThread({
   conversation,
   onConversationUpdate,
+  onConversationDeleted,
 }: UnifiedMessageThreadProps) {
   const router = useRouter()
+  const { user } = useAuth()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<UnifiedMessage[]>([])
@@ -140,6 +233,10 @@ export function UnifiedMessageThread({
   const [agents, setAgents] = useState<Agent[]>([])
   const [showAgentSelector, setShowAgentSelector] = useState(false)
   const [assigningAgent, setAssigningAgent] = useState(false)
+
+  // Action state (delete, archive, mark as read)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
 
   // Translation state
   const [translationEnabled, setTranslationEnabled] = useState(false)
@@ -386,6 +483,122 @@ export function UnifiedMessageThread({
     }
   }
 
+  // Delete conversation (WhatsApp: hide, Email: trash)
+  const handleDeleteConversation = async () => {
+    if (!conversation) return
+    setActionLoading(true)
+    try {
+      if (conversation.channel === 'whatsapp') {
+        // WhatsApp: DELETE to hide conversation
+        const res = await fetch(`/api/whatsapp/conversations?id=${conversation.id}`, { method: 'DELETE' })
+        if (res.ok && onConversationDeleted) {
+          onConversationDeleted(conversation.id)
+        }
+      } else {
+        // Email: Move to trash via Gmail API
+        if (!user) return
+        const res = await fetch('/api/gmail/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            messageIds: [conversation.identifier], // thread_id for email
+            action: 'delete'
+          }),
+        })
+        if (res.ok && onConversationDeleted) {
+          onConversationDeleted(conversation.id)
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error)
+    } finally {
+      setActionLoading(false)
+      setShowDeleteModal(false)
+    }
+  }
+
+  // Archive conversation (Email only)
+  const handleArchiveConversation = async () => {
+    if (!conversation || conversation.channel !== 'email' || !user) return
+    setActionLoading(true)
+    try {
+      const res = await fetch('/api/gmail/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          messageIds: [conversation.identifier],
+          action: 'archive'
+        }),
+      })
+      if (res.ok && onConversationDeleted) {
+        onConversationDeleted(conversation.id)
+      }
+    } catch (error) {
+      console.error('Error archiving conversation:', error)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Mark conversation as read
+  const handleMarkAsRead = async () => {
+    if (!conversation) return
+    setActionLoading(true)
+    try {
+      if (conversation.channel === 'whatsapp') {
+        await fetch('/api/whatsapp/conversations', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation_id: conversation.id, action: 'mark_read' })
+        })
+      } else if (user) {
+        await fetch('/api/gmail/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            messageIds: [conversation.identifier],
+            action: 'markRead'
+          }),
+        })
+      }
+      // Update local state
+      if (onConversationUpdate) {
+        onConversationUpdate({ ...conversation, unread_count: 0 })
+      }
+    } catch (error) {
+      console.error('Error marking as read:', error)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Mark conversation as unread (Email only)
+  const handleMarkAsUnread = async () => {
+    if (!conversation || conversation.channel !== 'email' || !user) return
+    setActionLoading(true)
+    try {
+      await fetch('/api/gmail/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          messageIds: [conversation.identifier],
+          action: 'markUnread'
+        }),
+      })
+      if (onConversationUpdate) {
+        onConversationUpdate({ ...conversation, unread_count: 1 })
+      }
+    } catch (error) {
+      console.error('Error marking as unread:', error)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const formatTime = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
@@ -621,6 +834,57 @@ export function UnifiedMessageThread({
             >
               <Sparkles className="w-4 h-4" />
               Generate Itinerary
+            </button>
+
+            {/* Separator */}
+            <div className="w-px h-6 bg-gray-200" />
+
+            {/* Action Buttons */}
+            {/* Mark as Read/Unread */}
+            {conversation.unread_count > 0 ? (
+              <button
+                type="button"
+                onClick={handleMarkAsRead}
+                disabled={actionLoading}
+                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                title="Mark as read"
+              >
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MailOpen className="w-4 h-4" />}
+              </button>
+            ) : conversation.channel === 'email' && (
+              <button
+                type="button"
+                onClick={handleMarkAsUnread}
+                disabled={actionLoading}
+                className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-50"
+                title="Mark as unread"
+              >
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              </button>
+            )}
+
+            {/* Archive (Email only) */}
+            {conversation.channel === 'email' && (
+              <button
+                type="button"
+                onClick={handleArchiveConversation}
+                disabled={actionLoading}
+                className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-50"
+                title="Archive conversation"
+              >
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+              </button>
+            )}
+
+            {/* Delete */}
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              disabled={actionLoading}
+              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+              title={conversation.channel === 'whatsapp' ? 'Hide conversation' : 'Move to trash'}
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -883,6 +1147,16 @@ export function UnifiedMessageThread({
           </button>
         </div>
       </form>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && conversation && (
+        <DeleteConfirmationModal
+          conversation={conversation}
+          onConfirm={handleDeleteConversation}
+          onCancel={() => setShowDeleteModal(false)}
+          isDeleting={actionLoading}
+        />
+      )}
     </div>
   )
 }
