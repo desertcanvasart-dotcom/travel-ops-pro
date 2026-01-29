@@ -57,13 +57,18 @@ export async function GET(request: NextRequest) {
 
 // POST /api/email/sync - Trigger email sync
 export async function POST(request: NextRequest) {
+  let userId: string | undefined
+
   try {
     const body: EmailSyncOptions = await request.json()
     const { user_id, full_sync = false, max_results = 100, days_back = 30 } = body
+    userId = user_id // Store for error handler
 
     if (!user_id) {
       return NextResponse.json({ error: 'User ID required', success: false }, { status: 400 })
     }
+
+    console.log('[Email Sync] Starting sync for user:', user_id)
 
     // Get Gmail tokens for this user
     const { data: tokenData, error: tokenError } = await supabase
@@ -71,6 +76,8 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('user_id', user_id)
       .single()
+
+    console.log('[Email Sync] Token lookup result:', { hasToken: !!tokenData, error: tokenError?.message })
 
     if (tokenError || !tokenData) {
       return NextResponse.json({
@@ -84,10 +91,14 @@ export async function POST(request: NextRequest) {
     const refreshToken = tokenData.refresh_token
     const userEmail = tokenData.email_address
 
+    console.log('[Email Sync] User email:', userEmail, 'Token expiry:', tokenData.token_expiry)
+
     if (tokenData.token_expiry && new Date(tokenData.token_expiry) < new Date()) {
+      console.log('[Email Sync] Token expired, refreshing...')
       try {
         const newCredentials = await refreshAccessToken(refreshToken)
         accessToken = newCredentials.access_token!
+        console.log('[Email Sync] Token refreshed successfully')
 
         // Update stored token
         await supabase
@@ -100,7 +111,8 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString()
           })
           .eq('user_id', user_id)
-      } catch (refreshError) {
+      } catch (refreshError: any) {
+        console.error('[Email Sync] Token refresh failed:', refreshError.message)
         return NextResponse.json({
           error: 'Failed to refresh Gmail token. Please reconnect your Gmail account.',
           success: false
@@ -128,6 +140,8 @@ export async function POST(request: NextRequest) {
       query += ` after:${Math.floor(daysAgo.getTime() / 1000)}`
     }
 
+    console.log('[Email Sync] Fetching messages with query:', query)
+
     // Fetch emails
     const response = await gmail.users.messages.list({
       userId: 'me',
@@ -136,6 +150,7 @@ export async function POST(request: NextRequest) {
     })
 
     const messageIds = response.data.messages || []
+    console.log('[Email Sync] Found', messageIds.length, 'messages')
     const result: EmailSyncResult = {
       success: true,
       conversations_created: 0,
@@ -358,17 +373,17 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' })
 
+    console.log('[Email Sync] Sync complete:', result)
     return NextResponse.json(result)
   } catch (error: any) {
-    console.error('Error syncing emails:', error)
+    console.error('[Email Sync] Error syncing emails:', error.message, error.stack)
 
-    // Update sync state with error
-    const { user_id } = await request.json().catch(() => ({}))
-    if (user_id) {
+    // Update sync state with error (use captured userId, not request.json())
+    if (userId) {
       await supabase
         .from('email_sync_state')
         .upsert({
-          user_id,
+          user_id: userId,
           sync_status: 'failed',
           error_message: error.message,
           updated_at: new Date().toISOString()
