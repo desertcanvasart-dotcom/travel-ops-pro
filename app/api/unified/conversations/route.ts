@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     // Parse filters
     const channel = searchParams.get('channel') || 'all'
-    const status = searchParams.get('status') || 'active'
+    const status = searchParams.get('status') || 'all' // Default to 'all' to show all conversations
     const clientId = searchParams.get('client_id')
     const agentId = searchParams.get('agent_id')
     const unassignedOnly = searchParams.get('unassigned_only') === 'true'
@@ -51,9 +51,13 @@ export async function GET(request: NextRequest) {
             max_conversations
           )
         `)
-        .eq('status', status)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .order('last_message_at', { ascending: false, nullsFirst: false })
+
+      // Only filter by status if not 'all'
+      if (status !== 'all') {
+        waQuery = waQuery.eq('status', status)
+      }
 
       if (clientId) waQuery = waQuery.eq('client_id', clientId)
       if (agentId) waQuery = waQuery.eq('assigned_team_member_id', agentId)
@@ -120,9 +124,13 @@ export async function GET(request: NextRequest) {
             max_conversations
           )
         `)
-        .eq('status', status)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .order('last_message_at', { ascending: false, nullsFirst: false })
+
+      // Only filter by status if not 'all'
+      if (status !== 'all') {
+        emailQuery = emailQuery.eq('status', status)
+      }
 
       if (clientId) emailQuery = emailQuery.eq('client_id', clientId)
       if (agentId) emailQuery = emailQuery.eq('assigned_team_member_id', agentId)
