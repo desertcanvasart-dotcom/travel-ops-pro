@@ -9,7 +9,7 @@ interface UseLocalizedFormattersReturn {
   formatCurrencyCompact: (amount: number, currency?: string) => string
 
   // Number formatting
-  formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string
+  formatNumber: (value: number) => string
   formatPercent: (value: number, decimals?: number) => string
   formatDecimal: (value: number, decimals?: number) => string
 
@@ -103,8 +103,8 @@ export function useLocalizedFormatters(): UseLocalizedFormattersReturn {
       },
 
       // Number formatting
-      formatNumber: (value: number, options?: Intl.NumberFormatOptions): string => {
-        return format.number(value, options)
+      formatNumber: (value: number): string => {
+        return format.number(value)
       },
 
       formatPercent: (value: number, decimals: number = 0): string => {
