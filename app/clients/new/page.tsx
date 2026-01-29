@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -22,6 +23,8 @@ const LEAD_SOURCES = [
 
 export default function NewClientPage() {
   const router = useRouter()
+  const t = useTranslations('clients')
+  const tCommon = useTranslations('common')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [currentStep, setCurrentStep] = useState(1)
@@ -109,11 +112,11 @@ export default function NewClientPage() {
 
   const totalSteps = 5
   const steps = [
-    { num: 1, label: 'Basic Info', icon: User },
-    { num: 2, label: 'Contact', icon: MapPin },
-    { num: 3, label: 'Preferences', icon: Heart },
-    { num: 4, label: 'Business', icon: Building },
-    { num: 5, label: 'Classification', icon: Tag }
+    { num: 1, label: t('stepBasicInfo'), icon: User },
+    { num: 2, label: t('stepContact'), icon: MapPin },
+    { num: 3, label: t('stepPreferences'), icon: Heart },
+    { num: 4, label: t('stepBusiness'), icon: Building },
+    { num: 5, label: t('stepClassification'), icon: Tag }
   ]
 
   // Reusable input class
@@ -133,13 +136,13 @@ export default function NewClientPage() {
                 className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 mb-2"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                Back to Clients
+                {t('backToClients')}
               </Link>
               <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <User className="w-5 h-5 text-primary-600" />
-                Add New Client
+                {t('addNewClient')}
               </h1>
-              <p className="text-xs text-gray-500 mt-0.5">Create a comprehensive client profile</p>
+              <p className="text-xs text-gray-500 mt-0.5">{t('createClientProfile')}</p>
             </div>
           </div>
 
@@ -189,76 +192,76 @@ export default function NewClientPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <User className="w-4 h-4 text-primary-600" />
-              Basic Information
+              {t('basicInformation')}
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>First Name *</label>
+                <label className={labelClass}>{t('firstName')} *</label>
                 <input
                   type="text"
                   required
                   value={formData.first_name}
                   onChange={(e) => handleInputChange('first_name', e.target.value)}
                   className={inputClass}
-                  placeholder="John"
+                  placeholder={t('placeholderFirstName')}
                 />
               </div>
 
               <div>
-                <label className={labelClass}>Last Name *</label>
+                <label className={labelClass}>{t('lastName')} *</label>
                 <input
                   type="text"
                   required
                   value={formData.last_name}
                   onChange={(e) => handleInputChange('last_name', e.target.value)}
                   className={inputClass}
-                  placeholder="Smith"
+                  placeholder={t('placeholderLastName')}
                 />
               </div>
 
               <div>
-  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-    <Mail className="w-3.5 h-3.5" />
-    Email Address *
-  </label>
-  <input
-    type="email"
-    required
-    value={formData.email}
-    onChange={(e) => handleInputChange('email', e.target.value)}
-    className={inputClass}
-    placeholder="john@example.com"
-  />
-</div>
-
-<div>
-  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-    <Phone className="w-3.5 h-3.5" />
-    Phone Number
-  </label>
-  <input
-    type="tel"
-    value={formData.phone}
-    onChange={(e) => handleInputChange('phone', e.target.value)}
-    className={inputClass}
-    placeholder="+1 234 567 8900"
-  />
-</div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                  <Mail className="w-3.5 h-3.5" />
+                  {t('emailAddress')} *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  className={inputClass}
+                  placeholder={t('placeholderEmail')}
+                />
+              </div>
 
               <div>
-                <label className={labelClass}>Alternative Phone</label>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                  <Phone className="w-3.5 h-3.5" />
+                  {t('phoneNumber')}
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  className={inputClass}
+                  placeholder={t('placeholderPhone')}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>{t('alternativePhone')}</label>
                 <input
                   type="tel"
                   value={formData.alternative_phone}
                   onChange={(e) => handleInputChange('alternative_phone', e.target.value)}
                   className={inputClass}
-                  placeholder="+1 234 567 8901"
+                  placeholder={t('placeholderPhone')}
                 />
               </div>
 
               <div>
-                <label className={labelClass}>Date of Birth</label>
+                <label className={labelClass}>{t('dateOfBirth')}</label>
                 <input
                   type="date"
                   value={formData.date_of_birth}
@@ -268,30 +271,30 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className={labelClass}>Nationality</label>
+                <label className={labelClass}>{t('nationality')}</label>
                 <input
                   type="text"
                   value={formData.nationality}
                   onChange={(e) => handleInputChange('nationality', e.target.value)}
                   className={inputClass}
-                  placeholder="American, British, Spanish..."
+                  placeholder={t('placeholderNationality')}
                 />
               </div>
 
               <div>
-                <label className={labelClass}>Passport Type</label>
+                <label className={labelClass}>{t('passportType')}</label>
                 <select
                   value={formData.passport_type}
                   onChange={(e) => handleInputChange('passport_type', e.target.value)}
                   className={selectClass}
                 >
-                  <option value="euro_passport">Euro Passport</option>
-                  <option value="other_passport">Other Passport</option>
+                  <option value="euro_passport">{t('euroPassport')}</option>
+                  <option value="other_passport">{t('otherPassport')}</option>
                 </select>
               </div>
 
               <div className="col-span-2">
-                <label className={labelClass}>Preferred Language</label>
+                <label className={labelClass}>{t('preferredLanguage')}</label>
                 <select
                   value={formData.preferred_language}
                   onChange={(e) => handleInputChange('preferred_language', e.target.value)}
@@ -305,6 +308,7 @@ export default function NewClientPage() {
                   <option value="Arabic">Arabic</option>
                   <option value="Russian">Russian</option>
                   <option value="Chinese">Chinese</option>
+                  <option value="Japanese">Japanese</option>
                 </select>
               </div>
             </div>
@@ -316,50 +320,50 @@ export default function NewClientPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-primary-600" />
-              Contact & Address
+              {t('contactAndAddress')}
             </h2>
 
             <div className="space-y-5">
               {/* Contact Preferences */}
               <div>
-                <h3 className="text-xs font-semibold text-gray-700 mb-3">Contact Preferences</h3>
+                <h3 className="text-xs font-semibold text-gray-700 mb-3">{t('contactPreferences')}</h3>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className={labelClass}>Preferred Method</label>
+                    <label className={labelClass}>{t('preferredMethod')}</label>
                     <select
                       value={formData.preferred_contact_method}
                       onChange={(e) => handleInputChange('preferred_contact_method', e.target.value)}
                       className={selectClass}
                     >
                       <option value="whatsapp">WhatsApp</option>
-                      <option value="email">Email</option>
-                      <option value="phone">Phone Call</option>
+                      <option value="email">{t('email')}</option>
+                      <option value="phone">{t('phoneCall')}</option>
                       <option value="sms">SMS</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className={labelClass}>Best Time</label>
+                    <label className={labelClass}>{t('bestTime')}</label>
                     <select
                       value={formData.best_time_to_contact}
                       onChange={(e) => handleInputChange('best_time_to_contact', e.target.value)}
                       className={selectClass}
                     >
-                      <option value="morning">Morning (8am-12pm)</option>
-                      <option value="afternoon">Afternoon (12pm-5pm)</option>
-                      <option value="evening">Evening (5pm-9pm)</option>
-                      <option value="anytime">Anytime</option>
+                      <option value="morning">{t('timeMorning')}</option>
+                      <option value="afternoon">{t('timeAfternoon')}</option>
+                      <option value="evening">{t('timeEvening')}</option>
+                      <option value="anytime">{t('timeAnytime')}</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className={labelClass}>Timezone</label>
+                    <label className={labelClass}>{t('timezone')}</label>
                     <input
                       type="text"
                       value={formData.timezone}
                       onChange={(e) => handleInputChange('timezone', e.target.value)}
                       className={inputClass}
-                      placeholder="Africa/Cairo"
+                      placeholder={t('placeholderTimezone')}
                     />
                   </div>
                 </div>
@@ -367,10 +371,10 @@ export default function NewClientPage() {
 
               {/* Address */}
               <div className="pt-4 border-t border-gray-100">
-                <h3 className="text-xs font-semibold text-gray-700 mb-3">Address</h3>
+                <h3 className="text-xs font-semibold text-gray-700 mb-3">{t('address')}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={labelClass}>Country</label>
+                    <label className={labelClass}>{t('country')}</label>
                     <input
                       type="text"
                       value={formData.country}
@@ -380,7 +384,7 @@ export default function NewClientPage() {
                   </div>
 
                   <div>
-                    <label className={labelClass}>City</label>
+                    <label className={labelClass}>{t('city')}</label>
                     <input
                       type="text"
                       value={formData.city}
@@ -390,7 +394,7 @@ export default function NewClientPage() {
                   </div>
 
                   <div className="col-span-2">
-                    <label className={labelClass}>Address Line 1</label>
+                    <label className={labelClass}>{t('addressLine1')}</label>
                     <input
                       type="text"
                       value={formData.address_line1}
@@ -400,7 +404,7 @@ export default function NewClientPage() {
                   </div>
 
                   <div className="col-span-2">
-                    <label className={labelClass}>Address Line 2</label>
+                    <label className={labelClass}>{t('addressLine2')}</label>
                     <input
                       type="text"
                       value={formData.address_line2}
@@ -410,7 +414,7 @@ export default function NewClientPage() {
                   </div>
 
                   <div>
-                    <label className={labelClass}>Postal Code</label>
+                    <label className={labelClass}>{t('postalCode')}</label>
                     <input
                       type="text"
                       value={formData.postal_code}
@@ -429,70 +433,95 @@ export default function NewClientPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <Heart className="w-4 h-4 text-primary-600" />
-              Travel Preferences
+              {t('travelPreferences')}
             </h2>
 
             <div className="space-y-5">
               <div>
-                <label className={labelClass}>Accommodation Level</label>
+                <label className={labelClass}>{t('accommodationLevel')}</label>
                 <select
                   value={formData.preferred_accommodation_level}
                   onChange={(e) => handleInputChange('preferred_accommodation_level', e.target.value)}
                   className={selectClass}
                 >
-                  <option value="budget">Budget (1-2 star)</option>
-                  <option value="moderate">Moderate (3 star)</option>
-                  <option value="luxury">Luxury (4-5 star)</option>
-                  <option value="ultra_luxury">Ultra Luxury (5+ star)</option>
+                  <option value="budget">{t('accommodationBudget')}</option>
+                  <option value="moderate">{t('accommodationModerate')}</option>
+                  <option value="luxury">{t('accommodationLuxury')}</option>
+                  <option value="ultra_luxury">{t('accommodationUltraLuxury')}</option>
                 </select>
               </div>
 
               <div className="pt-4 border-t border-gray-100">
-                <label className="text-xs font-semibold text-gray-700 mb-3 block">Special Interests</label>
+                <label className="text-xs font-semibold text-gray-700 mb-3 block">{t('specialInterests')}</label>
                 <div className="grid grid-cols-4 gap-2">
-                  {['History', 'Photography', 'Adventure', 'Food', 'Culture', 'Shopping', 'Nature', 'Architecture'].map((interest) => (
-                    <label key={interest} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
+                  {[
+                    { key: 'History', label: t('interestHistory') },
+                    { key: 'Photography', label: t('interestPhotography') },
+                    { key: 'Adventure', label: t('interestAdventure') },
+                    { key: 'Food', label: t('interestFood') },
+                    { key: 'Culture', label: t('interestCulture') },
+                    { key: 'Shopping', label: t('interestShopping') },
+                    { key: 'Nature', label: t('interestNature') },
+                    { key: 'Architecture', label: t('interestArchitecture') }
+                  ].map((interest) => (
+                    <label key={interest.key} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                       <input
                         type="checkbox"
-                        checked={formData.special_interests.includes(interest)}
-                        onChange={() => handleArrayToggle('special_interests', interest)}
+                        checked={formData.special_interests.includes(interest.key)}
+                        onChange={() => handleArrayToggle('special_interests', interest.key)}
                         className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                       />
-                      <span className="text-xs text-gray-700">{interest}</span>
+                      <span className="text-xs text-gray-700">{interest.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div className="pt-4 border-t border-gray-100">
-                <label className="text-xs font-semibold text-gray-700 mb-3 block">Dietary Restrictions</label>
+                <label className="text-xs font-semibold text-gray-700 mb-3 block">{t('dietaryRestrictions')}</label>
                 <div className="grid grid-cols-4 gap-2">
-                  {['Vegetarian', 'Vegan', 'Halal', 'Kosher', 'Gluten-Free', 'Lactose-Free', 'Nut Allergy', 'None'].map((restriction) => (
-                    <label key={restriction} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
+                  {[
+                    { key: 'Vegetarian', label: t('dietVegetarian') },
+                    { key: 'Vegan', label: t('dietVegan') },
+                    { key: 'Halal', label: t('dietHalal') },
+                    { key: 'Kosher', label: t('dietKosher') },
+                    { key: 'Gluten-Free', label: t('dietGlutenFree') },
+                    { key: 'Lactose-Free', label: t('dietLactoseFree') },
+                    { key: 'Nut Allergy', label: t('dietNutAllergy') },
+                    { key: 'None', label: t('dietNone') }
+                  ].map((restriction) => (
+                    <label key={restriction.key} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                       <input
                         type="checkbox"
-                        checked={formData.dietary_restrictions.includes(restriction)}
-                        onChange={() => handleArrayToggle('dietary_restrictions', restriction)}
+                        checked={formData.dietary_restrictions.includes(restriction.key)}
+                        onChange={() => handleArrayToggle('dietary_restrictions', restriction.key)}
                         className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                       />
-                      <span className="text-xs text-gray-700">{restriction}</span>
+                      <span className="text-xs text-gray-700">{restriction.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div className="pt-4 border-t border-gray-100">
-                <label className="text-xs font-semibold text-gray-700 mb-3 block">Accessibility Needs</label>
+                <label className="text-xs font-semibold text-gray-700 mb-3 block">{t('accessibilityNeeds')}</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {['Wheelchair Access', 'Elevator Required', 'Ground Floor', 'Hearing Assistance', 'Visual Assistance', 'None'].map((need) => (
-                    <label key={need} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
+                  {[
+                    { key: 'Wheelchair Access', label: t('accessWheelchair') },
+                    { key: 'Elevator Required', label: t('accessElevator') },
+                    { key: 'Ground Floor', label: t('accessGroundFloor') },
+                    { key: 'Hearing Assistance', label: t('accessHearing') },
+                    { key: 'Visual Assistance', label: t('accessVisual') },
+                    { key: 'None', label: t('accessNone') }
+                  ].map((need) => (
+                    <label key={need.key} className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                       <input
                         type="checkbox"
-                        checked={formData.accessibility_needs.includes(need)}
-                        onChange={() => handleArrayToggle('accessibility_needs', need)}
+                        checked={formData.accessibility_needs.includes(need.key)}
+                        onChange={() => handleArrayToggle('accessibility_needs', need.key)}
                         className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                       />
-                      <span className="text-xs text-gray-700">{need}</span>
+                      <span className="text-xs text-gray-700">{need.label}</span>
                     </label>
                   ))}
                 </div>
@@ -506,12 +535,12 @@ export default function NewClientPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <Building className="w-4 h-4 text-primary-600" />
-              Business Information
+              {t('businessInformation')}
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Company Name</label>
+                <label className={labelClass}>{t('companyName')}</label>
                 <input
                   type="text"
                   value={formData.company_name}
@@ -521,7 +550,7 @@ export default function NewClientPage() {
               </div>
 
               <div>
-                <label className={labelClass}>Job Title</label>
+                <label className={labelClass}>{t('jobTitle')}</label>
                 <input
                   type="text"
                   value={formData.job_title}
@@ -538,13 +567,13 @@ export default function NewClientPage() {
                     onChange={(e) => handleInputChange('is_travel_agent', e.target.checked)}
                     className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                   />
-                  <span className="text-xs font-medium text-gray-700">This client is a travel agent</span>
+                  <span className="text-xs font-medium text-gray-700">{t('isTravelAgent')}</span>
                 </label>
               </div>
 
               {formData.is_travel_agent && (
                 <div>
-                  <label className={labelClass}>Commission Rate (%)</label>
+                  <label className={labelClass}>{t('commissionRate')}</label>
                   <input
                     type="number"
                     min="0"
@@ -558,7 +587,7 @@ export default function NewClientPage() {
               )}
 
               <div>
-                <label className={labelClass}>Currency Preference</label>
+                <label className={labelClass}>{t('currencyPreference')}</label>
                 <select
                   value={formData.currency_preference}
                   onChange={(e) => handleInputChange('currency_preference', e.target.value)}
@@ -578,35 +607,35 @@ export default function NewClientPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <Tag className="w-4 h-4 text-primary-600" />
-              Classification & Marketing
+              {t('classificationAndMarketing')}
             </h2>
 
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Client Type</label>
+                  <label className={labelClass}>{t('clientType')}</label>
                   <select
                     value={formData.client_type}
                     onChange={(e) => handleInputChange('client_type', e.target.value)}
                     className={selectClass}
                   >
-                    <option value="individual">Individual</option>
-                    <option value="family">Family</option>
-                    <option value="group">Group</option>
-                    <option value="corporate">Corporate</option>
-                    <option value="agent">Travel Agent</option>
+                    <option value="individual">{t('clientTypeIndividual')}</option>
+                    <option value="family">{t('clientTypeFamily')}</option>
+                    <option value="group">{t('clientTypeGroup')}</option>
+                    <option value="corporate">{t('clientTypeCorporate')}</option>
+                    <option value="agent">{t('clientTypeAgent')}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className={labelClass}>Lead Source *</label>
+                  <label className={labelClass}>{t('leadSource')} *</label>
                   <select
                     value={formData.lead_source}
                     onChange={(e) => handleInputChange('lead_source', e.target.value)}
                     className={selectClass}
                     required
                   >
-                    <option value="">Select source...</option>
+                    <option value="">{t('selectSource')}</option>
                     {LEAD_SOURCES.map(source => (
                       <option key={source.value} value={source.value}>
                         {source.icon} {source.label}
@@ -625,12 +654,12 @@ export default function NewClientPage() {
                     className="w-3.5 h-3.5 text-yellow-500 rounded border-gray-300"
                   />
                   <Star className="w-4 h-4 text-yellow-500" />
-                  <span className="text-xs font-medium text-gray-700">Mark as VIP Client</span>
+                  <span className="text-xs font-medium text-gray-700">{t('markAsVip')}</span>
                 </label>
               </div>
 
               <div className="pt-4 border-t border-gray-100">
-                <h3 className="text-xs font-semibold text-gray-700 mb-3">Marketing Preferences</h3>
+                <h3 className="text-xs font-semibold text-gray-700 mb-3">{t('marketingPreferences')}</h3>
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
                     <input
@@ -639,7 +668,7 @@ export default function NewClientPage() {
                       onChange={(e) => handleInputChange('marketing_consent', e.target.checked)}
                       className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                     />
-                    <span className="text-xs text-gray-700">Marketing communications consent</span>
+                    <span className="text-xs text-gray-700">{t('marketingConsent')}</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
@@ -649,7 +678,7 @@ export default function NewClientPage() {
                       onChange={(e) => handleInputChange('newsletter_subscribed', e.target.checked)}
                       className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                     />
-                    <span className="text-xs text-gray-700">Subscribe to newsletter</span>
+                    <span className="text-xs text-gray-700">{t('newsletterSubscribed')}</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors">
@@ -659,19 +688,19 @@ export default function NewClientPage() {
                       onChange={(e) => handleInputChange('sms_consent', e.target.checked)}
                       className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300"
                     />
-                    <span className="text-xs text-gray-700">SMS notifications consent</span>
+                    <span className="text-xs text-gray-700">{t('smsConsent')}</span>
                   </label>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-gray-100">
-                <label className={labelClass}>Internal Notes</label>
+                <label className={labelClass}>{t('internalNotes')}</label>
                 <textarea
                   rows={3}
                   value={formData.internal_notes}
                   onChange={(e) => handleInputChange('internal_notes', e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md shadow-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500 outline-none"
-                  placeholder="Private notes about this client..."
+                  placeholder={t('placeholderNotes')}
                 />
               </div>
             </div>
@@ -687,7 +716,7 @@ export default function NewClientPage() {
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              Previous
+              {tCommon('previous')}
             </button>
           ) : (
             <Link
@@ -695,7 +724,7 @@ export default function NewClientPage() {
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
             >
               <X className="w-3.5 h-3.5" />
-              Cancel
+              {tCommon('cancel')}
             </Link>
           )}
 
@@ -705,7 +734,7 @@ export default function NewClientPage() {
               onClick={() => setCurrentStep(currentStep + 1)}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors shadow-sm"
             >
-              Next
+              {tCommon('next')}
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           ) : (
@@ -717,12 +746,12 @@ export default function NewClientPage() {
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></div>
-                  Creating...
+                  {t('creating')}
                 </>
               ) : (
                 <>
                   <Save className="w-3.5 h-3.5" />
-                  Create Client
+                  {t('createClient')}
                 </>
               )}
             </button>
