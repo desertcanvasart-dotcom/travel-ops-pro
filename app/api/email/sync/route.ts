@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createClient } from '@supabase/supabase-js'
 import { getGmailClient, refreshAccessToken } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
+
+// Use service role for API routes to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // Helper to extract email address from "Name <email>" format
 function extractEmailAddress(fromString: string): string {
@@ -18,7 +24,6 @@ function getDirection(from: string, userEmail: string): 'inbound' | 'outbound' {
 // GET /api/email/sync - Get sync status
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('user_id')
 
@@ -53,7 +58,6 @@ export async function GET(request: NextRequest) {
 // POST /api/email/sync - Trigger email sync
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
     const body: EmailSyncOptions = await request.json()
     const { user_id, full_sync = false, max_results = 100, days_back = 30 } = body
 
@@ -361,7 +365,6 @@ export async function POST(request: NextRequest) {
     // Update sync state with error
     const { user_id } = await request.json().catch(() => ({}))
     if (user_id) {
-      const supabase = createClient()
       await supabase
         .from('email_sync_state')
         .upsert({

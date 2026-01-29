@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createClient } from '@supabase/supabase-js'
 import type { EmailMessage, EmailMessageFormData } from '@/types/unified'
+
+// Use service role for API routes to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // GET /api/email/messages - Get messages for a conversation
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('conversation_id')
     const threadId = searchParams.get('thread_id')
@@ -52,7 +57,6 @@ export async function GET(request: NextRequest) {
 // POST /api/email/messages - Store a new email message
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
     const body: EmailMessageFormData = await request.json()
 
     const {
@@ -161,7 +165,6 @@ export async function POST(request: NextRequest) {
 // PATCH /api/email/messages - Update message (mark read, star, etc.)
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createClient()
     const body = await request.json()
     const { message_id, action, ...updates } = body
 
@@ -218,7 +221,6 @@ export async function PATCH(request: NextRequest) {
 // POST /api/email/messages/batch - Store multiple messages at once
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = createClient()
     const body = await request.json()
     const { messages } = body
 

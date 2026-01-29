@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createClient } from '@supabase/supabase-js'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
+
+// Use service role for API routes to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // GET /api/unified/conversations - List all conversations across channels
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
     const { searchParams } = new URL(request.url)
 
     // Parse filters

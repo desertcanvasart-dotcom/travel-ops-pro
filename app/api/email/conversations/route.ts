@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createClient } from '@supabase/supabase-js'
 import type { EmailConversation } from '@/types/unified'
+
+// Use service role for API routes to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // GET /api/email/conversations - List email conversations
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active'
     const search = searchParams.get('search') || ''
@@ -92,7 +97,6 @@ export async function GET(request: NextRequest) {
 // POST /api/email/conversations - Create or update email conversation
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
     const body = await request.json()
     const {
       thread_id,
@@ -199,7 +203,6 @@ export async function POST(request: NextRequest) {
 // PATCH /api/email/conversations - Update conversation status, assignment, etc.
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createClient()
     const body = await request.json()
     const { conversation_id, action, agent_id, ...updates } = body
 
@@ -271,7 +274,6 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/email/conversations - Hide (soft delete) a conversation
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('id')
 
