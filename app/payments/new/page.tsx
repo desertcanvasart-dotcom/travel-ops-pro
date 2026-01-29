@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, FileText, MapPin, DollarSign } from 'lucide-react'
@@ -30,6 +31,8 @@ type PaymentTarget = 'invoice' | 'itinerary' | null
 
 export default function RecordPaymentPage() {
   const router = useRouter()
+  const t = useTranslations('payments')
+  const tCommon = useTranslations('common')
   const [loading, setLoading] = useState(false)
   const [paymentTarget, setPaymentTarget] = useState<PaymentTarget>(null)
   
@@ -156,7 +159,7 @@ export default function RecordPaymentPage() {
     setError(null)
 
     if (!formData.target_id || !formData.amount) {
-      setError('Please fill in all required fields')
+      setError(t('errorRequired'))
       setLoading(false)
       return
     }
@@ -205,10 +208,10 @@ export default function RecordPaymentPage() {
       if (response.ok || data.success) {
         router.push('/payments')
       } else {
-        setError(data.error || 'Failed to record payment')
+        setError(data.error || t('errorFailed'))
       }
     } catch (err) {
-      setError('Error recording payment')
+      setError(t('errorRecording'))
       console.error(err)
     } finally {
       setLoading(false)
@@ -235,15 +238,15 @@ export default function RecordPaymentPage() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Record Payment</h1>
-            <p className="text-sm text-gray-600 mt-1">Add a new payment transaction</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('recordPayment')}</h1>
+            <p className="text-sm text-gray-600 mt-1">{t('addPaymentTransaction')}</p>
           </div>
           <Link
             href="/payments"
             className="bg-gray-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Payments
+            {t('backToPayments')}
           </Link>
         </div>
 
@@ -257,7 +260,7 @@ export default function RecordPaymentPage() {
           {/* Step 1: Choose Payment Target */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-900 mb-3">
-              Record Payment Against <span className="text-danger">*</span>
+              {t('recordPaymentAgainst')} <span className="text-danger">*</span>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -275,10 +278,10 @@ export default function RecordPaymentPage() {
                   </div>
                   <div>
                     <p className={`font-medium ${paymentTarget === 'invoice' ? 'text-primary-900' : 'text-gray-900'}`}>
-                      Invoice
+                      {t('invoice')}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {invoices.length} with balance due
+                      {invoices.length} {t('withBalanceDue')}
                     </p>
                   </div>
                 </div>
@@ -299,10 +302,10 @@ export default function RecordPaymentPage() {
                   </div>
                   <div>
                     <p className={`font-medium ${paymentTarget === 'itinerary' ? 'text-primary-900' : 'text-gray-900'}`}>
-                      Itinerary
+                      {t('itinerary')}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {itineraries.length} available
+                      {itineraries.length} {t('available')}
                     </p>
                   </div>
                 </div>
@@ -316,7 +319,7 @@ export default function RecordPaymentPage() {
               {paymentTarget === 'invoice' ? (
                 <div className="mb-4">
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Select Invoice <span className="text-danger">*</span>
+                    {t('selectInvoice')} <span className="text-danger">*</span>
                   </label>
                   <select
                     value={selectedInvoice?.id || ''}
@@ -324,21 +327,21 @@ export default function RecordPaymentPage() {
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
-                    <option value="">Choose an invoice...</option>
+                    <option value="">{t('chooseInvoice')}</option>
                     {invoices.map((invoice) => (
                       <option key={invoice.id} value={invoice.id}>
-                        {invoice.invoice_number} - {invoice.client_name} (Balance: {getCurrencySymbol(invoice.currency)}{Number(invoice.balance_due).toFixed(2)})
+                        {invoice.invoice_number} - {invoice.client_name} ({t('balanceDue')}: {getCurrencySymbol(invoice.currency)}{Number(invoice.balance_due).toFixed(2)})
                       </option>
                     ))}
                   </select>
                   {invoices.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">No invoices with outstanding balance found.</p>
+                    <p className="text-xs text-amber-600 mt-1">{t('noInvoicesWithBalance')}</p>
                   )}
                 </div>
               ) : (
                 <div className="mb-4">
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Select Itinerary <span className="text-danger">*</span>
+                    {t('selectItinerary')} <span className="text-danger">*</span>
                   </label>
                   <select
                     value={selectedItinerary?.id || ''}
@@ -346,7 +349,7 @@ export default function RecordPaymentPage() {
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
-                    <option value="">Choose an itinerary...</option>
+                    <option value="">{t('chooseItinerary')}</option>
                     {itineraries.map((itinerary) => (
                       <option key={itinerary.id} value={itinerary.id}>
                         {itinerary.itinerary_code} - {itinerary.client_name} (€{itinerary.total_cost.toFixed(2)})
@@ -361,31 +364,31 @@ export default function RecordPaymentPage() {
                 <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <DollarSign className="w-4 h-4 text-primary-600" />
-                    <h3 className="text-sm font-semibold text-gray-900">Payment Details</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">{t('paymentDetails')}</h3>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     {paymentTarget === 'invoice' && selectedInvoice && (
                       <>
                         <div>
-                          <span className="text-gray-600">Invoice Total:</span>
+                          <span className="text-gray-600">{t('invoiceTotal')}:</span>
                           <p className="font-bold text-gray-900">
                             {getCurrencySymbol(selectedInvoice.currency)}{Number(selectedInvoice.total_amount).toFixed(2)}
                           </p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Already Paid:</span>
+                          <span className="text-gray-600">{t('alreadyPaid')}:</span>
                           <p className="font-bold text-success">
                             {getCurrencySymbol(selectedInvoice.currency)}{Number(selectedInvoice.amount_paid).toFixed(2)}
                           </p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Balance Due:</span>
+                          <span className="text-gray-600">{t('balanceDue')}:</span>
                           <p className="font-bold text-orange-600">
                             {getCurrencySymbol(selectedInvoice.currency)}{Number(selectedInvoice.balance_due).toFixed(2)}
                           </p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Status:</span>
+                          <span className="text-gray-600">{t('status')}:</span>
                           <p className="font-medium text-gray-900 capitalize">{selectedInvoice.status}</p>
                         </div>
                       </>
@@ -393,23 +396,23 @@ export default function RecordPaymentPage() {
                     {paymentTarget === 'itinerary' && selectedItinerary && (
                       <>
                         <div>
-                          <span className="text-gray-600">Total Cost:</span>
+                          <span className="text-gray-600">{t('totalCost')}:</span>
                           <p className="font-bold text-gray-900">€{selectedItinerary.total_cost.toFixed(2)}</p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Already Paid:</span>
+                          <span className="text-gray-600">{t('alreadyPaid')}:</span>
                           <p className="font-bold text-success">€{(selectedItinerary.total_paid || 0).toFixed(2)}</p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Balance Due:</span>
+                          <span className="text-gray-600">{t('balanceDue')}:</span>
                           <p className="font-bold text-orange-600">
                             €{(selectedItinerary.total_cost - (selectedItinerary.total_paid || 0)).toFixed(2)}
                           </p>
                         </div>
                         <div>
-                          <span className="text-gray-600">Payment Status:</span>
+                          <span className="text-gray-600">{t('paymentStatus')}:</span>
                           <p className="font-medium text-gray-900 capitalize">
-                            {selectedItinerary.payment_status?.replace('_', ' ') || 'not paid'}
+                            {selectedItinerary.payment_status?.replace('_', ' ') || t('notPaid')}
                           </p>
                         </div>
                       </>
@@ -423,7 +426,7 @@ export default function RecordPaymentPage() {
                 {paymentTarget === 'itinerary' && (
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-2">
-                      Payment Type <span className="text-danger">*</span>
+                      {t('paymentType')} <span className="text-danger">*</span>
                     </label>
                     <select
                       name="payment_type"
@@ -432,15 +435,15 @@ export default function RecordPaymentPage() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
-                      <option value="deposit_10">Deposit (10%)</option>
-                      <option value="deposit_15">Deposit (15%)</option>
-                      <option value="deposit_20">Deposit (20%)</option>
-                      <option value="deposit_25">Deposit (25%)</option>
-                      <option value="deposit_30">Deposit (30%)</option>
-                      <option value="deposit_50">Deposit (50%)</option>
-                      <option value="installment">Installment</option>
-                      <option value="final">Final Payment</option>
-                      <option value="full">Full Payment</option>
+                      <option value="deposit_10">{t('deposit')} (10%)</option>
+                      <option value="deposit_15">{t('deposit')} (15%)</option>
+                      <option value="deposit_20">{t('deposit')} (20%)</option>
+                      <option value="deposit_25">{t('deposit')} (25%)</option>
+                      <option value="deposit_30">{t('deposit')} (30%)</option>
+                      <option value="deposit_50">{t('deposit')} (50%)</option>
+                      <option value="installment">{t('installment')}</option>
+                      <option value="final">{t('finalPayment')}</option>
+                      <option value="full">{t('fullPayment')}</option>
                     </select>
                   </div>
                 )}
@@ -448,7 +451,7 @@ export default function RecordPaymentPage() {
                 {/* Amount */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Amount ({getCurrencySymbol(formData.currency)}) <span className="text-danger">*</span>
+                    {t('amount')} ({getCurrencySymbol(formData.currency)}) <span className="text-danger">*</span>
                   </label>
                   <input
                     type="number"
@@ -467,7 +470,7 @@ export default function RecordPaymentPage() {
                 {/* Currency */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Currency
+                    {t('currency')}
                   </label>
                   <select
                     name="currency"
@@ -484,7 +487,7 @@ export default function RecordPaymentPage() {
                 {/* Payment Method */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Payment Method
+                    {t('paymentMethod')}
                   </label>
                   <select
                     name="payment_method"
@@ -492,14 +495,14 @@ export default function RecordPaymentPage() {
                     onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="airwallex">Airwallex</option>
-                    <option value="tab">Tab</option>
-                    <option value="credit_card">Credit Card</option>
-                    <option value="cash">Cash</option>
-                    <option value="paypal">PayPal</option>
-                    <option value="stripe">Stripe</option>
-                    <option value="wise">Wise</option>
+                    <option value="bank_transfer">{t('bankTransfer')}</option>
+                    <option value="airwallex">{t('airwallex')}</option>
+                    <option value="tab">{t('tab')}</option>
+                    <option value="credit_card">{t('creditCard')}</option>
+                    <option value="cash">{t('cash')}</option>
+                    <option value="paypal">{t('paypal')}</option>
+                    <option value="stripe">{t('stripe')}</option>
+                    <option value="wise">{t('wise')}</option>
                   </select>
                 </div>
 
@@ -507,7 +510,7 @@ export default function RecordPaymentPage() {
                 {paymentTarget === 'itinerary' && (
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-2">
-                      Payment Status
+                      {t('paymentStatus')}
                     </label>
                     <select
                       name="payment_status"
@@ -515,13 +518,13 @@ export default function RecordPaymentPage() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
-                      <option value="completed">Completed</option>
-                      <option value="pending">Pending</option>
-                      <option value="deposit_received">Deposit Received</option>
-                      <option value="partially_paid">Partially Paid</option>
-                      <option value="partially_refunded">Partially Refunded</option>
-                      <option value="failed">Failed</option>
-                      <option value="refunded">Fully Refunded</option>
+                      <option value="completed">{t('statusCompleted')}</option>
+                      <option value="pending">{t('statusPending')}</option>
+                      <option value="deposit_received">{t('statusDepositReceived')}</option>
+                      <option value="partially_paid">{t('statusPartiallyPaid')}</option>
+                      <option value="partially_refunded">{t('statusPartiallyRefunded')}</option>
+                      <option value="failed">{t('statusFailed')}</option>
+                      <option value="refunded">{t('statusRefunded')}</option>
                     </select>
                   </div>
                 )}
@@ -529,7 +532,7 @@ export default function RecordPaymentPage() {
                 {/* Transaction Reference */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Transaction Reference
+                    {t('transactionReference')}
                   </label>
                   <input
                     type="text"
@@ -544,7 +547,7 @@ export default function RecordPaymentPage() {
                 {/* Payment Date */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-2">
-                    Payment Date
+                    {t('paymentDate')}
                   </label>
                   <input
                     type="date"
@@ -559,7 +562,7 @@ export default function RecordPaymentPage() {
                 {paymentTarget === 'itinerary' && (
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-2">
-                      Due Date (Optional)
+                      {t('dueDateOptional')}
                     </label>
                     <input
                       type="date"
@@ -575,7 +578,7 @@ export default function RecordPaymentPage() {
               {/* Notes */}
               <div className="mt-4">
                 <label className="block text-xs font-medium text-gray-700 mb-2">
-                  Notes
+                  {t('notes')}
                 </label>
                 <textarea
                   name="notes"
@@ -583,7 +586,7 @@ export default function RecordPaymentPage() {
                   onChange={handleChange}
                   rows={3}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Add any additional notes about this payment..."
+                  placeholder={t('notesPlaceholder')}
                 />
               </div>
 
@@ -593,7 +596,7 @@ export default function RecordPaymentPage() {
                   href="/payments"
                   className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors font-medium"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </Link>
                 <button
                   type="submit"
@@ -605,12 +608,12 @@ export default function RecordPaymentPage() {
                   {loading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Recording...
+                      {t('recording')}
                     </>
                   ) : (
                     <>
                       <Save className="w-4 h-4" />
-                      Record Payment
+                      {t('recordPayment')}
                     </>
                   )}
                 </button>
@@ -622,7 +625,7 @@ export default function RecordPaymentPage() {
           {!paymentTarget && (
             <div className="text-center py-8 text-gray-500">
               <DollarSign className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm">Select whether to record payment against an Invoice or Itinerary</p>
+              <p className="text-sm">{t('selectTarget')}</p>
             </div>
           )}
         </form>

@@ -1,12 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Check, User, Plane, Users, FileText } from 'lucide-react'
 
 export default function NewItineraryPage() {
   const router = useRouter()
+  const t = useTranslations('itineraries')
+  const tCommon = useTranslations('common')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -47,13 +50,13 @@ export default function NewItineraryPage() {
     setError(null)
 
     if (!formData.client_name || !formData.trip_name || !formData.start_date || !formData.end_date) {
-      setError('Please fill in all required fields')
+      setError(t('errorRequired'))
       setLoading(false)
       return
     }
 
     if (new Date(formData.end_date) < new Date(formData.start_date)) {
-      setError('End date must be after start date')
+      setError(t('errorDateRange'))
       setLoading(false)
       return
     }
@@ -89,15 +92,15 @@ export default function NewItineraryPage() {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Create New Itinerary</h1>
-            <p className="text-gray-600 mt-1">Fill in the details to create a new trip plan</p>
+            <h1 className="text-3xl font-bold text-gray-900">{t('createNewItinerary')}</h1>
+            <p className="text-gray-600 mt-1">{t('fillDetails')}</p>
           </div>
-          <Link 
-            href="/itineraries" 
+          <Link
+            href="/itineraries"
             className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to List
+            {t('backToList')}
           </Link>
         </div>
 
@@ -112,12 +115,12 @@ export default function NewItineraryPage() {
           <div className="mb-8">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <User className="w-5 h-5 text-primary-600" />
-              Client Information
+              {t('clientInformation')}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Client Name <span className="text-danger">*</span>
+                  {tCommon('clientName')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -126,12 +129,12 @@ export default function NewItineraryPage() {
                   onChange={handleChange}
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="John Smith"
+                  placeholder={t('clientNamePlaceholder')}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
+                  {tCommon('email')}
                 </label>
                 <input
                   type="email"
@@ -139,12 +142,12 @@ export default function NewItineraryPage() {
                   value={formData.client_email}
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="john@example.com"
+                  placeholder={t('emailPlaceholder')}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
+                  {tCommon('phone')}
                 </label>
                 <input
                   type="tel"
@@ -152,7 +155,7 @@ export default function NewItineraryPage() {
                   value={formData.client_phone}
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="+1-555-0123"
+                  placeholder={t('phonePlaceholder')}
                 />
               </div>
             </div>
@@ -161,12 +164,12 @@ export default function NewItineraryPage() {
           <div className="mb-8">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Plane className="w-5 h-5 text-primary-600" />
-              Trip Details
+              {t('tripDetails')}
             </h2>
             <div className="grid grid-cols-1 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Trip Name <span className="text-danger">*</span>
+                  {t('tripName')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -175,13 +178,13 @@ export default function NewItineraryPage() {
                   onChange={handleChange}
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Classic Egypt - 7 Days"
+                  placeholder={t('tripNamePlaceholder')}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Date <span className="text-danger">*</span>
+                    {tCommon('startDate')} <span className="text-danger">*</span>
                   </label>
                   <input
                     type="date"
@@ -194,7 +197,7 @@ export default function NewItineraryPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Date <span className="text-danger">*</span>
+                    {tCommon('endDate')} <span className="text-danger">*</span>
                   </label>
                   <input
                     type="date"
@@ -210,7 +213,7 @@ export default function NewItineraryPage() {
               {totalDays > 0 && (
                 <div className="p-4 bg-primary-50 rounded-lg border border-primary-200">
                   <p className="text-primary-900 font-medium">
-                    📅 Trip Duration: <span className="text-2xl font-bold">{totalDays}</span> {totalDays === 1 ? 'day' : 'days'}
+                    📅 {t('tripDuration')}: <span className="text-2xl font-bold">{totalDays}</span> {totalDays === 1 ? t('day') : t('days')}
                   </p>
                 </div>
               )}
@@ -220,12 +223,12 @@ export default function NewItineraryPage() {
           <div className="mb-8">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Users className="w-5 h-5 text-primary-600" />
-              Passengers
+              {t('passengers')}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Number of Adults
+                  {t('numberOfAdults')}
                 </label>
                 <input
                   type="number"
@@ -239,7 +242,7 @@ export default function NewItineraryPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Number of Children
+                  {t('numberOfChildren')}
                 </label>
                 <input
                   type="number"
@@ -253,7 +256,7 @@ export default function NewItineraryPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Currency
+                  {tCommon('currency')}
                 </label>
                 <select
                   name="currency"
@@ -269,10 +272,10 @@ export default function NewItineraryPage() {
             </div>
             <div className="mt-4 p-4 bg-gray-50 rounded-lg">
               <p className="text-gray-700">
-                <span className="font-medium">Total Passengers:</span>{' '}
-                {formData.num_adults + formData.num_children} 
-                {' '}({formData.num_adults} {formData.num_adults === 1 ? 'adult' : 'adults'}
-                {formData.num_children > 0 && `, ${formData.num_children} ${formData.num_children === 1 ? 'child' : 'children'}`})
+                <span className="font-medium">{t('totalPassengers')}:</span>{' '}
+                {formData.num_adults + formData.num_children}
+                {' '}({formData.num_adults} {formData.num_adults === 1 ? t('adult') : t('adults')}
+                {formData.num_children > 0 && `, ${formData.num_children} ${formData.num_children === 1 ? t('child') : t('children')}`})
               </p>
             </div>
           </div>
@@ -280,7 +283,7 @@ export default function NewItineraryPage() {
           <div className="mb-8">
             <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary-600" />
-              Additional Notes
+              {t('additionalNotes')}
             </h2>
             <textarea
               name="notes"
@@ -288,7 +291,7 @@ export default function NewItineraryPage() {
               onChange={handleChange}
               rows={4}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Add any special requests, preferences, or important information..."
+              placeholder={t('additionalNotesPlaceholder')}
             />
           </div>
 
@@ -297,7 +300,7 @@ export default function NewItineraryPage() {
               href="/itineraries"
               className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
             >
-              Cancel
+              {tCommon('cancel')}
             </Link>
             <button
               type="submit"
@@ -309,12 +312,12 @@ export default function NewItineraryPage() {
               {loading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Creating...
+                  {t('creating')}
                 </>
               ) : (
                 <>
                   <Check className="w-5 h-5" />
-                  Create Itinerary
+                  {t('createItinerary')}
                 </>
               )}
             </button>
