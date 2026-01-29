@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   Users,
   CheckSquare,
@@ -39,6 +40,9 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  const t = useTranslations('dashboard')
+  const tCommon = useTranslations('common')
+  const tDates = useTranslations('dates')
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
     activeClients: 0,
@@ -190,10 +194,10 @@ export default function DashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Welcome Back{userName ? `, ${userName}` : ''}! 👋
+          {t('welcomeBack')}{userName ? `, ${userName}` : ''}! 👋
         </h1>
         <p className="text-sm text-gray-600 mt-1">
-          Here's what's happening with your travel operations today.
+          {t('subtitle')}
         </p>
       </div>
 
@@ -201,21 +205,22 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total Clients */}
         <StatCard
-          title="Total Clients"
+          title={t('totalClients')}
           value={stats.totalClients}
           icon={Users}
           trend="+12%"
           trendUp={true}
           href="/clients"
           color="primary"
+          trendLabel={t('fromLastMonth')}
         />
 
         {/* Pending Follow-ups */}
         <StatCard
-          title="Pending Follow-ups"
+          title={t('pendingFollowups')}
           value={stats.pendingFollowups}
           icon={CheckSquare}
-          badge={stats.overdueFollowups > 0 ? `${stats.overdueFollowups} overdue` : undefined}
+          badge={stats.overdueFollowups > 0 ? `${stats.overdueFollowups} ${t('overdue')}` : undefined}
           badgeColor="danger"
           href="/followups"
           color="warning"
@@ -223,21 +228,22 @@ export default function DashboardPage() {
 
         {/* Client Quotes (B2C) */}
         <StatCard
-          title="Client Quotes"
+          title={t('clientQuotes')}
           value={stats.totalQuotes}
           icon={FileText}
           trend="+8%"
           trendUp={true}
           href="/itineraries"
           color="purple"
+          trendLabel={t('fromLastMonth')}
         />
 
         {/* Upcoming Trips */}
         <StatCard
-          title="Upcoming Trips"
+          title={t('upcomingTrips')}
           value={stats.upcomingTrips}
           icon={CalendarDays}
-          subtitle="Next 30 days"
+          subtitle={t('next30Days')}
           href="/calendar"
           color="orange"
         />
@@ -249,17 +255,17 @@ export default function DashboardPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs text-gray-600">Quotes Sent</h3>
+              <h3 className="text-xs text-gray-600">{t('quotesSent')}</h3>
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
             <Mail className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.quotesSent}</p>
           <p className="text-xs text-gray-500 mt-1">
-            {stats.totalQuotes > 0 
-              ? `${Math.round((stats.quotesSent / stats.totalQuotes) * 100)}% sent rate`
-              : '0% sent rate'
-            }
+            {t('sentRate', { percent: stats.totalQuotes > 0
+              ? Math.round((stats.quotesSent / stats.totalQuotes) * 100)
+              : 0
+            })}
           </p>
         </div>
 
@@ -267,17 +273,17 @@ export default function DashboardPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs text-gray-600">Confirmed</h3>
+              <h3 className="text-xs text-gray-600">{t('confirmed')}</h3>
               <div className="w-1.5 h-1.5 rounded-full bg-success" />
             </div>
             <CheckCircle className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.quotesConfirmed}</p>
           <p className="text-xs text-gray-500 mt-1">
-            {stats.quotesSent > 0
-              ? `${Math.round((stats.quotesConfirmed / stats.quotesSent) * 100)}% conversion`
-              : '0% conversion'
-            }
+            {t('conversion', { percent: stats.quotesSent > 0
+              ? Math.round((stats.quotesConfirmed / stats.quotesSent) * 100)
+              : 0
+            })}
           </p>
         </div>
 
@@ -285,49 +291,53 @@ export default function DashboardPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs text-gray-600">Active Clients</h3>
+              <h3 className="text-xs text-gray-600">{t('activeClients')}</h3>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
             <Activity className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.activeClients}</p>
-          <p className="text-xs text-gray-500 mt-1">Engaged customers</p>
+          <p className="text-xs text-gray-500 mt-1">{t('engagedCustomers')}</p>
         </div>
       </div>
 
       {/* Quick Actions */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <h3 className="text-base font-semibold text-gray-900 mb-3">
-          Quick Actions
+          {t('quickActions')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <QuickActionButton
             icon={MessageSquare}
-            label="Parse WhatsApp"
+            label={t('parseWhatsApp')}
             href="/whatsapp-parser"
-            description="AI-powered conversation parser"
+            description={t('aiPoweredParser')}
             color="bg-success"
+            startNowLabel={t('startNow')}
           />
           <QuickActionButton
             icon={Sparkles}
-            label="New Quote"
+            label={t('newQuote')}
             href="/itineraries/new"
-            description="Create itinerary from scratch"
+            description={t('createFromScratch')}
             color="bg-purple-500"
+            startNowLabel={t('startNow')}
           />
           <QuickActionButton
             icon={Layers}
-            label="Rates Hub"
+            label={t('ratesHub')}
             href="/rates"
-            description="Manage hotels, guides & services"
+            description={t('manageRates')}
             color="bg-primary-600"
+            startNowLabel={t('startNow')}
           />
           <QuickActionButton
             icon={Package}
-            label="B2B Packages"
+            label={t('b2bPackages')}
             href="/tours"
-            description="Ready-made tour packages"
+            description={t('readyMadePackages')}
             color="bg-warning"
+            startNowLabel={t('startNow')}
           />
         </div>
       </div>
@@ -339,13 +349,13 @@ export default function DashboardPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-semibold text-gray-900">
-                Recent Activity
+                {t('recentActivity')}
               </h3>
               <Link
                 href="/itineraries"
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
               >
-                View all
+                {t('viewAll')}
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -353,13 +363,13 @@ export default function DashboardPage() {
             {recentQuotes.length === 0 ? (
               <div className="text-center py-8">
                 <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500 mb-3">No quotes yet</p>
+                <p className="text-sm text-gray-500 mb-3">{t('noQuotesYet')}</p>
                 <Link
                   href="/whatsapp-parser"
                   className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
                 >
                   <Sparkles className="w-4 h-4" />
-                  Create Your First Quote
+                  {t('createFirstQuote')}
                 </Link>
               </div>
             ) : (
@@ -376,11 +386,11 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium text-gray-900">{activity.action}</p>
                       <p className="text-xs text-gray-500">{activity.time}</p>
                     </div>
-                    <Link 
+                    <Link
                       href={`/itineraries/${activity.id}`}
                       className="text-primary-600 hover:text-primary-700 text-sm font-medium whitespace-nowrap"
                     >
-                      View →
+                      {tCommon('view')} →
                     </Link>
                   </div>
                 ))}
@@ -392,13 +402,13 @@ export default function DashboardPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mt-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-semibold text-gray-900">
-                Upcoming Follow-ups
+                {t('upcomingFollowups')}
               </h3>
               <Link
                 href="/followups"
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
               >
-                View all
+                {t('viewAll')}
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -406,12 +416,12 @@ export default function DashboardPage() {
             {upcomingFollowups.length === 0 ? (
               <div className="text-center py-6">
                 <CheckSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No upcoming follow-ups</p>
+                <p className="text-sm text-gray-500">{t('noUpcomingFollowups')}</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {upcomingFollowups.map((followup) => (
-                  <FollowupCard key={followup.id} followup={followup} />
+                  <FollowupCard key={followup.id} followup={followup} t={t} tDates={tDates} />
                 ))}
               </div>
             )}
@@ -423,20 +433,20 @@ export default function DashboardPage() {
           {/* Today's Summary */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <h3 className="text-base font-bold text-gray-900">Today's Summary</h3>
+              <h3 className="text-base font-bold text-gray-900">{t('todaysSummary')}</h3>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600">Quotes Created</span>
+                <span className="text-xs text-gray-600">{t('quotesCreated')}</span>
                 <span className="font-bold text-lg text-gray-900">0</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600">Quotes Sent</span>
+                <span className="text-xs text-gray-600">{t('quotesSent')}</span>
                 <span className="font-bold text-lg text-gray-900">0</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600">Bookings</span>
+                <span className="text-xs text-gray-600">{t('bookings')}</span>
                 <span className="font-bold text-lg text-gray-900">0</span>
               </div>
             </div>
@@ -444,38 +454,38 @@ export default function DashboardPage() {
 
           {/* Quick Tips */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h3 className="text-base font-bold text-gray-900 mb-3">💡 Quick Tips</h3>
+            <h3 className="text-base font-bold text-gray-900 mb-3">💡 {t('quickTips')}</h3>
             <div className="space-y-2 text-xs text-gray-700">
-              <p>• Use AI parser to extract client details from WhatsApp in seconds</p>
-              <p>• Check the Rates Hub for hotel and guide pricing</p>
-              <p>• Send quotes via WhatsApp or Email with one click</p>
-              <p>• Track your conversion rates in Analytics</p>
+              <p>• {t('tip1')}</p>
+              <p>• {t('tip2')}</p>
+              <p>• {t('tip3')}</p>
+              <p>• {t('tip4')}</p>
             </div>
           </div>
 
           {/* System Status */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h3 className="text-base font-bold text-gray-900 mb-3">System Status</h3>
+            <h3 className="text-base font-bold text-gray-900 mb-3">{t('systemStatus')}</h3>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">AI Parser</span>
+                <span className="text-xs text-gray-600">{t('aiParser')}</span>
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                  <span className="text-xs font-medium text-gray-700">Online</span>
+                  <span className="text-xs font-medium text-gray-700">{t('online')}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">B2B Packages</span>
+                <span className="text-xs text-gray-600">{t('b2bPackages')}</span>
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                  <span className="text-xs font-medium text-gray-700">Active</span>
+                  <span className="text-xs font-medium text-gray-700">{t('active')}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Email Service</span>
+                <span className="text-xs text-gray-600">{t('emailService')}</span>
                 <div className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                  <span className="text-xs font-medium text-gray-700">Ready</span>
+                  <span className="text-xs font-medium text-gray-700">{t('ready')}</span>
                 </div>
               </div>
             </div>
@@ -493,6 +503,7 @@ interface StatCardProps {
   icon: React.ComponentType<{ className?: string }>
   trend?: string
   trendUp?: boolean
+  trendLabel?: string
   badge?: string
   badgeColor?: 'primary' | 'danger'
   href: string
@@ -500,19 +511,20 @@ interface StatCardProps {
   subtitle?: string
 }
 
-function StatCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  trend, 
-  trendUp, 
-  badge, 
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  trendUp,
+  trendLabel,
+  badge,
   badgeColor = 'primary',
   href,
   color = 'primary',
   subtitle
 }: StatCardProps) {
-  
+
   const dotColors = {
     primary: 'bg-primary-600',
     warning: 'bg-warning',
@@ -532,7 +544,7 @@ function StatCard({
             <p className="text-2xl font-bold text-gray-900">{value}</p>
             {trend && (
               <p className={`text-xs mt-1 ${trendUp ? 'text-success' : 'text-danger'}`}>
-                {trend} from last month
+                {trend} {trendLabel}
               </p>
             )}
             {subtitle && (
@@ -556,7 +568,7 @@ function StatCard({
 }
 
 // Quick Action Button
-function QuickActionButton({ icon: Icon, label, href, description, color }: any) {
+function QuickActionButton({ icon: Icon, label, href, description, color, startNowLabel }: any) {
   const dotColors: Record<string, string> = {
     'bg-success': 'bg-success',
     'bg-purple-500': 'bg-purple-600',
@@ -575,16 +587,22 @@ function QuickActionButton({ icon: Icon, label, href, description, color }: any)
       </div>
       <h3 className="text-base font-bold text-gray-900">{label}</h3>
       <p className="text-xs text-gray-600 mt-1">{description}</p>
-      <p className="text-xs text-gray-500 mt-2 group-hover:text-primary-600">Start now →</p>
+      <p className="text-xs text-gray-500 mt-2 group-hover:text-primary-600">{startNowLabel}</p>
     </Link>
   )
 }
 
 // Followup Card
-function FollowupCard({ followup }: any) {
+function FollowupCard({ followup, t, tDates }: any) {
   const daysUntil = Math.ceil(
     (new Date(followup.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
   )
+
+  const getDaysLabel = () => {
+    if (daysUntil === 0) return tDates ? tDates('today') : 'Today'
+    if (daysUntil === 1) return tDates ? tDates('tomorrow') : 'Tomorrow'
+    return `${daysUntil} ${t ? t('days') : 'days'}`
+  }
 
   return (
     <Link
@@ -603,7 +621,7 @@ function FollowupCard({ followup }: any) {
         <div className="flex items-center gap-2 ml-4">
           <div className="text-right">
             <p className="text-xs text-gray-500">
-              {daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `${daysUntil} days`}
+              {getDaysLabel()}
             </p>
             <span className={`
               inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium

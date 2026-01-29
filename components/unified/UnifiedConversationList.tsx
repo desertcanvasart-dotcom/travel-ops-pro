@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   Search, RefreshCw, User, Filter, Loader2,
   MessageSquare, Mail, UserX, Users, Plus, X, Trash2, Check,
@@ -113,11 +114,13 @@ function AgentAvatar({ agent, size = 'sm' }: {
 function AgentsManagementModal({
   agents,
   onClose,
-  onRefresh
+  onRefresh,
+  t
 }: {
   agents: SalesAgent[]
   onClose: () => void
   onRefresh: () => void
+  t: any
 }) {
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentEmail, setNewAgentEmail] = useState('')
@@ -158,7 +161,7 @@ function AgentsManagementModal({
   }
 
   const deleteAgent = async (agentId: string) => {
-    if (!confirm('Are you sure you want to deactivate this agent?')) return
+    if (!confirm(t('deactivateAgent'))) return
     try {
       await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
       onRefresh()
@@ -173,31 +176,32 @@ function AgentsManagementModal({
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-bold text-gray-900">Sales Agents</h3>
+            <h3 className="text-lg font-bold text-gray-900">{t('salesAgents')}</h3>
           </div>
-          <button type="button" onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="Close"><X className="w-5 h-5 text-gray-500" /></button>
+          <button type="button" onClick={onClose} className="p-1 hover:bg-gray-100 rounded" aria-label="Close"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
 
         <div className="p-6">
           {/* Add New Agent */}
           <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Add New Agent</h4>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">{t('addNewAgent')}</h4>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newAgentName}
                 onChange={(e) => setNewAgentName(e.target.value)}
-                placeholder="Agent name"
+                placeholder={t('agentName')}
                 className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
               />
               <input
                 type="email"
                 value={newAgentEmail}
                 onChange={(e) => setNewAgentEmail(e.target.value)}
-                placeholder="Email (optional)"
+                placeholder={t('emailOptional')}
                 className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
               />
               <button
+                type="button"
                 onClick={addAgent}
                 disabled={!newAgentName.trim() || isAdding}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
@@ -210,7 +214,7 @@ function AgentsManagementModal({
           {/* Agent List */}
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {agents.length === 0 ? (
-              <p className="text-center text-gray-500 py-4">No agents yet. Add one above.</p>
+              <p className="text-center text-gray-500 py-4">{t('noAgentsYet')}</p>
             ) : (
               agents.map(agent => (
                 <div key={agent.id} className={`flex items-center gap-3 p-3 rounded-lg border ${agent.is_active ? 'border-gray-200' : 'border-red-200 bg-red-50'}`}>
@@ -218,7 +222,7 @@ function AgentsManagementModal({
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{agent.name}</p>
                     <p className="text-xs text-gray-500">
-                      {agent.email || 'No email'} • {agent.current_conversations} active chats
+                      {agent.email || t('noEmail')} • {agent.current_conversations} {t('activeChats')}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -231,13 +235,13 @@ function AgentsManagementModal({
                           : 'bg-gray-100 text-gray-600'
                       }`}
                     >
-                      {agent.is_available ? 'Available' : 'Away'}
+                      {agent.is_available ? t('available') : t('away')}
                     </button>
                     <button
                       type="button"
                       onClick={() => deleteAgent(agent.id)}
                       className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
-                      title="Delete agent"
+                      title={t('deleteAgent')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -258,6 +262,8 @@ export function UnifiedConversationList({
   clientId,
   userId,
 }: UnifiedConversationListProps) {
+  const t = useTranslations('communications')
+  const tCommon = useTranslations('common')
   const [conversations, setConversations] = useState<UnifiedConversation[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -392,6 +398,7 @@ export function UnifiedConversationList({
           agents={agents}
           onClose={() => setShowAgentsModal(false)}
           onRefresh={fetchAgents}
+          t={t}
         />
       )}
 
@@ -400,11 +407,11 @@ export function UnifiedConversationList({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-lg font-bold text-gray-900">
-              {clientId ? 'Communications' : 'Unified Inbox'}
+              {clientId ? t('title') : t('unifiedInbox')}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
-              {totalUnread > 0 && ` • ${totalUnread} unread`}
+              {conversations.length} {conversations.length !== 1 ? t('conversations') : t('conversation')}
+              {totalUnread > 0 && ` • ${totalUnread} ${t('unread')}`}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -412,7 +419,7 @@ export function UnifiedConversationList({
               type="button"
               onClick={() => setShowAgentsModal(true)}
               className="p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
-              title="Manage Agents"
+              title={t('manageAgents')}
             >
               <Users className="w-4 h-4" />
             </button>
@@ -420,7 +427,7 @@ export function UnifiedConversationList({
               type="button"
               onClick={() => setShowFilters(!showFilters)}
               className={`p-2 rounded-lg transition-colors ${showFilters ? 'bg-primary-100 text-primary-600' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
-              title="Filters"
+              title={t('filters')}
             >
               <Filter className="w-4 h-4" />
             </button>
@@ -429,7 +436,7 @@ export function UnifiedConversationList({
               onClick={syncEmails}
               disabled={syncing || !userId}
               className={`p-2 rounded-lg transition-colors ${syncing ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'} disabled:opacity-50`}
-              title="Sync Emails"
+              title={t('syncEmails')}
             >
               {syncing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -441,7 +448,7 @@ export function UnifiedConversationList({
               type="button"
               onClick={() => fetchConversations(false)}
               className="p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
-              title="Refresh"
+              title={tCommon('refresh')}
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -462,9 +469,9 @@ export function UnifiedConversationList({
         {/* Channel Filter Tabs */}
         <div className="flex gap-1 mb-3 p-1 bg-gray-100/80 rounded-xl">
           {[
-            { key: 'all', label: 'All', count: conversations.length, icon: null, color: 'gray' },
-            { key: 'whatsapp', label: 'WhatsApp', count: whatsappCount, icon: MessageSquare, color: 'emerald' },
-            { key: 'email', label: 'Email', count: emailCount, icon: Mail, color: 'blue' },
+            { key: 'all', label: t('all'), count: conversations.length, icon: null, color: 'gray' },
+            { key: 'whatsapp', label: t('whatsapp'), count: whatsappCount, icon: MessageSquare, color: 'emerald' },
+            { key: 'email', label: t('email'), count: emailCount, icon: Mail, color: 'blue' },
           ].map(tab => {
             const isActive = filters.channel === tab.key
             const IconComp = tab.icon
@@ -506,7 +513,7 @@ export function UnifiedConversationList({
             type="text"
             value={filters.search}
             onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Search by name, email, or subject..."
+            placeholder={t('searchPlaceholder')}
             className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-50 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-colors placeholder:text-gray-400"
           />
           {filters.search && (
@@ -514,7 +521,7 @@ export function UnifiedConversationList({
               type="button"
               onClick={() => setFilters(f => ({ ...f, search: '' }))}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600"
-              title="Clear search"
+              title={tCommon('clear')}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -532,7 +539,7 @@ export function UnifiedConversationList({
                   onChange={(e) => setFilters(f => ({ ...f, hasUnread: e.target.checked }))}
                   className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="font-medium text-gray-700">Unread only</span>
+                <span className="font-medium text-gray-700">{t('unreadOnly')}</span>
                 {totalUnread > 0 && (
                   <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-500 text-white rounded-full">
                     {totalUnread}
@@ -546,21 +553,21 @@ export function UnifiedConversationList({
                   onChange={(e) => setFilters(f => ({ ...f, unassignedOnly: e.target.checked }))}
                   className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
-                <span className="font-medium text-gray-700">Unassigned</span>
+                <span className="font-medium text-gray-700">{t('unassigned')}</span>
               </label>
             </div>
             <div>
-              <label htmlFor="status-filter" className="sr-only">Filter by status</label>
+              <label htmlFor="status-filter" className="sr-only">{t('filters')}</label>
               <select
                 id="status-filter"
                 value={filters.status}
                 onChange={(e) => setFilters(f => ({ ...f, status: e.target.value as any }))}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                title="Filter by status"
+                title={t('filters')}
               >
-                <option value="all">All statuses</option>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
+                <option value="all">{t('allStatuses')}</option>
+                <option value="active">{tCommon('status')}</option>
+                <option value="archived">{t('archive')}</option>
                 <option value="spam">Spam</option>
               </select>
             </div>
@@ -577,16 +584,17 @@ export function UnifiedConversationList({
         ) : conversations.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
             <MessageSquare className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">No conversations found</p>
+            <p className="text-sm">{t('noConversations')}</p>
             <p className="text-xs text-gray-400 mt-1">
-              Click the sync button to import emails
+              {t('clickToSyncEmails')}
             </p>
             {(filters.search || filters.channel !== 'all' || filters.hasUnread || filters.unassignedOnly) && (
               <button
+                type="button"
                 onClick={() => setFilters({ channel: 'all', status: 'all', search: '', hasUnread: false, unassignedOnly: false })}
                 className="mt-2 text-xs text-primary-600 hover:underline"
               >
-                Clear filters
+                {t('clearFilters')}
               </button>
             )}
           </div>
@@ -668,7 +676,7 @@ export function UnifiedConversationList({
                     <p className={`text-[12px] truncate mt-0.5 ${
                       conv.unread_count > 0 ? 'text-gray-600' : 'text-gray-400'
                     }`}>
-                      {conv.last_message_snippet || 'No messages yet'}
+                      {conv.last_message_snippet || t('noMessages')}
                     </p>
 
                     {/* Footer row */}
@@ -678,12 +686,12 @@ export function UnifiedConversationList({
                       </span>
                       {!conv.assigned_agent && (
                         <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-medium">
-                          Unassigned
+                          {t('unassigned')}
                         </span>
                       )}
                       {conv.client_id && (
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">
-                          Linked
+                          {t('linked')}
                         </span>
                       )}
                     </div>
