@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Send, User, Clock, Loader2, CheckCheck, Check,
   AlertCircle, Plus, History, Paperclip, Download,
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
-  ExternalLink, Languages
+  ExternalLink, Languages, Sparkles
 } from 'lucide-react'
 import { ChannelBadge } from './ChannelBadge'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
@@ -129,6 +130,7 @@ export function UnifiedMessageThread({
   conversation,
   onConversationUpdate,
 }: UnifiedMessageThreadProps) {
+  const router = useRouter()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<UnifiedMessage[]>([])
@@ -414,6 +416,44 @@ export function UnifiedMessageThread({
       : { bg: 'bg-gray-100', outbound: 'bg-blue-100', inbound: 'bg-white', accent: '#3B82F6' }
   }
 
+  // Navigate to WhatsApp parser with conversation data
+  const handleParseConversation = () => {
+    if (!conversation || messages.length === 0) return
+
+    // Format messages into a conversation string
+    const formattedConversation = messages.map(msg => {
+      const sender = msg.direction === 'inbound' ? 'Cliente' : 'Agente'
+      let content = msg.content
+
+      // For emails, include subject in first message
+      if (conversation.channel === 'email' && msg.subject) {
+        content = `[Subject: ${msg.subject}]\n${content}`
+      }
+
+      // Clean up the content - remove excessive whitespace
+      content = content.replace(/\n{3,}/g, '\n\n').trim()
+
+      return `${sender}: ${content}`
+    }).join('\n')
+
+    // Build query params
+    const params = new URLSearchParams()
+    params.set('conversation', formattedConversation)
+
+    // Pass client ID if linked
+    if (conversation.client_id) {
+      params.set('clientId', conversation.client_id)
+    }
+
+    // Pass contact info based on channel
+    if (conversation.channel === 'whatsapp' && conversation.contact_info) {
+      params.set('phone', conversation.contact_info)
+    }
+
+    // Navigate to parser
+    router.push(`/whatsapp-parser?${params.toString()}`)
+  }
+
   // Group messages by date
   const groupedMessages = messages.reduce((groups: Record<string, UnifiedMessage[]>, msg) => {
     const date = formatDate(msg.sent_at)
@@ -570,6 +610,18 @@ export function UnifiedMessageThread({
                 Create Client
               </Link>
             )}
+
+            {/* Parse & Generate Itinerary */}
+            <button
+              type="button"
+              onClick={handleParseConversation}
+              disabled={messages.length === 0}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              title="Parse conversation and generate itinerary"
+            >
+              <Sparkles className="w-4 h-4" />
+              Generate Itinerary
+            </button>
           </div>
         </div>
       </div>
