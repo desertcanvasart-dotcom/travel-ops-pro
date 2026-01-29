@@ -82,7 +82,81 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ success: true, messageId: response.data.id })
+    // Store sent message in email_messages table for unified view
+    const sentMessageId = response.data.id
+    const sentThreadId = response.data.threadId
+
+    if (sentMessageId && sentThreadId) {
+      try {
+        // Find or create conversation for this thread
+        const { data: existingConv } = await supabase
+          .from('email_conversations')
+          .select('id')
+          .eq('thread_id', sentThreadId)
+          .single()
+
+        let conversationId = existingConv?.id
+
+        if (!conversationId) {
+          // Create new conversation
+          const { data: newConv } = await supabase
+            .from('email_conversations')
+            .insert({
+              thread_id: sentThreadId,
+              user_id: userId,
+              client_email: to,
+              subject: subject,
+              last_message_snippet: body.substring(0, 200).replace(/<[^>]*>/g, ''),
+              last_message_at: new Date().toISOString(),
+              message_count: 1,
+              status: 'active',
+              is_hidden: false,
+              last_sync_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+
+          conversationId = newConv?.id
+        } else {
+          // Update existing conversation
+          await supabase
+            .from('email_conversations')
+            .update({
+              last_message_snippet: body.substring(0, 200).replace(/<[^>]*>/g, ''),
+              last_message_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', conversationId)
+        }
+
+        // Store the sent message
+        await supabase
+          .from('email_messages')
+          .insert({
+            conversation_id: conversationId,
+            message_id: sentMessageId,
+            thread_id: sentThreadId,
+            direction: 'outbound',
+            from_address: tokenData.email_address,
+            to_addresses: [to],
+            subject: subject,
+            body_html: body,
+            snippet: body.substring(0, 200).replace(/<[^>]*>/g, ''),
+            attachments: attachments?.map((a: Attachment) => ({
+              filename: a.filename,
+              mimeType: a.mimeType,
+              size: a.data ? Math.round(a.data.length * 0.75) : 0
+            })) || [],
+            is_read: true,
+            sent_at: new Date().toISOString()
+          })
+      } catch (storeError) {
+        // Log but don't fail - email was still sent
+        console.error('Error storing sent email:', storeError)
+      }
+    }
+
+    return NextResponse.json({ success: true, messageId: sentMessageId, threadId: sentThreadId })
   } catch (err: any) {
     console.error('Send email error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

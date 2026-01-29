@@ -106,7 +106,8 @@ const navigation: NavSection[] = [
     key: 'communication',
     roles: ['admin', 'manager', 'agent'],
     items: [
-      { label: 'Inbox', href: '/inbox', icon: Mail },
+      { label: 'Unified Inbox', href: '/communications', icon: MessageSquare },
+      { label: 'Email', href: '/inbox', icon: Mail },
       { label: 'WhatsApp', href: '/whatsapp-inbox', icon: MessageSquare },
       { label: 'WhatsApp Parser', href: '/whatsapp-parser', icon: Send },
       { label: 'Message Templates', href: '/templates', icon: FileText },

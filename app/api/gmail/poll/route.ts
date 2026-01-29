@@ -134,30 +134,154 @@ export async function GET(request: NextRequest) {
 
       // Fetch details for new messages
       const newMessages = []
+      const userEmail = tokenData.email_address?.toLowerCase()
+
       for (const messageId of newMessageIds.slice(0, 10)) { // Limit to 10
         try {
           const message = await gmail.users.messages.get({
             userId: 'me',
             id: messageId,
-            format: 'metadata',
-            metadataHeaders: ['From', 'To', 'Subject', 'Date'],
+            format: 'full', // Get full message for storage
           })
 
           const headers = message.data.payload?.headers || []
-          const getHeader = (name: string) => 
+          const getHeader = (name: string) =>
             headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
+
+          const from = getHeader('From')
+          const to = getHeader('To')
+          const subject = getHeader('Subject')
+          const date = getHeader('Date')
+          const threadId = message.data.threadId
 
           newMessages.push({
             id: message.data.id,
-            threadId: message.data.threadId,
+            threadId,
             snippet: message.data.snippet,
-            from: getHeader('From'),
-            to: getHeader('To'),
-            subject: getHeader('Subject'),
-            date: getHeader('Date'),
+            from,
+            to,
+            subject,
+            date,
             labelIds: message.data.labelIds,
             isUnread: message.data.labelIds?.includes('UNREAD'),
           })
+
+          // Store message in email_messages table for unified view
+          if (threadId) {
+            try {
+              // Extract email from "Name <email>" format
+              const extractEmail = (str: string) => {
+                const match = str.match(/<([^>]+)>/)
+                return match ? match[1].toLowerCase() : str.toLowerCase()
+              }
+
+              const fromEmail = extractEmail(from)
+              const direction = fromEmail === userEmail ? 'outbound' : 'inbound'
+              const clientEmail = direction === 'inbound' ? fromEmail : extractEmail(to)
+
+              // Extract body
+              let bodyHtml = ''
+              let bodyText = ''
+              const extractBody = (payload: any) => {
+                if (payload?.body?.data) {
+                  const content = Buffer.from(payload.body.data, 'base64').toString('utf-8')
+                  if (payload.mimeType === 'text/html') bodyHtml = content
+                  else if (payload.mimeType === 'text/plain') bodyText = content
+                }
+                if (payload?.parts) {
+                  for (const part of payload.parts) extractBody(part)
+                }
+              }
+              extractBody(message.data.payload)
+
+              // Extract attachments
+              const attachments: any[] = []
+              const extractAttachments = (payload: any) => {
+                if (payload?.filename && payload?.body?.attachmentId) {
+                  attachments.push({
+                    id: payload.body.attachmentId,
+                    filename: payload.filename,
+                    mimeType: payload.mimeType || 'application/octet-stream',
+                    size: payload.body.size || 0
+                  })
+                }
+                if (payload?.parts) {
+                  for (const part of payload.parts) extractAttachments(part)
+                }
+              }
+              extractAttachments(message.data.payload)
+
+              // Find or create conversation
+              const { data: existingConv } = await supabase
+                .from('email_conversations')
+                .select('id')
+                .eq('thread_id', threadId)
+                .single()
+
+              let conversationId = existingConv?.id
+
+              if (!conversationId) {
+                const { data: newConv } = await supabase
+                  .from('email_conversations')
+                  .insert({
+                    thread_id: threadId,
+                    user_id: userId,
+                    client_email: clientEmail,
+                    subject,
+                    last_message_snippet: message.data.snippet,
+                    last_message_at: new Date(date || Date.now()).toISOString(),
+                    unread_count: direction === 'inbound' ? 1 : 0,
+                    status: 'active',
+                    is_hidden: false,
+                    last_sync_at: new Date().toISOString()
+                  })
+                  .select()
+                  .single()
+                conversationId = newConv?.id
+              } else {
+                // Update conversation
+                await supabase
+                  .from('email_conversations')
+                  .update({
+                    last_message_snippet: message.data.snippet,
+                    last_message_at: new Date(date || Date.now()).toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', conversationId)
+              }
+
+              // Store message (if not exists)
+              const { data: existingMsg } = await supabase
+                .from('email_messages')
+                .select('id')
+                .eq('message_id', message.data.id)
+                .single()
+
+              if (!existingMsg) {
+                await supabase
+                  .from('email_messages')
+                  .insert({
+                    conversation_id: conversationId,
+                    message_id: message.data.id,
+                    thread_id: threadId,
+                    direction,
+                    from_address: from,
+                    to_addresses: to ? to.split(',').map((e: string) => e.trim()) : [],
+                    subject,
+                    body_text: bodyText || null,
+                    body_html: bodyHtml || null,
+                    snippet: message.data.snippet,
+                    attachments,
+                    is_read: !message.data.labelIds?.includes('UNREAD'),
+                    is_starred: message.data.labelIds?.includes('STARRED') || false,
+                    labels: message.data.labelIds,
+                    sent_at: new Date(date || Date.now()).toISOString()
+                  })
+              }
+            } catch (storeError) {
+              console.error('Error storing polled message:', storeError)
+            }
+          }
         } catch (e) {
           // Message might have been deleted
           console.error('Error fetching message:', messageId, e)
