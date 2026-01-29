@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import {
   Send, User, Clock, Loader2, CheckCheck, Check,
   AlertCircle, Plus, History, Paperclip, Download,
@@ -224,6 +225,8 @@ export function UnifiedMessageThread({
 }: UnifiedMessageThreadProps) {
   const router = useRouter()
   const { user } = useAuth()
+  const t = useTranslations('communications')
+  const tCommon = useTranslations('common')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<UnifiedMessage[]>([])
@@ -682,9 +685,9 @@ export function UnifiedMessageThread({
           <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-sm">
             <MessageSquare className="w-10 h-10 text-gray-400" />
           </div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unified Communications</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">{t('unifiedCommunications')}</h2>
           <p className="text-sm text-gray-500 leading-relaxed">
-            Select a conversation from the list to view messages and respond to your customers via WhatsApp or Email.
+            {t('selectToView')}
           </p>
         </div>
       </div>
@@ -724,7 +727,7 @@ export function UnifiedMessageThread({
                 </p>
                 {conversation.client_id && (
                   <span className="px-1.5 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 rounded">
-                    Client
+                    {t('client')}
                   </span>
                 )}
               </div>
@@ -812,7 +815,7 @@ export function UnifiedMessageThread({
                 className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-50"
               >
                 <User className="w-3.5 h-3.5" />
-                View Client
+                {t('viewClient')}
               </Link>
             ) : (
               <Link
@@ -820,7 +823,7 @@ export function UnifiedMessageThread({
                 className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-50"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Create Client
+                {t('createClient')}
               </Link>
             )}
 
@@ -830,10 +833,10 @@ export function UnifiedMessageThread({
               onClick={handleParseConversation}
               disabled={messages.length === 0}
               className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-primary-500 rounded-md hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Parse conversation and generate itinerary"
+              title={t('generateItinerary')}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              Generate Itinerary
+              {t('generateItinerary')}
             </button>
 
             {/* Separator */}
@@ -847,7 +850,7 @@ export function UnifiedMessageThread({
                 onClick={handleMarkAsRead}
                 disabled={actionLoading}
                 className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
-                title="Mark as read"
+                title={t('markAsRead')}
               >
                 {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MailOpen className="w-3.5 h-3.5" />}
               </button>
@@ -857,7 +860,7 @@ export function UnifiedMessageThread({
                 onClick={handleMarkAsUnread}
                 disabled={actionLoading}
                 className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
-                title="Mark as unread"
+                title={t('markAsUnread')}
               >
                 {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
               </button>
@@ -870,7 +873,7 @@ export function UnifiedMessageThread({
                 onClick={handleArchiveConversation}
                 disabled={actionLoading}
                 className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
-                title="Archive conversation"
+                title={t('archive')}
               >
                 {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
               </button>
@@ -882,7 +885,7 @@ export function UnifiedMessageThread({
               onClick={() => setShowDeleteModal(true)}
               disabled={actionLoading}
               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-              title={conversation.channel === 'whatsapp' ? 'Hide conversation' : 'Move to trash'}
+              title={tCommon('delete')}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -898,7 +901,7 @@ export function UnifiedMessageThread({
           </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500 bg-white/80 px-4 py-2 rounded-lg">No messages yet</p>
+            <p className="text-gray-500 bg-white/80 px-4 py-2 rounded-lg">{t('noMessages')}</p>
           </div>
         ) : (
           <div className="space-y-4">

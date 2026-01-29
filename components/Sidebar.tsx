@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { useRole, UserRole } from '@/hooks/useRole'
 import NotificationBell from '@/components/NotificationBell'
@@ -80,124 +81,137 @@ interface NavSection {
   items: NavItem[]
 }
 
-// Define navigation with role-based visibility
-const navigation: NavSection[] = [
+// Navigation structure with translation keys
+interface NavConfig {
+  titleKey: string
+  key: string
+  roles?: UserRole[]
+  items: {
+    labelKey: string
+    href: string
+    icon: any
+    roles?: UserRole[]
+    children?: { labelKey: string; href: string; icon?: any; roles?: UserRole[] }[]
+  }[]
+}
+
+const navigationConfig: NavConfig[] = [
   {
-    title: 'Main',
+    titleKey: 'main',
     key: 'main',
     items: [
-      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { label: 'Analytics', href: '/analytics', icon: TrendingUp },
+      { labelKey: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { labelKey: 'analytics', href: '/analytics', icon: TrendingUp },
     ]
   },
   {
-    title: 'CRM',
+    titleKey: 'crm',
     key: 'crm',
     roles: ['admin', 'manager', 'agent'],
     items: [
-      { label: 'Clients', href: '/clients', icon: Users },
-      { label: 'Staff', href: '/contacts?type=staff', icon: UserCog },
-      { label: 'Follow-ups', href: '/followups', icon: CheckSquare },
-      { label: 'Calendar', href: '/calendar', icon: Calendar },
+      { labelKey: 'clients', href: '/clients', icon: Users },
+      { labelKey: 'staff', href: '/contacts?type=staff', icon: UserCog },
+      { labelKey: 'followups', href: '/followups', icon: CheckSquare },
+      { labelKey: 'calendar', href: '/calendar', icon: Calendar },
     ]
   },
   {
-    title: 'Communication',
+    titleKey: 'communication',
     key: 'communication',
     roles: ['admin', 'manager', 'agent'],
     items: [
-      { label: 'Unified Inbox', href: '/communications', icon: MessageSquare },
-      { label: 'Email', href: '/inbox', icon: Mail },
-      { label: 'WhatsApp', href: '/whatsapp-inbox', icon: MessageSquare },
-      { label: 'WhatsApp Parser', href: '/whatsapp-parser', icon: Send },
-      { label: 'Message Templates', href: '/templates', icon: FileText },
+      { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
+      { labelKey: 'email', href: '/inbox', icon: Mail },
+      { labelKey: 'whatsapp', href: '/whatsapp-inbox', icon: MessageSquare },
+      { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: Send },
+      { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
     ]
   },
   {
-    title: 'Operations',
+    titleKey: 'operations',
     key: 'operations',
     roles: ['admin', 'manager'],
     items: [
-      { label: 'Suppliers', href: '/suppliers', icon: Building },
-      { label: 'Itineraries', href: '/itineraries', icon: Route },
-      { label: 'Team Members', href: '/team-members', icon: Users },
-      { label: 'Tasks', href: '/tasks', icon: CheckSquare },
+      { labelKey: 'suppliers', href: '/suppliers', icon: Building },
+      { labelKey: 'itineraries', href: '/itineraries', icon: Route },
+      { labelKey: 'teamMembers', href: '/team-members', icon: Users },
+      { labelKey: 'tasks', href: '/tasks', icon: CheckSquare },
     ]
   },
   {
-    title: 'Rates & Pricing',
+    titleKey: 'ratesPricing',
     key: 'rates',
     roles: ['admin', 'manager'],
     items: [
-      { label: 'Rates Hub', href: '/rates', icon: Coins },
-      { label: 'Hotels', href: '/rates/hotels', icon: Hotel },
-      { label: 'Nile Cruises', href: '/rates/cruises', icon: Ship },
-      { label: 'Sleeping Trains', href: '/rates/sleeping-train', icon: BedDouble },
-      { label: 'Flights', href: '/rates/flights', icon: Plane },
-      { label: 'Trains', href: '/rates/trains', icon: Train },
-      { label: 'Meals', href: '/rates/meals', icon: UtensilsCrossed },
-      { label: 'Attractions', href: '/rates/attractions', icon: Building },
-      { label: 'Tour Guides', href: '/rates/guides', icon: Users },   
-      { label: 'Activities', href: '/rates/activities', icon: Ticket },    
-      { label: 'Transportation', href: '/rates/transportation', icon: Truck },
-      { label: 'Airport Services', href: '/rates/airport-services', icon: Plane },
-      { label: 'Hotel Services', href: '/rates/hotel-services', icon: ConciergeBell },
-      { label: 'Tipping', href: '/rates/tipping', icon: DollarSign },
+      { labelKey: 'ratesHub', href: '/rates', icon: Coins },
+      { labelKey: 'hotels', href: '/rates/hotels', icon: Hotel },
+      { labelKey: 'nileCruises', href: '/rates/cruises', icon: Ship },
+      { labelKey: 'sleepingTrains', href: '/rates/sleeping-train', icon: BedDouble },
+      { labelKey: 'flights', href: '/rates/flights', icon: Plane },
+      { labelKey: 'trains', href: '/rates/trains', icon: Train },
+      { labelKey: 'meals', href: '/rates/meals', icon: UtensilsCrossed },
+      { labelKey: 'attractions', href: '/rates/attractions', icon: Building },
+      { labelKey: 'tourGuides', href: '/rates/guides', icon: Users },
+      { labelKey: 'activities', href: '/rates/activities', icon: Ticket },
+      { labelKey: 'transportation', href: '/rates/transportation', icon: Truck },
+      { labelKey: 'airportServices', href: '/rates/airport-services', icon: Plane },
+      { labelKey: 'hotelServices', href: '/rates/hotel-services', icon: ConciergeBell },
+      { labelKey: 'tipping', href: '/rates/tipping', icon: DollarSign },
     ]
   },
   {
-    title: 'Finance',
+    titleKey: 'finance',
     key: 'finance',
     roles: ['admin', 'manager'],
     items: [
-      { label: 'Payments', href: '/payments', icon: DollarSign },
-      { label: 'Invoices', href: '/invoices', icon: FileText },
-      { label: 'Receipts', href: '/receipts', icon: Receipt },
-      { label: 'Receivables', href: '/accounts-receivable', icon: Wallet },
-      { label: 'Payables', href: '/accounts-payable', icon: CreditCard },
-      { label: 'Expenses', href: '/expenses', icon: Receipt },
-      { label: 'Commissions', href: '/commissions', icon: Handshake },
-      { label: 'Profit & Loss', href: '/profit-loss', icon: TrendingUp },
+      { labelKey: 'payments', href: '/payments', icon: DollarSign },
+      { labelKey: 'invoices', href: '/invoices', icon: FileText },
+      { labelKey: 'receipts', href: '/receipts', icon: Receipt },
+      { labelKey: 'receivables', href: '/accounts-receivable', icon: Wallet },
+      { labelKey: 'payables', href: '/accounts-payable', icon: CreditCard },
+      { labelKey: 'expenses', href: '/expenses', icon: Receipt },
+      { labelKey: 'commissions', href: '/commissions', icon: Handshake },
+      { labelKey: 'profitLoss', href: '/profit-loss', icon: TrendingUp },
     ]
   },
   {
-    title: 'Content',
+    titleKey: 'content',
     key: 'content',
     roles: ['admin', 'manager'],
     items: [
-      { label: 'Content Library', href: '/content-library', icon: Library },
-      { label: 'Writing Rules', href: '/content-library/rules', icon: BookOpen },
-      { label: 'AI Prompts', href: '/content-library/prompts', icon: Wand2 },
-      { label: 'Documents', href: '/documents', icon: FileText },
+      { labelKey: 'contentLibrary', href: '/content-library', icon: Library },
+      { labelKey: 'writingRules', href: '/content-library/rules', icon: BookOpen },
+      { labelKey: 'aiPrompts', href: '/content-library/prompts', icon: Wand2 },
+      { labelKey: 'documents', href: '/documents', icon: FileText },
     ]
   },
   {
-    title: 'Reports',
+    titleKey: 'reports',
     key: 'reports',
     roles: ['admin', 'manager'],
     items: [
-      { label: 'Reports', href: '/financial-reports', icon: BarChart3 },
+      { labelKey: 'reports', href: '/financial-reports', icon: BarChart3 },
     ]
   },
   {
-    title: 'B2B',
+    titleKey: 'b2b',
     key: 'b2b',
     roles: ['admin', 'manager'],
     items: [
-      { label: 'Tour Builder', href: '/tours/manage', icon: LayoutTemplate },
-      { label: 'Ready Made Packages', href: '/tours', icon: Package },
-      { label: 'Partners', href: '/b2b/partners', icon: Handshake },
-      { label: 'Quotes', href: '/b2b/quotes', icon: FileText },
-      { label: 'Pricing Rules', href: '/b2b/pricing-rules', icon: Tags },
+      { labelKey: 'tourBuilder', href: '/tours/manage', icon: LayoutTemplate },
+      { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
+      { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
+      { labelKey: 'quotes', href: '/b2b/quotes', icon: FileText },
+      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },
   {
-    title: 'Settings',
+    titleKey: 'settings',
     key: 'settings',
     roles: ['admin'],
     items: [
-      { label: 'Settings', href: '/settings', icon: Settings },
-      { label: 'User Management', href: '/users', icon: Shield },
+      { labelKey: 'settings', href: '/settings', icon: Settings },
+      { labelKey: 'userManagement', href: '/users', icon: Shield },
     ]
   }
 ]
@@ -213,17 +227,31 @@ const ROLE_COLORS: Record<UserRole, string> = {
   viewer: 'bg-gray-100 text-gray-600'
 }
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Admin',
-  manager: 'Manager',
-  agent: 'Agent',
-  viewer: 'Viewer'
-}
-
 export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname()
   const { profile, signOut } = useAuth()
   const { role, canAccess } = useRole()
+  const t = useTranslations('navigation')
+  const tRoles = useTranslations('roles')
+
+  // Build navigation with translated labels
+  const navigation: NavSection[] = navigationConfig.map(section => ({
+    title: t(section.titleKey),
+    key: section.key,
+    roles: section.roles,
+    items: section.items.map(item => ({
+      label: t(item.labelKey),
+      href: item.href,
+      icon: item.icon,
+      roles: item.roles,
+      children: item.children?.map(child => ({
+        label: t(child.labelKey),
+        href: child.href,
+        icon: child.icon,
+        roles: child.roles,
+      })),
+    })),
+  }))
   
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['main', 'crm', 'trips'])
@@ -563,7 +591,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                   {profile?.full_name || 'User'}
                 </p>
                 <span className={`inline-block px-1.5 py-0.5 text-[9px] font-medium rounded ${ROLE_COLORS[role]}`}>
-                  {ROLE_LABELS[role]}
+                  {tRoles(role)}
                 </span>
               </div>
             )}
@@ -577,11 +605,11 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors
               ${isCollapsed ? 'justify-center' : ''}
             `}
-            title={isCollapsed ? 'Sign out' : ''}
+            title={isCollapsed ? t('signOut') : ''}
           >
             <LogOut className="w-[18px] h-[18px] flex-shrink-0" />
             {!isCollapsed && (
-              <span className="text-[13px]">Sign out</span>
+              <span className="text-[13px]">{t('signOut')}</span>
             )}
           </button>
         </div>

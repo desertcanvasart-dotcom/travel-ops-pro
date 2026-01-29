@@ -4,10 +4,10 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/app/supabase'
 import { useAuth } from '@/app/contexts/AuthContext'
-import { 
-  User, 
-  Mail, 
-  Bell, 
+import {
+  User,
+  Mail,
+  Bell,
   CreditCard,
   Settings,
   Save,
@@ -31,6 +31,7 @@ import {
   Calculator,
   Info
 } from 'lucide-react'
+import { LanguageSelector } from '@/components/LanguageSelector'
 
 // ============================================
 // TYPES
@@ -613,6 +614,10 @@ function SettingsContent() {
               <option key={tz.value} value={tz.value}>{tz.label}</option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <LanguageSelector />
         </div>
 
         <div>
