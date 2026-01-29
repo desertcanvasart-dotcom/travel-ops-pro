@@ -116,7 +116,7 @@ export default function EditClientPage() {
       }
     } catch (err) {
       console.error('Error fetching client:', err)
-      setError('Failed to load client data')
+      setError(t('failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -251,7 +251,7 @@ export default function EditClientPage() {
       router.push(`/clients/${clientId}`)
     } catch (err) {
       console.error('Error updating client:', err)
-      setError('Failed to update client. Please try again.')
+      setError(t('failedToUpdate'))
     } finally {
       setSaving(false)
     }
@@ -262,7 +262,7 @@ export default function EditClientPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-600">Loading client...</p>
+          <p className="text-sm text-gray-600">{t('loadingClient')}</p>
         </div>
       </div>
     )
@@ -304,7 +304,7 @@ export default function EditClientPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <User className="w-4 h-4 text-gray-400" />
-              Basic Information
+              {t('basicInformation')}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -384,7 +384,7 @@ export default function EditClientPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Globe className="w-3 h-3 inline mr-1" />
-                  Nationality
+                  {t('nationality')}
                 </label>
                 <input
                   type="text"
@@ -397,7 +397,7 @@ export default function EditClientPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Building className="w-3 h-3 inline mr-1" />
-                  Company Name
+                  {t('companyName')}
                 </label>
                 <input
                   type="text"
@@ -412,11 +412,11 @@ export default function EditClientPage() {
 
           {/* Classification */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Classification</h2>
+            <h2 className="text-base font-semibold text-gray-900 mb-4">{t('classification')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Client Type
+                  {t('clientType')}
                 </label>
                 <select
                   name="client_type"
@@ -424,16 +424,16 @@ export default function EditClientPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
-                  <option value="individual">Individual</option>
-                  <option value="family">Family</option>
-                  <option value="group">Group</option>
-                  <option value="corporate">Corporate</option>
-                  <option value="agent">Travel Agent</option>
+                  <option value="individual">{t('clientTypeIndividual')}</option>
+                  <option value="family">{t('clientTypeFamily')}</option>
+                  <option value="group">{t('clientTypeGroup')}</option>
+                  <option value="corporate">{t('clientTypeCorporate')}</option>
+                  <option value="agent">{t('clientTypeAgent')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
+                  {t('statusLabel')}
                 </label>
                 <select
                   name="status"
@@ -441,15 +441,15 @@ export default function EditClientPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
-                  <option value="prospect">Prospect</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="blacklisted">Blacklisted</option>
+                  <option value="prospect">{t('statusProspect')}</option>
+                  <option value="active">{t('statusActive')}</option>
+                  <option value="inactive">{t('statusInactive')}</option>
+                  <option value="blacklisted">{t('statusBlacklisted')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Lead Source
+                  {t('leadSource')}
                 </label>
                 <select
                   name="lead_source"
@@ -457,7 +457,7 @@ export default function EditClientPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
-                  <option value="">Select source...</option>
+                  <option value="">{t('selectSource')}</option>
                   {LEAD_SOURCES.map(source => (
                     <option key={source.value} value={source.value}>
                       {source.icon} {source.label}
@@ -468,7 +468,7 @@ export default function EditClientPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Star className="w-3 h-3 inline mr-1" />
-                  VIP Status
+                  {t('vipStatus')}
                 </label>
                 <label className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 shadow-sm">
                   <input
@@ -479,7 +479,7 @@ export default function EditClientPage() {
                     className="w-4 h-4 text-yellow-500 border-gray-300 rounded focus:ring-2 focus:ring-yellow-500"
                   />
                   <Star className="w-4 h-4 text-yellow-500" />
-                  <span className="text-sm text-gray-700">VIP Client</span>
+                  <span className="text-sm text-gray-700">{t('vipClient')}</span>
                 </label>
               </div>
             </div>
@@ -487,11 +487,11 @@ export default function EditClientPage() {
 
           {/* Preferences */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Preferences</h2>
+            <h2 className="text-base font-semibold text-gray-900 mb-4">{t('preferences')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Passport Type
+                  {t('passportType')}
                 </label>
                 <select
                   name="passport_type"
@@ -499,14 +499,14 @@ export default function EditClientPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
-                  <option value="">Select...</option>
-                  <option value="euro_passport">Euro Passport</option>
-                  <option value="other_passport">Other Passport</option>
+                  <option value="">{t('selectOption')}</option>
+                  <option value="euro_passport">{t('euroPassport')}</option>
+                  <option value="other_passport">{t('otherPassport')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Preferred Language
+                  {t('preferredLanguage')}
                 </label>
                 <select
                   name="preferred_language"
@@ -514,7 +514,7 @@ export default function EditClientPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
-                  <option value="">Select...</option>
+                  <option value="">{t('selectOption')}</option>
                   <option value="English">English</option>
                   <option value="Arabic">Arabic</option>
                   <option value="French">French</option>
@@ -529,7 +529,7 @@ export default function EditClientPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Preferred Contact Method
+                  {t('preferredContactMethod')}
                 </label>
                 <select
                   name="preferred_contact_method"
@@ -537,9 +537,9 @@ export default function EditClientPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
-                  <option value="">Select...</option>
-                  <option value="email">Email</option>
-                  <option value="phone">Phone</option>
+                  <option value="">{t('selectOption')}</option>
+                  <option value="email">{t('email')}</option>
+                  <option value="phone">{t('phone')}</option>
                   <option value="whatsapp">WhatsApp</option>
                   <option value="sms">SMS</option>
                 </select>
@@ -549,14 +549,14 @@ export default function EditClientPage() {
 
           {/* Special Interests */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Special Interests</h2>
+            <h2 className="text-base font-semibold text-gray-900 mb-4">{t('specialInterests')}</h2>
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
                 value={newInterest}
                 onChange={(e) => setNewInterest(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addInterest())}
-                placeholder="Add interest (e.g., History, Adventure)"
+                placeholder={t('addInterestPlaceholder')}
                 className="flex-1 px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
               />
               <button
@@ -564,7 +564,7 @@ export default function EditClientPage() {
                 onClick={addInterest}
                 className="px-4 py-2.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
               >
-                Add
+                {tCommon('add')}
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -590,7 +590,7 @@ export default function EditClientPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
             <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Tag className="w-4 h-4 text-gray-400" />
-              Tags
+              {t('tags')}
             </h2>
             <div className="flex gap-2 mb-3">
               <input
@@ -598,7 +598,7 @@ export default function EditClientPage() {
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                placeholder="Add tag"
+                placeholder={t('addTagPlaceholder')}
                 className="flex-1 px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
               />
               <button
@@ -606,7 +606,7 @@ export default function EditClientPage() {
                 onClick={addTag}
                 className="px-4 py-2.5 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors shadow-sm"
               >
-                Add
+                {tCommon('add')}
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -630,13 +630,13 @@ export default function EditClientPage() {
 
           {/* Internal Notes */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Internal Notes</h2>
+            <h2 className="text-base font-semibold text-gray-900 mb-4">{t('internalNotes')}</h2>
             <textarea
               name="internal_notes"
               value={formData.internal_notes}
               onChange={handleChange}
               rows={4}
-              placeholder="Add any internal notes about this client..."
+              placeholder={t('internalNotesPlaceholder')}
               className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
             />
           </div>
