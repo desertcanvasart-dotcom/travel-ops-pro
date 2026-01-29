@@ -700,20 +700,20 @@ export function UnifiedMessageThread({
       {/* Header */}
       <div className="px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="relative">
-              <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold shadow-sm ${
-                conversation.channel === 'whatsapp' ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' : 'bg-gradient-to-br from-blue-400 to-blue-600'
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold ${
+                conversation.channel === 'whatsapp' ? 'bg-emerald-600' : 'bg-blue-600'
               }`}>
                 {initials}
               </div>
-              <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center shadow-sm ${
+              <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center ${
                 conversation.channel === 'whatsapp' ? 'bg-[#25D366]' : 'bg-blue-500'
               }`}>
                 {conversation.channel === 'whatsapp' ? (
-                  <MessageSquare className="w-2.5 h-2.5 text-white" />
+                  <MessageSquare className="w-2 h-2 text-white" />
                 ) : (
-                  <Mail className="w-2.5 h-2.5 text-white" />
+                  <Mail className="w-2 h-2 text-white" />
                 )}
               </div>
             </div>
@@ -737,31 +737,31 @@ export function UnifiedMessageThread({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {/* Agent Selector */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowAgentSelector(!showAgentSelector)}
                 disabled={assigningAgent}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-2 py-1 text-xs border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50"
               >
                 {assigningAgent ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : conversation.assigned_agent ? (
                   <>
                     <AgentAvatar agent={conversation.assigned_agent as Agent} size="sm" />
-                    <span className="font-medium truncate max-w-[100px]">
+                    <span className="font-medium truncate max-w-[80px]">
                       {conversation.assigned_agent.name}
                     </span>
                   </>
                 ) : (
                   <>
-                    <UserX className="w-4 h-4 text-gray-400" />
+                    <UserX className="w-3.5 h-3.5 text-gray-400" />
                     <span className="text-gray-500">Unassigned</span>
                   </>
                 )}
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                <ChevronDown className="w-3 h-3 text-gray-400" />
               </button>
 
               {showAgentSelector && (
@@ -809,17 +809,17 @@ export function UnifiedMessageThread({
             {conversation.client_id ? (
               <Link
                 href={`/clients/${conversation.client_id}`}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-50"
               >
-                <User className="w-4 h-4" />
+                <User className="w-3.5 h-3.5" />
                 View Client
               </Link>
             ) : (
               <Link
                 href={`/clients/new?${conversation.channel === 'whatsapp' ? 'phone' : 'email'}=${conversation.contact_info}`}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
+                className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-50"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 Create Client
               </Link>
             )}
@@ -829,15 +829,15 @@ export function UnifiedMessageThread({
               type="button"
               onClick={handleParseConversation}
               disabled={messages.length === 0}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-primary-500 rounded-md hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Parse conversation and generate itinerary"
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-3.5 h-3.5" />
               Generate Itinerary
             </button>
 
             {/* Separator */}
-            <div className="w-px h-6 bg-gray-200" />
+            <div className="w-px h-5 bg-gray-200" />
 
             {/* Action Buttons */}
             {/* Mark as Read/Unread */}
@@ -846,20 +846,20 @@ export function UnifiedMessageThread({
                 type="button"
                 onClick={handleMarkAsRead}
                 disabled={actionLoading}
-                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
                 title="Mark as read"
               >
-                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MailOpen className="w-4 h-4" />}
+                {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MailOpen className="w-3.5 h-3.5" />}
               </button>
             ) : conversation.channel === 'email' && (
               <button
                 type="button"
                 onClick={handleMarkAsUnread}
                 disabled={actionLoading}
-                className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-50"
+                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
                 title="Mark as unread"
               >
-                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
               </button>
             )}
 
@@ -869,10 +869,10 @@ export function UnifiedMessageThread({
                 type="button"
                 onClick={handleArchiveConversation}
                 disabled={actionLoading}
-                className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors disabled:opacity-50"
+                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
                 title="Archive conversation"
               >
-                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
               </button>
             )}
 
@@ -881,10 +881,10 @@ export function UnifiedMessageThread({
               type="button"
               onClick={() => setShowDeleteModal(true)}
               disabled={actionLoading}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
               title={conversation.channel === 'whatsapp' ? 'Hide conversation' : 'Move to trash'}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
