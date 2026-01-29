@@ -6,10 +6,24 @@ import {
   Send, User, Clock, Loader2, CheckCheck, Check,
   AlertCircle, Plus, History, Paperclip, Download,
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
-  ExternalLink
+  ExternalLink, Languages
 } from 'lucide-react'
 import { ChannelBadge } from './ChannelBadge'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
+
+// Supported languages
+const QUICK_LANGUAGES = [
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+  { code: 'fr', name: 'French', flag: '🇫🇷' },
+  { code: 'de', name: 'German', flag: '🇩🇪' },
+  { code: 'it', name: 'Italian', flag: '🇮🇹' },
+  { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
+  { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+  { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+  { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+  { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+]
 
 interface UnifiedMessageThreadProps {
   conversation: UnifiedConversation | null
@@ -93,6 +107,18 @@ export function UnifiedMessageThread({
   const [showAgentSelector, setShowAgentSelector] = useState(false)
   const [assigningAgent, setAssigningAgent] = useState(false)
 
+  // Translation state
+  const [translationEnabled, setTranslationEnabled] = useState(false)
+  const [translatedMessage, setTranslatedMessage] = useState('')
+  const [isTranslating, setIsTranslating] = useState(false)
+  const [customerLanguage, setCustomerLanguage] = useState('es')
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false)
+  const [incomingTranslations, setIncomingTranslations] = useState<Record<string, string>>({})
+  const [translatingMessageIds, setTranslatingMessageIds] = useState<Set<string>>(new Set())
+  const [showOriginalMap, setShowOriginalMap] = useState<Record<string, boolean>>({})
+
+  const getLanguageInfo = (code: string) => QUICK_LANGUAGES.find(l => l.code === code) || { code, name: code, flag: '🌐' }
+
   // Fetch messages based on channel
   const fetchMessages = useCallback(async (showLoader = true) => {
     if (!conversation) return
@@ -154,6 +180,11 @@ export function UnifiedMessageThread({
     if (conversation) {
       fetchMessages(true)
       fetchAgents()
+      // Reset translation state
+      setIncomingTranslations({})
+      setShowOriginalMap({})
+      setNewMessage('')
+      setTranslatedMessage('')
     } else {
       setMessages([])
     }
@@ -173,6 +204,66 @@ export function UnifiedMessageThread({
     return () => clearInterval(interval)
   }, [conversation?.id, fetchMessages])
 
+  // Translation functions
+  const translateOutgoing = async (text: string, targetLang: string): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, targetLanguage: targetLang, action: 'fromEnglish' })
+      })
+      const data = await res.json()
+      return data.success && data.data?.translatedText ? data.data.translatedText : null
+    } catch { return null }
+  }
+
+  const translateIncoming = async (text: string): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, action: 'toEnglish' })
+      })
+      const data = await res.json()
+      return data.success && data.data?.translatedText ? data.data.translatedText : null
+    } catch { return null }
+  }
+
+  const handleTranslateMessage = async (messageId: string, messageBody: string) => {
+    if (incomingTranslations[messageId] || translatingMessageIds.has(messageId)) return
+    setTranslatingMessageIds(prev => new Set(prev).add(messageId))
+    const translation = await translateIncoming(messageBody)
+    if (translation) setIncomingTranslations(prev => ({ ...prev, [messageId]: translation }))
+    setTranslatingMessageIds(prev => { const s = new Set(prev); s.delete(messageId); return s })
+  }
+
+  // Auto-translate outgoing message
+  useEffect(() => {
+    if (!translationEnabled || !newMessage.trim()) {
+      setTranslatedMessage('')
+      setIsTranslating(false)
+      return
+    }
+    setIsTranslating(true)
+    const timer = setTimeout(async () => {
+      const result = await translateOutgoing(newMessage.trim(), customerLanguage)
+      setTranslatedMessage(result || '')
+      setIsTranslating(false)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [newMessage, customerLanguage, translationEnabled])
+
+  // Auto-translate incoming messages when translation is enabled
+  useEffect(() => {
+    if (translationEnabled && messages.length > 0) {
+      messages.forEach(msg => {
+        if (msg.direction === 'inbound' && !incomingTranslations[msg.id]) {
+          handleTranslateMessage(msg.id, msg.content)
+        }
+      })
+    }
+  }, [translationEnabled, messages])
+
   // Send message
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -181,17 +272,23 @@ export function UnifiedMessageThread({
     try {
       let url: string
       let body: any
+      let messageToSend = newMessage.trim()
+
+      // Use translated message if translation is enabled
+      if (translationEnabled && translatedMessage) {
+        messageToSend = translatedMessage
+      }
 
       if (conversation.channel === 'whatsapp') {
         url = '/api/whatsapp/messages'
-        body = { conversation_id: conversation.id, message: newMessage.trim() }
+        body = { conversation_id: conversation.id, message: messageToSend }
       } else {
         // For email, we need the thread_id and recipient
         url = '/api/gmail/send'
         body = {
           to: conversation.contact_info,
           subject: conversation.subject ? `Re: ${conversation.subject}` : 'New message',
-          body: newMessage.trim(),
+          body: messageToSend,
           threadId: conversation.identifier, // thread_id for email
           userId: 'current', // Will be handled by the API
         }
@@ -205,6 +302,7 @@ export function UnifiedMessageThread({
 
       if (res.ok) {
         setNewMessage('')
+        setTranslatedMessage('')
         fetchMessages(false)
       }
     } catch (error) {
@@ -342,6 +440,7 @@ export function UnifiedMessageThread({
             {/* Agent Selector */}
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setShowAgentSelector(!showAgentSelector)}
                 disabled={assigningAgent}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50"
@@ -369,6 +468,7 @@ export function UnifiedMessageThread({
                   <div className="fixed inset-0 z-40" onClick={() => setShowAgentSelector(false)} />
                   <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
                     <button
+                      type="button"
                       onClick={() => assignConversation(null)}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100"
                     >
@@ -379,6 +479,7 @@ export function UnifiedMessageThread({
                       <p className="px-3 py-1 text-xs font-medium text-gray-400 uppercase">Assign to</p>
                       {agents.filter(a => a.is_available).map(agent => (
                         <button
+                          type="button"
                           key={agent.id}
                           onClick={() => assignConversation(agent.id)}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 ${
@@ -450,6 +551,11 @@ export function UnifiedMessageThread({
                 <div className="space-y-2">
                   {msgs.map((msg) => {
                     const isOutbound = msg.direction === 'outbound'
+                    const isInbound = msg.direction === 'inbound'
+                    const hasTranslation = isInbound && incomingTranslations[msg.id]
+                    const isTranslatingThis = translatingMessageIds.has(msg.id)
+                    const showOriginal = showOriginalMap[msg.id]
+
                     return (
                       <div key={msg.id} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
                         <div
@@ -459,6 +565,33 @@ export function UnifiedMessageThread({
                               : `${colors.inbound} rounded-tl-none`
                           }`}
                         >
+                          {/* Translation controls for inbound messages */}
+                          {isInbound && translationEnabled && (
+                            <div className="flex items-center gap-2 mb-1 pb-1 border-b border-gray-200">
+                              {isTranslatingThis ? (
+                                <span className="flex items-center gap-1 text-xs text-blue-500">
+                                  <Loader2 className="w-3 h-3 animate-spin" />Translating...
+                                </span>
+                              ) : hasTranslation ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowOriginalMap(p => ({ ...p, [msg.id]: !p[msg.id] }))}
+                                  className="text-xs text-blue-600 hover:text-blue-700"
+                                >
+                                  {showOriginal ? '🇬🇧 Show English' : '🌐 Show Original'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleTranslateMessage(msg.id, msg.content)}
+                                  className="text-xs text-blue-600 hover:text-blue-700"
+                                >
+                                  🌐 Translate
+                                </button>
+                              )}
+                            </div>
+                          )}
+
                           {/* Email header info */}
                           {conversation.channel === 'email' && msg.from_address && (
                             <div className="text-xs text-gray-500 mb-1 pb-1 border-b border-gray-200">
@@ -471,8 +604,17 @@ export function UnifiedMessageThread({
 
                           {/* Message content */}
                           <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                            {msg.content}
+                            {isInbound && hasTranslation && !showOriginal
+                              ? incomingTranslations[msg.id]
+                              : msg.content}
                           </p>
+
+                          {/* Show original if translated */}
+                          {isInbound && hasTranslation && !showOriginal && (
+                            <p className="text-xs text-gray-400 mt-1 italic">
+                              Original: {msg.content}
+                            </p>
+                          )}
 
                           {/* Attachments for email */}
                           {msg.attachments && msg.attachments.length > 0 && (
@@ -500,6 +642,81 @@ export function UnifiedMessageThread({
         )}
       </div>
 
+      {/* Translation Controls */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => { setTranslationEnabled(!translationEnabled); setTranslatedMessage('') }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                translationEnabled
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+              }`}
+            >
+              <Languages className="w-4 h-4" />
+              {translationEnabled ? 'Translation ON' : 'Translate'}
+            </button>
+            {translationEnabled && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowLanguageSelector(!showLanguageSelector)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+                >
+                  <span>{getLanguageInfo(customerLanguage).flag}</span>
+                  <span>{getLanguageInfo(customerLanguage).name}</span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                {showLanguageSelector && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowLanguageSelector(false)} />
+                    <div className="absolute bottom-full left-0 mb-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+                      {QUICK_LANGUAGES.filter(l => l.code !== 'en').map(lang => (
+                        <button
+                          type="button"
+                          key={lang.code}
+                          onClick={() => { setCustomerLanguage(lang.code); setShowLanguageSelector(false); setTranslatedMessage('') }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 ${
+                            customerLanguage === lang.code ? 'bg-blue-50 text-blue-700' : ''
+                          }`}
+                        >
+                          <span>{lang.flag}</span>
+                          <span>{lang.name}</span>
+                          {customerLanguage === lang.code && <Check className="w-4 h-4 ml-auto" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          {translationEnabled && newMessage && (
+            <div className="text-xs">
+              {isTranslating ? (
+                <span className="flex items-center gap-1 text-blue-600">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />Translating...
+                </span>
+              ) : translatedMessage ? (
+                <span className="flex items-center gap-1 text-green-600">
+                  <Check className="w-3.5 h-3.5" />Ready in {getLanguageInfo(customerLanguage).name}
+                </span>
+              ) : (
+                <span className="text-gray-400">Type to translate</span>
+              )}
+            </div>
+          )}
+        </div>
+        {translationEnabled && translatedMessage && !isTranslating && (
+          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs text-blue-600 font-medium mb-1">{getLanguageInfo(customerLanguage).flag} Will send:</p>
+            <p className="text-sm text-gray-700">{translatedMessage}</p>
+          </div>
+        )}
+      </div>
+
       {/* Message Input */}
       <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
         <div className="flex items-center gap-3">
@@ -507,13 +724,17 @@ export function UnifiedMessageThread({
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder={`Type a message via ${conversation.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}...`}
+            placeholder={
+              translationEnabled
+                ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}`
+                : `Type a message via ${conversation.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}...`
+            }
             className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2"
             style={{ '--tw-ring-color': colors.accent } as any}
           />
           <button
             type="submit"
-            disabled={!newMessage.trim() || sending}
+            disabled={!newMessage.trim() || sending || (translationEnabled && isTranslating)}
             className="p-2.5 text-white rounded-full hover:opacity-90 disabled:opacity-50"
             style={{ backgroundColor: colors.accent }}
           >

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Search, RefreshCw, User, Clock, Filter, Loader2,
-  MessageSquare, Mail, UserX, Trash2
+  Search, RefreshCw, User, Filter, Loader2,
+  MessageSquare, Mail, UserX, Users, Plus, X, Trash2, Check,
+  CloudDownload
 } from 'lucide-react'
 import { ChannelBadge, ChannelBadgeLight } from './ChannelBadge'
 import { UnifiedConversation, ConversationChannel, ConversationStatus } from '@/types/unified'
@@ -12,6 +13,7 @@ interface UnifiedConversationListProps {
   onSelectConversation: (conversation: UnifiedConversation) => void
   selectedConversationId?: string
   clientId?: string // Optional: filter by client
+  userId?: string // Current user ID for sync
 }
 
 interface FilterState {
@@ -20,6 +22,18 @@ interface FilterState {
   search: string
   hasUnread: boolean
   unassignedOnly: boolean
+}
+
+interface SalesAgent {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  avatar_url: string | null
+  is_active: boolean
+  is_available: boolean
+  current_conversations: number
+  max_conversations: number
 }
 
 // Agent avatar component
@@ -61,13 +75,159 @@ function AgentAvatar({ agent, size = 'sm' }: {
   )
 }
 
+// Agents Management Modal
+function AgentsManagementModal({
+  agents,
+  onClose,
+  onRefresh
+}: {
+  agents: SalesAgent[]
+  onClose: () => void
+  onRefresh: () => void
+}) {
+  const [newAgentName, setNewAgentName] = useState('')
+  const [newAgentEmail, setNewAgentEmail] = useState('')
+  const [isAdding, setIsAdding] = useState(false)
+
+  const addAgent = async () => {
+    if (!newAgentName.trim()) return
+    setIsAdding(true)
+    try {
+      const res = await fetch('/api/whatsapp/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newAgentName.trim(), email: newAgentEmail.trim() || null })
+      })
+      if (res.ok) {
+        setNewAgentName('')
+        setNewAgentEmail('')
+        onRefresh()
+      }
+    } catch (error) {
+      console.error('Error adding agent:', error)
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  const toggleAgentAvailability = async (agent: SalesAgent) => {
+    try {
+      await fetch('/api/whatsapp/agents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: agent.id, is_available: !agent.is_available })
+      })
+      onRefresh()
+    } catch (error) {
+      console.error('Error updating agent:', error)
+    }
+  }
+
+  const deleteAgent = async (agentId: string) => {
+    if (!confirm('Are you sure you want to deactivate this agent?')) return
+    try {
+      await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
+      onRefresh()
+    } catch (error) {
+      console.error('Error deleting agent:', error)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-bold text-gray-900">Sales Agents</h3>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="Close"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+
+        <div className="p-6">
+          {/* Add New Agent */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Add New Agent</h4>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newAgentName}
+                onChange={(e) => setNewAgentName(e.target.value)}
+                placeholder="Agent name"
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+              />
+              <input
+                type="email"
+                value={newAgentEmail}
+                onChange={(e) => setNewAgentEmail(e.target.value)}
+                placeholder="Email (optional)"
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+              />
+              <button
+                onClick={addAgent}
+                disabled={!newAgentName.trim() || isAdding}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+              >
+                {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Agent List */}
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {agents.length === 0 ? (
+              <p className="text-center text-gray-500 py-4">No agents yet. Add one above.</p>
+            ) : (
+              agents.map(agent => (
+                <div key={agent.id} className={`flex items-center gap-3 p-3 rounded-lg border ${agent.is_active ? 'border-gray-200' : 'border-red-200 bg-red-50'}`}>
+                  <AgentAvatar agent={agent} size="md" />
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{agent.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {agent.email || 'No email'} • {agent.current_conversations} active chats
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleAgentAvailability(agent)}
+                      className={`px-2 py-1 text-xs rounded-full ${
+                        agent.is_available
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      {agent.is_available ? 'Available' : 'Away'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteAgent(agent.id)}
+                      className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+                      title="Delete agent"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function UnifiedConversationList({
   onSelectConversation,
   selectedConversationId,
   clientId,
+  userId,
 }: UnifiedConversationListProps) {
   const [conversations, setConversations] = useState<UnifiedConversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
   const [filters, setFilters] = useState<FilterState>({
     channel: 'all',
     status: 'all',
@@ -76,6 +236,21 @@ export function UnifiedConversationList({
     unassignedOnly: false,
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [agents, setAgents] = useState<SalesAgent[]>([])
+  const [showAgentsModal, setShowAgentsModal] = useState(false)
+
+  // Fetch agents
+  const fetchAgents = useCallback(async () => {
+    try {
+      const res = await fetch('/api/whatsapp/agents')
+      if (res.ok) {
+        const data = await res.json()
+        setAgents(data.agents || [])
+      }
+    } catch (error) {
+      console.error('Error fetching agents:', error)
+    }
+  }, [])
 
   // Fetch conversations
   const fetchConversations = useCallback(async (showLoader = true) => {
@@ -102,9 +277,41 @@ export function UnifiedConversationList({
     }
   }, [filters, clientId])
 
+  // Sync emails
+  const syncEmails = async () => {
+    if (!userId || syncing) return
+    setSyncing(true)
+    setSyncMessage('Syncing emails...')
+    try {
+      const res = await fetch('/api/email/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          full_sync: false,
+          max_results: 100,
+          days_back: 30
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSyncMessage(`Synced ${data.messages_created || 0} new messages`)
+        fetchConversations(false)
+      } else {
+        setSyncMessage(data.error || 'Sync failed')
+      }
+    } catch (error: any) {
+      setSyncMessage(error.message || 'Sync failed')
+    } finally {
+      setSyncing(false)
+      setTimeout(() => setSyncMessage(null), 3000)
+    }
+  }
+
   // Initial fetch and filter change
   useEffect(() => {
     fetchConversations(true)
+    fetchAgents()
   }, [])
 
   // Debounced search
@@ -138,10 +345,6 @@ export function UnifiedConversationList({
     return channel === 'whatsapp' ? MessageSquare : Mail
   }
 
-  const getChannelColor = (channel: ConversationChannel) => {
-    return channel === 'whatsapp' ? 'text-[#25D366]' : 'text-blue-500'
-  }
-
   // Count summaries
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0)
   const whatsappCount = conversations.filter(c => c.channel === 'whatsapp').length
@@ -149,6 +352,15 @@ export function UnifiedConversationList({
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
+      {/* Agents Modal */}
+      {showAgentsModal && (
+        <AgentsManagementModal
+          agents={agents}
+          onClose={() => setShowAgentsModal(false)}
+          onRefresh={fetchAgents}
+        />
+      )}
+
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-3">
@@ -157,10 +369,29 @@ export function UnifiedConversationList({
           </h1>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowAgentsModal(true)}
+              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+              title="Manage Agents"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => setShowFilters(!showFilters)}
               className={`p-2 rounded-lg ${showFilters ? 'bg-primary-100 text-primary-600' : 'text-gray-500 hover:bg-gray-100'}`}
             >
               <Filter className="w-4 h-4" />
+            </button>
+            <button
+              onClick={syncEmails}
+              disabled={syncing || !userId}
+              className={`p-2 rounded-lg ${syncing ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+              title="Sync Emails"
+            >
+              {syncing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CloudDownload className="w-4 h-4" />
+              )}
             </button>
             <button
               onClick={() => fetchConversations(false)}
@@ -170,6 +401,17 @@ export function UnifiedConversationList({
             </button>
           </div>
         </div>
+
+        {/* Sync Message */}
+        {syncMessage && (
+          <div className={`mb-3 px-3 py-2 rounded-lg text-sm ${
+            syncMessage.includes('failed') || syncMessage.includes('error')
+              ? 'bg-red-50 text-red-700'
+              : 'bg-blue-50 text-blue-700'
+          }`}>
+            {syncMessage}
+          </div>
+        )}
 
         {/* Channel Filter Tabs */}
         <div className="flex gap-1 mb-3 p-1 bg-gray-100 rounded-lg">
@@ -263,6 +505,9 @@ export function UnifiedConversationList({
           <div className="p-6 text-center text-gray-500">
             <MessageSquare className="w-10 h-10 mx-auto mb-2 text-gray-300" />
             <p className="text-sm">No conversations found</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Click the sync button to import emails
+            </p>
             {(filters.search || filters.channel !== 'all' || filters.hasUnread || filters.unassignedOnly) && (
               <button
                 onClick={() => setFilters({ channel: 'all', status: 'all', search: '', hasUnread: false, unassignedOnly: false })}

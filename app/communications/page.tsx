@@ -3,8 +3,10 @@
 import { useState, useCallback } from 'react'
 import { UnifiedConversationList, UnifiedMessageThread } from '@/components/unified'
 import { UnifiedConversation } from '@/types/unified'
+import { useAuth } from '@/app/contexts/AuthContext'
 
 export default function UnifiedCommunicationsPage() {
+  const { user } = useAuth()
   const [selectedConversation, setSelectedConversation] = useState<UnifiedConversation | null>(null)
 
   const handleSelectConversation = useCallback((conversation: UnifiedConversation) => {
@@ -24,6 +26,7 @@ export default function UnifiedCommunicationsPage() {
         <UnifiedConversationList
           onSelectConversation={handleSelectConversation}
           selectedConversationId={selectedConversation?.id}
+          userId={user?.id}
         />
       </div>
 
