@@ -11,6 +11,37 @@ import {
 import { ChannelBadge } from './ChannelBadge'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
 
+// Helper to extract and separate quoted content from emails
+function parseEmailContent(content: string): { main: string; quoted: string | null } {
+  if (!content) return { main: '', quoted: null }
+
+  // Common patterns for quoted content
+  const patterns = [
+    /\n\s*On .+wrote:\s*\n/i,           // "On [date], [person] wrote:"
+    /\n\s*-{3,}\s*Original Message\s*-{3,}/i,  // "--- Original Message ---"
+    /\n\s*>{2,}/,                        // Multiple > characters
+    /\n\s*From:.+\nSent:.+\nTo:/i,      // Outlook style
+    /\n\s*_{10,}/,                       // Long underscore lines
+  ]
+
+  let splitIndex = content.length
+  for (const pattern of patterns) {
+    const match = content.search(pattern)
+    if (match !== -1 && match < splitIndex) {
+      splitIndex = match
+    }
+  }
+
+  if (splitIndex < content.length) {
+    return {
+      main: content.substring(0, splitIndex).trim(),
+      quoted: content.substring(splitIndex).trim()
+    }
+  }
+
+  return { main: content, quoted: null }
+}
+
 // Supported languages
 const QUICK_LANGUAGES = [
   { code: 'en', name: 'English', flag: '🇬🇧' },
@@ -116,6 +147,7 @@ export function UnifiedMessageThread({
   const [incomingTranslations, setIncomingTranslations] = useState<Record<string, string>>({})
   const [translatingMessageIds, setTranslatingMessageIds] = useState<Set<string>>(new Set())
   const [showOriginalMap, setShowOriginalMap] = useState<Record<string, boolean>>({})
+  const [expandedQuotes, setExpandedQuotes] = useState<Set<string>>(new Set())
 
   const getLanguageInfo = (code: string) => QUICK_LANGUAGES.find(l => l.code === code) || { code, name: code, flag: '🌐' }
 
@@ -390,50 +422,62 @@ export function UnifiedMessageThread({
 
   if (!conversation) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <MessageSquare className="w-8 h-8 text-gray-400" />
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="text-center max-w-md px-6">
+          <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-sm">
+            <MessageSquare className="w-10 h-10 text-gray-400" />
           </div>
-          <h2 className="text-lg font-medium text-gray-900 mb-1">Unified Communications</h2>
-          <p className="text-sm text-gray-500">Select a conversation to view messages</p>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Unified Communications</h2>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            Select a conversation from the list to view messages and respond to your customers via WhatsApp or Email.
+          </p>
         </div>
       </div>
     )
   }
 
   const colors = getChannelColors(conversation.channel)
+  const displayName = conversation.client_name || conversation.contact_info?.split('@')[0] || 'Unknown'
+  const initials = displayName.split(/[\s@.]/).filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase() || '?'
 
   return (
     <div className="flex-1 flex flex-col bg-white">
       {/* Header */}
-      <div className="p-4 bg-white border-b border-gray-200">
+      <div className="px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-gray-500" />
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold shadow-sm ${
+                conversation.channel === 'whatsapp' ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' : 'bg-gradient-to-br from-blue-400 to-blue-600'
+              }`}>
+                {initials}
               </div>
-              <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ${
+              <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center shadow-sm ${
                 conversation.channel === 'whatsapp' ? 'bg-[#25D366]' : 'bg-blue-500'
               }`}>
                 {conversation.channel === 'whatsapp' ? (
-                  <MessageSquare className="w-3 h-3 text-white" />
+                  <MessageSquare className="w-2.5 h-2.5 text-white" />
                 ) : (
-                  <Mail className="w-3 h-3 text-white" />
+                  <Mail className="w-2.5 h-2.5 text-white" />
                 )}
               </div>
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-gray-900">
-                  {conversation.client_name || conversation.contact_info}
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {displayName}
                 </p>
-                <ChannelBadge channel={conversation.channel} size="sm" />
+                {conversation.client_id && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 rounded">
+                    Client
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-gray-500">{conversation.contact_info}</p>
+              <p className="text-xs text-gray-500 truncate">{conversation.contact_info}</p>
               {conversation.channel === 'email' && conversation.subject && (
-                <p className="text-xs text-gray-600 font-medium mt-0.5">{conversation.subject}</p>
+                <p className="text-xs text-gray-700 font-medium truncate mt-0.5 max-w-[300px]" title={conversation.subject}>
+                  {conversation.subject}
+                </p>
               )}
             </div>
           </div>
@@ -550,7 +594,7 @@ export function UnifiedMessageThread({
                 </div>
 
                 {/* Messages for this date */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {msgs.map((msg) => {
                     const isOutbound = msg.direction === 'outbound'
                     const isInbound = msg.direction === 'inbound'
@@ -558,18 +602,28 @@ export function UnifiedMessageThread({
                     const isTranslatingThis = translatingMessageIds.has(msg.id)
                     const showOriginal = showOriginalMap[msg.id]
 
+                    // Parse email content to separate main content from quoted
+                    const isEmail = conversation.channel === 'email'
+                    const contentToParse = isInbound && hasTranslation && !showOriginal
+                      ? incomingTranslations[msg.id]
+                      : msg.content
+                    const { main: mainContent, quoted: quotedContent } = isEmail
+                      ? parseEmailContent(contentToParse)
+                      : { main: contentToParse, quoted: null }
+                    const isQuoteExpanded = expandedQuotes.has(msg.id)
+
                     return (
                       <div key={msg.id} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
                         <div
-                          className={`max-w-[70%] rounded-lg px-3 py-2 shadow-sm ${
+                          className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-sm ${
                             isOutbound
-                              ? `${colors.outbound} rounded-tr-none`
-                              : `${colors.inbound} rounded-tl-none`
+                              ? `${colors.outbound} rounded-br-md`
+                              : `${colors.inbound} rounded-bl-md border border-gray-100`
                           }`}
                         >
                           {/* Translation controls for inbound messages */}
                           {isInbound && translationEnabled && (
-                            <div className="flex items-center gap-2 mb-1 pb-1 border-b border-gray-200">
+                            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200/60">
                               {isTranslatingThis ? (
                                 <span className="flex items-center gap-1 text-xs text-blue-500">
                                   <Loader2 className="w-3 h-3 animate-spin" />Translating...
@@ -578,7 +632,7 @@ export function UnifiedMessageThread({
                                 <button
                                   type="button"
                                   onClick={() => setShowOriginalMap(p => ({ ...p, [msg.id]: !p[msg.id] }))}
-                                  className="text-xs text-blue-600 hover:text-blue-700"
+                                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                                 >
                                   {showOriginal ? '🇬🇧 Show English' : '🌐 Show Original'}
                                 </button>
@@ -586,7 +640,7 @@ export function UnifiedMessageThread({
                                 <button
                                   type="button"
                                   onClick={() => handleTranslateMessage(msg.id, msg.content)}
-                                  className="text-xs text-blue-600 hover:text-blue-700"
+                                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                                 >
                                   🌐 Translate
                                 </button>
@@ -595,32 +649,59 @@ export function UnifiedMessageThread({
                           )}
 
                           {/* Email header info */}
-                          {conversation.channel === 'email' && msg.from_address && (
-                            <div className="text-xs text-gray-500 mb-1 pb-1 border-b border-gray-200">
-                              <span className="font-medium">
+                          {isEmail && msg.from_address && (
+                            <div className="text-[11px] text-gray-500 mb-2 pb-2 border-b border-gray-200/60">
+                              <span className="font-semibold text-gray-600">
                                 {isOutbound ? 'To: ' : 'From: '}
                               </span>
-                              {isOutbound ? msg.to_addresses?.join(', ') : msg.from_address}
+                              <span className="text-gray-500">
+                                {isOutbound ? msg.to_addresses?.join(', ') : msg.from_address}
+                              </span>
                             </div>
                           )}
 
                           {/* Message content */}
-                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                            {isInbound && hasTranslation && !showOriginal
-                              ? incomingTranslations[msg.id]
-                              : msg.content}
-                          </p>
+                          <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+                            {mainContent}
+                          </div>
+
+                          {/* Quoted content (collapsible) */}
+                          {quotedContent && (
+                            <div className="mt-3 pt-2 border-t border-gray-200/60">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedQuotes(prev => {
+                                  const newSet = new Set(prev)
+                                  if (newSet.has(msg.id)) {
+                                    newSet.delete(msg.id)
+                                  } else {
+                                    newSet.add(msg.id)
+                                  }
+                                  return newSet
+                                })}
+                                className="text-[11px] text-gray-400 hover:text-gray-600 font-medium flex items-center gap-1"
+                              >
+                                <ChevronDown className={`w-3 h-3 transition-transform ${isQuoteExpanded ? 'rotate-180' : ''}`} />
+                                {isQuoteExpanded ? 'Hide quoted' : 'Show quoted'} ({quotedContent.split('\n').length} lines)
+                              </button>
+                              {isQuoteExpanded && (
+                                <div className="mt-2 pl-3 border-l-2 border-gray-200 text-[12px] text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                                  {quotedContent}
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           {/* Show original if translated */}
                           {isInbound && hasTranslation && !showOriginal && (
-                            <p className="text-xs text-gray-400 mt-1 italic">
-                              Original: {msg.content}
+                            <p className="text-[11px] text-gray-400 mt-2 italic border-t border-gray-200/60 pt-2">
+                              Original: {msg.content.substring(0, 100)}...
                             </p>
                           )}
 
                           {/* Attachments for email */}
                           {msg.attachments && msg.attachments.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
+                            <div className="mt-3 pt-2 border-t border-gray-200/60 flex flex-wrap gap-1.5">
                               {msg.attachments.map((att, idx) => (
                                 <AttachmentBadge key={idx} attachment={att} />
                               ))}
@@ -628,8 +709,8 @@ export function UnifiedMessageThread({
                           )}
 
                           {/* Timestamp and status */}
-                          <div className="flex items-center justify-end gap-1 mt-1">
-                            <span className="text-xs text-gray-500">{formatTime(msg.sent_at)}</span>
+                          <div className="flex items-center justify-end gap-1.5 mt-2">
+                            <span className="text-[11px] text-gray-400">{formatTime(msg.sent_at)}</span>
                             {isOutbound && getStatusIcon(msg.status)}
                           </div>
                         </div>
