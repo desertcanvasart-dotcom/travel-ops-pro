@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/app/supabase'
+import { useAuth } from '@/app/contexts/AuthContext'
 import { 
   User, 
   Mail, 
@@ -125,7 +126,8 @@ function SettingsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  
+  const { user } = useAuth()
+
   const [activeTab, setActiveTab] = useState(tabParam || 'profile')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -394,6 +396,65 @@ function SettingsContent() {
     }
   }
 
+  // Handle Gmail connection
+  const handleConnectGmail = async () => {
+    if (!user) {
+      setError('Please sign in to connect Gmail')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/gmail/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      const data = await response.json()
+
+      if (data.authUrl) {
+        window.location.href = data.authUrl
+      } else {
+        setError(data.error || 'Failed to get Gmail authorization URL')
+      }
+    } catch (err) {
+      console.error('Gmail connect error:', err)
+      setError('Failed to connect Gmail')
+    }
+  }
+
+  // Handle Gmail disconnection
+  const handleDisconnectGmail = async () => {
+    if (!user) {
+      setError('Please sign in to disconnect Gmail')
+      return
+    }
+
+    if (!confirm('Are you sure you want to disconnect your Gmail account?')) {
+      return
+    }
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('gmail_tokens')
+        .delete()
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      setEmailSettings(prev => prev ? {
+        ...prev,
+        gmail_connected: false,
+        gmail_email: ''
+      } : null)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err: any) {
+      console.error('Gmail disconnect error:', err)
+      setError(err.message || 'Failed to disconnect Gmail')
+    }
+  }
+
   // Handle avatar upload
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -613,12 +674,18 @@ function SettingsContent() {
                   <CheckCircle className="w-3 h-3" />
                   Connected
                 </span>
-                <button className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                <button
+                  onClick={handleDisconnectGmail}
+                  className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
                   Disconnect
                 </button>
               </>
             ) : (
-              <button className="px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors">
+              <button
+                onClick={handleConnectGmail}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors"
+              >
                 Connect Gmail
               </button>
             )}
