@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getGmailClient, refreshAccessToken } from '@/lib/gmail'
+import { getGmailClient, refreshAccessToken, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -10,14 +10,16 @@ const supabase = createClient(
 )
 
 // Helper to extract email address from "Name <email>" format
-function extractEmailAddress(fromString: string): string {
+function extractEmailAddress(fromString: string | undefined | null): string {
+  if (!fromString) return ''
   const match = fromString.match(/<([^>]+)>/)
   return match ? match[1].toLowerCase() : fromString.toLowerCase()
 }
 
 // Helper to determine direction based on user's email
-function getDirection(from: string, userEmail: string): 'inbound' | 'outbound' {
-  const fromEmail = extractEmailAddress(from).toLowerCase()
+function getDirection(from: string | undefined | null, userEmail: string): 'inbound' | 'outbound' {
+  if (!from || !userEmail) return 'inbound' // Default to inbound if we can't determine
+  const fromEmail = extractEmailAddress(from)
   return fromEmail === userEmail.toLowerCase() ? 'outbound' : 'inbound'
 }
 
@@ -89,9 +91,39 @@ export async function POST(request: NextRequest) {
     // Check if token needs refresh
     let accessToken = tokenData.access_token
     const refreshToken = tokenData.refresh_token
-    const userEmail = tokenData.email_address
+    let userEmail = tokenData.email_address
 
-    console.log('[Email Sync] User email:', userEmail, 'Token expiry:', tokenData.token_expiry)
+    console.log('[Email Sync] User email from DB:', userEmail, 'Token expiry:', tokenData.token_expiry)
+
+    // If email_address is not stored, fetch it from Gmail
+    if (!userEmail) {
+      console.log('[Email Sync] User email not stored, fetching from Gmail...')
+      try {
+        userEmail = await getUserEmail(accessToken)
+        console.log('[Email Sync] Fetched user email:', userEmail)
+
+        // Update the stored token with the email
+        if (userEmail) {
+          await supabase
+            .from('gmail_tokens')
+            .update({ email_address: userEmail, updated_at: new Date().toISOString() })
+            .eq('user_id', user_id)
+        }
+      } catch (emailError: any) {
+        console.error('[Email Sync] Failed to fetch user email:', emailError.message)
+        return NextResponse.json({
+          error: 'Could not determine your Gmail address. Please reconnect your Gmail account.',
+          success: false
+        }, { status: 400 })
+      }
+    }
+
+    if (!userEmail) {
+      return NextResponse.json({
+        error: 'Gmail email address not found. Please reconnect your Gmail account.',
+        success: false
+      }, { status: 400 })
+    }
 
     if (tokenData.token_expiry && new Date(tokenData.token_expiry) < new Date()) {
       console.log('[Email Sync] Token expired, refreshing...')
