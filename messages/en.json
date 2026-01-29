@@ -433,5 +433,65 @@
     "newBooking": "New booking received",
     "paymentReceived": "Payment received",
     "reminderDue": "Reminder: {task} is due"
+  },
+
+  "validation": {
+    "required": "{field} is required",
+    "email": "Please enter a valid email address",
+    "minLength": "{field} must be at least {min} characters",
+    "maxLength": "{field} must be no more than {max} characters",
+    "pattern": "{field} format is invalid",
+    "number": "Please enter a valid number",
+    "positive": "Please enter a positive number",
+    "integer": "Please enter a whole number",
+    "min": "{field} must be at least {min}",
+    "max": "{field} must be no more than {max}",
+    "date": "Please enter a valid date",
+    "dateRange": "End date must be after start date",
+    "phone": "Please enter a valid phone number",
+    "url": "Please enter a valid URL",
+    "match": "{field} must match {other}",
+    "unique": "{field} already exists",
+    "fileSize": "File size must be less than {max}",
+    "fileType": "File type not supported",
+    "passwordStrength": "Password must contain at least one uppercase letter, one lowercase letter, and one number",
+    "confirmPassword": "Passwords do not match"
+  },
+
+  "formats": {
+    "currency": "{value, number, ::currency/USD}",
+    "currencyShort": "${value}",
+    "date": "{date, date, medium}",
+    "dateShort": "{date, date, short}",
+    "dateLong": "{date, date, long}",
+    "time": "{time, time, short}",
+    "dateTime": "{date, date, medium} at {time, time, short}",
+    "number": "{value, number}",
+    "percent": "{value, number, percent}",
+    "decimal": "{value, number, ::precision-integer}",
+    "pax": "{count, plural, one {# person} other {# people}}",
+    "nights": "{count, plural, one {# night} other {# nights}}",
+    "days": "{count, plural, one {# day} other {# days}}"
+  },
+
+  "fieldNames": {
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "company": "Company",
+    "address": "Address",
+    "city": "City",
+    "country": "Country",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "amount": "Amount",
+    "quantity": "Quantity",
+    "description": "Description",
+    "subject": "Subject",
+    "message": "Message"
   }
 }

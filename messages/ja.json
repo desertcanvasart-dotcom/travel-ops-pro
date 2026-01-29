@@ -433,5 +433,65 @@
     "newBooking": "新しい予約が入りました",
     "paymentReceived": "支払いを受け取りました",
     "reminderDue": "リマインダー: {task}の期限です"
+  },
+
+  "validation": {
+    "required": "{field}は必須です",
+    "email": "有効なメールアドレスを入力してください",
+    "minLength": "{field}は{min}文字以上で入力してください",
+    "maxLength": "{field}は{max}文字以内で入力してください",
+    "pattern": "{field}の形式が正しくありません",
+    "number": "有効な数値を入力してください",
+    "positive": "正の数を入力してください",
+    "integer": "整数を入力してください",
+    "min": "{field}は{min}以上で入力してください",
+    "max": "{field}は{max}以下で入力してください",
+    "date": "有効な日付を入力してください",
+    "dateRange": "終了日は開始日より後にしてください",
+    "phone": "有効な電話番号を入力してください",
+    "url": "有効なURLを入力してください",
+    "match": "{field}は{other}と一致する必要があります",
+    "unique": "{field}はすでに存在します",
+    "fileSize": "ファイルサイズは{max}以下にしてください",
+    "fileType": "このファイル形式はサポートされていません",
+    "passwordStrength": "パスワードには大文字、小文字、数字をそれぞれ1文字以上含めてください",
+    "confirmPassword": "パスワードが一致しません"
+  },
+
+  "formats": {
+    "currency": "{value, number, ::currency/JPY}",
+    "currencyShort": "¥{value}",
+    "date": "{date, date, medium}",
+    "dateShort": "{date, date, short}",
+    "dateLong": "{date, date, long}",
+    "time": "{time, time, short}",
+    "dateTime": "{date, date, medium} {time, time, short}",
+    "number": "{value, number}",
+    "percent": "{value, number, percent}",
+    "decimal": "{value, number, ::precision-integer}",
+    "pax": "{count}名",
+    "nights": "{count}泊",
+    "days": "{count}日間"
+  },
+
+  "fieldNames": {
+    "name": "名前",
+    "email": "メールアドレス",
+    "phone": "電話番号",
+    "password": "パスワード",
+    "confirmPassword": "パスワード（確認）",
+    "firstName": "名",
+    "lastName": "姓",
+    "company": "会社名",
+    "address": "住所",
+    "city": "市区町村",
+    "country": "国",
+    "startDate": "開始日",
+    "endDate": "終了日",
+    "amount": "金額",
+    "quantity": "数量",
+    "description": "説明",
+    "subject": "件名",
+    "message": "メッセージ"
   }
 }

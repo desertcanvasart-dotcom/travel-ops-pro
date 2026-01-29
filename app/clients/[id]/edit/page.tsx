@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, Loader2, User, Mail, Phone, Globe, Building, Star, Tag } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { useLocalizedValidation, validationRules } from '@/hooks/useLocalizedValidation'
 
 const LEAD_SOURCES = [
   { value: 'whatsapp', label: 'WhatsApp', icon: '💬' },
@@ -42,9 +44,16 @@ export default function EditClientPage() {
   const clientId = params?.id as string
   const supabase = createClient()
 
+  // i18n hooks
+  const t = useTranslations('clients')
+  const tCommon = useTranslations('common')
+  const tValidation = useTranslations('validation')
+  const { validate, validateForm, getFieldName } = useLocalizedValidation()
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   
   const [formData, setFormData] = useState<ClientFormData>({
     first_name: '',
@@ -155,17 +164,64 @@ export default function EditClientPage() {
     }))
   }
 
+  // Validate a single field on blur
+  const validateField = (fieldName: string, value: any) => {
+    let error: string | null = null
+
+    switch (fieldName) {
+      case 'first_name':
+        error = validate(value, [validationRules.required()], 'firstName')
+        break
+      case 'last_name':
+        error = validate(value, [validationRules.required()], 'lastName')
+        break
+      case 'email':
+        error = validate(value, [validationRules.required(), validationRules.email()], 'email')
+        break
+      case 'phone':
+        if (value) {
+          error = validate(value, [validationRules.phone()], 'phone')
+        }
+        break
+    }
+
+    setFieldErrors(prev => {
+      if (error) {
+        return { ...prev, [fieldName]: error }
+      }
+      const { [fieldName]: _, ...rest } = prev
+      return rest
+    })
+
+    return error === null
+  }
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    validateField(name, value)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!formData.first_name || !formData.last_name || !formData.email) {
-      setError('Please fill in all required fields')
+
+    // Run validation
+    const validations = validateForm(formData, [
+      { field: 'first_name', fieldKey: 'firstName', rules: [validationRules.required()] },
+      { field: 'last_name', fieldKey: 'lastName', rules: [validationRules.required()] },
+      { field: 'email', fieldKey: 'email', rules: [validationRules.required(), validationRules.email()] },
+      { field: 'phone', fieldKey: 'phone', rules: formData.phone ? [validationRules.phone()] : [] },
+    ])
+
+    if (!validations.isValid) {
+      setFieldErrors(validations.errors)
+      setError(tValidation('required', { field: tCommon('required') }))
       return
     }
 
     try {
       setSaving(true)
       setError(null)
+      setFieldErrors({})
 
       const { error: updateError } = await supabase
         .from('clients')
@@ -226,8 +282,8 @@ export default function EditClientPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">Edit Client</h1>
-                <p className="text-sm text-gray-500">Update client information</p>
+                <h1 className="text-xl font-semibold text-gray-900">{t('editClient')}</h1>
+                <p className="text-sm text-gray-500">{t('clientDetails')}</p>
               </div>
             </div>
           </div>
@@ -253,56 +309,77 @@ export default function EditClientPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name <span className="text-red-500">*</span>
+                  {getFieldName('firstName')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   name="first_name"
                   value={formData.first_name}
                   onChange={handleChange}
-                  required
-                  className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
+                  onBlur={handleBlur}
+                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm ${
+                    fieldErrors.first_name ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
+                {fieldErrors.first_name && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.first_name}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name <span className="text-red-500">*</span>
+                  {getFieldName('lastName')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   name="last_name"
                   value={formData.last_name}
                   onChange={handleChange}
-                  required
-                  className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
+                  onBlur={handleBlur}
+                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm ${
+                    fieldErrors.last_name ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
+                {fieldErrors.last_name && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.last_name}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Mail className="w-3 h-3 inline mr-1" />
-                  Email <span className="text-red-500">*</span>
+                  {getFieldName('email')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  required
-                  className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
+                  onBlur={handleBlur}
+                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm ${
+                    fieldErrors.email ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
+                {fieldErrors.email && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Phone className="w-3 h-3 inline mr-1" />
-                  Phone
+                  {getFieldName('phone')}
                 </label>
                 <input
                   type="tel"
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
+                  onBlur={handleBlur}
+                  className={`w-full px-4 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm ${
+                    fieldErrors.phone ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
+                {fieldErrors.phone && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -570,7 +647,7 @@ export default function EditClientPage() {
               href={`/clients/${clientId}`}
               className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
             >
-              Cancel
+              {tCommon('cancel')}
             </Link>
             <button
               type="submit"
@@ -580,12 +657,12 @@ export default function EditClientPage() {
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
+                  {tCommon('loading')}
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  Save Changes
+                  {tCommon('save')}
                 </>
               )}
             </button>
