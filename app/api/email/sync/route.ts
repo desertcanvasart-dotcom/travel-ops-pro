@@ -131,23 +131,33 @@ export async function POST(request: NextRequest) {
 
     const gmail = getGmailClient(accessToken, refreshToken)
 
-    // Build query for Gmail API
-    let query = 'in:inbox OR in:sent'
+    // Build query for Gmail API - use simpler query that matches working email inbox
+    // Format date as YYYY/MM/DD for Gmail search
+    let query = ''
     if (!full_sync) {
-      // Only get recent emails (last 30 days)
       const daysAgo = new Date()
       daysAgo.setDate(daysAgo.getDate() - days_back)
-      query += ` after:${Math.floor(daysAgo.getTime() / 1000)}`
+      const year = daysAgo.getFullYear()
+      const month = String(daysAgo.getMonth() + 1).padStart(2, '0')
+      const day = String(daysAgo.getDate()).padStart(2, '0')
+      query = `after:${year}/${month}/${day}`
     }
 
-    console.log('[Email Sync] Fetching messages with query:', query)
+    console.log('[Email Sync] Fetching messages with query:', query || '(all)')
 
     // Fetch emails
-    const response = await gmail.users.messages.list({
-      userId: 'me',
-      maxResults: max_results,
-      q: query
-    })
+    let response
+    try {
+      response = await gmail.users.messages.list({
+        userId: 'me',
+        maxResults: max_results,
+        q: query || undefined
+      })
+      console.log('[Email Sync] Gmail API response:', JSON.stringify(response.data).substring(0, 500))
+    } catch (gmailError: any) {
+      console.error('[Email Sync] Gmail API error:', gmailError.message, gmailError.response?.data)
+      throw new Error(`Gmail API error: ${gmailError.message}`)
+    }
 
     const messageIds = response.data.messages || []
     console.log('[Email Sync] Found', messageIds.length, 'messages')
