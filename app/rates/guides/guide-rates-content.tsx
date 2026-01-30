@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -12,12 +13,8 @@ import {
   X,
   Check,
   Download,
-  Filter,
   Globe,
   MapPin,
-  Clock,
-  Calendar,
-  Star,
   ChevronLeft,
   ChevronRight,
   LayoutGrid,
@@ -91,6 +88,8 @@ interface GuideRate {
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function GuideRatesContent() {
+  const t = useTranslations('rates.guides')
+  const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -280,20 +279,20 @@ export default function GuideRatesContent() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        showNotification('error', 'Error', data.error || 'Failed to save rate')
+        showNotification('error', t('notifications.error'), data.error || t('notifications.failedToSave'))
         return
       }
 
       if (data.data) {
-        showNotification('success', 'Success', editingRate ? 'Guide rate updated successfully!' : 'Guide rate created successfully!')
+        showNotification('success', tCommon('success'), editingRate ? t('notifications.rateUpdated') : t('notifications.rateCreated'))
         setShowModal(false)
         fetchRates()
       } else {
-        showNotification('error', 'Error', 'No data returned')
+        showNotification('error', t('notifications.error'), tCommon('noDataReturned'))
       }
     } catch (error) {
       console.error('Error saving rate:', error)
-      showNotification('error', 'Error', 'Failed to save rate. Please try again.')
+      showNotification('error', t('notifications.error'), t('notifications.failedToSave'))
     }
   }
 
@@ -315,14 +314,14 @@ export default function GuideRatesContent() {
       const data = await response.json()
 
       if (data.success) {
-        showNotification('success', 'Deleted', `"${deleteModal.name}" rate has been deleted successfully.`)
+        showNotification('success', tCommon('deleted'), t('notifications.rateDeleted', { name: deleteModal.name }))
         fetchRates()
       } else {
-        showNotification('error', 'Cannot Delete', data.error || 'Failed to delete rate')
+        showNotification('error', t('notifications.cannotDelete'), data.error || t('notifications.failedToDelete'))
       }
     } catch (error) {
       console.error('Error deleting rate:', error)
-      showNotification('error', 'Error', 'Failed to delete rate. Please try again.')
+      showNotification('error', t('notifications.error'), t('notifications.failedToDelete'))
     } finally {
       setIsDeleting(false)
       setDeleteModal(null)
@@ -385,7 +384,7 @@ export default function GuideRatesContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading guide rates...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -418,7 +417,7 @@ export default function GuideRatesContent() {
                   'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                Got it
+                {tCommon('gotIt')}
               </button>
             </div>
           </div>
@@ -433,15 +432,15 @@ export default function GuideRatesContent() {
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
                 <Trash2 className="w-7 h-7 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Guide Rate?</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteModal.title')}</h3>
               <p className="text-sm text-gray-600 mb-1">
-                Are you sure you want to delete the rate for
+                {t('deleteModal.confirmText')}
               </p>
               <p className="text-sm font-semibold text-gray-900 mb-4">
                 "{deleteModal.name}"
               </p>
               <p className="text-xs text-gray-500 mb-6">
-                This action cannot be undone. The rate will be permanently removed.
+                {t('deleteModal.warning')}
               </p>
               <div className="flex items-center gap-3 w-full">
                 <button
@@ -449,7 +448,7 @@ export default function GuideRatesContent() {
                   disabled={isDeleting}
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
-                  Cancel
+                  {t('deleteModal.cancel')}
                 </button>
                 <button
                   onClick={handleDelete}
@@ -459,12 +458,12 @@ export default function GuideRatesContent() {
                   {isDeleting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Deleting...
+                      {t('deleteModal.deleting')}
                     </>
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      {t('deleteModal.delete')}
                     </>
                   )}
                 </button>
@@ -482,10 +481,10 @@ export default function GuideRatesContent() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              Guide Rates
+              {t('title')}
               <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
             </h1>
-            <p className="text-sm text-gray-600">Manage tour guide pricing by language and type</p>
+            <p className="text-sm text-gray-600">{t('subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -494,21 +493,21 @@ export default function GuideRatesContent() {
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
             <Download className="w-4 h-4" />
-            Export
+            {t('export')}
           </button>
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
           >
             <Plus className="w-4 h-4" />
-            Add Rate
+            {t('addRate')}
           </button>
           <Link
             href="/guides"
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50"
           >
             <Users className="w-4 h-4" />
-            Guides
+            {t('viewGuides')}
           </Link>
         </div>
       </div>
@@ -521,7 +520,7 @@ export default function GuideRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{rates.length}</p>
-          <p className="text-xs text-gray-600">Total Rates</p>
+          <p className="text-xs text-gray-600">{t('stats.totalRates')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -529,7 +528,7 @@ export default function GuideRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{activeRates}</p>
-          <p className="text-xs text-gray-600">Active</p>
+          <p className="text-xs text-gray-600">{t('stats.active')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -537,7 +536,7 @@ export default function GuideRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{linkedRates}</p>
-          <p className="text-xs text-gray-600">Linked to Guide</p>
+          <p className="text-xs text-gray-600">{t('stats.linkedToGuide')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -545,7 +544,7 @@ export default function GuideRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
-          <p className="text-xs text-gray-600">Avg. Daily Rate</p>
+          <p className="text-xs text-gray-600">{t('stats.avgDailyRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -553,7 +552,7 @@ export default function GuideRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-orange-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{uniqueCities}</p>
-          <p className="text-xs text-gray-600">Cities</p>
+          <p className="text-xs text-gray-600">{t('stats.cities')}</p>
         </div>
       </div>
 
@@ -566,7 +565,7 @@ export default function GuideRatesContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search rates..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
@@ -580,7 +579,7 @@ export default function GuideRatesContent() {
             onChange={(e) => setSelectedGuide(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Guides</option>
+            <option value="">{t('allGuides')}</option>
             {guides.map(guide => (
               <option key={guide.id} value={guide.id}>{guide.name}</option>
             ))}
@@ -592,7 +591,7 @@ export default function GuideRatesContent() {
             onChange={(e) => setSelectedLanguage(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Languages</option>
+            <option value="">{t('allLanguages')}</option>
             {LANGUAGES.map(lang => (
               <option key={lang} value={lang}>{lang}</option>
             ))}
@@ -604,7 +603,7 @@ export default function GuideRatesContent() {
             onChange={(e) => setSelectedCity(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Cities</option>
+            <option value="">{t('allCities')}</option>
             {EGYPT_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -616,9 +615,9 @@ export default function GuideRatesContent() {
             onChange={(e) => setSelectedGuideType(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Types</option>
+            <option value="">{t('allTypes')}</option>
             {GUIDE_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{type.label}</option>
+              <option key={type.value} value={type.value}>{t(`guideTypes.${type.value}`)}</option>
             ))}
           </select>
 
@@ -631,8 +630,7 @@ export default function GuideRatesContent() {
                 : 'bg-green-100 text-green-700'
             }`}
           >
-            {showInactive ? 'Show All' : 'Active Only'}
-          </button>
+            {showInactive ? t('showInactive') : t('hideInactive')}</button>
 
           {/* View Mode */}
           <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
@@ -660,8 +658,8 @@ export default function GuideRatesContent() {
         {/* Results Count */}
         <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
           <p className="text-xs text-gray-600">
-            Showing <span className="font-semibold">{paginatedRates.length}</span> of{' '}
-            <span className="font-semibold">{filteredRates.length}</span> rates
+            {tCommon('showing')} <span className="font-semibold">{paginatedRates.length}</span> {tCommon('of')}{' '}
+            <span className="font-semibold">{filteredRates.length}</span> {tCommon('rates')}
           </p>
           <select
             value={itemsPerPage}
@@ -669,7 +667,7 @@ export default function GuideRatesContent() {
             className="text-xs border border-gray-300 rounded px-2 py-1"
           >
             {ITEMS_PER_PAGE_OPTIONS.map(n => (
-              <option key={n} value={n}>{n} per page</option>
+              <option key={n} value={n}>{n} {tCommon('perPage')}</option>
             ))}
           </select>
         </div>
@@ -680,18 +678,18 @@ export default function GuideRatesContent() {
         {paginatedRates.length === 0 ? (
           <div className="p-12 text-center">
             <Globe className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Rates Found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('noRatesFound')}</h3>
             <p className="text-sm text-gray-600 mb-4">
               {searchTerm || selectedCity || selectedLanguage || selectedGuide || selectedGuideType
-                ? 'Try adjusting your filters'
-                : 'Get started by adding your first guide rate'}
+                ? t('tryAdjustingFilters')
+                : t('noRatesDescription')}
             </p>
             <button
               onClick={handleAddNew}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               <Plus className="w-4 h-4" />
-              Add First Rate
+              {t('addFirstRate')}
             </button>
           </div>
         ) : viewMode === 'table' ? (
@@ -699,15 +697,15 @@ export default function GuideRatesContent() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Language</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Guide</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Duration</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.language')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.guide')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.type')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.duration')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.eurRate')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.nonEurRate')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -726,12 +724,12 @@ export default function GuideRatesContent() {
                           {getGuideName(rate.supplier_id)}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">Not linked</span>
+                        <span className="text-xs text-gray-400">{tCommon('notLinked')}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                        {GUIDE_TYPES.find(t => t.value === rate.guide_type)?.label || rate.guide_type}
+                        {t(`guideTypes.${rate.guide_type}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -739,7 +737,7 @@ export default function GuideRatesContent() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-600">
-                        {TOUR_DURATIONS.find(d => d.value === rate.tour_duration)?.label || rate.tour_duration}
+                        {t(`tourDurations.${rate.tour_duration}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -752,7 +750,7 @@ export default function GuideRatesContent() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
+                        {rate.is_active ? tCommon('active') : tCommon('inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -788,7 +786,7 @@ export default function GuideRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? tCommon('active') : tCommon('inactive')}
                   </span>
                 </div>
 
@@ -800,14 +798,14 @@ export default function GuideRatesContent() {
                 )}
 
                 <div className="space-y-1 text-sm text-gray-600 mb-3">
-                  <p><span className="text-gray-400">Type:</span> {GUIDE_TYPES.find(t => t.value === rate.guide_type)?.label}</p>
-                  <p><span className="text-gray-400">City:</span> {rate.city || '—'}</p>
-                  <p><span className="text-gray-400">Duration:</span> {TOUR_DURATIONS.find(d => d.value === rate.tour_duration)?.label}</p>
+                  <p><span className="text-gray-400">{t('table.type')}:</span> {t(`guideTypes.${rate.guide_type}`)}</p>
+                  <p><span className="text-gray-400">{t('table.city')}:</span> {rate.city || '—'}</p>
+                  <p><span className="text-gray-400">{t('table.duration')}:</span> {t(`tourDurations.${rate.tour_duration}`)}</p>
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
-                    <p className="text-xs text-gray-500">EUR Rate</p>
+                    <p className="text-xs text-gray-500">{t('table.eurRate')}</p>
                     <p className="text-lg font-bold text-green-600">€{rate.base_rate_eur}</p>
                   </div>
                   <div className="flex gap-1">
@@ -845,7 +843,7 @@ export default function GuideRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? tCommon('active') : tCommon('inactive')}
                   </span>
                   <div className="flex gap-1">
                     <button onClick={() => handleEdit(rate)} className="p-1 text-gray-400 hover:text-primary-600">
@@ -865,8 +863,8 @@ export default function GuideRatesContent() {
         {totalPages > 1 && (
           <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between bg-gray-50">
             <p className="text-sm text-gray-600">
-              Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
-              <span className="text-gray-400 ml-2">({filteredRates.length} total)</span>
+              {t('pagination.page')} <span className="font-semibold">{currentPage}</span> {t('pagination.of')} <span className="font-semibold">{totalPages}</span>
+              <span className="text-gray-400 ml-2">({filteredRates.length} {t('pagination.total')})</span>
             </p>
             <div className="flex items-center gap-1">
               {/* First Page */}
@@ -875,8 +873,7 @@ export default function GuideRatesContent() {
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                First
-              </button>
+                {t('pagination.first')}</button>
               
               {/* Previous */}
               <button
@@ -931,7 +928,7 @@ export default function GuideRatesContent() {
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                Last
+                {t('pagination.last')}
               </button>
             </div>
           </div>
@@ -944,7 +941,7 @@ export default function GuideRatesContent() {
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? 'Edit Guide Rate' : 'Add Guide Rate'}
+                {editingRate ? t('editRate') : t('addGuideRate')}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
                 <X className="w-4 h-4" />
@@ -956,11 +953,11 @@ export default function GuideRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">1</span>
-                  Basic Information
+                  {t('form.basicInfo')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
                     <input
                       type="text"
                       name="service_code"
@@ -970,7 +967,7 @@ export default function GuideRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Language *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.language')} *</label>
                     <select
                       name="guide_language"
                       value={formData.guide_language}
@@ -984,7 +981,7 @@ export default function GuideRatesContent() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Guide Type *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.guideType')} *</label>
                     <select
                       name="guide_type"
                       value={formData.guide_type}
@@ -993,19 +990,19 @@ export default function GuideRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       {GUIDE_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>{type.label}</option>
+                        <option key={type.value} value={type.value}>{t(`guideTypes.${type.value}`)}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.city')}</label>
                     <select
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select City</option>
+                      <option value="">{t('form.selectCity')}</option>
                       {EGYPT_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
@@ -1018,7 +1015,7 @@ export default function GuideRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  Link to Guide (Optional)
+                  {t('form.linkToGuide')}
                 </h3>
                 <select
                   name="supplier_id"
@@ -1026,7 +1023,7 @@ export default function GuideRatesContent() {
                   onChange={(e) => handleGuideChange(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                 >
-                  <option value="">-- Select a Guide --</option>
+                  <option value="">{t('form.selectGuide')}</option>
                   {guides.map(guide => (
                     <option key={guide.id} value={guide.id}>
                       {guide.name} {guide.city ? `(${guide.city})` : ''}
@@ -1039,11 +1036,11 @@ export default function GuideRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
-                  Duration & Rates
+                  {t('form.durationRates')}
                 </h3>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Tour Duration</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.tourDuration')}</label>
                     <select
                       name="tour_duration"
                       value={formData.tour_duration}
@@ -1051,12 +1048,12 @@ export default function GuideRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       {TOUR_DURATIONS.map(dur => (
-                        <option key={dur.value} value={dur.value}>{dur.label}</option>
+                        <option key={dur.value} value={dur.value}>{t(`tourDurations.${dur.value}`)}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">EUR Rate (€) *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.eurRate')} *</label>
                     <input
                       type="number"
                       name="base_rate_eur"
@@ -1069,7 +1066,7 @@ export default function GuideRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Non-EUR Rate (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.nonEurRate')}</label>
                     <input
                       type="number"
                       name="base_rate_non_eur"
@@ -1087,11 +1084,11 @@ export default function GuideRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">4</span>
-                  Validity Period
+                  {t('form.validityPeriod')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
                     <input
                       type="date"
                       name="rate_valid_from"
@@ -1101,7 +1098,7 @@ export default function GuideRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
                     <input
                       type="date"
                       name="rate_valid_to"
@@ -1115,7 +1112,7 @@ export default function GuideRatesContent() {
 
               {/* Notes & Status */}
               <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
@@ -1133,7 +1130,7 @@ export default function GuideRatesContent() {
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                   />
-                  <span className="text-sm font-medium text-gray-900">Active (available for bookings)</span>
+                  <span className="text-sm font-medium text-gray-900">{t('form.activeBookings')}</span>
                 </label>
               </div>
             </form>
@@ -1144,14 +1141,14 @@ export default function GuideRatesContent() {
                 onClick={() => setShowModal(false)}
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                {t('form.cancel')}
               </button>
               <button
                 onClick={handleSubmit}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
               >
                 <Check className="w-4 h-4" />
-                {editingRate ? 'Update Rate' : 'Create Rate'}
+                {editingRate ? t('form.update') : t('form.create')}
               </button>
             </div>
           </div>

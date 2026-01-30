@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { AccommodationRate } from '../types'
 
 interface AccommodationSelectorProps {
@@ -18,6 +19,7 @@ export default function AccommodationSelector({
   isEuroPassport,
   onSelect
 }: AccommodationSelectorProps) {
+  const t = useTranslations('tourBuilder.accommodation')
   const [accommodations, setAccommodations] = useState<AccommodationRate[]>([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState({
@@ -76,7 +78,7 @@ export default function AccommodationSelector({
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <p className="text-sm text-gray-600">
-          Please select a city first to see available accommodations
+          {t('selectCityFirst')}
         </p>
       </div>
     )
@@ -85,7 +87,7 @@ export default function AccommodationSelector({
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">
-        🏨 Accommodation
+        🏨 {t('title')}
       </label>
 
       {/* Filters */}
@@ -93,9 +95,10 @@ export default function AccommodationSelector({
         <select
           value={filter.tier}
           onChange={(e) => setFilter({ ...filter, tier: e.target.value })}
+          title={t('allTiers')}
           className="text-xs px-2 py-1 border border-gray-300 rounded"
         >
-          <option value="all">All Tiers</option>
+          <option value="all">{t('allTiers')}</option>
           <option value="budget">Budget</option>
           <option value="standard">Standard</option>
           <option value="premium">Premium</option>
@@ -105,24 +108,26 @@ export default function AccommodationSelector({
         <select
           value={filter.board_basis}
           onChange={(e) => setFilter({ ...filter, board_basis: e.target.value })}
+          title={t('allBoardBasis')}
           className="text-xs px-2 py-1 border border-gray-300 rounded"
         >
-          <option value="all">All Board Basis</option>
-          <option value="BB">BB (Bed & Breakfast)</option>
-          <option value="HB">HB (Half Board)</option>
-          <option value="FB">FB (Full Board)</option>
-          <option value="AI">AI (All Inclusive)</option>
+          <option value="all">{t('allBoardBasis')}</option>
+          <option value="BB">BB {t('boardBB')}</option>
+          <option value="HB">HB {t('boardHB')}</option>
+          <option value="FB">FB {t('boardFB')}</option>
+          <option value="AI">AI {t('boardAI')}</option>
         </select>
 
         <select
           value={filter.min_stars}
           onChange={(e) => setFilter({ ...filter, min_stars: parseInt(e.target.value) })}
+          title={t('allStars')}
           className="text-xs px-2 py-1 border border-gray-300 rounded"
         >
-          <option value="0">All Stars</option>
-          <option value="3">3+ Stars</option>
-          <option value="4">4+ Stars</option>
-          <option value="5">5 Stars</option>
+          <option value="0">{t('allStars')}</option>
+          <option value="3">3+ ⭐</option>
+          <option value="4">4+ ⭐</option>
+          <option value="5">5 ⭐</option>
         </select>
       </div>
 
@@ -131,34 +136,37 @@ export default function AccommodationSelector({
         {loading ? (
           <div className="p-4 text-center text-gray-600">
             <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-2"></div>
-            <p className="text-sm">Loading accommodations...</p>
+            <p className="text-sm">{t('loading')}</p>
           </div>
         ) : filteredAccommodations.length === 0 ? (
           <div className="p-4 text-center text-gray-600">
-            <p className="text-sm">No accommodations found for {city}</p>
+            <p className="text-sm">{t('noAccommodations', { city })}</p>
             <button
+              type="button"
               onClick={() => setFilter({ tier: 'all', board_basis: 'all', min_stars: 0 })}
               className="text-xs text-blue-600 hover:text-blue-700 mt-2"
             >
-              Reset filters
+              {t('resetFilters')}
             </button>
           </div>
         ) : (
           <div className="max-h-64 overflow-y-auto">
             {/* No Selection Option */}
             <button
+              type="button"
               onClick={() => onSelect(undefined)}
               className={`w-full text-left px-4 py-3 border-b hover:bg-gray-50 transition-colors ${
                 !selectedAccommodation ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
               }`}
             >
-              <div className="font-medium text-gray-900">No accommodation</div>
-              <div className="text-xs text-gray-500">Skip accommodation for this day</div>
+              <div className="font-medium text-gray-900">{t('noAccommodation')}</div>
+              <div className="text-xs text-gray-500">{t('skipAccommodation')}</div>
             </button>
 
             {/* Accommodation Options */}
             {filteredAccommodations.map((acc) => (
               <button
+                type="button"
                 key={acc.id}
                 onClick={() => onSelect(acc)}
                 className={`w-full text-left px-4 py-3 border-b hover:bg-gray-50 transition-colors ${
@@ -197,10 +205,10 @@ export default function AccommodationSelector({
                       €{getPrice(acc).toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {roomsNeeded} room{roomsNeeded > 1 ? 's' : ''}
+                      {roomsNeeded} {roomsNeeded > 1 ? t('rooms') : t('room')}
                     </div>
                     <div className="text-xs text-gray-400">
-                      €{(isEuroPassport ? acc.base_rate_eur : acc.base_rate_non_eur).toFixed(2)}/room
+                      €{(isEuroPassport ? acc.base_rate_eur : acc.base_rate_non_eur).toFixed(2)}{t('perRoom')}
                     </div>
                   </div>
                 </div>
@@ -219,14 +227,14 @@ export default function AccommodationSelector({
                 {selectedAccommodation.property_name}
               </div>
               <div className="text-blue-700 text-xs mt-1">
-                {roomsNeeded} {selectedAccommodation.room_type} room{roomsNeeded > 1 ? 's' : ''}
+                {roomsNeeded} {selectedAccommodation.room_type} {roomsNeeded > 1 ? t('rooms') : t('room')}
               </div>
               <div className="text-blue-600 text-xs mt-1">
-                Board: {selectedAccommodation.board_basis}
-                {selectedAccommodation.board_basis === 'BB' && ' (Breakfast only)'}
-                {selectedAccommodation.board_basis === 'HB' && ' (Breakfast + Dinner)'}
-                {selectedAccommodation.board_basis === 'FB' && ' (All meals)'}
-                {selectedAccommodation.board_basis === 'AI' && ' (All inclusive)'}
+                {t('board')}: {selectedAccommodation.board_basis}
+                {selectedAccommodation.board_basis === 'BB' && ` ${t('boardBB')}`}
+                {selectedAccommodation.board_basis === 'HB' && ` ${t('boardHB')}`}
+                {selectedAccommodation.board_basis === 'FB' && ` ${t('boardFB')}`}
+                {selectedAccommodation.board_basis === 'AI' && ` ${t('boardAI')}`}
               </div>
             </div>
             <div className="text-right">
@@ -234,7 +242,7 @@ export default function AccommodationSelector({
                 €{getPrice(selectedAccommodation).toFixed(2)}
               </div>
               <div className="text-xs text-blue-700">
-                Total for {pax} pax
+                {t('totalForPax', { pax })}
               </div>
             </div>
           </div>
@@ -243,7 +251,7 @@ export default function AccommodationSelector({
 
       {/* Stats */}
       <div className="mt-2 text-xs text-gray-500">
-        Showing {filteredAccommodations.length} of {accommodations.length} properties in {city}
+        {t('showingProperties', { city, filtered: filteredAccommodations.length, total: accommodations.length })}
       </div>
     </div>
   )

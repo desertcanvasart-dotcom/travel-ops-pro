@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface EntranceFee {
   id: string
@@ -48,6 +49,7 @@ export default function ActivityBuilder({
   isEuroPassport,
   onActivitiesChange
 }: ActivityBuilderProps) {
+  const t = useTranslations('tourBuilder.activities')
   const [entrances, setEntrances] = useState<EntranceFee[]>([])
   const [transportations, setTransportations] = useState<Transportation[]>([])
   const [loading, setLoading] = useState(false)
@@ -183,13 +185,14 @@ export default function ActivityBuilder({
     <div>
       <div className="flex items-center justify-between mb-4">
         <label className="block text-sm font-medium text-gray-700">
-          🎯 Activities
+          🎯 {t('title')}
         </label>
         <button
+          type="button"
           onClick={addActivity}
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
         >
-          ➕ Add Activity
+          ➕ {t('addActivity')}
         </button>
       </div>
 
@@ -199,8 +202,8 @@ export default function ActivityBuilder({
         </div>
       ) : activities.length === 0 ? (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-          <p className="text-gray-600 mb-2">No activities added yet</p>
-          <p className="text-sm text-gray-500">Click "Add Activity" to start building your itinerary</p>
+          <p className="text-gray-600 mb-2">{t('noActivities')}</p>
+          <p className="text-sm text-gray-500">{t('clickToAdd')}</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -216,31 +219,34 @@ export default function ActivityBuilder({
                     {activity.activity_order}
                   </span>
                   <span className="font-semibold text-gray-900">
-                    Activity {activity.activity_order}
+                    {t('activity')} {activity.activity_order}
                   </span>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                   <button
+                    type="button"
                     onClick={() => moveActivity(index, 'up')}
                     disabled={index === 0}
                     className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Move up"
+                    title={t('moveUp')}
                   >
                     ⬆️
                   </button>
                   <button
+                    type="button"
                     onClick={() => moveActivity(index, 'down')}
                     disabled={index === activities.length - 1}
                     className="p-1 text-gray-600 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Move down"
+                    title={t('moveDown')}
                   >
                     ⬇️
                   </button>
                   <button
+                    type="button"
                     onClick={() => removeActivity(index)}
                     className="p-1 text-red-600 hover:text-red-700"
-                    title="Remove activity"
+                    title={t('remove')}
                   >
                     🗑️
                   </button>
@@ -250,19 +256,19 @@ export default function ActivityBuilder({
               {/* Entrance Multi-Select */}
               <div className="mb-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🎫 Entrance Tickets (Select Multiple)
+                  🎫 {t('entranceTickets')}
                 </label>
                 <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto bg-white">
                   {entrances.length === 0 ? (
                     <div className="p-3 text-sm text-gray-500 text-center">
-                      No entrance tickets available
+                      {t('noEntrances')}
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-200">
                       {entrances.map((entrance) => {
                         const rate = isEuroPassport ? entrance.eur_rate : entrance.non_eur_rate
                         const isSelected = activity.entrances?.some(e => e.id === entrance.id) || false
-                        
+
                         return (
                           <label
                             key={entrance.id}
@@ -293,7 +299,7 @@ export default function ActivityBuilder({
                                 €{rate.toFixed(2)}
                               </div>
                               <div className="text-xs text-gray-500">
-                                €{(pax * rate).toFixed(2)} total
+                                €{(pax * rate).toFixed(2)} {t('total')}
                               </div>
                             </div>
                           </label>
@@ -304,7 +310,7 @@ export default function ActivityBuilder({
                 </div>
                 {activity.entrances && activity.entrances.length > 0 && (
                   <div className="mt-2 text-xs text-blue-600">
-                    ✓ {activity.entrances.length} entrance{activity.entrances.length !== 1 ? 's' : ''} selected
+                    ✓ {t('entrancesSelected', { count: activity.entrances.length })}
                   </div>
                 )}
               </div>
@@ -312,7 +318,7 @@ export default function ActivityBuilder({
               {/* Transportation Selector */}
               <div className="mb-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🚗 Transportation
+                  🚗 {t('transportation')}
                 </label>
                 <select
                   value={activity.transportation?.id || ''}
@@ -320,9 +326,10 @@ export default function ActivityBuilder({
                     const transport = transportations.find(t => t.id === e.target.value)
                     updateActivity(index, 'transportation', transport || null)
                   }}
+                  title={t('transportation')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">No transportation</option>
+                  <option value="">{t('noTransportation')}</option>
                   {transportations
                     .filter(t => t.capacity_max >= pax)
                     .map((transport) => {
@@ -336,7 +343,7 @@ export default function ActivityBuilder({
                 </select>
                 {transportations.filter(t => t.capacity_max >= pax).length === 0 && (
                   <p className="text-xs text-amber-600 mt-1">
-                    ⚠️ No vehicles available for {pax} passengers
+                    ⚠️ {t('noVehiclesAvailable', { pax })}
                   </p>
                 )}
               </div>
@@ -344,12 +351,12 @@ export default function ActivityBuilder({
               {/* Notes */}
               <div className="mb-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📝 Notes (Optional)
+                  📝 {t('notes')}
                 </label>
                 <textarea
                   value={activity.activity_notes || ''}
                   onChange={(e) => updateActivity(index, 'activity_notes', e.target.value)}
-                  placeholder="Add timing, special instructions, etc..."
+                  placeholder={t('notesPlaceholder')}
                   rows={2}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                 />
@@ -357,7 +364,7 @@ export default function ActivityBuilder({
 
               {/* Activity Cost */}
               <div className="bg-blue-50 border border-blue-200 rounded p-3 flex justify-between items-center">
-                <span className="text-sm font-medium text-blue-900">Activity Cost:</span>
+                <span className="text-sm font-medium text-blue-900">{t('activityCost')}:</span>
                 <span className="text-lg font-bold text-blue-700">
                   €{calculateActivityCost(activity).toFixed(2)}
                 </span>
@@ -370,7 +377,7 @@ export default function ActivityBuilder({
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex justify-between items-center">
                 <span className="font-semibold text-green-900">
-                  Total Activities Cost ({activities.length} activit{activities.length !== 1 ? 'ies' : 'y'})
+                  {t('totalActivitiesCost', { count: activities.length })}
                 </span>
                 <span className="text-2xl font-bold text-green-700">
                   €{getTotalCost().toFixed(2)}

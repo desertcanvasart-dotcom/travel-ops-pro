@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Search, Plus, FileText, Eye, Edit2, Trash2, CheckCircle2, AlertCircle, X } from 'lucide-react'
 
 interface Itinerary {
@@ -26,6 +27,7 @@ interface Toast {
 }
 
 export default function ItinerariesPage() {
+  const t = useTranslations('itineraries')
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [filteredItineraries, setFilteredItineraries] = useState<Itinerary[]>([])
   const [loading, setLoading] = useState(true)
@@ -106,11 +108,11 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         setItineraries(itineraries.filter(it => it.id !== id))
         setDeleteConfirm(null)
       } else {
-        showToast('error', data.error || 'Failed to delete itinerary')
+        showToast('error', data.error || t('errorDeleteFailed'))
       }
     } catch (error) {
       console.error('Error deleting itinerary:', error)
-      alert('Failed to delete itinerary')
+      showToast('error', t('errorDeleteFailed'))
     }
   }
 
@@ -126,15 +128,15 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
       const data = await response.json()
 
       if (data.success) {
-        setItineraries(itineraries.map(it => 
+        setItineraries(itineraries.map(it =>
           it.id === id ? { ...it, status: newStatus } : it
         ))
       } else {
-        showToast('error', data.error || 'Failed to update status')
+        showToast('error', data.error || t('errorUpdateFailed'))
       }
     } catch (error) {
       console.error('Error updating status:', error)
-      showToast('error', 'Failed to update status')
+      showToast('error', t('errorUpdateFailed'))
     } finally {
       setUpdatingStatus(null)
     }
@@ -165,7 +167,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-12 h-12 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-500">Loading itineraries...</p>
+          <p className="text-sm text-gray-500">{t('loadingItineraries')}</p>
         </div>
       </div>
     )
@@ -176,15 +178,15 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
       {/* ⭐ COMPACT HEADER */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Itineraries</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Create and manage client trip itineraries</p>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
         </div>
         <button
           onClick={() => router.push('/itineraries/new')}
           className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 flex items-center gap-2 text-sm font-medium shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
-          New Itinerary
+          {t('newItinerary')}
         </button>
       </div>
 
@@ -194,13 +196,13 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         <button
           onClick={() => setStatusFilter('all')}
           className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
-            statusFilter === 'all' 
-              ? 'border-primary-600 bg-primary-50' 
+            statusFilter === 'all'
+              ? 'border-primary-600 bg-primary-50'
               : 'border-gray-200 bg-white hover:border-gray-300'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-gray-600">Total</span>
+            <span className="text-xs font-medium text-gray-600">{t('total')}</span>
             <FileText className="w-4 h-4 text-gray-400" />
           </div>
           <div className="text-2xl font-bold text-gray-900">{statusCounts.total}</div>
@@ -210,13 +212,13 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         <button
           onClick={() => setStatusFilter('draft')}
           className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
-            statusFilter === 'draft' 
-              ? 'border-gray-400 bg-gray-50' 
+            statusFilter === 'draft'
+              ? 'border-gray-400 bg-gray-50'
               : 'border-gray-200 bg-white hover:border-gray-300'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-gray-600">Draft</span>
+            <span className="text-xs font-medium text-gray-600">{t('draft')}</span>
             <div className="w-2 h-2 rounded-full bg-gray-400"></div>
           </div>
           <div className="text-2xl font-bold text-gray-900">{statusCounts.draft}</div>
@@ -226,13 +228,13 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         <button
           onClick={() => setStatusFilter('sent')}
           className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
-            statusFilter === 'sent' 
-              ? 'border-primary-500 bg-primary-50' 
+            statusFilter === 'sent'
+              ? 'border-primary-500 bg-primary-50'
               : 'border-gray-200 bg-white hover:border-gray-300'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-gray-600">Sent</span>
+            <span className="text-xs font-medium text-gray-600">{t('sent')}</span>
             <div className="w-2 h-2 rounded-full bg-primary-500"></div>
           </div>
           <div className="text-2xl font-bold text-gray-900">{statusCounts.sent}</div>
@@ -242,13 +244,13 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         <button
           onClick={() => setStatusFilter('confirmed')}
           className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
-            statusFilter === 'confirmed' 
-              ? 'border-green-500 bg-green-50' 
+            statusFilter === 'confirmed'
+              ? 'border-green-500 bg-green-50'
               : 'border-gray-200 bg-white hover:border-gray-300'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-gray-600">Confirmed</span>
+            <span className="text-xs font-medium text-gray-600">{t('confirmed')}</span>
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
           </div>
           <div className="text-2xl font-bold text-gray-900">{statusCounts.confirmed}</div>
@@ -258,13 +260,13 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         <button
           onClick={() => setStatusFilter('completed')}
           className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
-            statusFilter === 'completed' 
-              ? 'border-purple-500 bg-purple-50' 
+            statusFilter === 'completed'
+              ? 'border-purple-500 bg-purple-50'
               : 'border-gray-200 bg-white hover:border-gray-300'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-gray-600">Completed</span>
+            <span className="text-xs font-medium text-gray-600">{t('completed')}</span>
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
           </div>
           <div className="text-2xl font-bold text-gray-900">{statusCounts.completed}</div>
@@ -274,13 +276,13 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         <button
           onClick={() => setStatusFilter('cancelled')}
           className={`rounded-lg border-2 p-3 text-left transition-all hover:shadow-md ${
-            statusFilter === 'cancelled' 
-              ? 'border-red-500 bg-red-50' 
+            statusFilter === 'cancelled'
+              ? 'border-red-500 bg-red-50'
               : 'border-gray-200 bg-white hover:border-gray-300'
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-gray-600">Cancelled</span>
+            <span className="text-xs font-medium text-gray-600">{t('cancelled')}</span>
             <div className="w-2 h-2 rounded-full bg-red-500"></div>
           </div>
           <div className="text-2xl font-bold text-gray-900">{statusCounts.cancelled}</div>
@@ -292,7 +294,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
-          placeholder="Search by client name, trip name, or code..."
+          placeholder={t('searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
@@ -300,7 +302,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
       </div>
 
       <div className="text-xs text-gray-500">
-        Showing <span className="font-semibold text-gray-700">{filteredItineraries.length}</span> of {itineraries.length} itineraries
+        {t('showingOf', { count: filteredItineraries.length, total: itineraries.length })}
       </div>
 
       {/* ⭐ COMPACT TABLE - Linear Style */}
@@ -309,15 +311,15 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
           <table className="w-full min-w-[1200px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Code</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Client</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Trip</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Dates</th>
-                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">Days</th>
-                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">Pax</th>
-                <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-600 whitespace-nowrap">Cost</th>
-                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">Status</th>
-                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap sticky right-0 bg-gray-50">Actions</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('code')}</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('client')}</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('trip')}</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('dates')}</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('days')}</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('pax')}</th>
+                <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-600 whitespace-nowrap">{t('cost')}</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('status')}</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap sticky right-0 bg-gray-50">{t('actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -368,11 +370,11 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                         updatingStatus === itinerary.id ? 'opacity-50' : ''
                       }`}
                     >
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
+                      <option value="draft">{t('draft')}</option>
+                      <option value="sent">{t('sent')}</option>
+                      <option value="confirmed">{t('confirmed')}</option>
+                      <option value="completed">{t('completed')}</option>
+                      <option value="cancelled">{t('cancelled')}</option>
                     </select>
                   </td>
                   <td className="px-3 py-3 sticky right-0 bg-white">
@@ -380,14 +382,14 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                       <button
                         onClick={() => router.push(`/itineraries/${itinerary.id}`)}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-primary-600 transition-colors"
-                        title="View"
+                        title={t('view')}
                       >
                         <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => router.push(`/itineraries/${itinerary.id}/edit`)}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
-                        title="Edit"
+                        title={t('edit')}
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
@@ -398,7 +400,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                             ? 'bg-red-500 text-white hover:bg-red-600'
                             : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
                         }`}
-                        title={deleteConfirm === itinerary.id ? "Click again to confirm" : "Delete"}
+                        title={deleteConfirm === itinerary.id ? t('clickToConfirm') : t('delete')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -412,8 +414,8 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
         {filteredItineraries.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-base font-medium text-gray-900">No itineraries found</p>
-            <p className="mt-1 text-sm text-gray-500">Try adjusting your search or filters</p>
+            <p className="text-base font-medium text-gray-900">{t('noItinerariesFound')}</p>
+            <p className="mt-1 text-sm text-gray-500">{t('tryAdjusting')}</p>
           </div>
         )}
       </div>

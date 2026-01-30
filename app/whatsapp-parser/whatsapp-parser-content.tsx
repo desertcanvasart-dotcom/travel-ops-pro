@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useRef, Suspense } from 'react'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -189,17 +190,18 @@ const parseConversation = (text: string): { sender: 'client' | 'agent'; message:
 // ============================================
 
 function ChatBubble({ sender, message, highlight }: { sender: 'client' | 'agent'; message: string; highlight?: string[] }) {
+  const t = useTranslations('whatsappParser')
   const isClient = sender === 'client'
-  
+
   return (
     <div className={`flex ${isClient ? 'justify-start' : 'justify-end'} mb-2`}>
       <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${
-        isClient 
-          ? 'bg-white border border-gray-200 text-gray-900 rounded-bl-md' 
+        isClient
+          ? 'bg-white border border-gray-200 text-gray-900 rounded-bl-md'
           : 'bg-[#DCF8C6] text-gray-900 rounded-br-md'
       }`}>
         <p className="text-xs font-medium mb-0.5 opacity-60">
-          {isClient ? 'Client' : 'Agent'}
+          {isClient ? t('chatClient') : t('chatAgent')}
         </p>
         <p>
           {message}
@@ -274,18 +276,27 @@ function StepIndicator({
 // ============================================
 
 function GenerationProgress({ currentStep, mode, inputMode }: { currentStep: GenerationStep; mode: GenerationMode; inputMode: InputMode }) {
+  const t = useTranslations('whatsappParser')
   const stepIndex = GENERATION_STEPS.findIndex(s => s.key === currentStep)
-  
-  const displaySteps = mode === 'edit' 
+
+  const stepLabels: Record<string, string> = {
+    'creating-client': t('creatingClientProfile'),
+    'checking-suppliers': t('checkingSuppliers'),
+    'building-route': t('buildingRoute'),
+    'calculating-margins': t('calculatingMargins'),
+    'finalizing': t('finalizing'),
+  }
+
+  const displaySteps = mode === 'edit'
     ? GENERATION_STEPS.filter(s => s.key !== 'calculating-margins')
     : GENERATION_STEPS
-  
+
   return (
     <div className="space-y-3 p-4 bg-primary-50 rounded-lg border border-primary-200">
       <div className="flex items-center gap-2">
         <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
         <span className="text-sm font-semibold text-primary-700">
-          {mode === 'edit' ? 'Generating Draft Itinerary' : 'Generating Itinerary'}
+          {mode === 'edit' ? t('generatingDraft') : t('generatingItinerary')}
         </span>
       </div>
       <div className="space-y-2">
@@ -301,7 +312,7 @@ function GenerationProgress({ currentStep, mode, inputMode }: { currentStep: Gen
                 <div className="w-4 h-4 rounded-full border-2 border-gray-300" />
               )}
               <span className={`text-xs ${originalIndex <= stepIndex ? 'text-gray-700' : 'text-gray-400'}`}>
-                {step.label}
+                {stepLabels[step.key] || step.label}
               </span>
             </div>
           )
@@ -309,14 +320,14 @@ function GenerationProgress({ currentStep, mode, inputMode }: { currentStep: Gen
       </div>
       <div className="flex items-center gap-2 text-xs text-primary-600 mt-2">
         {inputMode === 'structured' ? (
-          <><ListChecks className="w-3 h-3" /> Following your provided itinerary</>
+          <><ListChecks className="w-3 h-3" /> {t('followingYourItinerary')}</>
         ) : (
-          <><Wand2 className="w-3 h-3" /> AI creating itinerary</>
+          <><Wand2 className="w-3 h-3" /> {t('aiCreatingItinerary')}</>
         )}
       </div>
       {mode === 'edit' && (
         <p className="text-xs text-primary-600">
-          ✏️ You'll be able to edit before pricing is calculated
+          ✏️ {t('editBeforePricing')}
         </p>
       )}
     </div>
@@ -342,6 +353,7 @@ function ClientConfirmationModal({
   onCancel: () => void
   isCreating: boolean
 }) {
+  const t = useTranslations('whatsappParser')
   const [editMode, setEditMode] = useState(false)
   const [editedData, setEditedData] = useState({
     client_name: extractedData.client_name || '',
@@ -361,8 +373,8 @@ function ClientConfirmationModal({
               <UserPlus className={`w-5 h-5 ${tierColor.text}`} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Confirm New Client</h3>
-              <p className="text-sm text-gray-600">This client will be added to your CRM</p>
+              <h3 className="text-lg font-bold text-gray-900">{t('confirmNewClient')}</h3>
+              <p className="text-sm text-gray-600">{t('clientWillBeAdded')}</p>
             </div>
           </div>
         </div>
@@ -374,33 +386,33 @@ function ClientConfirmationModal({
               className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium"
             >
               <Edit3 className="w-3 h-3" />
-              {editMode ? 'Done Editing' : 'Edit Details'}
+              {editMode ? t('doneEditing') : t('editDetails')}
             </button>
           </div>
 
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Full Name *</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('fullNameRequired')}</label>
               {editMode ? (
                 <input
                   type="text"
                   value={editedData.client_name}
                   onChange={(e) => setEditedData({ ...editedData, client_name: e.target.value })}
                   className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter client name"
+                  placeholder={t('enterClientName')}
                 />
               ) : (
                 <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-gray-50 rounded-lg">
                   <User className="w-4 h-4 text-gray-400" />
                   <span className="text-sm font-medium text-gray-900">
-                    {editedData.client_name || <span className="text-red-500">Name required</span>}
+                    {editedData.client_name || <span className="text-red-500">{t('nameRequired')}</span>}
                   </span>
                 </div>
               )}
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('email')}</label>
               {editMode ? (
                 <input
                   type="email"
@@ -412,13 +424,13 @@ function ClientConfirmationModal({
               ) : (
                 <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-gray-50 rounded-lg">
                   <Mail className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-700">{editedData.client_email || 'Not provided'}</span>
+                  <span className="text-sm text-gray-700">{editedData.client_email || t('notProvided')}</span>
                 </div>
               )}
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('phone')}</label>
               {editMode ? (
                 <input
                   type="tel"
@@ -430,13 +442,13 @@ function ClientConfirmationModal({
               ) : (
                 <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-gray-50 rounded-lg">
                   <Phone className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-700">{editedData.client_phone || 'Not provided'}</span>
+                  <span className="text-sm text-gray-700">{editedData.client_phone || t('notProvided')}</span>
                 </div>
               )}
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Nationality</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t('nationality')}</label>
               {editMode ? (
                 <input
                   type="text"
@@ -458,7 +470,7 @@ function ClientConfirmationModal({
             <div className="flex items-center gap-2">
               <Crown className={`w-4 h-4 ${tierColor.text}`} />
               <span className={`text-sm font-semibold ${tierColor.text}`}>
-                {tier.charAt(0).toUpperCase() + tier.slice(1)} Tier Client
+                {t('tierClient', { tier: tier.charAt(0).toUpperCase() + tier.slice(1) })}
               </span>
             </div>
           </div>
@@ -470,7 +482,7 @@ function ClientConfirmationModal({
             disabled={isCreating}
             className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 disabled:opacity-50"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             onClick={() => onConfirm(editedData)}
@@ -478,9 +490,9 @@ function ClientConfirmationModal({
             className="flex-1 px-4 py-2.5 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isCreating ? (
-              <><Loader2 className="w-4 h-4 animate-spin" />Creating...</>
+              <><Loader2 className="w-4 h-4 animate-spin" />{t('creating')}</>
             ) : (
-              <><UserPlus className="w-4 h-4" />Create Client & Generate</>
+              <><UserPlus className="w-4 h-4" />{t('createClientAndGenerate')}</>
             )}
           </button>
         </div>
@@ -493,14 +505,14 @@ function ClientConfirmationModal({
 // NEW: INPUT MODE SELECTOR COMPONENT
 // ============================================
 
-function InputModeSelector({ 
-  mode, 
+function InputModeSelector({
+  mode,
   onChange,
   autoDetected,
   confidence,
   signals,
   extractedDaysCount
-}: { 
+}: {
   mode: InputMode
   onChange: (mode: InputMode) => void
   autoDetected: InputMode | null
@@ -508,6 +520,7 @@ function InputModeSelector({
   signals: string[]
   extractedDaysCount: number
 }) {
+  const t = useTranslations('whatsappParser')
   const [showDetails, setShowDetails] = useState(false)
 
   return (
@@ -515,15 +528,16 @@ function InputModeSelector({
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
           <FileText className="w-4 h-4 text-gray-500" />
-          Input Type
+          {t('inputType')}
         </h3>
         {autoDetected && (
           <button
+            type="button"
             onClick={() => setShowDetails(!showDetails)}
             className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
           >
             <Info className="w-3 h-3" />
-            {showDetails ? 'Hide' : 'Why?'}
+            {showDetails ? t('hide') : t('why')}
           </button>
         )}
       </div>
@@ -531,36 +545,37 @@ function InputModeSelector({
       {/* Auto-detection banner */}
       {autoDetected && (
         <div className={`mb-3 p-2 rounded-lg text-xs ${
-          autoDetected === 'structured' 
-            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' 
+          autoDetected === 'structured'
+            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
             : 'bg-blue-50 border border-blue-200 text-blue-700'
         }`}>
           <div className="flex items-center gap-2">
             {autoDetected === 'structured' ? (
-              <><ListChecks className="w-3 h-3" /> Detected structured itinerary ({confidence}% confidence)</>
+              <><ListChecks className="w-3 h-3" /> {t('detectedStructured', { confidence })}</>
             ) : (
-              <><Wand2 className="w-3 h-3" /> Detected general request</>
+              <><Wand2 className="w-3 h-3" /> {t('detectedGeneral')}</>
             )}
           </div>
           {showDetails && signals.length > 0 && (
             <div className="mt-2 pt-2 border-t border-current/20">
-              <p className="font-medium mb-1">Detection signals:</p>
+              <p className="font-medium mb-1">{t('detectionSignals')}</p>
               <ul className="space-y-0.5">
                 {signals.map((signal, idx) => (
                   <li key={idx}>• {signal}</li>
                 ))}
               </ul>
               {extractedDaysCount > 0 && (
-                <p className="mt-1 font-medium">📅 {extractedDaysCount} days extracted</p>
+                <p className="mt-1 font-medium">📅 {t('daysExtracted', { count: extractedDaysCount })}</p>
               )}
             </div>
           )}
         </div>
       )}
-      
+
       <div className="grid grid-cols-2 gap-3">
         {/* Creative / General Request */}
         <button
+          type="button"
           onClick={() => onChange('creative')}
           className={`p-4 rounded-xl border-2 text-left transition-all ${
             mode === 'creative'
@@ -575,16 +590,17 @@ function InputModeSelector({
               <Wand2 className={`w-4 h-4 ${mode === 'creative' ? 'text-blue-600' : 'text-gray-500'}`} />
             </div>
             <span className={`text-sm font-semibold ${mode === 'creative' ? 'text-blue-700' : 'text-gray-700'}`}>
-              Let AI Create
+              {t('letAICreate')}
             </span>
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">
-            AI suggests itinerary based on interests, cities, and duration.
+            {t('letAICreateDesc')}
           </p>
         </button>
 
         {/* Structured / Follow Provided */}
         <button
+          type="button"
           onClick={() => onChange('structured')}
           className={`p-4 rounded-xl border-2 text-left transition-all ${
             mode === 'structured'
@@ -599,11 +615,11 @@ function InputModeSelector({
               <ListChecks className={`w-4 h-4 ${mode === 'structured' ? 'text-emerald-600' : 'text-gray-500'}`} />
             </div>
             <span className={`text-sm font-semibold ${mode === 'structured' ? 'text-emerald-700' : 'text-gray-700'}`}>
-              Follow My Plan
+              {t('followMyPlan')}
             </span>
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">
-            I provided a day-by-day itinerary. Follow it exactly.
+            {t('followMyPlanDesc')}
           </p>
         </button>
       </div>
@@ -613,9 +629,9 @@ function InputModeSelector({
         <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-amber-700">
-            {mode === 'structured' 
-              ? "Your input doesn't appear to have a clear day-by-day structure. The AI might not be able to follow a specific plan."
-              : "Your input appears to contain a structured itinerary. Switching to 'Let AI Create' may ignore your specific plan."
+            {mode === 'structured'
+              ? t('mismatchWarningStructured')
+              : t('mismatchWarningCreative')
             }
           </p>
         </div>
@@ -623,17 +639,17 @@ function InputModeSelector({
 
       {/* Info box */}
       <div className={`mt-3 p-3 rounded-lg text-xs ${
-        mode === 'structured' 
-          ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' 
+        mode === 'structured'
+          ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
           : 'bg-blue-50 border border-blue-200 text-blue-700'
       }`}>
         {mode === 'structured' ? (
           <p>
-            <strong>📋 Follow My Plan:</strong> The AI will extract dates, cities, and activities from your input and create the itinerary exactly as specified. It won't add or change anything.
+            <strong>📋 {t('followMyPlan')}:</strong> {t('followPlanInfo')}
           </p>
         ) : (
           <p>
-            <strong>✨ Let AI Create:</strong> The AI will design an optimal itinerary based on the cities, interests, and duration extracted from your input.
+            <strong>✨ {t('letAICreate')}:</strong> {t('letAICreateInfo')}
           </p>
         )}
       </div>
@@ -645,22 +661,25 @@ function InputModeSelector({
 // GENERATION MODE SELECTOR COMPONENT
 // ============================================
 
-function GenerationModeSelector({ 
-  mode, 
-  onChange 
-}: { 
-  mode: GenerationMode; 
-  onChange: (mode: GenerationMode) => void 
+function GenerationModeSelector({
+  mode,
+  onChange
+}: {
+  mode: GenerationMode;
+  onChange: (mode: GenerationMode) => void
 }) {
+  const t = useTranslations('whatsappParser')
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
       <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
         <Settings className="w-4 h-4 text-gray-500" />
-        Generation Mode
+        {t('generationMode')}
       </h3>
-      
+
       <div className="grid grid-cols-2 gap-3">
         <button
+          type="button"
           onClick={() => onChange('edit')}
           className={`p-4 rounded-xl border-2 text-left transition-all ${
             mode === 'edit'
@@ -676,21 +695,22 @@ function GenerationModeSelector({
             </div>
             <div>
               <span className={`text-sm font-semibold ${mode === 'edit' ? 'text-primary-700' : 'text-gray-700'}`}>
-                Edit First
+                {t('editFirst')}
               </span>
               {mode === 'edit' && (
                 <span className="ml-2 px-1.5 py-0.5 bg-primary-500 text-white text-[10px] rounded font-bold">
-                  RECOMMENDED
+                  {t('recommended')}
                 </span>
               )}
             </div>
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">
-            Review & edit content before calculating pricing.
+            {t('editFirstDesc')}
           </p>
         </button>
 
         <button
+          type="button"
           onClick={() => onChange('quick')}
           className={`p-4 rounded-xl border-2 text-left transition-all ${
             mode === 'quick'
@@ -705,11 +725,11 @@ function GenerationModeSelector({
               <Zap className={`w-4 h-4 ${mode === 'quick' ? 'text-amber-600' : 'text-gray-500'}`} />
             </div>
             <span className={`text-sm font-semibold ${mode === 'quick' ? 'text-amber-700' : 'text-gray-700'}`}>
-              Quick Generate
+              {t('quickGenerate')}
             </span>
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">
-            Auto-calculate pricing immediately.
+            {t('quickGenerateDesc')}
           </p>
         </button>
       </div>
@@ -722,8 +742,9 @@ function GenerationModeSelector({
 // ============================================
 
 function ExtractedDaysPreview({ days }: { days: ExtractedDay[] }) {
+  const t = useTranslations('whatsappParser')
   const [expanded, setExpanded] = useState(false)
-  
+
   if (!days || days.length === 0) return null
 
   const displayDays = expanded ? days : days.slice(0, 3)
@@ -733,17 +754,17 @@ function ExtractedDaysPreview({ days }: { days: ExtractedDay[] }) {
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
           <ListChecks className="w-4 h-4" />
-          Extracted Day-by-Day Plan
+          {t('extractedDayByDay')}
         </h4>
         <span className="text-xs text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">
-          {days.length} days
+          {days.length} {t('days')}
         </span>
       </div>
 
       <div className="space-y-2">
         {displayDays.map((day, idx) => (
-          <div 
-            key={idx} 
+          <div
+            key={idx}
             className={`p-2 rounded-lg text-xs ${
               day.is_transfer_only || day.is_arrival || day.is_departure
                 ? 'bg-white/50 border border-emerald-200'
@@ -755,10 +776,10 @@ function ExtractedDaysPreview({ days }: { days: ExtractedDay[] }) {
                 {day.date_display || `Day ${day.day_number}`}: {day.title || day.city}
               </span>
               <div className="flex gap-1">
-                {day.is_arrival && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">Arrival</span>}
-                {day.is_departure && <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]">Departure</span>}
-                {day.is_transfer_only && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">Transfer</span>}
-                {day.guide_required && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px]">Guide</span>}
+                {day.is_arrival && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">{t('arrival')}</span>}
+                {day.is_departure && <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px]">{t('departure')}</span>}
+                {day.is_transfer_only && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">{t('transfer')}</span>}
+                {day.guide_required && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px]">{t('guide')}</span>}
               </div>
             </div>
             {day.attractions && day.attractions.length > 0 && (
@@ -772,13 +793,14 @@ function ExtractedDaysPreview({ days }: { days: ExtractedDay[] }) {
 
       {days.length > 3 && (
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
           className="mt-2 text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
         >
           {expanded ? (
-            <><ChevronUp className="w-3 h-3" /> Show less</>
+            <><ChevronUp className="w-3 h-3" /> {t('showLess')}</>
           ) : (
-            <><ChevronDown className="w-3 h-3" /> Show {days.length - 3} more days</>
+            <><ChevronDown className="w-3 h-3" /> {t('showMoreDays', { count: days.length - 3 })}</>
           )}
         </button>
       )}
@@ -791,12 +813,14 @@ function ExtractedDaysPreview({ days }: { days: ExtractedDay[] }) {
 // ============================================
 
 export default function WhatsAppParserPage() {
+  const t = useTranslations('whatsappParser')
+
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-600">Loading WhatsApp Parser...</p>
+          <p className="text-sm text-gray-600">{t('loadingParser')}</p>
         </div>
       </div>
     }>
@@ -810,6 +834,7 @@ export default function WhatsAppParserPage() {
 // ============================================
 
 function WhatsAppParserContent() {
+  const t = useTranslations('whatsappParser')
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1301,8 +1326,8 @@ function WhatsAppParserContent() {
                 <MessageSquare className="w-5 h-5 text-primary-600" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900">WhatsApp to Itinerary</h1>
-                <p className="text-xs text-gray-500">Analyze → Configure → Confirm Client → Generate</p>
+                <h1 className="text-lg font-bold text-gray-900">{t('title')}</h1>
+                <p className="text-xs text-gray-500">{t('subtitle')}</p>
               </div>
             </div>
 
@@ -1314,10 +1339,10 @@ function WhatsAppParserContent() {
           </div>
 
           <div className="grid grid-cols-4 gap-2 mt-3">
-            <StepIndicator step={1} label="Analyze" status={getStepStatus(1)} isActive={!extractedData} />
-            <StepIndicator step={2} label="Configure" status={getStepStatus(2)} isActive={step1Complete && !step2Complete} />
-            <StepIndicator step={3} label="Client" status={getStepStatus(3)} isActive={step2Complete && !step3Complete} />
-            <StepIndicator step={4} label="Generate" status={getStepStatus(4)} isActive={step3Complete} />
+            <StepIndicator step={1} label={t('stepAnalyze')} status={getStepStatus(1)} isActive={!extractedData} />
+            <StepIndicator step={2} label={t('stepConfigure')} status={getStepStatus(2)} isActive={step1Complete && !step2Complete} />
+            <StepIndicator step={3} label={t('stepClient')} status={getStepStatus(3)} isActive={step2Complete && !step3Complete} />
+            <StepIndicator step={4} label={t('stepGenerate')} status={getStepStatus(4)} isActive={step3Complete} />
           </div>
         </div>
       </div>
@@ -1332,11 +1357,11 @@ function WhatsAppParserContent() {
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-[#25D366]" />
-                  <h2 className="text-sm font-semibold text-gray-900">Conversation</h2>
+                  <h2 className="text-sm font-semibold text-gray-900">{t('conversation')}</h2>
                 </div>
                 {!fromInbox && (
                   <button onClick={loadSample} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                    Load Sample
+                    {t('loadSample')}
                   </button>
                 )}
               </div>
@@ -1351,7 +1376,7 @@ function WhatsAppParserContent() {
                 <textarea
                   value={conversation}
                   onChange={(e) => setConversation(e.target.value)}
-                  placeholder="Paste WhatsApp conversation or structured itinerary here..."
+                  placeholder={t('pasteConversationPlaceholder')}
                   className="w-full h-80 px-4 py-3 text-sm border-0 focus:ring-0 resize-none font-mono bg-gray-50"
                 />
               )}
@@ -1363,9 +1388,9 @@ function WhatsAppParserContent() {
                   className="w-full px-4 py-2.5 text-sm bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isAnalyzing ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing with Claude AI...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {t('analyzingWithAI')}</>
                   ) : (
-                    <><Sparkles className="w-4 h-4" /> {extractedData ? 'Re-Analyze' : 'Analyze with AI'}</>
+                    <><Sparkles className="w-4 h-4" /> {extractedData ? t('reAnalyze') : t('analyzeWithAI')}</>
                   )}
                 </button>
               </div>
@@ -1373,15 +1398,15 @@ function WhatsAppParserContent() {
 
             {extractedData && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Readiness Check</h3>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('readinessCheck')}</h3>
                 <div className="flex flex-wrap gap-2">
-                  <ConfidenceBadge label="Data extracted" checked={step1Complete} />
-                  <ConfidenceBadge label={`Tier: ${selectedTier}`} checked={true} />
-                  <ConfidenceBadge label={`Language: ${extractedData.conversation_language}`} checked={!!extractedData.conversation_language} />
-                  <ConfidenceBadge label="Client confirmed" checked={step3Complete} />
-                  <ConfidenceBadge 
-                    label={inputMode === 'structured' ? 'Follow Plan' : 'AI Create'} 
-                    checked={true} 
+                  <ConfidenceBadge label={t('dataExtracted')} checked={step1Complete} />
+                  <ConfidenceBadge label={`${t('tier')}: ${selectedTier}`} checked={true} />
+                  <ConfidenceBadge label={`${t('language')}: ${extractedData.conversation_language}`} checked={!!extractedData.conversation_language} />
+                  <ConfidenceBadge label={t('clientConfirmed')} checked={step3Complete} />
+                  <ConfidenceBadge
+                    label={inputMode === 'structured' ? t('followPlan') : t('aiCreate')}
+                    checked={true}
                   />
                 </div>
               </div>
@@ -1400,7 +1425,7 @@ function WhatsAppParserContent() {
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-red-800">Error</p>
+                  <p className="text-sm font-medium text-red-800">{t('error')}</p>
                   <p className="text-xs text-red-600 mt-1">{error}</p>
                 </div>
               </div>
@@ -1413,26 +1438,26 @@ function WhatsAppParserContent() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <BadgeCheck className="w-4 h-4 text-green-500" />
-                      <h2 className="text-sm font-semibold text-gray-900">Extracted Information</h2>
+                      <h2 className="text-sm font-semibold text-gray-900">{t('extractedInformation')}</h2>
                     </div>
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Claude AI • Editable</span>
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{t('claudeAIEditable')}</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-3">
-                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Client</h4>
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t('client')}</h4>
                       <div>
-                        <label className="text-xs text-gray-500">Name <span className="text-red-500">*</span></label>
+                        <label className="text-xs text-gray-500">{t('name')} <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           value={extractedData.client_name}
                           onChange={(e) => setExtractedData({ ...extractedData, client_name: e.target.value })}
                           className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                          placeholder="Enter name"
+                          placeholder={t('enterName')}
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500">Email</label>
+                        <label className="text-xs text-gray-500">{t('email')}</label>
                         <input
                           type="email"
                           value={extractedData.client_email}
@@ -1441,7 +1466,7 @@ function WhatsAppParserContent() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500">Phone</label>
+                        <label className="text-xs text-gray-500">{t('phone')}</label>
                         <input
                           type="tel"
                           value={extractedData.client_phone || phoneNumber || ''}
@@ -1452,13 +1477,13 @@ function WhatsAppParserContent() {
                     </div>
 
                     <div className="space-y-3">
-                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Trip Details</h4>
+                      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t('tripDetails')}</h4>
                       <div>
-                        <label className="text-xs text-gray-500">Tour</label>
+                        <label className="text-xs text-gray-500">{t('tour')}</label>
                         <div className="mt-1 px-3 py-2 text-sm bg-gray-50 rounded-lg text-gray-700">{extractedData.tour_name}</div>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500">Date</label>
+                        <label className="text-xs text-gray-500">{t('date')}</label>
                         <input
                           type="date"
                           value={extractedData.start_date}
@@ -1467,10 +1492,10 @@ function WhatsAppParserContent() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500">Travelers</label>
+                        <label className="text-xs text-gray-500">{t('travelers')}</label>
                         <div className="mt-1 px-3 py-2 text-sm bg-gray-50 rounded-lg text-gray-700">
-                          {extractedData.num_adults} adults{extractedData.num_children > 0 && `, ${extractedData.num_children} children`}
-                          {extractedData.duration_days > 1 && ` • ${extractedData.duration_days} days`}
+                          {extractedData.num_adults} {t('adults')}{extractedData.num_children > 0 && `, ${extractedData.num_children} ${t('children')}`}
+                          {extractedData.duration_days > 1 && ` • ${extractedData.duration_days} ${t('days')}`}
                         </div>
                       </div>
                     </div>
@@ -1491,66 +1516,81 @@ function WhatsAppParserContent() {
                 <div className={`bg-white rounded-xl border-2 shadow-sm p-4 ${tierColor.border}`}>
                   {extractedData.budget_level && (
                     <div className={`mb-3 p-2 rounded-lg ${tierColor.bg} ${tierColor.text} text-sm`}>
-                      <span className="font-medium">📊 AI Recommendation:</span>
+                      <span className="font-medium">📊 {t('aiRecommendation')}</span>
                       <span className="font-bold ml-1">{selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)}</span>
                     </div>
                   )}
 
                   <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <Crown className="w-4 h-4 text-amber-500" />
-                    Service Tier
+                    {t('serviceTier')}
                   </h3>
 
                   <div className="grid grid-cols-4 gap-2">
                     {TIER_OPTIONS.map((tier) => {
                       const isSelected = selectedTier === tier.value
                       const color = getTierColor(tier.value)
+                      const tierLabels: Record<string, { label: string; desc: string }> = {
+                        budget: { label: t('tierBudget'), desc: t('tierBudgetDesc') },
+                        standard: { label: t('tierStandard'), desc: t('tierStandardDesc') },
+                        deluxe: { label: t('tierDeluxe'), desc: t('tierDeluxeDesc') },
+                        luxury: { label: t('tierLuxury'), desc: t('tierLuxuryDesc') },
+                      }
                       return (
                         <button
+                          type="button"
                           key={tier.value}
                           onClick={() => setSelectedTier(tier.value)}
                           className={`p-3 rounded-xl border-2 text-left transition-all ${
-                            isSelected 
-                              ? `${color.border} ${color.bg} ring-2 ${color.ring} ring-offset-1` 
+                            isSelected
+                              ? `${color.border} ${color.bg} ring-2 ${color.ring} ring-offset-1`
                               : 'border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
                           }`}
                         >
                           <div className="flex items-center gap-1.5 mb-1">
                             {tier.icon && <tier.icon className={`w-4 h-4 ${color.text}`} />}
-                            <span className={`text-sm font-semibold ${isSelected ? color.text : 'text-gray-600'}`}>{tier.label}</span>
+                            <span className={`text-sm font-semibold ${isSelected ? color.text : 'text-gray-600'}`}>{tierLabels[tier.value]?.label || tier.label}</span>
                           </div>
-                          <p className="text-xs text-gray-500">{tier.description}</p>
+                          <p className="text-xs text-gray-500">{tierLabels[tier.value]?.desc || tier.description}</p>
                         </button>
                       )
                     })}
                   </div>
                 </div>
 
-                {/* UPDATED: Package Type Selection with 5 options */}
+                {/* Package Type Selection */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <Package className="w-4 h-4 text-primary-500" />
-                    Package Type
+                    {t('packageType')}
                   </h3>
 
                   <div className="grid grid-cols-5 gap-2">
                     {PACKAGE_TYPES.map((pkg) => {
                       const isSelected = packageType === pkg.slug
+                      const pkgLabels: Record<string, { name: string; desc: string }> = {
+                        'day-trips': { name: t('dayTrips'), desc: t('dayTripsDesc') },
+                        'tours-only': { name: t('toursOnly'), desc: t('toursOnlyDesc') },
+                        'land-package': { name: t('landPackage'), desc: t('landPackageDesc') },
+                        'cruise-package': { name: t('cruisePackage'), desc: t('cruisePackageDesc') },
+                        'cruise-land': { name: t('cruiseLand'), desc: t('cruiseLandDesc') },
+                      }
                       return (
                         <button
+                          type="button"
                           key={pkg.slug}
                           onClick={() => setPackageType(pkg.slug as PackageType)}
                           className={`p-3 rounded-xl border-2 text-left transition-all ${
-                            isSelected 
-                              ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-500 ring-offset-1' 
+                            isSelected
+                              ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-500 ring-offset-1'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
                           <div className="flex items-center gap-2 mb-1">
                             <pkg.icon className={`w-4 h-4 ${isSelected ? 'text-primary-600' : 'text-gray-400'}`} />
                           </div>
-                          <span className={`text-xs font-semibold ${isSelected ? 'text-primary-700' : 'text-gray-700'}`}>{pkg.name}</span>
-                          <p className="text-[10px] text-gray-500 mt-0.5">{pkg.description}</p>
+                          <span className={`text-xs font-semibold ${isSelected ? 'text-primary-700' : 'text-gray-700'}`}>{pkgLabels[pkg.slug]?.name || pkg.name}</span>
+                          <p className="text-[10px] text-gray-500 mt-0.5">{pkgLabels[pkg.slug]?.desc || pkg.description}</p>
                         </button>
                       )
                     })}
@@ -1564,20 +1604,21 @@ function WhatsAppParserContent() {
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <User className="w-4 h-4 text-primary-500" />
-                    Step 3: Confirm Client
+                    {t('step3ConfirmClient')}
                   </h3>
 
                   {existingClients.length > 0 && clientStep !== 'confirmed' && (
                     <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-sm font-medium text-amber-800 mb-2">⚠️ Possible existing client(s) found:</p>
+                      <p className="text-sm font-medium text-amber-800 mb-2">⚠️ {t('possibleExistingClients')}</p>
                       <div className="space-y-2">
                         {existingClients.map((client) => (
                           <button
+                            type="button"
                             key={client.id}
                             onClick={() => selectExistingClient(client.id)}
                             className={`w-full p-3 text-left rounded-lg border-2 transition-all ${
                               selectedClientId === client.id && clientStep === 'existing-selected'
-                                ? 'border-primary-500 bg-primary-50' 
+                                ? 'border-primary-500 bg-primary-50'
                                 : 'border-gray-200 bg-white hover:border-gray-300'
                             }`}
                           >
@@ -1600,8 +1641,8 @@ function WhatsAppParserContent() {
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-green-500" />
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-green-800">Client created successfully</p>
-                        <p className="text-xs text-green-600">{extractedData.client_name} added to CRM</p>
+                        <p className="text-sm font-medium text-green-800">{t('clientCreatedSuccessfully')}</p>
+                        <p className="text-xs text-green-600">{t('addedToCRM', { name: extractedData.client_name })}</p>
                       </div>
                     </div>
                   )}
@@ -1610,8 +1651,8 @@ function WhatsAppParserContent() {
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
                       <CheckCircle className="w-5 h-5 text-blue-500" />
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-blue-800">Existing client selected</p>
-                        <p className="text-xs text-blue-600">Will be linked to this itinerary</p>
+                        <p className="text-sm font-medium text-blue-800">{t('existingClientSelected')}</p>
+                        <p className="text-xs text-blue-600">{t('willBeLinkToItinerary')}</p>
                       </div>
                     </div>
                   )}
@@ -1619,14 +1660,15 @@ function WhatsAppParserContent() {
                   {clientStep === 'pending' && (
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                       <p className="text-sm text-gray-700 mb-3">
-                        A new client profile will be created before generating.
+                        {t('newClientWillBeCreated')}
                       </p>
                       <button
+                        type="button"
                         onClick={openClientConfirmation}
                         className="w-full px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:border-primary-500 hover:text-primary-600 hover:bg-primary-50 transition-all flex items-center justify-center gap-2"
                       >
                         <UserPlus className="w-4 h-4" />
-                        Review & Create Client
+                        {t('reviewAndCreateClient')}
                       </button>
                     </div>
                   )}
@@ -1634,8 +1676,8 @@ function WhatsAppParserContent() {
 
                 {/* Generate Button */}
                 <div className={`rounded-xl p-4 shadow-lg ${
-                  generationMode === 'edit' 
-                    ? 'bg-gradient-to-r from-primary-500 to-primary-600' 
+                  generationMode === 'edit'
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600'
                     : 'bg-gradient-to-r from-green-500 to-emerald-600'
                 }`}>
                   {isGenerating ? (
@@ -1643,33 +1685,34 @@ function WhatsAppParserContent() {
                   ) : (
                     <>
                       <p className="text-sm text-white/90 mb-3">
-                        {step3Complete 
+                        {step3Complete
                           ? inputMode === 'structured'
-                            ? `Generate from your ${extractedData.extracted_days?.length || 0}-day plan (${selectedTier.toUpperCase()})`
-                            : `AI will create ${selectedTier.toUpperCase()} ${packageType.replace('-', ' ')} itinerary`
-                          : 'Please confirm the client first to proceed.'
+                            ? t('generateFromPlan', { count: extractedData.extracted_days?.length || 0, tier: selectedTier.toUpperCase() })
+                            : t('aiWillCreate', { tier: selectedTier.toUpperCase(), packageType: packageType.replace('-', ' ') })
+                          : t('pleaseConfirmClient')
                         }
                       </p>
                       <button
+                        type="button"
                         onClick={() => generateItinerary()}
                         disabled={!canGenerate}
                         className={`w-full px-6 py-3 bg-white rounded-lg font-bold text-base disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-md ${
-                          generationMode === 'edit' 
-                            ? 'text-primary-700 hover:bg-primary-50' 
+                          generationMode === 'edit'
+                            ? 'text-primary-700 hover:bg-primary-50'
                             : 'text-green-700 hover:bg-green-50'
                         }`}
                       >
                         {inputMode === 'structured' ? (
-                          <><ListChecks className="w-5 h-5" /> Generate from Plan</>
+                          <><ListChecks className="w-5 h-5" /> {t('generateFromPlanBtn')}</>
                         ) : generationMode === 'edit' ? (
-                          <><Pencil className="w-5 h-5" /> Generate & Edit</>
+                          <><Pencil className="w-5 h-5" /> {t('generateAndEdit')}</>
                         ) : (
-                          <><Zap className="w-5 h-5" /> Quick Generate</>
+                          <><Zap className="w-5 h-5" /> {t('quickGenerate')}</>
                         )}
                       </button>
                       {!canGenerate && !step3Complete && (
                         <p className="text-xs text-white/70 mt-2 text-center">
-                          👆 Click "Review & Create Client" above first
+                          👆 {t('clickReviewFirst')}
                         </p>
                       )}
                     </>
@@ -1684,24 +1727,26 @@ function WhatsAppParserContent() {
                         <Check className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-base font-bold text-green-800">Itinerary Generated!</h3>
+                        <h3 className="text-base font-bold text-green-800">{t('itineraryGenerated')}</h3>
                         <p className="text-sm text-green-600">
-                          {generatedItinerary.itinerary_code} • {generatedItinerary.generation_mode === 'structured' ? 'Followed your plan' : 'AI created'}
+                          {generatedItinerary.itinerary_code} • {generatedItinerary.generation_mode === 'structured' ? t('followedYourPlan') : t('aiCreated')}
                         </p>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
                         className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 flex items-center justify-center gap-2"
                       >
-                        View Itinerary <ChevronRight className="w-4 h-4" />
+                        {t('viewItinerary')} <ChevronRight className="w-4 h-4" />
                       </button>
                       <button
+                        type="button"
                         onClick={() => router.push(`/itineraries/${generatedItinerary.id}/edit`)}
                         className="px-4 py-2.5 border border-green-300 bg-white rounded-lg hover:bg-green-50 flex items-center gap-2 text-sm text-green-700"
                       >
-                        <Pencil className="w-4 h-4" /> Edit
+                        <Pencil className="w-4 h-4" /> {t('edit')}
                       </button>
                     </div>
                   </div>
@@ -1712,8 +1757,8 @@ function WhatsAppParserContent() {
                     <div className="flex items-center gap-3">
                       <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
                       <div>
-                        <h3 className="text-base font-bold text-primary-800">Draft Created!</h3>
-                        <p className="text-sm text-primary-600">Redirecting to editor...</p>
+                        <h3 className="text-base font-bold text-primary-800">{t('draftCreated')}</h3>
+                        <p className="text-sm text-primary-600">{t('redirectingToEditor')}</p>
                       </div>
                     </div>
                   </div>
@@ -1725,9 +1770,9 @@ function WhatsAppParserContent() {
             {!extractedData && !isAnalyzing && (
               <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center">
                 <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <h3 className="text-sm font-medium text-gray-600 mb-1">Paste a WhatsApp conversation or itinerary</h3>
+                <h3 className="text-sm font-medium text-gray-600 mb-1">{t('emptyStateTitle')}</h3>
                 <p className="text-xs text-gray-400">
-                  AI will auto-detect if you've provided a structured plan or a general request
+                  {t('emptyStateDesc')}
                 </p>
               </div>
             )}

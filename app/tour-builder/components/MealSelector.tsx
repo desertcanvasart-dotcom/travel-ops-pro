@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { MealRate } from '../types'
 
 interface MealSelectorProps {
@@ -20,6 +21,7 @@ export default function MealSelector({
   isEuroPassport,
   onSelect
 }: MealSelectorProps) {
+  const t = useTranslations('tourBuilder.meals')
   const [meals, setMeals] = useState<MealRate[]>([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState({
@@ -78,18 +80,19 @@ export default function MealSelector({
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <p className="text-sm text-gray-600">
-          Please select a city first
+          {t('selectCityFirst')}
         </p>
       </div>
     )
   }
 
   const icon = mealType === 'Lunch' ? '🥗' : '🍽️'
+  const mealLabel = mealType === 'Lunch' ? t('lunch') : t('dinner')
 
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">
-        {icon} {mealType}
+        {icon} {mealLabel}
       </label>
 
       {/* Filters */}
@@ -97,9 +100,10 @@ export default function MealSelector({
         <select
           value={filter.tier}
           onChange={(e) => setFilter({ ...filter, tier: e.target.value })}
+          title={t('allTiers')}
           className="text-xs px-2 py-1 border border-gray-300 rounded flex-1"
         >
-          <option value="all">All Tiers</option>
+          <option value="all">{t('allTiers')}</option>
           <option value="budget">Budget</option>
           <option value="standard">Standard</option>
           <option value="premium">Premium</option>
@@ -108,9 +112,10 @@ export default function MealSelector({
         <select
           value={filter.cuisine}
           onChange={(e) => setFilter({ ...filter, cuisine: e.target.value })}
+          title={t('allCuisines')}
           className="text-xs px-2 py-1 border border-gray-300 rounded flex-1"
         >
-          <option value="all">All Cuisines</option>
+          <option value="all">{t('allCuisines')}</option>
           {cuisines.map(cuisine => (
             <option key={cuisine} value={cuisine}>{cuisine}</option>
           ))}
@@ -122,34 +127,37 @@ export default function MealSelector({
         {loading ? (
           <div className="p-4 text-center text-gray-600">
             <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-2"></div>
-            <p className="text-sm">Loading {mealType.toLowerCase()} options...</p>
+            <p className="text-sm">{t('loading', { mealType: mealLabel })}</p>
           </div>
         ) : filteredMeals.length === 0 ? (
           <div className="p-4 text-center text-gray-600">
-            <p className="text-sm">No {mealType.toLowerCase()} options found for {city}</p>
+            <p className="text-sm">{t('noOptions', { city, mealType: mealLabel })}</p>
             <button
+              type="button"
               onClick={() => setFilter({ tier: 'all', cuisine: 'all' })}
               className="text-xs text-blue-600 hover:text-blue-700 mt-2"
             >
-              Reset filters
+              {t('resetFilters')}
             </button>
           </div>
         ) : (
           <div className="max-h-48 overflow-y-auto">
             {/* No Selection Option */}
             <button
+              type="button"
               onClick={() => onSelect(undefined)}
               className={`w-full text-left px-4 py-2.5 border-b hover:bg-gray-50 transition-colors ${
                 !selectedMeal ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
               }`}
             >
-              <div className="font-medium text-gray-900 text-sm">No {mealType.toLowerCase()}</div>
-              <div className="text-xs text-gray-500">Skip {mealType.toLowerCase()} for this day</div>
+              <div className="font-medium text-gray-900 text-sm">{t('noMeal', { mealType: mealLabel })}</div>
+              <div className="text-xs text-gray-500">{t('skipMeal', { mealType: mealLabel })}</div>
             </button>
 
             {/* Meal Options */}
             {filteredMeals.map((meal) => (
               <button
+                type="button"
                 key={meal.id}
                 onClick={() => onSelect(meal)}
                 className={`w-full text-left px-4 py-2.5 border-b hover:bg-gray-50 transition-colors ${
@@ -187,7 +195,7 @@ export default function MealSelector({
                       {pax} pax
                     </div>
                     <div className="text-xs text-gray-400">
-                      €{(isEuroPassport ? meal.base_rate_eur : meal.base_rate_non_eur).toFixed(2)}/person
+                      €{(isEuroPassport ? meal.base_rate_eur : meal.base_rate_non_eur).toFixed(2)}{t('perPerson')}
                     </div>
                   </div>
                 </div>
@@ -223,7 +231,7 @@ export default function MealSelector({
 
       {/* Stats */}
       <div className="mt-2 text-xs text-gray-500">
-        {filteredMeals.length} {mealType.toLowerCase()} option{filteredMeals.length !== 1 ? 's' : ''} in {city}
+        {t('optionsInCity', { city, count: filteredMeals.length, mealType: mealLabel })}
       </div>
     </div>
   )

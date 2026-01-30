@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { 
   Search, Plus, MoreHorizontal, Users, UserCog, X, Edit, Trash2, Eye, 
@@ -90,6 +91,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function ContactsContent() {
+  const t = useTranslations('contacts')
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -403,15 +405,16 @@ export default function ContactsContent() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-semibold text-gray-900">
-                {selectedType === 'all' ? 'Contacts' : TYPE_CONFIG[selectedType].label}
+                {selectedType === 'all' ? t('title') : selectedType === 'client' ? t('clients') : t('staff')}
               </h1>
-              <p className="text-sm text-gray-500">Manage your clients and internal staff</p>
+              <p className="text-sm text-gray-500">{t('subtitle')}</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-gray-100 rounded-lg p-1">
                 {(['grid', 'table', 'list'] as ViewMode[]).map(mode => (
                   <button
                     key={mode}
+                    type="button"
                     onClick={() => setViewMode(mode)}
                     className={`p-1.5 rounded-md transition-colors ${viewMode === mode ? 'bg-white shadow-sm text-primary-600' : 'text-gray-500'}`}
                   >
@@ -420,11 +423,11 @@ export default function ContactsContent() {
                 ))}
               </div>
               <div className="w-px h-6 bg-gray-200" />
-              <button onClick={handleExport} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                <Download className="w-4 h-4" /> Export
+              <button type="button" onClick={handleExport} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                <Download className="w-4 h-4" /> {t('export')}
               </button>
-              <button onClick={handleAdd} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
-                <Plus className="w-4 h-4" /> Add Contact
+              <button type="button" onClick={handleAdd} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
+                <Plus className="w-4 h-4" /> {t('addContact')}
               </button>
             </div>
           </div>
@@ -432,23 +435,26 @@ export default function ContactsContent() {
           {/* Type Tabs - ONLY Clients and Staff */}
           <div className="flex gap-2 mt-4">
             <button
+              type="button"
               onClick={() => handleTypeChange('all')}
               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${selectedType === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >
-              All <span className="px-1.5 py-0.5 bg-white/20 rounded-full">{stats.all}</span>
+              {t('all')} <span className="px-1.5 py-0.5 bg-white/20 rounded-full">{stats.all}</span>
             </button>
             <button
+              type="button"
               onClick={() => handleTypeChange('client')}
               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${selectedType === 'client' ? TYPE_CONFIG.client.color : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >
-              <Users className="w-3.5 h-3.5" /> Clients
+              <Users className="w-3.5 h-3.5" /> {t('clients')}
               <span className={`px-1.5 py-0.5 rounded-full ${selectedType === 'client' ? 'bg-white/30' : 'bg-gray-200'}`}>{stats.client}</span>
             </button>
             <button
+              type="button"
               onClick={() => handleTypeChange('staff')}
               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${selectedType === 'staff' ? TYPE_CONFIG.staff.color : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >
-              <UserCog className="w-3.5 h-3.5" /> Staff
+              <UserCog className="w-3.5 h-3.5" /> {t('staff')}
               <span className={`px-1.5 py-0.5 rounded-full ${selectedType === 'staff' ? 'bg-white/30' : 'bg-gray-200'}`}>{stats.staff}</span>
             </button>
           </div>
@@ -457,8 +463,8 @@ export default function ContactsContent() {
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
             <Globe className="w-5 h-5 text-blue-600" />
             <p className="text-sm text-blue-800">
-              Looking for hotels, transport companies, guides, or other suppliers? 
-              <a href="/suppliers" className="font-medium underline ml-1">Go to Suppliers →</a>
+              {t('suppliersInfo')}
+              <a href="/suppliers" className="font-medium underline ml-1">{t('goToSuppliers')}</a>
             </p>
           </div>
         </div>
@@ -470,7 +476,7 @@ export default function ContactsContent() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by name, email, phone..."
+            placeholder={t('searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-10 pl-10 pr-4 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
@@ -485,9 +491,9 @@ export default function ContactsContent() {
         ) : filteredContacts.length === 0 ? (
           <div className="text-center py-12">
             <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 mb-4">No contacts found</p>
-            <button onClick={handleAdd} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
-              <Plus className="w-4 h-4" /> Add your first contact
+            <p className="text-gray-500 mb-4">{t('noContactsFound')}</p>
+            <button type="button" onClick={handleAdd} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
+              <Plus className="w-4 h-4" /> {t('addFirstContact')}
             </button>
           </div>
         ) : (
@@ -514,9 +520,9 @@ export default function ContactsContent() {
                           </button>
                           {openMenuId === contact.id && (
                             <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                              <button onClick={(e) => { e.stopPropagation(); handleView(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Eye className="w-3.5 h-3.5" /> View</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleEdit(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Edit className="w-3.5 h-3.5" /> Edit</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleView(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Eye className="w-3.5 h-3.5" /> {t('view')}</button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleEdit(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Edit className="w-3.5 h-3.5" /> {t('edit')}</button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /> {t('delete')}</button>
                             </div>
                           )}
                         </div>
@@ -641,24 +647,25 @@ export default function ContactsContent() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-base font-semibold text-gray-900">Add New Contact</h3>
-              <button onClick={() => setShowAddModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
+              <h3 className="text-base font-semibold text-gray-900">{t('addNewContact')}</h3>
+              <button type="button" onClick={() => setShowAddModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               {error && <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
-              
+
               {/* Type selector */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-2">Contact Type</label>
+                <label className="block text-xs font-medium text-gray-600 mb-2">{t('contactType')}</label>
                 <div className="grid grid-cols-2 gap-2">
                   {(['client', 'staff'] as const).map(type => (
                     <button
                       key={type}
+                      type="button"
                       onClick={() => { setNewContactType(type); setFormData({}) }}
                       className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${newContactType === type ? TYPE_CONFIG[type].color + ' ' + TYPE_CONFIG[type].borderColor : 'border-gray-200 hover:bg-gray-50'}`}
                     >
                       {type === 'client' ? <Users className="w-5 h-5" /> : <UserCog className="w-5 h-5" />}
-                      <span className="font-medium">{TYPE_CONFIG[type].singular}</span>
+                      <span className="font-medium">{type === 'client' ? t('client') : t('staff')}</span>
                     </button>
                   ))}
                 </div>
@@ -674,9 +681,9 @@ export default function ContactsContent() {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">Cancel</button>
-              <button onClick={handleSaveNew} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />} Add Contact
+              <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">{t('cancel')}</button>
+              <button type="button" onClick={handleSaveNew} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />} {t('addContactBtn')}
               </button>
             </div>
           </div>
@@ -690,9 +697,9 @@ export default function ContactsContent() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 {(() => { const c = TYPE_CONFIG[selectedContact.type]; return <div className={`w-8 h-8 rounded-lg ${c.color} flex items-center justify-center`}><c.icon className="w-4 h-4" /></div> })()}
-                <h3 className="text-base font-semibold text-gray-900">Edit {TYPE_CONFIG[selectedContact.type].singular}</h3>
+                <h3 className="text-base font-semibold text-gray-900">{selectedContact.type === 'client' ? t('editClient') : t('editStaff')}</h3>
               </div>
-              <button onClick={() => setShowEditModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
+              <button type="button" onClick={() => setShowEditModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500" /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               {error && <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
@@ -706,9 +713,9 @@ export default function ContactsContent() {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => setShowEditModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">Cancel</button>
-              <button onClick={handleSaveEdit} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save Changes
+              <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">{t('cancel')}</button>
+              <button type="button" onClick={handleSaveEdit} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />} {t('save')}
               </button>
             </div>
           </div>
@@ -751,10 +758,10 @@ export default function ContactsContent() {
               {selectedContact.notes && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Notes</p><p className="text-sm text-gray-700">{selectedContact.notes}</p></div>}
             </div>
             <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => { setShowViewModal(false); handleDeleteClick(selectedContact) }} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">Delete</button>
+              <button type="button" onClick={() => { setShowViewModal(false); handleDeleteClick(selectedContact) }} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">{t('delete')}</button>
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowViewModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">Close</button>
-                <button onClick={() => { setShowViewModal(false); handleEdit(selectedContact) }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"><Edit className="w-4 h-4" /> Edit</button>
+                <button type="button" onClick={() => setShowViewModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">{t('close')}</button>
+                <button type="button" onClick={() => { setShowViewModal(false); handleEdit(selectedContact) }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"><Edit className="w-4 h-4" /> {t('edit')}</button>
               </div>
             </div>
           </div>
@@ -767,13 +774,13 @@ export default function ContactsContent() {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center"><Trash2 className="w-6 h-6 text-red-600" /></div>
-              <div><h3 className="text-base font-semibold text-gray-900">Delete Contact</h3><p className="text-sm text-gray-500">This cannot be undone.</p></div>
+              <div><h3 className="text-base font-semibold text-gray-900">{t('deleteContact')}</h3><p className="text-sm text-gray-500">{t('deleteWarning')}</p></div>
             </div>
-            <p className="text-sm text-gray-600 mb-6">Are you sure you want to delete <strong>{selectedContact.name}</strong>?</p>
+            <p className="text-sm text-gray-600 mb-6">{t('deleteConfirm', { name: selectedContact.name })}</p>
             {error && <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
             <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-              <button onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{saving && <Loader2 className="w-4 h-4 animate-spin" />} Delete</button>
+              <button type="button" onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">{t('cancel')}</button>
+              <button type="button" onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{saving && <Loader2 className="w-4 h-4 animate-spin" />} {t('delete')}</button>
             </div>
           </div>
         </div>

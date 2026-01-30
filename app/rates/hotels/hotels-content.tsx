@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -348,6 +349,8 @@ function Pagination({
 // ============================================
 
 export default function HotelsContent() {
+  const t = useTranslations('rates.hotels')
+  const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dialog = useConfirmDialog()
@@ -835,7 +838,7 @@ export default function HotelsContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading hotels...</p>
+          <p className="text-sm text-gray-600">{tCommon('loading')}</p>
         </div>
       </div>
     )
@@ -856,7 +859,7 @@ export default function HotelsContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-purple-600" />
-              <h1 className="text-xl font-bold text-gray-900">Hotels & Accommodation</h1>
+              <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
             <div className="flex items-center gap-2">
@@ -865,21 +868,21 @@ export default function HotelsContent() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
                 <Building2 className="w-4 h-4" />
-                Hotel Companies
+                {t('hotelCompanies')}
               </Link>
               <button
                 onClick={handleExportCSV}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
                 <Download className="w-4 h-4" />
-                Export
+                {tCommon('export')}
               </button>
               <button
                 onClick={handleAddNew}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
               >
                 <Plus className="w-4 h-4" />
-                Add Hotel
+                {t('addRate')}
               </button>
               <Link 
                 href="/rates"
@@ -900,7 +903,7 @@ export default function HotelsContent() {
               <Building2 className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
-            <p className="text-xs text-gray-600">Total Hotels</p>
+            <p className="text-xs text-gray-600">{t('totalRates')}</p>
             <p className="text-2xl font-bold text-gray-900">{rates.length}</p>
           </div>
 
@@ -909,7 +912,7 @@ export default function HotelsContent() {
               <Check className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
             </div>
-            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-xs text-gray-600">{t('active')}</p>
             <p className="text-2xl font-bold text-gray-900">{activeRates}</p>
           </div>
 
@@ -918,7 +921,7 @@ export default function HotelsContent() {
               <Building2 className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
             </div>
-            <p className="text-xs text-gray-600">Linked to Company</p>
+            <p className="text-xs text-gray-600">{t('linked')}</p>
             <p className="text-2xl font-bold text-gray-900">{linkedRates}</p>
           </div>
 
@@ -927,7 +930,7 @@ export default function HotelsContent() {
               <span className="text-gray-400">💶</span>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
-            <p className="text-xs text-gray-600">Avg. Double (Low)</p>
+            <p className="text-xs text-gray-600">{t('avgDoubleLow')}</p>
             <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
           </div>
 
@@ -936,7 +939,7 @@ export default function HotelsContent() {
               <MapPin className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-orange-600" />
             </div>
-            <p className="text-xs text-gray-600">Cities</p>
+            <p className="text-xs text-gray-600">{t('cities')}</p>
             <p className="text-2xl font-bold text-gray-900">{usedCities.length}</p>
           </div>
         </div>
@@ -948,7 +951,7 @@ export default function HotelsContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by hotel name, code, company, or contact..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
@@ -962,7 +965,7 @@ export default function HotelsContent() {
                 onChange={(e) => setSelectedCity(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm appearance-none"
               >
-                <option value="all">All Cities</option>
+                <option value="all">{t('allCities')}</option>
                 {usedCities.map(city => (
                   <option key={city} value={city}>{city}</option>
                 ))}
@@ -977,7 +980,7 @@ export default function HotelsContent() {
                 onChange={(e) => setSelectedSupplier(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm appearance-none"
               >
-                <option value="all">All Companies</option>
+                <option value="all">{t('allCompanies')}</option>
                 {suppliers.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -992,7 +995,7 @@ export default function HotelsContent() {
                 onChange={(e) => setFilterTier(e.target.value === 'all' ? null : e.target.value)}
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm appearance-none pr-8"
               >
-                <option value="all">All Tiers</option>
+                <option value="all">{t('allTiers')}</option>
                 {TIER_OPTIONS.map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
@@ -1008,7 +1011,7 @@ export default function HotelsContent() {
                   : 'bg-white border border-green-300 text-green-700'
               }`}
             >
-              {showInactive ? 'Show All' : 'Active Only'}
+              {showInactive ? tCommon('showAll') : tCommon('activeOnly')}
             </button>
             
             {/* View Toggle */}
@@ -1039,7 +1042,7 @@ export default function HotelsContent() {
           
           <div className="mt-3 pt-3 border-t border-gray-200">
             <p className="text-xs text-gray-600">
-              Showing <span className="font-bold text-gray-900">{filteredRates.length}</span> of {rates.length} hotels
+              {tCommon('showing')} <span className="font-bold text-gray-900">{filteredRates.length}</span> {tCommon('of')} {rates.length} {t('hotels')}
             </p>
           </div>
         </div>
@@ -1051,15 +1054,15 @@ export default function HotelsContent() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Hotel</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Company</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Tier</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Board</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Low Dbl</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">High Dbl</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('hotel')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('company')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('tier')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('city')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('board')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('lowDbl')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('highDbl')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('status')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1115,7 +1118,7 @@ export default function HotelsContent() {
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {rate.is_active ? 'Active' : 'Inactive'}
+                          {rate.is_active ? tCommon('active') : tCommon('inactive')}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -1140,12 +1143,12 @@ export default function HotelsContent() {
                     <tr>
                       <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
                         <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                        <p className="text-sm font-medium">No hotels found</p>
+                        <p className="text-sm font-medium">{t('noRatesFound')}</p>
                         <button
                           onClick={handleAddNew}
                           className="mt-3 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                         >
-                          Add Your First Hotel
+                          {t('addFirstHotel')}
                         </button>
                       </td>
                     </tr>
@@ -1184,7 +1187,7 @@ export default function HotelsContent() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         rate.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
+                        {rate.is_active ? tCommon('active') : tCommon('inactive')}
                       </span>
                     </div>
                     
@@ -1226,15 +1229,15 @@ export default function HotelsContent() {
 
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
                       <div className="text-center">
-                        <p className="text-xs text-blue-600 font-medium">Low</p>
+                        <p className="text-xs text-blue-600 font-medium">{t('low')}</p>
                         <p className="text-sm font-bold text-gray-700">€{(rate.double_rate_eur || 0).toFixed(0)}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-xs text-orange-600 font-medium">High</p>
+                        <p className="text-xs text-orange-600 font-medium">{t('high')}</p>
                         <p className="text-sm font-bold text-gray-700">€{(rate.high_season_double_eur || 0).toFixed(0)}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-xs text-red-600 font-medium">Peak</p>
+                        <p className="text-xs text-red-600 font-medium">{t('peak')}</p>
                         <p className="text-sm font-bold text-gray-700">€{(rate.peak_season_double_eur || 0).toFixed(0)}</p>
                       </div>
                     </div>
@@ -1246,14 +1249,14 @@ export default function HotelsContent() {
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                     >
                       <Edit className="w-4 h-4" />
-                      Edit
+                      {tCommon('edit')}
                     </button>
                     <button
                       onClick={() => handleDelete(rate.id, rate.property_name)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      {tCommon('delete')}
                     </button>
                   </div>
                 </div>
@@ -1340,7 +1343,7 @@ export default function HotelsContent() {
           <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? 'Edit Hotel' : 'Add New Hotel'}
+                {editingRate ? t('editRate') : t('addRate')}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
@@ -1355,11 +1358,11 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">1</span>
-                  Hotel Information
+                  {t('hotelInformation')}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Hotel Name *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('hotelName')} *</label>
                     <input
                       type="text"
                       name="property_name"
@@ -1371,7 +1374,7 @@ export default function HotelsContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('serviceCode')}</label>
                     <input
                       type="text"
                       name="service_code"
@@ -1382,25 +1385,25 @@ export default function HotelsContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Company / Supplier</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('companySupplier')}</label>
                     <select
                       value={formData.supplier_id}
                       onChange={(e) => handleSupplierSelect(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="">Select company (optional)...</option>
+                      <option value="">{t('selectCompanyOptional')}</option>
                       {suppliers.map(s => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-1">
                       <Link href="/suppliers?type=hotel" className="text-primary-600 hover:underline flex items-center gap-1 inline">
-                        <Plus className="w-3 h-3" /> Add new company
+                        <Plus className="w-3 h-3" /> {t('addNewCompany')}
                       </Link>
                     </p>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">City *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('city')} *</label>
                     <select
                       name="city"
                       value={formData.city}
@@ -1408,14 +1411,14 @@ export default function HotelsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="">Select City...</option>
+                      <option value="">{tCommon('selectCity')}</option>
                       {EGYPT_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Property Type *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyType')} *</label>
                     <select
                       name="property_type"
                       value={formData.property_type}
@@ -1432,7 +1435,7 @@ export default function HotelsContent() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Board Basis</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('boardBasis')}</label>
                     <select
                       name="board_basis"
                       value={formData.board_basis}
@@ -1451,14 +1454,14 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  Hotel Contacts
+                  {t('hotelContacts')}
                 </h3>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         <User className="w-3 h-3 inline mr-1" />
-                        Sales Contact Name
+                        {t('salesContactName')}
                       </label>
                       <input
                         type="text"
@@ -1472,7 +1475,7 @@ export default function HotelsContent() {
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         <Mail className="w-3 h-3 inline mr-1" />
-                        Sales Email
+                        {t('salesEmail')}
                       </label>
                       <input
                         type="email"
@@ -1486,7 +1489,7 @@ export default function HotelsContent() {
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         <Phone className="w-3 h-3 inline mr-1" />
-                        Sales Phone
+                        {t('salesPhone')}
                       </label>
                       <input
                         type="tel"
@@ -1500,7 +1503,7 @@ export default function HotelsContent() {
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         <AtSign className="w-3 h-3 inline mr-1" />
-                        Reservations Email
+                        {t('reservationsEmail')}
                       </label>
                       <input
                         type="email"
@@ -1514,7 +1517,7 @@ export default function HotelsContent() {
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         <Phone className="w-3 h-3 inline mr-1" />
-                        Reservations Phone
+                        {t('reservationsPhone')}
                       </label>
                       <input
                         type="tel"
@@ -1533,7 +1536,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">3</span>
-                  Service Tier
+                  {tCommon('tier')}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {TIER_OPTIONS.map((tier) => (
@@ -1564,7 +1567,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
-                  Low Season Rates
+                  {t('lowSeasonRates')}
                 </h3>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   {/* Date Range */}
@@ -1633,7 +1636,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">5</span>
-                  High Season Rates
+                  {t('highSeasonRates')}
                 </h3>
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                   {/* Date Range */}
@@ -1702,7 +1705,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold">6</span>
-                  Peak Season Rates
+                  {t('peakSeasonRates')}
                 </h3>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   {/* Date Ranges - Primary and Secondary */}
@@ -1810,7 +1813,7 @@ export default function HotelsContent() {
 
               {/* Notes & Status */}
               <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('notes')}</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
@@ -1830,7 +1833,7 @@ export default function HotelsContent() {
                     onChange={handleCheckboxChange}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                   />
-                  <span className="text-sm font-medium text-gray-700">Active (available for bookings)</span>
+                  <span className="text-sm font-medium text-gray-700">{tCommon('activeForBookings')}</span>
                 </label>
               </div>
 
@@ -1841,14 +1844,14 @@ export default function HotelsContent() {
                   onClick={() => setShowModal(false)}
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  {editingRate ? 'Update Hotel' : 'Create Hotel'}
+                  {editingRate ? tCommon('updateRate') : tCommon('createRate')}
                 </button>
               </div>
             </form>

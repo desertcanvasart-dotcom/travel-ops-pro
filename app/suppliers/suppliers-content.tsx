@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { 
   Search, Plus, MoreHorizontal, Building2, Car, Compass, Ship, Ticket, Utensils, 
@@ -186,6 +187,7 @@ function MultiSelect({ options, value, onChange, placeholder }: {
 }
 
 export default function SuppliersContent() {
+  const t = useTranslations('suppliers')
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -690,15 +692,16 @@ export default function SuppliersContent() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-semibold text-gray-900">
-                {selectedType === 'all' ? 'All Suppliers' : getTypeConfig(selectedType).label}
+                {selectedType === 'all' ? t('allSuppliers') : getTypeConfig(selectedType).label}
               </h1>
-              <p className="text-sm text-gray-500">Manage supplier relationships, contacts, and rates</p>
+              <p className="text-sm text-gray-500">{t('subtitle')}</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center bg-gray-100 rounded-lg p-1">
                 {(['grid', 'table', 'list'] as ViewMode[]).map(mode => (
                   <button
                     key={mode}
+                    type="button"
                     onClick={() => setViewMode(mode)}
                     className={`p-1.5 rounded-md transition-colors ${viewMode === mode ? 'bg-white shadow-sm text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
                   >
@@ -707,11 +710,11 @@ export default function SuppliersContent() {
                 ))}
               </div>
               <div className="w-px h-6 bg-gray-200" />
-              <button onClick={handleExport} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                <Download className="w-4 h-4" /> Export
+              <button type="button" onClick={handleExport} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                <Download className="w-4 h-4" /> {t('export')}
               </button>
-              <button onClick={handleAdd} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
-                <Plus className="w-4 h-4" /> Add Supplier
+              <button type="button" onClick={handleAdd} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
+                <Plus className="w-4 h-4" /> {t('addSupplier')}
               </button>
             </div>
           </div>
@@ -719,10 +722,11 @@ export default function SuppliersContent() {
           {/* Type Tabs */}
           <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
             <button
+              type="button"
               onClick={() => handleTypeChange('all')}
               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${selectedType === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >
-              All <span className="px-1.5 py-0.5 bg-white/20 rounded-full">{stats.all || 0}</span>
+              {t('all')} <span className="px-1.5 py-0.5 bg-white/20 rounded-full">{stats.all || 0}</span>
             </button>
             {Object.entries(TYPE_CONFIG).filter(([key]) => key !== 'other' && stats[key]).map(([key, config]) => (
               <button
@@ -746,7 +750,7 @@ export default function SuppliersContent() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by name, email, city..."
+              placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-10 pl-10 pr-4 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
@@ -757,28 +761,30 @@ export default function SuppliersContent() {
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="h-10 px-3 text-sm border border-gray-200 rounded-lg outline-none bg-white"
           >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="pending">Pending</option>
+            <option value="all">{t('allStatus')}</option>
+            <option value="active">{t('statusActive')}</option>
+            <option value="inactive">{t('statusInactive')}</option>
+            <option value="pending">{t('statusPending')}</option>
           </select>
-          
+
           {/* Property/Company filter - only show for hierarchical types */}
           {HIERARCHICAL_TYPES.includes(selectedType) && (
             <>
               <button
+                type="button"
                 onClick={() => { setShowPropertiesOnly(!showPropertiesOnly); setShowCompaniesOnly(false) }}
                 className={`h-10 px-3 text-sm rounded-lg font-medium transition-colors ${showPropertiesOnly ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
               >
                 <Building className="w-4 h-4 inline mr-1.5" />
-                Properties Only
+                {t('propertiesOnly')}
               </button>
               <button
+                type="button"
                 onClick={() => { setShowCompaniesOnly(!showCompaniesOnly); setShowPropertiesOnly(false) }}
                 className={`h-10 px-3 text-sm rounded-lg font-medium transition-colors ${showCompaniesOnly ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
               >
                 <Briefcase className="w-4 h-4 inline mr-1.5" />
-                Companies Only
+                {t('companiesOnly')}
               </button>
             </>
           )}
@@ -794,9 +800,9 @@ export default function SuppliersContent() {
         ) : filteredSuppliers.length === 0 ? (
           <div className="text-center py-12">
             <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 mb-4">No suppliers found</p>
-            <button onClick={handleAdd} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
-              <Plus className="w-4 h-4" /> Add your first supplier
+            <p className="text-gray-500 mb-4">{t('noSuppliersFound')}</p>
+            <button type="button" onClick={handleAdd} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">
+              <Plus className="w-4 h-4" /> {t('addFirstSupplier')}
             </button>
           </div>
         ) : (
@@ -839,9 +845,9 @@ export default function SuppliersContent() {
                           </button>
                           {openMenuId === supplier.id && (
                             <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                              <button onClick={(e) => { e.stopPropagation(); handleView(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Eye className="w-3.5 h-3.5" /> View</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleEdit(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Edit className="w-3.5 h-3.5" /> Edit</button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleView(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Eye className="w-3.5 h-3.5" /> {t('view')}</button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleEdit(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Edit className="w-3.5 h-3.5" /> {t('edit')}</button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteClick(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /> {t('delete')}</button>
                             </div>
                           )}
                         </div>
@@ -1031,7 +1037,7 @@ export default function SuppliersContent() {
                   const Icon = config.icon
                   return <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center`}><Icon className="w-5 h-5" /></div>
                 })()}
-                <h2 className="text-lg font-semibold text-gray-900">{showAddModal ? 'Add Supplier' : 'Edit Supplier'}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{showAddModal ? t('addSupplier') : t('editSupplier')}</h2>
               </div>
               <button onClick={() => { setShowAddModal(false); setShowEditModal(false); setError(null) }} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5" />
@@ -1063,12 +1069,12 @@ export default function SuppliersContent() {
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => { setShowAddModal(false); setShowEditModal(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                Cancel
+              <button type="button" onClick={() => { setShowAddModal(false); setShowEditModal(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                {t('cancel')}
               </button>
-              <button onClick={showAddModal ? handleSaveNew : handleSaveEdit} disabled={saving || !formData.name} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+              <button type="button" onClick={showAddModal ? handleSaveNew : handleSaveEdit} disabled={saving || !formData.name} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('saving') : t('save')}
               </button>
             </div>
           </div>
@@ -1111,18 +1117,18 @@ export default function SuppliersContent() {
             {/* Tabs */}
             <div className="px-6 border-b border-gray-200">
               <div className="flex gap-6">
-                <button onClick={() => setViewTab('details')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'details' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Details</button>
+                <button type="button" onClick={() => setViewTab('details')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'details' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{t('details')}</button>
                 {['transport_company', 'transport', 'driver'].includes(selectedSupplier.type) && (
-                  <button onClick={() => setViewTab('rates')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'rates' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    Rates {supplierRates.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs">{supplierRates.length}</span>}
+                  <button type="button" onClick={() => setViewTab('rates')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'rates' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    {t('rates')} {supplierRates.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs">{supplierRates.length}</span>}
                   </button>
                 )}
                 {!selectedSupplier.is_property && !selectedSupplier.parent_supplier_id && HIERARCHICAL_TYPES.includes(selectedSupplier.type) && (
-                  <button onClick={() => { setViewTab('properties'); fetchChildProperties(selectedSupplier.id) }} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'properties' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    Properties {childProperties.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">{childProperties.length}</span>}
+                  <button type="button" onClick={() => { setViewTab('properties'); fetchChildProperties(selectedSupplier.id) }} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'properties' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    {t('properties')} {childProperties.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">{childProperties.length}</span>}
                   </button>
                 )}
-                <button onClick={() => setViewTab('documents')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'documents' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Documents</button>
+                <button type="button" onClick={() => setViewTab('documents')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'documents' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{t('documents')}</button>
               </div>
             </div>
 
@@ -1130,7 +1136,7 @@ export default function SuppliersContent() {
               {viewTab === 'details' && (
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><Users className="w-4 h-4 text-gray-400" /> Contact Information</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><Users className="w-4 h-4 text-gray-400" /> {t('contactInformation')}</h3>
                     <div className="space-y-3">
                       {selectedSupplier.contact_name && <div><p className="text-xs text-gray-500">Contact Person</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.contact_name}</p></div>}
                       {selectedSupplier.contact_email && <div><p className="text-xs text-gray-500">Email</p><a href={`mailto:${selectedSupplier.contact_email}`} className="text-sm font-medium text-primary-600 hover:underline">{selectedSupplier.contact_email}</a></div>}
@@ -1141,7 +1147,7 @@ export default function SuppliersContent() {
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> Location & Details</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> {t('locationDetails')}</h3>
                     <div className="space-y-3">
                       {selectedSupplier.city && <div><p className="text-xs text-gray-500">City</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.city}</p></div>}
                       {selectedSupplier.address && <div><p className="text-xs text-gray-500">Address</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.address}</p></div>}
@@ -1150,9 +1156,9 @@ export default function SuppliersContent() {
                     </div>
                   </div>
                   <div className="col-span-2 space-y-4 pt-4 border-t border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> Financial</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> {t('financial')}</h3>
                     <div className="grid grid-cols-3 gap-4">
-                      {selectedSupplier.default_commission_rate != null && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">Commission Rate</p><p className="text-lg font-semibold text-gray-900">{selectedSupplier.default_commission_rate}%</p></div>}
+                      {selectedSupplier.default_commission_rate != null && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">{t('commissionRate')}</p><p className="text-lg font-semibold text-gray-900">{selectedSupplier.default_commission_rate}%</p></div>}
                       {selectedSupplier.payment_terms && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">Payment Terms</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.payment_terms?.replace(/_/g, ' ')}</p></div>}
                     </div>
                   </div>
@@ -1172,7 +1178,7 @@ export default function SuppliersContent() {
                   ) : supplierRates.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <DollarSign className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                      <p>No rates found for this supplier</p>
+                      <p>{t('noRatesFound')}</p>
                     </div>
                   ) : (
                     <table className="w-full">
@@ -1188,21 +1194,22 @@ export default function SuppliersContent() {
                   {childProperties.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <Building className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                      <p>No properties linked to this company</p>
-                      <button 
-                        onClick={() => { 
+                      <p>{t('noPropertiesLinked')}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
                           setShowViewModal(false)
-                          setFormData({ 
-                            status: 'active', 
+                          setFormData({
+                            status: 'active',
                             type: selectedSupplier.type,
                             is_property: true,
                             parent_supplier_id: selectedSupplier.id
                           })
                           setShowAddModal(true)
-                        }} 
+                        }}
                         className="mt-3 text-sm text-primary-600 hover:underline"
                       >
-                        + Add a property
+                        {t('addProperty')}
                       </button>
                     </div>
                   ) : (
@@ -1230,20 +1237,21 @@ export default function SuppliersContent() {
                           </div>
                         )
                       })}
-                      <button 
-                        onClick={() => { 
+                      <button
+                        type="button"
+                        onClick={() => {
                           setShowViewModal(false)
-                          setFormData({ 
-                            status: 'active', 
+                          setFormData({
+                            status: 'active',
                             type: selectedSupplier.type,
                             is_property: true,
                             parent_supplier_id: selectedSupplier.id
                           })
                           setShowAddModal(true)
-                        }} 
+                        }}
                         className="w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors"
                       >
-                        + Add another property
+                        {t('addAnotherProperty')}
                       </button>
                     </div>
                   )}
@@ -1253,7 +1261,7 @@ export default function SuppliersContent() {
               {viewTab === 'documents' && (
                 <div className="text-center py-8 text-gray-500">
                   <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                  <p>Document management coming soon</p>
+                  <p>{t('documentsComing')}</p>
                 </div>
               )}
             </div>
@@ -1267,15 +1275,15 @@ export default function SuppliersContent() {
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center"><Trash2 className="w-5 h-5 text-red-600" /></div>
-              <div><h3 className="text-lg font-semibold text-gray-900">Delete Supplier</h3><p className="text-sm text-gray-500">This action cannot be undone</p></div>
+              <div><h3 className="text-lg font-semibold text-gray-900">{t('deleteSupplier')}</h3><p className="text-sm text-gray-500">{t('deleteWarning')}</p></div>
             </div>
-            <p className="text-sm text-gray-600 mb-6">Are you sure you want to delete <strong>{selectedSupplier.name}</strong>?</p>
+            <p className="text-sm text-gray-600 mb-6">{t('deleteConfirm', { name: selectedSupplier.name })}</p>
             {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
             <div className="flex items-center justify-end gap-3">
-              <button onClick={() => { setShowDeleteModal(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
+              <button type="button" onClick={() => { setShowDeleteModal(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">{t('cancel')}</button>
+              <button type="button" onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {saving ? 'Deleting...' : 'Delete'}
+                {saving ? t('deleting') : t('delete')}
               </button>
             </div>
           </div>

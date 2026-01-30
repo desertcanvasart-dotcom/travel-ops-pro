@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { Tour } from '../types'
 
 interface TourSetupProps {
@@ -17,9 +18,10 @@ export default function TourSetup({
   pax,
   isEuroPassport,
   onComplete,
-  onPaxChange,
-  onPassportTypeChange
+  onPaxChange: _onPaxChange,
+  onPassportTypeChange: _onPassportTypeChange
 }: TourSetupProps) {
+  const t = useTranslations('tourBuilder.setup')
   const [formData, setFormData] = useState({
     tour_name: tour.tour_name || '',
     duration_days: tour.duration_days || 1,
@@ -34,23 +36,23 @@ export default function TourSetup({
     const newErrors: Record<string, string> = {}
 
     if (!formData.tour_name.trim()) {
-      newErrors.tour_name = 'Tour name is required'
+      newErrors.tour_name = t('tourNameRequired')
     }
 
     if (formData.duration_days < 1) {
-      newErrors.duration_days = 'Duration must be at least 1 day'
+      newErrors.duration_days = t('durationMin')
     }
 
     if (formData.duration_days > 30) {
-      newErrors.duration_days = 'Duration cannot exceed 30 days'
+      newErrors.duration_days = t('durationMax')
     }
 
     if (!formData.cities.trim()) {
-      newErrors.cities = 'At least one city is required'
+      newErrors.cities = t('citiesRequired')
     }
 
     if (pax < 1) {
-      newErrors.pax = 'At least 1 passenger is required'
+      newErrors.pax = t('paxRequired')
     }
 
     setErrors(newErrors)
@@ -82,23 +84,23 @@ export default function TourSetup({
   return (
     <div>
       <h2 className="text-2xl font-bold text-gray-900 mb-2">
-        🎯 Tour Setup
+        🎯 {t('title')}
       </h2>
       <p className="text-gray-600 mb-6">
-        Let's start by setting up the basic information for your tour
+        {t('subtitle')}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Tour Name */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Tour Name *
+            {t('tourName')} *
           </label>
           <input
             type="text"
             value={formData.tour_name}
             onChange={(e) => setFormData({ ...formData, tour_name: e.target.value })}
-            placeholder="e.g., Classic Egypt 8 Days"
+            placeholder={t('tourNamePlaceholder')}
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
               errors.tour_name ? 'border-red-500' : 'border-gray-300'
             }`}
@@ -111,7 +113,7 @@ export default function TourSetup({
         {/* Duration */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Duration (Days) *
+            {t('duration')} *
           </label>
           <input
             type="number"
@@ -119,6 +121,7 @@ export default function TourSetup({
             max="30"
             value={formData.duration_days}
             onChange={(e) => setFormData({ ...formData, duration_days: parseInt(e.target.value) || 1 })}
+            title={t('duration')}
             className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
               errors.duration_days ? 'border-red-500' : 'border-gray-300'
             }`}
@@ -127,19 +130,20 @@ export default function TourSetup({
             <p className="mt-1 text-sm text-red-600">{errors.duration_days}</p>
           )}
           <p className="mt-1 text-sm text-gray-500">
-            Enter the number of days (1-30)
+            {t('durationHint')}
           </p>
         </div>
 
         {/* Cities */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Cities *
+            {t('cities')} *
           </label>
           <div className="space-y-2">
             <select
               multiple
               size={6}
+              title={t('cities')}
               value={formData.cities.split(',').map(c => c.trim()).filter(c => c)}
               onChange={(e) => {
                 const selected = Array.from(e.target.selectedOptions, option => option.value)
@@ -160,13 +164,13 @@ export default function TourSetup({
               <option value="Luxor-Aswan">Luxor-Aswan</option>
             </select>
             <p className="text-xs text-gray-500">
-              Hold Ctrl (Cmd on Mac) to select multiple cities
+              {t('citiesMultiSelect')}
             </p>
             <input
               type="text"
               value={formData.cities}
               onChange={(e) => setFormData({ ...formData, cities: e.target.value })}
-              placeholder="Or type custom cities (comma-separated)"
+              placeholder={t('citiesCustom')}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
             />
           </div>
@@ -178,14 +182,14 @@ export default function TourSetup({
         {/* Tour Type */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Tour Type
+            {t('tourType')}
           </label>
           <div className="grid grid-cols-4 gap-3">
             {[
-              { value: 'budget', label: '💰 Budget', color: 'blue' },
-              { value: 'standard', label: '⭐ Standard', color: 'green' },
-              { value: 'premium', label: '💎 Premium', color: 'purple' },
-              { value: 'luxury', label: '👑 Luxury', color: 'amber' }
+              { value: 'budget', label: `💰 ${t('budget')}`, color: 'blue' },
+              { value: 'standard', label: `⭐ ${t('standard')}`, color: 'green' },
+              { value: 'premium', label: `💎 ${t('premium')}`, color: 'purple' },
+              { value: 'luxury', label: `👑 ${t('luxury')}`, color: 'amber' }
             ].map((type) => (
               <button
                 key={type.value}
@@ -206,12 +210,12 @@ export default function TourSetup({
         {/* Description */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Description (Optional)
+            {t('description')}
           </label>
           <textarea
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Brief description of the tour..."
+            placeholder={t('descriptionPlaceholder')}
             rows={4}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
@@ -219,26 +223,26 @@ export default function TourSetup({
 
         {/* Passengers & Passport (Display Only) */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="font-semibold text-blue-900 mb-3">Pricing Parameters</h3>
+          <h3 className="font-semibold text-blue-900 mb-3">{t('pricingParameters')}</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-blue-800 mb-1">
-                Number of Passengers
+                {t('numberOfPassengers')}
               </label>
               <div className="text-2xl font-bold text-blue-900">{pax}</div>
               <p className="text-xs text-blue-700 mt-1">
-                Adjust in the header above
+                {t('adjustInHeader')}
               </p>
             </div>
             <div>
               <label className="block text-sm text-blue-800 mb-1">
-                Passport Type
+                {t('passportType')}
               </label>
               <div className="text-2xl font-bold text-blue-900">
                 {isEuroPassport ? '🇪🇺 Euro' : '🌍 Non-Euro'}
               </div>
               <p className="text-xs text-blue-700 mt-1">
-                Toggle in the header above
+                {t('toggleInHeader')}
               </p>
             </div>
           </div>
@@ -251,13 +255,13 @@ export default function TourSetup({
             onClick={() => window.location.href = '/rates'}
             className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="submit"
             className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
           >
-            Continue to Daily Planning →
+            {t('continueToDailyPlanning')}
           </button>
         </div>
       </form>

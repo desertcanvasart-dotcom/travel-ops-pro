@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import {
   Train,
@@ -69,6 +70,8 @@ interface TrainRate {
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function TrainRatesContent() {
+  const t = useTranslations('rates.trains')
+  const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
 
   const [rates, setRates] = useState<TrainRate[]>([])

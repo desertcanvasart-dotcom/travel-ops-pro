@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { 
-  Search, 
-  Plus, 
-  Edit2, 
-  Trash2, 
+import { useTranslations } from 'next-intl'
+import {
+  Search,
+  Plus,
+  Edit2,
+  Trash2,
   X,
   Car,
   ChevronDown,
@@ -114,8 +115,10 @@ const CITIES = ['Cairo', 'Giza', 'Luxor', 'Aswan', 'Alexandria', 'Hurghada', 'Sh
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function TransportationContent() {
+  const t = useTranslations('rates.transportation')
+  const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  
+
   const [rates, setRates] = useState<TransportationRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])  // NEW: suppliers list
   const [loading, setLoading] = useState(true)
@@ -421,14 +424,15 @@ export default function TransportationContent() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Car className="h-5 w-5 text-blue-600" />
-          <h1 className="text-lg font-semibold text-gray-900">Transportation Rates</h1>
+          <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
         </div>
         <button
+          type="button"
           onClick={openAddModal}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#647C47] text-white text-sm rounded-md hover:bg-[#4f6238] transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Add Rate
+          {t('addRate')}
         </button>
       </div>
 
@@ -437,35 +441,35 @@ export default function TransportationContent() {
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-gray-500">Total Rates</span>
+            <span className="text-xs text-gray-500">{t('totalRates')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{totalRates}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            <span className="text-xs text-gray-500">Active</span>
+            <span className="text-xs text-gray-500">{t('active')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{activeRates}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-            <span className="text-xs text-gray-500">Inactive</span>
+            <span className="text-xs text-gray-500">{tCommon('inactive')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{inactiveRates}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-            <span className="text-xs text-gray-500">Cities</span>
+            <span className="text-xs text-gray-500">{t('city')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{uniqueCities}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-            <span className="text-xs text-gray-500">Vehicle Types</span>
+            <span className="text-xs text-gray-500">{t('vehicles')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{uniqueVehicleTypes}</p>
         </div>
@@ -473,7 +477,7 @@ export default function TransportationContent() {
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-            <span className="text-xs text-gray-500">Linked</span>
+            <span className="text-xs text-gray-500">{t('linked')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{linkedToSuppliers}</p>
         </div>
@@ -485,7 +489,7 @@ export default function TransportationContent() {
           <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search rates..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
@@ -496,9 +500,10 @@ export default function TransportationContent() {
           <select
             value={cityFilter}
             onChange={(e) => setCityFilter(e.target.value)}
+            title={t('allCities')}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">All Cities</option>
+            <option value="">{t('allCities')}</option>
             {CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -510,9 +515,10 @@ export default function TransportationContent() {
           <select
             value={serviceTypeFilter}
             onChange={(e) => setServiceTypeFilter(e.target.value)}
+            title={t('allServiceTypes')}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">All Service Types</option>
+            <option value="">{t('allServiceTypes')}</option>
             {SERVICE_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
@@ -524,9 +530,10 @@ export default function TransportationContent() {
           <select
             value={vehicleTypeFilter}
             onChange={(e) => setVehicleTypeFilter(e.target.value)}
+            title={t('allVehicleTypes')}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">All Vehicles</option>
+            <option value="">{t('allVehicleTypes')}</option>
             {VEHICLE_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
@@ -539,9 +546,10 @@ export default function TransportationContent() {
           <select
             value={supplierFilter}
             onChange={(e) => setSupplierFilter(e.target.value)}
+            title={t('allSuppliers')}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">All Suppliers</option>
+            <option value="">{t('allSuppliers')}</option>
             {suppliers.map(supplier => (
               <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
             ))}
@@ -550,14 +558,15 @@ export default function TransportationContent() {
         </div>
 
         <button
+          type="button"
           onClick={() => setShowInactive(!showInactive)}
           className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-            showInactive 
-              ? 'bg-gray-100 border-gray-300 text-gray-700' 
+            showInactive
+              ? 'bg-gray-100 border-gray-300 text-gray-700'
               : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
           }`}
         >
-          {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+          {showInactive ? t('hideInactive') : t('showInactive')}
         </button>
       </div>
 
@@ -566,22 +575,22 @@ export default function TransportationContent() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Service Code</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Supplier</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Service Type</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Vehicle</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Capacity</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Route</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">EUR Rate</th>
-              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Status</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Actions</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('serviceType')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('supplier')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('serviceType')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('vehicleType')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('capacity')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('city')}</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('eurRate')}</th>
+              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{tCommon('status')}</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{tCommon('actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {paginatedRates.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
-                  No transportation rates found
+                  {t('noRatesFound')}
                 </td>
               </tr>
             ) : (

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/app/supabase'
 import { useAuth } from '@/app/contexts/AuthContext'
 import {
@@ -79,12 +80,13 @@ interface UserPreferences {
 // TAB CONFIGURATION
 // ============================================
 
-const TABS = [
-  { id: 'profile', label: 'Profile', icon: User },
-  { id: 'email', label: 'Email', icon: Mail },
-  { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'preferences', label: 'Preferences', icon: Settings },
-]
+const TAB_IDS = ['profile', 'email', 'notifications', 'preferences'] as const
+const TAB_ICONS = {
+  profile: User,
+  email: Mail,
+  notifications: Bell,
+  preferences: Settings,
+}
 
 const TIMEZONES = [
   { value: 'Africa/Cairo', label: 'Cairo (EET, UTC+2)' },
@@ -97,27 +99,6 @@ const TIMEZONES = [
   { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
 ]
 
-const TIER_OPTIONS = [
-  { value: 'budget', label: 'Budget', description: 'Cost-effective options' },
-  { value: 'standard', label: 'Standard', description: 'Comfortable mid-range' },
-  { value: 'deluxe', label: 'Deluxe', description: 'Superior quality' },
-  { value: 'luxury', label: 'Luxury', description: 'Top-tier VIP experience' }
-]
-
-const COST_MODE_OPTIONS = [
-  { 
-    value: 'auto', 
-    label: 'Auto-Calculate', 
-    description: 'System calculates costs from rates database automatically',
-    icon: Calculator
-  },
-  { 
-    value: 'manual', 
-    label: 'Manual Entry', 
-    description: 'Enter actual costs manually for each service',
-    icon: Settings
-  }
-]
 
 // ============================================
 // MAIN COMPONENT
@@ -128,6 +109,7 @@ function SettingsContent() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const { user } = useAuth()
+  const t = useTranslations('settings')
 
   const [activeTab, setActiveTab] = useState(tabParam || 'profile')
   const [loading, setLoading] = useState(true)
@@ -511,8 +493,8 @@ function SettingsContent() {
   const renderProfileTab = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900">Profile Information</h3>
-        <p className="text-sm text-gray-500 mt-1">Update your personal information and preferences.</p>
+        <h3 className="text-lg font-medium text-gray-900">{t('profileInformation')}</h3>
+        <p className="text-sm text-gray-500 mt-1">{t('updatePersonalInfo')}</p>
       </div>
 
       {/* Avatar Section */}
@@ -544,67 +526,67 @@ function SettingsContent() {
             {uploadingAvatar ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Uploading...
+                {t('uploading')}
               </>
             ) : (
               <>
                 <Camera className="w-4 h-4" />
-                Change Photo
+                {t('changePhoto')}
               </>
             )}
           </label>
-          <p className="text-xs text-gray-500 mt-1">JPG, PNG up to 2MB</p>
+          <p className="text-xs text-gray-500 mt-1">{t('photoUploadHint')}</p>
         </div>
       </div>
 
       {/* Form Fields */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('fullName')}</label>
           <input
             type="text"
             value={profile?.full_name || ''}
             onChange={(e) => setProfile(prev => prev ? { ...prev, full_name: e.target.value } : null)}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder="Your full name"
+            placeholder={t('fullNamePlaceholder')}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('emailLabel')}</label>
           <input
             type="email"
             value={profile?.email || ''}
             onChange={(e) => setProfile(prev => prev ? { ...prev, email: e.target.value } : null)}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder="your@email.com"
+            placeholder={t('emailPlaceholder')}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('phone')}</label>
           <input
             type="tel"
             value={profile?.phone || ''}
             onChange={(e) => setProfile(prev => prev ? { ...prev, phone: e.target.value } : null)}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder="+20 xxx xxx xxxx"
+            placeholder={t('phonePlaceholder')}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('role')}</label>
           <input
             type="text"
             value={profile?.role || ''}
             onChange={(e) => setProfile(prev => prev ? { ...prev, role: e.target.value } : null)}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder="Admin, Manager, etc."
+            placeholder={t('rolePlaceholder')}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('timezone')}</label>
           <select
             value={profile?.timezone || 'Africa/Cairo'}
             onChange={(e) => setProfile(prev => prev ? { ...prev, timezone: e.target.value } : null)}
@@ -621,13 +603,13 @@ function SettingsContent() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('companyName')}</label>
           <input
             type="text"
             value={profile?.company_name || ''}
             onChange={(e) => setProfile(prev => prev ? { ...prev, company_name: e.target.value } : null)}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder="Travel2Egypt"
+            placeholder={t('companyNamePlaceholder')}
           />
         </div>
       </div>
@@ -640,7 +622,7 @@ function SettingsContent() {
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t('saving') : t('saveChanges')}
         </button>
       </div>
     </div>
@@ -649,8 +631,8 @@ function SettingsContent() {
   const renderEmailTab = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900">Email Settings</h3>
-        <p className="text-sm text-gray-500 mt-1">Configure your email integration and preferences.</p>
+        <h3 className="text-lg font-medium text-gray-900">{t('emailSettings')}</h3>
+        <p className="text-sm text-gray-500 mt-1">{t('configureEmail')}</p>
       </div>
 
       {/* Gmail Connection Status */}
@@ -663,27 +645,27 @@ function SettingsContent() {
               <Mail className={`w-5 h-5 ${emailSettings?.gmail_connected ? 'text-green-600' : 'text-gray-500'}`} />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900">Gmail Integration</p>
+              <p className="text-sm font-medium text-gray-900">{t('gmailIntegration')}</p>
               <p className="text-xs text-gray-500">
-                {emailSettings?.gmail_connected 
-                  ? `Connected as ${emailSettings.gmail_email}`
-                  : 'Not connected'}
+                {emailSettings?.gmail_connected
+                  ? t('connectedAs', { email: emailSettings.gmail_email })
+                  : t('notConnected')}
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
             {emailSettings?.gmail_connected ? (
               <>
                 <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
                   <CheckCircle className="w-3 h-3" />
-                  Connected
+                  {t('connected')}
                 </span>
                 <button
                   onClick={handleDisconnectGmail}
                   className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
-                  Disconnect
+                  {t('disconnect')}
                 </button>
               </>
             ) : (
@@ -691,7 +673,7 @@ function SettingsContent() {
                 onClick={handleConnectGmail}
                 className="px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors"
               >
-                Connect Gmail
+                {t('connectGmail')}
               </button>
             )}
           </div>
@@ -700,23 +682,23 @@ function SettingsContent() {
 
       {/* Email Signature */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Email Signature</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('emailSignature')}</label>
         <textarea
           value={emailSettings?.signature || ''}
           onChange={(e) => setEmailSettings(prev => prev ? { ...prev, signature: e.target.value } : null)}
           rows={5}
           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-          placeholder="Best regards,&#10;Islam Hussein&#10;Travel2Egypt"
+          placeholder={t('signaturePlaceholder')}
         />
-        <p className="text-xs text-gray-500 mt-1">This signature will be added to all outgoing emails.</p>
+        <p className="text-xs text-gray-500 mt-1">{t('signatureHint')}</p>
       </div>
 
       {/* Auto Reply */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-900">Auto-Reply</p>
-            <p className="text-xs text-gray-500">Automatically reply to incoming emails</p>
+            <p className="text-sm font-medium text-gray-900">{t('autoReply')}</p>
+            <p className="text-xs text-gray-500">{t('autoReplyDescription')}</p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
             <input
@@ -735,7 +717,7 @@ function SettingsContent() {
             onChange={(e) => setEmailSettings(prev => prev ? { ...prev, auto_reply_message: e.target.value } : null)}
             rows={3}
             className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder="Thank you for your email. We will get back to you within 24 hours..."
+            placeholder={t('autoReplyPlaceholder')}
           />
         )}
       </div>
@@ -748,7 +730,7 @@ function SettingsContent() {
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t('saving') : t('saveChanges')}
         </button>
       </div>
     </div>
@@ -757,20 +739,20 @@ function SettingsContent() {
   const renderNotificationsTab = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900">Notification Preferences</h3>
-        <p className="text-sm text-gray-500 mt-1">Choose how you want to receive notifications.</p>
+        <h3 className="text-lg font-medium text-gray-900">{t('notificationPreferences')}</h3>
+        <p className="text-sm text-gray-500 mt-1">{t('chooseNotifications')}</p>
       </div>
 
       {/* Delivery Methods */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
-        <h4 className="text-sm font-medium text-gray-900">Delivery Methods</h4>
-        
+        <h4 className="text-sm font-medium text-gray-900">{t('deliveryMethods')}</h4>
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Mail className="w-5 h-5 text-gray-500" />
             <div>
-              <p className="text-sm font-medium text-gray-700">Email Notifications</p>
-              <p className="text-xs text-gray-500">Receive notifications via email</p>
+              <p className="text-sm font-medium text-gray-700">{t('emailNotifications')}</p>
+              <p className="text-xs text-gray-500">{t('receiveViaEmail')}</p>
             </div>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -788,8 +770,8 @@ function SettingsContent() {
           <div className="flex items-center gap-3">
             <Bell className="w-5 h-5 text-gray-500" />
             <div>
-              <p className="text-sm font-medium text-gray-700">In-App Notifications</p>
-              <p className="text-xs text-gray-500">Show notifications in the app</p>
+              <p className="text-sm font-medium text-gray-700">{t('inAppNotifications')}</p>
+              <p className="text-xs text-gray-500">{t('showInApp')}</p>
             </div>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -806,20 +788,20 @@ function SettingsContent() {
 
       {/* Notification Types */}
       <div className="space-y-3">
-        <h4 className="text-sm font-medium text-gray-900">Task Notifications</h4>
-        
+        <h4 className="text-sm font-medium text-gray-900">{t('taskNotifications')}</h4>
+
         {[
-          { key: 'task_assigned', label: 'Task Assigned', desc: 'When a task is assigned to you', icon: '📋' },
-          { key: 'task_due_soon', label: 'Task Due Soon', desc: 'Reminder 24 hours before due date', icon: '⏰' },
-          { key: 'task_overdue', label: 'Task Overdue', desc: 'When a task passes its due date', icon: '🚨' },
-          { key: 'task_completed', label: 'Task Completed', desc: 'When a task you created is completed', icon: '✅' },
+          { key: 'task_assigned', labelKey: 'taskAssigned', descKey: 'taskAssignedDesc', icon: '📋' },
+          { key: 'task_due_soon', labelKey: 'taskDueSoon', descKey: 'taskDueSoonDesc', icon: '⏰' },
+          { key: 'task_overdue', labelKey: 'taskOverdue', descKey: 'taskOverdueDesc', icon: '🚨' },
+          { key: 'task_completed', labelKey: 'taskCompleted', descKey: 'taskCompletedDesc', icon: '✅' },
         ].map(item => (
           <div key={item.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
             <div className="flex items-center gap-3">
               <span className="text-lg">{item.icon}</span>
               <div>
-                <p className="text-sm font-medium text-gray-700">{item.label}</p>
-                <p className="text-xs text-gray-500">{item.desc}</p>
+                <p className="text-sm font-medium text-gray-700">{t(item.labelKey)}</p>
+                <p className="text-xs text-gray-500">{t(item.descKey)}</p>
               </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -843,7 +825,7 @@ function SettingsContent() {
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t('saving') : t('saveChanges')}
         </button>
       </div>
     </div>
@@ -852,26 +834,29 @@ function SettingsContent() {
   const renderPreferencesTab = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium text-gray-900">Itinerary Preferences</h3>
-        <p className="text-sm text-gray-500 mt-1">Configure default settings for itineraries and pricing.</p>
+        <h3 className="text-lg font-medium text-gray-900">{t('itineraryPreferences')}</h3>
+        <p className="text-sm text-gray-500 mt-1">{t('configureDefaults')}</p>
       </div>
 
       {/* Cost Mode Setting */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-4">
           <Calculator className="w-5 h-5 text-blue-600" />
-          <h4 className="text-sm font-bold text-gray-900">Cost Calculation Mode</h4>
+          <h4 className="text-sm font-bold text-gray-900">{t('costCalculationMode')}</h4>
         </div>
-        
+
         <p className="text-xs text-gray-600 mb-4">
-          Choose how costs are calculated for new itineraries. You can override this per itinerary.
+          {t('costModeDescription')}
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {COST_MODE_OPTIONS.map((option) => {
+          {[
+            { value: 'auto', labelKey: 'autoCalculate', descKey: 'autoCalculateDesc', icon: Calculator },
+            { value: 'manual', labelKey: 'manualEntry', descKey: 'manualEntryDesc', icon: Settings }
+          ].map((option) => {
             const Icon = option.icon
             const isSelected = userPreferences.default_cost_mode === option.value
-            
+
             return (
               <button
                 key={option.value}
@@ -888,16 +873,16 @@ function SettingsContent() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
-                      {option.label}
+                      {t(option.labelKey)}
                     </span>
                     {isSelected && (
                       <span className="px-2 py-0.5 bg-[#647C47]/10 text-[#647C47] text-xs rounded-full font-medium">
-                        Default
+                        {t('default')}
                       </span>
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 ml-11">{option.description}</p>
+                <p className="text-xs text-gray-500 ml-11">{t(option.descKey)}</p>
               </button>
             )
           })}
@@ -908,9 +893,9 @@ function SettingsContent() {
             <div className="flex items-start gap-2">
               <Info className="w-4 h-4 text-amber-600 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-amber-800">Manual Mode Selected</p>
+                <p className="text-sm font-medium text-amber-800">{t('manualModeSelected')}</p>
                 <p className="text-xs text-amber-700 mt-1">
-                  New itineraries will have editable cost fields. Auto-calculated values will be pre-filled as a starting point.
+                  {t('manualModeHint')}
                 </p>
               </div>
             </div>
@@ -922,17 +907,22 @@ function SettingsContent() {
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-4">
           <Crown className="w-5 h-5 text-amber-600" />
-          <h4 className="text-sm font-bold text-gray-900">Default Service Tier</h4>
+          <h4 className="text-sm font-bold text-gray-900">{t('defaultServiceTier')}</h4>
         </div>
-        
+
         <p className="text-xs text-gray-600 mb-4">
-          Set the default tier for new itineraries. AI will select suppliers matching this tier.
+          {t('tierDescription')}
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {TIER_OPTIONS.map((tier) => {
+          {[
+            { value: 'budget', labelKey: 'tierBudget', descKey: 'tierBudgetDesc' },
+            { value: 'standard', labelKey: 'tierStandard', descKey: 'tierStandardDesc' },
+            { value: 'deluxe', labelKey: 'tierDeluxe', descKey: 'tierDeluxeDesc' },
+            { value: 'luxury', labelKey: 'tierLuxury', descKey: 'tierLuxuryDesc' }
+          ].map((tier) => {
             const isSelected = userPreferences.default_tier === tier.value
-            
+
             return (
               <button
                 key={tier.value}
@@ -954,10 +944,10 @@ function SettingsContent() {
                   <span className={`text-sm font-semibold ${
                     isSelected ? 'text-gray-900' : 'text-gray-700'
                   }`}>
-                    {tier.label}
+                    {t(tier.labelKey)}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">{tier.description}</p>
+                <p className="text-xs text-gray-500">{t(tier.descKey)}</p>
               </button>
             )
           })}
@@ -968,11 +958,11 @@ function SettingsContent() {
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-4">
           <span className="text-lg">💰</span>
-          <h4 className="text-sm font-bold text-gray-900">Default Profit Margin</h4>
+          <h4 className="text-sm font-bold text-gray-900">{t('defaultProfitMargin')}</h4>
         </div>
-        
+
         <p className="text-xs text-gray-600 mb-4">
-          Set the default margin percentage applied to supplier costs.
+          {t('marginDescription')}
         </p>
 
         <div className="flex items-center gap-4">
@@ -1001,18 +991,18 @@ function SettingsContent() {
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-4">
           <span className="text-lg">💱</span>
-          <h4 className="text-sm font-bold text-gray-900">Default Currency</h4>
+          <h4 className="text-sm font-bold text-gray-900">{t('defaultCurrency')}</h4>
         </div>
-        
+
         <p className="text-xs text-gray-600 mb-4">
-          Set the default currency for new itineraries and pricing.
+          {t('currencyDescription')}
         </p>
 
         <div className="flex gap-2">
           {['EUR', 'USD', 'GBP', 'EGP'].map((currency) => {
             const isSelected = userPreferences.default_currency === currency
             const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
-            
+
             return (
               <button
                 key={currency}
@@ -1038,7 +1028,7 @@ function SettingsContent() {
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t('saving') : t('saveChanges')}
         </button>
       </div>
     </div>
@@ -1056,8 +1046,8 @@ function SettingsContent() {
           <Settings className="w-5 h-5 text-gray-600" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
-          <p className="text-sm text-gray-500">Manage your account and preferences</p>
+          <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+          <p className="text-sm text-gray-500">{t('subtitle')}</p>
         </div>
       </div>
 
@@ -1065,7 +1055,7 @@ function SettingsContent() {
       {saveSuccess && (
         <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 text-green-700 rounded-lg shadow-lg animate-in slide-in-from-top">
           <CheckCircle className="w-5 h-5" />
-          <span className="text-sm font-medium">Settings saved successfully!</span>
+          <span className="text-sm font-medium">{t('savedSuccessfully')}</span>
         </div>
       )}
 
@@ -1085,23 +1075,23 @@ function SettingsContent() {
         {/* Tabs */}
         <div className="border-b border-gray-200">
           <nav className="flex overflow-x-auto">
-            {TABS.map(tab => {
-              const Icon = tab.icon
-              const isActive = activeTab === tab.id
+            {TAB_IDS.map(tabId => {
+              const Icon = TAB_ICONS[tabId]
+              const isActive = activeTab === tabId
               return (
                 <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
+                  key={tabId}
+                  onClick={() => handleTabChange(tabId)}
                   className={`
                     flex items-center gap-2 px-5 py-3.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors
-                    ${isActive 
-                      ? 'border-[#647C47] text-[#647C47]' 
+                    ${isActive
+                      ? 'border-[#647C47] text-[#647C47]'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }
                   `}
                 >
                   <Icon className="w-4 h-4" />
-                  {tab.label}
+                  {t(tabId)}
                 </button>
               )
             })}

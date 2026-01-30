@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface ServiceFee {
   id: string
@@ -35,6 +36,7 @@ export default function AdditionalServices({
   isEuroPassport,
   onServicesChange
 }: AdditionalServicesProps) {
+  const t = useTranslations('tourBuilder.services')
   const [services, setServices] = useState<ServiceFee[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -115,7 +117,7 @@ export default function AdditionalServices({
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <p className="text-sm text-gray-600">
-          Please select a city first
+          {t('selectCityFirst')}
         </p>
       </div>
     )
@@ -132,7 +134,7 @@ export default function AdditionalServices({
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-2">
-        ➕ Additional Services
+        ➕ {t('title')}
       </label>
 
       {loading ? (
@@ -141,7 +143,7 @@ export default function AdditionalServices({
         </div>
       ) : services.length === 0 ? (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-sm text-gray-600">
-          No additional services available
+          {t('noServices')}
         </div>
       ) : (
         <div className="space-y-4">
@@ -184,7 +186,7 @@ export default function AdditionalServices({
                         {/* Quantity input for per-vehicle services */}
                         {isSelected && service.rate_type === 'per_vehicle' && (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-600">Qty:</span>
+                            <span className="text-xs text-gray-600">{t('quantity')}:</span>
                             <input
                               type="number"
                               min="1"
@@ -192,6 +194,7 @@ export default function AdditionalServices({
                               onChange={(e) => updateQuantity(service.id, parseInt(e.target.value) || 1)}
                               className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
                               onClick={(e) => e.stopPropagation()}
+                              title={t('quantity')}
                             />
                           </div>
                         )}
@@ -201,10 +204,10 @@ export default function AdditionalServices({
                             {isSelected ? `€${cost.toFixed(2)}` : `€${(isEuroPassport ? service.base_rate_eur : service.base_rate_non_eur).toFixed(2)}`}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {service.rate_type === 'per_person' && `${pax} pax`}
-                            {service.rate_type === 'per_group' && 'per group'}
-                            {service.rate_type === 'per_vehicle' && (selected?.quantity ? `${selected.quantity} vehicle(s)` : 'per vehicle')}
-                            {service.rate_type === 'per_day' && 'per day'}
+                            {service.rate_type === 'per_person' && t('perPerson', { pax })}
+                            {service.rate_type === 'per_group' && t('perGroup')}
+                            {service.rate_type === 'per_vehicle' && (selected?.quantity ? `${selected.quantity} ${t('vehicles')}` : t('perVehicle'))}
+                            {service.rate_type === 'per_day' && t('perDay')}
                           </div>
                         </div>
                       </div>
@@ -220,14 +223,14 @@ export default function AdditionalServices({
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex justify-between items-center">
                 <span className="font-semibold text-green-900">
-                  Total Additional Services
+                  {t('totalServices')}
                 </span>
                 <span className="text-xl font-bold text-green-700">
                   €{getTotalCost().toFixed(2)}
                 </span>
               </div>
               <div className="text-xs text-green-700 mt-1">
-                {selectedServices.length} service{selectedServices.length !== 1 ? 's' : ''} selected
+                {t('servicesSelected', { count: selectedServices.length })}
               </div>
             </div>
           )}

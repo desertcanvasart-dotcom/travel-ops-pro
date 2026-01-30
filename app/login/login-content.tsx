@@ -3,11 +3,13 @@
 export const dynamic = 'force-dynamic'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '../contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function LoginContent() {
+  const t = useTranslations('auth')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -24,7 +26,7 @@ export default function LoginContent() {
       await signIn(email, password)
       // Redirect handled in AuthContext
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in')
+      setError(err.message || t('failedToSignIn'))
     } finally {
       setLoading(false)
     }
@@ -41,8 +43,8 @@ export default function LoginContent() {
               <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-          <p className="text-gray-600">Sign in to your Autoura account</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('welcomeBack')}</h1>
+          <p className="text-gray-600">{t('signInToAccount')}</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
@@ -55,7 +57,7 @@ export default function LoginContent() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
+                {t('emailAddress')}
               </label>
               <input
                 type="email"
@@ -63,13 +65,13 @@ export default function LoginContent() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#263A29] focus:border-transparent"
-                placeholder="you@example.com"
+                placeholder={t('emailPlaceholder')}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
+                {t('password')}
               </label>
               <input
                 type="password"
@@ -77,7 +79,7 @@ export default function LoginContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#263A29] focus:border-transparent"
-                placeholder="••••••••"
+                placeholder={t('passwordPlaceholder')}
               />
             </div>
 
@@ -87,10 +89,10 @@ export default function LoginContent() {
                   type="checkbox"
                   className="w-4 h-4 text-[#263A29] border-gray-300 rounded focus:ring-[#263A29]"
                 />
-                <span className="ml-2 text-sm text-gray-600">Remember me</span>
+                <span className="ml-2 text-sm text-gray-600">{t('rememberMe')}</span>
               </label>
               <Link href="/forgot-password" className="text-sm text-[#263A29] hover:text-[#1D2B20]">
-                Forgot password?
+                {t('forgotPassword')}
               </Link>
             </div>
 
@@ -99,22 +101,22 @@ export default function LoginContent() {
               disabled={loading}
               className="w-full bg-[#263A29] text-white py-3 rounded-lg hover:bg-[#1D2B20] disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? t('signingIn') : t('signIn')}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
+              {t('dontHaveAccount')}{' '}
               <Link href="/signup" className="text-[#263A29] hover:text-[#1D2B20] font-medium">
-                Sign up
+                {t('signUp')}
               </Link>
             </p>
           </div>
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          © 2025 Autoura. All rights reserved.
+          © 2025 Autoura. {t('allRightsReserved')}
         </p>
       </div>
     </div>

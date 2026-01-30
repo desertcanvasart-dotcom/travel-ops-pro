@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -71,7 +72,8 @@ function Pagination({
   endIndex,
   itemsPerPage,
   onPageChange,
-  onItemsPerPageChange
+  onItemsPerPageChange,
+  translations
 }: {
   currentPage: number
   totalPages: number
@@ -81,6 +83,17 @@ function Pagination({
   itemsPerPage: number
   onPageChange: (page: number) => void
   onItemsPerPageChange: (items: number) => void
+  translations: {
+    show: string
+    perPage: string
+    showing: string
+    of: string
+    attractions: string
+    firstPage: string
+    previousPage: string
+    nextPage: string
+    lastPage: string
+  }
 }) {
   const goToPage = (page: number) => {
     onPageChange(Math.max(1, Math.min(page, totalPages)))
@@ -90,7 +103,7 @@ function Pagination({
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Show</span>
+          <span className="text-sm text-gray-500">{translations.show}</span>
           <select
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
@@ -100,10 +113,10 @@ function Pagination({
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          <span className="text-sm text-gray-500">per page</span>
+          <span className="text-sm text-gray-500">{translations.perPage}</span>
         </div>
         <span className="text-sm text-gray-500">
-          Showing {startIndex + 1}-{endIndex} of {totalItems} attractions
+          {translations.showing} {startIndex + 1}-{endIndex} {translations.of} {totalItems} {translations.attractions}
         </span>
       </div>
 
@@ -112,7 +125,7 @@ function Pagination({
           onClick={() => goToPage(1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="First page"
+          title={translations.firstPage}
         >
           <ChevronsLeft className="h-4 w-4" />
         </button>
@@ -120,7 +133,7 @@ function Pagination({
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Previous page"
+          title={translations.previousPage}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -138,7 +151,7 @@ function Pagination({
             } else {
               pageNum = currentPage - 2 + i
             }
-            
+
             return (
               <button
                 key={pageNum}
@@ -159,7 +172,7 @@ function Pagination({
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Next page"
+          title={translations.nextPage}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -167,7 +180,7 @@ function Pagination({
           onClick={() => goToPage(totalPages)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Last page"
+          title={translations.lastPage}
         >
           <ChevronsRight className="h-4 w-4" />
         </button>
@@ -181,6 +194,8 @@ function Pagination({
 // ============================================
 
 export default function AttractionsContent() {
+  const t = useTranslations('rates.attractions')
+  const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
   
@@ -243,7 +258,7 @@ export default function AttractionsContent() {
       setLoading(false)
     } catch (error) {
       console.error('Error fetching attractions:', error)
-      showToast('error', 'Failed to load attractions')
+      showToast('error', t('notifications.failedToLoad'))
       setLoading(false)
     }
   }
@@ -325,14 +340,14 @@ export default function AttractionsContent() {
       const data = await response.json()
       
       if (data.success) {
-        showToast('success', `${attraction.attraction_name} is now ${!attraction.is_addon ? 'an add-on' : 'standard'}`)
+        showToast('success', !attraction.is_addon ? t('notifications.nowAddon', { name: attraction.attraction_name }) : t('notifications.nowStandard', { name: attraction.attraction_name }))
         fetchAttractions()
       } else {
-        showToast('error', data.error || 'Failed to update')
+        showToast('error', data.error || t('notifications.failedToUpdate'))
       }
     } catch (error) {
       console.error('Error toggling add-on:', error)
-      showToast('error', 'Failed to update add-on status')
+      showToast('error', t('notifications.failedToUpdateAddon'))
     } finally {
       setTogglingAddon(null)
     }
@@ -416,15 +431,15 @@ export default function AttractionsContent() {
       const data = await response.json()
       
       if (data.success) {
-        showToast('success', editingAttraction ? 'Attraction updated!' : 'Attraction created!')
+        showToast('success', editingAttraction ? t('notifications.attractionUpdated') : t('notifications.attractionCreated'))
         setShowModal(false)
         fetchAttractions()
       } else {
-        showToast('error', data.error || 'Failed to save')
+        showToast('error', data.error || t('notifications.failedToSave'))
       }
     } catch (error) {
       console.error('Error saving attraction:', error)
-      showToast('error', 'Failed to save attraction')
+      showToast('error', t('notifications.failedToSave'))
     }
   }
 
@@ -444,14 +459,14 @@ export default function AttractionsContent() {
       const data = await response.json()
       
       if (data.success) {
-        showToast('success', 'Attraction deleted!')
+        showToast('success', t('notifications.attractionDeleted'))
         fetchAttractions()
       } else {
-        await dialog.alert('Error', data.error || 'Failed to delete attraction', 'warning')
+        await dialog.alert(tCommon('error'), data.error || t('notifications.failedToDelete'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting attraction:', error)
-      await dialog.alert('Error', 'Failed to delete attraction. Please try again.', 'warning')
+      await dialog.alert(tCommon('error'), t('notifications.failedToDelete'), 'warning')
     }
   }
 
@@ -502,7 +517,7 @@ export default function AttractionsContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading attractions...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -547,7 +562,7 @@ export default function AttractionsContent() {
         <div className="container mx-auto px-4 lg:px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">Attractions & Entrance Fees</h1>
+              <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
               <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
             </div>
             <div className="flex items-center gap-2">
@@ -556,19 +571,19 @@ export default function AttractionsContent() {
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" />
-                Add Attraction
+                {t('addAttraction')}
               </button>
-              <Link 
+              <Link
                 href="/rates"
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
-                ← Resources
+                ← {t('nav.resources')}
               </Link>
-              <Link 
-                href="/" 
+              <Link
+                href="/"
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
-                ← Home
+                ← {t('nav.home')}
               </Link>
             </div>
           </div>
@@ -583,7 +598,7 @@ export default function AttractionsContent() {
               <span className="text-gray-400 text-xl">🎫</span>
               <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
             </div>
-            <p className="text-xs text-gray-600">Total Attractions</p>
+            <p className="text-xs text-gray-600">{t('stats.totalAttractions')}</p>
             <p className="text-2xl font-bold text-gray-900">{attractions.length}</p>
           </div>
 
@@ -592,7 +607,7 @@ export default function AttractionsContent() {
               <span className="text-gray-400 text-xl">✓</span>
               <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
             </div>
-            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-xs text-gray-600">{t('stats.active')}</p>
             <p className="text-2xl font-bold text-gray-900">{activeAttractions}</p>
           </div>
 
@@ -602,7 +617,7 @@ export default function AttractionsContent() {
               <span className="text-gray-400 text-xl">📍</span>
               <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
             </div>
-            <p className="text-xs text-gray-600">Standard</p>
+            <p className="text-xs text-gray-600">{t('stats.standard')}</p>
             <p className="text-2xl font-bold text-gray-900">{standardAttractions}</p>
           </div>
 
@@ -611,7 +626,7 @@ export default function AttractionsContent() {
               <Sparkles className="text-orange-500 w-5 h-5" />
               <div className="w-1.5 h-1.5 rounded-full bg-orange-600" />
             </div>
-            <p className="text-xs text-orange-700">Add-ons</p>
+            <p className="text-xs text-orange-700">{t('stats.addons')}</p>
             <p className="text-2xl font-bold text-orange-700">{addonAttractions}</p>
           </div>
 
@@ -620,7 +635,7 @@ export default function AttractionsContent() {
               <span className="text-gray-400 text-xl">🏙️</span>
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
-            <p className="text-xs text-gray-600">Cities</p>
+            <p className="text-xs text-gray-600">{t('stats.cities')}</p>
             <p className="text-2xl font-bold text-gray-900">{cities.length}</p>
           </div>
 
@@ -629,7 +644,7 @@ export default function AttractionsContent() {
               <span className="text-gray-400 text-xl">💶</span>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
-            <p className="text-xs text-gray-600">Avg. EUR Rate</p>
+            <p className="text-xs text-gray-600">{t('stats.avgEurRate')}</p>
             <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
           </div>
         </div>
@@ -641,7 +656,7 @@ export default function AttractionsContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by name, city, code, or category..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
@@ -653,7 +668,7 @@ export default function AttractionsContent() {
                 onChange={(e) => setSelectedCity(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
               >
-                <option value="all">All Cities</option>
+                <option value="all">{t('allCities')}</option>
                 {cities.map(city => (
                   <option key={city} value={city}>{city}</option>
                 ))}
@@ -665,40 +680,40 @@ export default function AttractionsContent() {
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
               >
-                <option value="all">All Categories</option>
+                <option value="all">{t('allCategories')}</option>
                 {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>{t(`categories.${cat}`)}</option>
                 ))}
               </select>
             </div>
             <button
               onClick={() => setShowInactive(!showInactive)}
               className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
-                showInactive 
-                  ? 'bg-white border border-red-300 text-red-700' 
+                showInactive
+                  ? 'bg-white border border-red-300 text-red-700'
                   : 'bg-white border border-green-300 text-green-700'
               }`}
             >
-              {showInactive ? 'Active Only' : 'Show Inactive'}
+              {showInactive ? t('activeOnly') : t('showInactive')}
             </button>
             {/* NEW: Add-on filter button */}
             <button
               onClick={() => setShowAddonsOnly(!showAddonsOnly)}
               className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
-                showAddonsOnly 
-                  ? 'bg-orange-100 border border-orange-400 text-orange-700' 
+                showAddonsOnly
+                  ? 'bg-orange-100 border border-orange-400 text-orange-700'
                   : 'bg-white border border-gray-300 text-gray-700'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              {showAddonsOnly ? 'All Types' : 'Add-ons Only'}
+              {showAddonsOnly ? t('allTypes') : t('addonsOnly')}
             </button>
           </div>
-          
+
           <div className="mt-3 pt-3 border-t border-gray-200">
             <p className="text-xs text-gray-600">
-              Showing <span className="font-bold text-gray-900">{filteredAttractions.length}</span> of {attractions.length} attractions
-              {showAddonsOnly && <span className="ml-1 text-orange-600">(add-ons only)</span>}
+              {t('pagination.showing')} <span className="font-bold text-gray-900">{filteredAttractions.length}</span> {t('pagination.of')} {attractions.length} {t('pagination.attractions')}
+              {showAddonsOnly && <span className="ml-1 text-orange-600">({t('addonsOnly')})</span>}
             </p>
           </div>
         </div>
@@ -709,20 +724,20 @@ export default function AttractionsContent() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Attraction</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Supplier</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Category</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.attraction')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.supplier')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.category')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.eurRate')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.nonEurRate')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">
                     <span className="flex items-center justify-center gap-1">
                       <Sparkles className="w-3.5 h-3.5 text-orange-500" />
-                      Add-on
+                      {t('table.addon')}
                     </span>
                   </th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -751,7 +766,7 @@ export default function AttractionsContent() {
                     <td className="px-4 py-3">
                       {attraction.category && (
                         <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs font-medium capitalize">
-                          {attraction.category}
+                          {t(`categories.${attraction.category}`)}
                         </span>
                       )}
                     </td>
@@ -778,7 +793,7 @@ export default function AttractionsContent() {
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
                           attraction.is_addon ? 'bg-orange-500' : 'bg-gray-200'
                         } ${togglingAddon === attraction.id ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
-                        title={attraction.is_addon ? 'Click to make standard' : 'Click to make add-on'}
+                        title={attraction.is_addon ? t('clickToMakeStandard') : t('clickToMakeAddon')}
                       >
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -789,11 +804,11 @@ export default function AttractionsContent() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        attraction.is_active 
-                          ? 'bg-green-100 text-green-800' 
+                        attraction.is_active
+                          ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
                       }`}>
-                        {attraction.is_active ? 'Active' : 'Inactive'}
+                        {attraction.is_active ? t('active') : t('inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -819,12 +834,12 @@ export default function AttractionsContent() {
                     <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-3xl text-gray-400">🎫</span>
-                        <p className="text-sm font-medium">No attractions found</p>
+                        <p className="text-sm font-medium">{t('noAttractionsFound')}</p>
                         <button
                           onClick={handleAddNew}
                           className="mt-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                         >
-                          Add Your First Attraction
+                          {t('addFirstAttraction')}
                         </button>
                       </div>
                     </td>
@@ -845,6 +860,17 @@ export default function AttractionsContent() {
               itemsPerPage={itemsPerPage}
               onPageChange={setCurrentPage}
               onItemsPerPageChange={setItemsPerPage}
+              translations={{
+                show: t('pagination.show'),
+                perPage: t('pagination.perPage'),
+                showing: t('pagination.showing'),
+                of: t('pagination.of'),
+                attractions: t('pagination.attractions'),
+                firstPage: t('pagination.firstPage'),
+                previousPage: t('pagination.previousPage'),
+                nextPage: t('pagination.nextPage'),
+                lastPage: t('pagination.lastPage')
+              }}
             />
           )}
         </div>
@@ -856,7 +882,7 @@ export default function AttractionsContent() {
           <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingAttraction ? 'Edit Attraction' : 'Add New Attraction'}
+                {editingAttraction ? t('editAttraction') : t('addNewAttraction')}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
@@ -869,11 +895,11 @@ export default function AttractionsContent() {
             <form onSubmit={handleSubmit} className="p-4">
               {/* Basic Information */}
               <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">Basic Information</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.basicInfo')}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Attraction Name *
+                      {t('form.attractionName')} *
                     </label>
                     <input
                       type="text"
@@ -888,7 +914,7 @@ export default function AttractionsContent() {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Service Code
+                      {t('form.serviceCode')}
                     </label>
                     <input
                       type="text"
@@ -905,7 +931,7 @@ export default function AttractionsContent() {
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       <span className="flex items-center gap-1">
                         <Building2 className="w-3.5 h-3.5" />
-                        Supplier
+                        {t('form.supplier')}
                       </span>
                     </label>
                     <select
@@ -914,19 +940,19 @@ export default function AttractionsContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="">No supplier linked</option>
+                      <option value="">{t('form.noSupplierLinked')}</option>
                       {suppliers.map(supplier => (
                         <option key={supplier.id} value={supplier.id}>
                           {supplier.name} {supplier.city && `(${supplier.city})`}
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-500 mt-1">Link this attraction to a supplier for tracking</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('form.linkSupplierDesc')}</p>
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      City *
+                      {t('form.city')} *
                     </label>
                     <select
                       name="city"
@@ -935,7 +961,7 @@ export default function AttractionsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="">Select city...</option>
+                      <option value="">{t('form.selectCity')}</option>
                       {EGYPT_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
@@ -944,7 +970,7 @@ export default function AttractionsContent() {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Category
+                      {t('form.category')}
                     </label>
                     <select
                       name="category"
@@ -952,16 +978,16 @@ export default function AttractionsContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="">Select category...</option>
+                      <option value="">{t('form.selectCategory')}</option>
                       {categoryOptions.map(cat => (
-                        <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                        <option key={cat} value={cat}>{t(`categories.${cat}`)}</option>
                       ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Fee Type
+                      {t('form.feeType')}
                     </label>
                     <select
                       name="fee_type"
@@ -970,14 +996,14 @@ export default function AttractionsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       {feeTypeOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value} value={opt.value}>{t(`feeTypes.${opt.value}`)}</option>
                       ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Season
+                      {t('form.season')}
                     </label>
                     <select
                       name="season"
@@ -986,7 +1012,7 @@ export default function AttractionsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       {seasonOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value} value={opt.value}>{t(`seasons.${opt.value}`)}</option>
                       ))}
                     </select>
                   </div>
@@ -995,11 +1021,11 @@ export default function AttractionsContent() {
 
               {/* Pricing Information */}
               <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">Pricing</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.pricing')}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      EUR Rate (€) *
+                      {t('form.eurRate')} *
                     </label>
                     <input
                       type="number"
@@ -1016,7 +1042,7 @@ export default function AttractionsContent() {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Non-EUR Rate (€) *
+                      {t('form.nonEurRate')} *
                     </label>
                     <input
                       type="number"
@@ -1033,7 +1059,7 @@ export default function AttractionsContent() {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Egyptian Rate (€)
+                      {t('form.egyptianRate')}
                     </label>
                     <input
                       type="number"
@@ -1051,11 +1077,11 @@ export default function AttractionsContent() {
 
               {/* Discounts */}
               <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">Discounts</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.discounts')}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Child Discount (%)
+                      {t('form.childDiscount')}
                     </label>
                     <input
                       type="number"
@@ -1071,7 +1097,7 @@ export default function AttractionsContent() {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Student Discount (%)
+                      {t('form.studentDiscount')}
                     </label>
                     <input
                       type="number"
@@ -1089,11 +1115,11 @@ export default function AttractionsContent() {
 
               {/* Validity Period */}
               <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">Rate Validity Period</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.validityPeriod')}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Valid From *
+                      {t('form.validFrom')} *
                     </label>
                     <input
                       type="date"
@@ -1107,7 +1133,7 @@ export default function AttractionsContent() {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Valid To *
+                      {t('form.validTo')} *
                     </label>
                     <input
                       type="date"
@@ -1125,7 +1151,7 @@ export default function AttractionsContent() {
               <div className="mb-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
                 <h3 className="text-base font-semibold text-orange-800 mb-3 flex items-center gap-2">
                   <Sparkles className="w-4 h-4" />
-                  Add-on Settings
+                  {t('form.addonSettings')}
                 </h3>
                 <div className="space-y-3">
                   <label className="flex items-start gap-3 cursor-pointer">
@@ -1137,9 +1163,9 @@ export default function AttractionsContent() {
                       className="w-5 h-5 mt-0.5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
                     />
                     <div>
-                      <span className="text-sm font-medium text-gray-900">This is an optional add-on</span>
+                      <span className="text-sm font-medium text-gray-900">{t('form.isAddon')}</span>
                       <p className="text-xs text-gray-600 mt-0.5">
-                        Add-ons are not automatically included in itinerary pricing. They're only added when explicitly requested by the customer (e.g., pyramid interior entry, Sound & Light shows, camel rides).
+                        {t('form.addonDescription')}
                       </p>
                     </div>
                   </label>
@@ -1147,7 +1173,7 @@ export default function AttractionsContent() {
                   {formData.is_addon && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Add-on Note (internal)
+                        {t('form.addonNote')}
                       </label>
                       <input
                         type="text"
@@ -1155,7 +1181,7 @@ export default function AttractionsContent() {
                         value={formData.addon_note}
                         onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm bg-white"
-                        placeholder="e.g., Only include if customer requests pyramid interior"
+                        placeholder={t('form.addonNotePlaceholder')}
                       />
                     </div>
                   )}
@@ -1165,7 +1191,7 @@ export default function AttractionsContent() {
               {/* Notes */}
               <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Notes
+                  {t('form.notes')}
                 </label>
                 <textarea
                   name="notes"
@@ -1173,7 +1199,7 @@ export default function AttractionsContent() {
                   onChange={handleChange}
                   rows={3}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                  placeholder="Additional information about this attraction..."
+                  placeholder={t('form.notesPlaceholder')}
                 />
               </div>
 
@@ -1187,7 +1213,7 @@ export default function AttractionsContent() {
                     onChange={handleCheckboxChange}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                   />
-                  <span className="text-sm font-medium text-gray-700">Active (available for itineraries)</span>
+                  <span className="text-sm font-medium text-gray-700">{t('form.activeStatus')}</span>
                 </label>
               </div>
 
@@ -1198,14 +1224,14 @@ export default function AttractionsContent() {
                   onClick={() => setShowModal(false)}
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
                 >
-                  Cancel
+                  {t('form.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  {editingAttraction ? 'Update Attraction' : 'Create Attraction'}
+                  {editingAttraction ? t('form.update') : t('form.create')}
                 </button>
               </div>
             </form>

@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { 
-  Search, 
-  Plus, 
+import { useTranslations } from 'next-intl'
+import {
+  Search,
+  Plus,
   Eye,
-  Trash2, 
+  Trash2,
   X,
   FileText,
   ChevronDown,
@@ -130,6 +131,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
 }
 
 export default function InvoicesContent() {
+  const t = useTranslations('invoices')
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
@@ -140,6 +142,28 @@ export default function InvoicesContent() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formData, setFormData] = useState<FormData>(initialFormData)
   const [saving, setSaving] = useState(false)
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      draft: t('draft'),
+      sent: t('sent'),
+      viewed: t('viewed'),
+      partial: t('partial'),
+      paid: t('paid'),
+      overdue: t('overdue'),
+      cancelled: t('cancelled')
+    }
+    return labels[status] || status
+  }
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      standard: t('standard'),
+      deposit: t('deposit'),
+      final: t('final')
+    }
+    return labels[type] || type
+  }
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -530,8 +554,8 @@ export default function InvoicesContent() {
             <FileText className="h-5 w-5 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Invoices</h1>
-            <p className="text-sm text-gray-500">Manage client invoices and payments</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
         <button
@@ -539,7 +563,7 @@ export default function InvoicesContent() {
           className="flex items-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors shadow-sm"
         >
           <Plus className="h-4 w-4" />
-          New Invoice
+          {t('newInvoice')}
         </button>
       </div>
 
@@ -548,49 +572,49 @@ export default function InvoicesContent() {
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Total</span>
+            <span className="text-xs text-gray-500 font-medium">{t('total')}</span>
           </div>
           <p className="text-2xl font-bold text-gray-900 mt-2">{totalInvoices}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Deposits</span>
+            <span className="text-xs text-gray-500 font-medium">{t('deposits')}</span>
           </div>
           <p className="text-2xl font-bold text-amber-600 mt-2">{depositCount}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Finals</span>
+            <span className="text-xs text-gray-500 font-medium">{t('finals')}</span>
           </div>
           <p className="text-2xl font-bold text-emerald-600 mt-2">{finalCount}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Billed</span>
+            <span className="text-xs text-gray-500 font-medium">{t('billed')}</span>
           </div>
           <p className="text-2xl font-bold text-gray-900 mt-2">€{totalRevenue.toLocaleString()}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Paid</span>
+            <span className="text-xs text-gray-500 font-medium">{t('paid')}</span>
           </div>
           <p className="text-2xl font-bold text-green-600 mt-2">€{totalPaid.toLocaleString()}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Outstanding</span>
+            <span className="text-xs text-gray-500 font-medium">{t('outstanding')}</span>
           </div>
           <p className="text-2xl font-bold text-orange-600 mt-2">€{totalOutstanding.toLocaleString()}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-red-500"></div>
-            <span className="text-xs text-gray-500 font-medium">Overdue</span>
+            <span className="text-xs text-gray-500 font-medium">{t('overdue')}</span>
           </div>
           <p className="text-2xl font-bold text-red-600 mt-2">€{overdueAmount.toLocaleString()}</p>
         </div>
@@ -602,7 +626,7 @@ export default function InvoicesContent() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search invoices..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
@@ -615,10 +639,10 @@ export default function InvoicesContent() {
             onChange={(e) => setTypeFilter(e.target.value)}
             className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white shadow-sm cursor-pointer"
           >
-            <option value="">All Types</option>
-            <option value="standard">Standard</option>
-            <option value="deposit">Deposit</option>
-            <option value="final">Final</option>
+            <option value="">{t('allTypes')}</option>
+            <option value="standard">{t('standard')}</option>
+            <option value="deposit">{t('deposit')}</option>
+            <option value="final">{t('final')}</option>
           </select>
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -629,13 +653,13 @@ export default function InvoicesContent() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white shadow-sm cursor-pointer"
           >
-            <option value="">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="sent">Sent</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-            <option value="overdue">Overdue</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="">{t('allStatus')}</option>
+            <option value="draft">{t('draft')}</option>
+            <option value="sent">{t('sent')}</option>
+            <option value="partial">{t('partial')}</option>
+            <option value="paid">{t('paid')}</option>
+            <option value="overdue">{t('overdue')}</option>
+            <option value="cancelled">{t('cancelled')}</option>
           </select>
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -646,22 +670,22 @@ export default function InvoicesContent() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Invoice #</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Type</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Client</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Issue Date</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Due Date</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Total</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Balance</th>
-              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Status</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Actions</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('invoiceNumber')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('type')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('client')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('issueDate')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('dueDate')}</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('totalAmount')}</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('balanceDue')}</th>
+              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('status')}</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredInvoices.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
-                  No invoices found
+                  {t('noInvoicesFound')}
                 </td>
               </tr>
             ) : (
@@ -677,7 +701,7 @@ export default function InvoicesContent() {
                     <td className="px-4 py-2">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${typeConfig.bg} ${typeConfig.color}`}>
                         <TypeIcon className="h-3 w-3" />
-                        {typeConfig.label}
+                        {getTypeLabel(invoice.invoice_type)}
                         {invoice.invoice_type !== 'standard' && (
                           <span className="text-[10px] opacity-75">({invoice.deposit_percent}%)</span>
                         )}
@@ -711,7 +735,7 @@ export default function InvoicesContent() {
                     </td>
                     <td className="px-4 py-2 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.color}`}>
-                        {statusConfig.label}
+                        {getStatusLabel(invoice.status)}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right">
@@ -719,7 +743,7 @@ export default function InvoicesContent() {
                         <Link
                           href={`/invoices/${invoice.id}`}
                           className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                          title="View"
+                          title={t('view')}
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
@@ -727,7 +751,7 @@ export default function InvoicesContent() {
                           <button
                             onClick={() => handleSendInvoice(invoice.id)}
                             className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                            title="Mark as Sent"
+                            title={t('markAsSent')}
                           >
                             <Send className="h-4 w-4" />
                           </button>
@@ -735,7 +759,7 @@ export default function InvoicesContent() {
                         <button
                           onClick={() => handleDelete(invoice.id)}
                           className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                          title="Delete"
+                          title={t('delete')}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -754,7 +778,7 @@ export default function InvoicesContent() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
-              <h2 className="text-lg font-semibold text-gray-900">New Invoice</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t('newInvoice')}</h2>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -766,7 +790,7 @@ export default function InvoicesContent() {
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {/* Invoice Type Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Invoice Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-3">{t('invoiceType')}</label>
                 <div className="grid grid-cols-3 gap-3">
                   {(['standard', 'deposit', 'final'] as const).map((type) => {
                     const config = TYPE_CONFIG[type]

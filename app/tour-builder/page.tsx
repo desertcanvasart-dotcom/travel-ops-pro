@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { Tour, TourDay, TourPricingBreakdown } from './types'
 import TourSetup from './components/TourSetup'
 import DayPlanner from './components/DayPlanner'
@@ -8,6 +9,7 @@ import PricingSidebar from './components/PricingSidebar'
 import { Users, Globe, ArrowLeft, Save, FileDown } from 'lucide-react'
 
 export default function TourBuilderPage() {
+  const t = useTranslations('tourBuilder')
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [tour, setTour] = useState<Tour>({
     tour_code: '',
@@ -154,10 +156,10 @@ export default function TourBuilderPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-gray-900">
-                🏗️ Multi-Day Tour Builder
+                🏗️ {t('title')}
               </h1>
               <p className="text-xs text-gray-600 mt-0.5">
-                {tour.tour_name || 'Create a new tour package'}
+                {tour.tour_name || t('createNewTour')}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -165,7 +167,7 @@ export default function TourBuilderPage() {
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-gray-400" />
                 <label className="text-xs font-medium text-gray-600">
-                  PAX:
+                  {t('pax')}:
                 </label>
                 <input
                   type="number"
@@ -174,6 +176,7 @@ export default function TourBuilderPage() {
                   value={pax}
                   onChange={(e) => setPax(parseInt(e.target.value) || 1)}
                   className="w-16 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  title={t('pax')}
                 />
               </div>
 
@@ -181,10 +184,11 @@ export default function TourBuilderPage() {
               <div className="flex items-center gap-2">
                 <Globe className="w-4 h-4 text-gray-400" />
                 <label className="text-xs font-medium text-gray-600">
-                  Passport:
+                  {t('passport')}:
                 </label>
                 <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
                   <button
+                    type="button"
                     onClick={() => setIsEuroPassport(true)}
                     className={`px-2 py-0.5 rounded text-xs font-medium transition-colors flex items-center gap-1.5 ${
                       isEuroPassport
@@ -193,9 +197,10 @@ export default function TourBuilderPage() {
                     }`}
                   >
                     {isEuroPassport && <div className="w-1.5 h-1.5 rounded-full bg-green-600" />}
-                    🇪🇺 Euro
+                    🇪🇺 {t('euro')}
                   </button>
                   <button
+                    type="button"
                     onClick={() => setIsEuroPassport(false)}
                     className={`px-2 py-0.5 rounded text-xs font-medium transition-colors flex items-center gap-1.5 ${
                       !isEuroPassport
@@ -204,7 +209,7 @@ export default function TourBuilderPage() {
                     }`}
                   >
                     {!isEuroPassport && <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
-                    🌍 Non-Euro
+                    🌍 {t('nonEuro')}
                   </button>
                 </div>
               </div>
@@ -215,35 +220,35 @@ export default function TourBuilderPage() {
           <div className="mt-4 flex items-center">
             <div className={`flex items-center ${step >= 1 ? 'text-gray-900' : 'text-gray-400'}`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
-                step >= 1 
-                  ? 'bg-white border-primary-600 text-primary-600' 
+                step >= 1
+                  ? 'bg-white border-primary-600 text-primary-600'
                   : 'bg-white border-gray-300 text-gray-400'
               }`}>
                 {step > 1 ? '✓' : '1'}
               </div>
-              <span className="ml-2 text-xs font-medium">Tour Setup</span>
+              <span className="ml-2 text-xs font-medium">{t('steps.tourSetup')}</span>
             </div>
             <div className={`h-0.5 w-20 mx-3 ${step >= 2 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
             <div className={`flex items-center ${step >= 2 ? 'text-gray-900' : 'text-gray-400'}`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
-                step >= 2 
-                  ? 'bg-white border-primary-600 text-primary-600' 
+                step >= 2
+                  ? 'bg-white border-primary-600 text-primary-600'
                   : 'bg-white border-gray-300 text-gray-400'
               }`}>
                 2
               </div>
-              <span className="ml-2 text-xs font-medium">Daily Planning</span>
+              <span className="ml-2 text-xs font-medium">{t('steps.dailyPlanning')}</span>
             </div>
             <div className={`h-0.5 w-20 mx-3 ${step >= 3 ? 'bg-primary-600' : 'bg-gray-200'}`}></div>
             <div className={`flex items-center ${step >= 3 ? 'text-gray-900' : 'text-gray-400'}`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
-                step >= 3 
-                  ? 'bg-white border-primary-600 text-primary-600' 
+                step >= 3
+                  ? 'bg-white border-primary-600 text-primary-600'
                   : 'bg-white border-gray-300 text-gray-400'
               }`}>
                 3
               </div>
-              <span className="ml-2 text-xs font-medium">Review & Save</span>
+              <span className="ml-2 text-xs font-medium">{t('steps.reviewSave')}</span>
             </div>
           </div>
         </div>
@@ -280,35 +285,35 @@ export default function TourBuilderPage() {
               {step === 3 && (
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <h2 className="text-lg font-bold text-gray-900">Review & Save</h2>
+                    <h2 className="text-lg font-bold text-gray-900">{t('review.title')}</h2>
                     <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
                   </div>
                   <p className="text-sm text-gray-600 mb-4">
-                    Review your tour details and save the template.
+                    {t('review.subtitle')}
                   </p>
-                  
+
                   <div className="space-y-3 mb-6">
                     {/* Tour Details Card */}
                     <div className="bg-white border border-gray-200 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-sm font-semibold text-gray-900">Tour Details</h3>
+                        <h3 className="text-sm font-semibold text-gray-900">{t('review.tourDetails')}</h3>
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <span className="text-xs text-gray-600">Tour Name:</span>
+                          <span className="text-xs text-gray-600">{t('review.tourName')}:</span>
                           <p className="text-sm font-medium text-gray-900">{tour.tour_name}</p>
                         </div>
                         <div>
-                          <span className="text-xs text-gray-600">Duration:</span>
-                          <p className="text-sm font-medium text-gray-900">{tour.duration_days} days</p>
+                          <span className="text-xs text-gray-600">{t('review.duration')}:</span>
+                          <p className="text-sm font-medium text-gray-900">{tour.duration_days} {t('review.days')}</p>
                         </div>
                         <div>
-                          <span className="text-xs text-gray-600">Cities:</span>
+                          <span className="text-xs text-gray-600">{t('review.cities')}:</span>
                           <p className="text-sm font-medium text-gray-900">{tour.cities.join(', ')}</p>
                         </div>
                         <div>
-                          <span className="text-xs text-gray-600">Type:</span>
+                          <span className="text-xs text-gray-600">{t('review.type')}:</span>
                           <p className="text-sm font-medium text-gray-900 capitalize">{tour.tour_type}</p>
                         </div>
                       </div>
@@ -318,14 +323,14 @@ export default function TourBuilderPage() {
                     {pricing && (
                       <div className="bg-white border border-gray-200 rounded-lg p-3">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="text-sm font-semibold text-gray-900">Pricing Summary</h3>
+                          <h3 className="text-sm font-semibold text-gray-900">{t('review.pricingSummary')}</h3>
                           <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
                         </div>
                         <div className="text-2xl font-bold text-gray-900">
                           €{pricing.totals.grand_total.toFixed(2)}
                         </div>
                         <div className="text-xs text-gray-600 mt-1">
-                          €{pricing.per_person.toFixed(2)} per person ({pax} pax)
+                          €{pricing.per_person.toFixed(2)} {t('review.perPerson')} ({pax} {t('pax')})
                         </div>
                       </div>
                     )}
@@ -333,21 +338,24 @@ export default function TourBuilderPage() {
 
                   <div className="flex gap-3">
                     <button
+                      type="button"
                       onClick={() => setStep(2)}
                       className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
                     >
                       <ArrowLeft className="w-4 h-4" />
-                      Back to Planning
+                      {t('review.backToPlanning')}
                     </button>
                     <button
+                      type="button"
                       onClick={handleSaveTour}
                       disabled={isSaving}
                       className="flex-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       <Save className="w-4 h-4" />
-                      {isSaving ? 'Saving...' : 'Save Tour'}
+                      {isSaving ? t('review.saving') : t('review.saveTour')}
                     </button>
                     <button
+                      type="button"
                       onClick={async () => {
                         try {
                           const response = await fetch('/api/tours/export-pdf', {
@@ -360,7 +368,7 @@ export default function TourBuilderPage() {
                               pricing
                             })
                           })
-                          
+
                           const html = await response.text()
                           const blob = new Blob([html], { type: 'text/html' })
                           const url = window.URL.createObjectURL(blob)
@@ -370,13 +378,13 @@ export default function TourBuilderPage() {
                           a.click()
                           window.URL.revokeObjectURL(url)
                         } catch (error) {
-                          alert('Failed to export PDF')
+                          alert(t('review.failedToExport'))
                         }
                       }}
                       className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold flex items-center gap-2"
                     >
                       <FileDown className="w-4 h-4" />
-                      Export PDF
+                      {t('review.exportPdf')}
                     </button>
                   </div>
                 </div>

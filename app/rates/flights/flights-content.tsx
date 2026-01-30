@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { 
-  Search, 
-  Plus, 
-  Edit2, 
-  Trash2, 
+import { useTranslations } from 'next-intl'
+import {
+  Search,
+  Plus,
+  Edit2,
+  Trash2,
   X,
   Plane,
   ChevronDown,
@@ -165,8 +166,10 @@ const POPULAR_ROUTES = [
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function FlightsContent() {
+  const t = useTranslations('rates.flights')
+  const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  
+
   const [rates, setRates] = useState<FlightRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
@@ -495,14 +498,14 @@ export default function FlightsContent() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Plane className="h-5 w-5 text-sky-600" />
-          <h1 className="text-lg font-semibold text-gray-900">Flight Rates</h1>
+          <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
         </div>
         <button
           onClick={openAddModal}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#647C47] text-white text-sm rounded-md hover:bg-[#4f6238] transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Add Flight Rate
+          {t('addRate')}
         </button>
       </div>
 
@@ -511,42 +514,42 @@ export default function FlightsContent() {
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-sky-500"></div>
-            <span className="text-xs text-gray-500">Total Rates</span>
+            <span className="text-xs text-gray-500">{t('totalRates')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{totalRates}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            <span className="text-xs text-gray-500">Active</span>
+            <span className="text-xs text-gray-500">{t('active')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{activeRates}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-gray-500">Domestic</span>
+            <span className="text-xs text-gray-500">{t('domestic')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{domesticRoutes}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-            <span className="text-xs text-gray-500">International</span>
+            <span className="text-xs text-gray-500">{t('international')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{internationalRoutes}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-            <span className="text-xs text-gray-500">Airlines</span>
+            <span className="text-xs text-gray-500">{t('airlines')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{uniqueAirlines}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-            <span className="text-xs text-gray-500">Linked</span>
+            <span className="text-xs text-gray-500">{t('linked')}</span>
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{linkedToSuppliers}</p>
         </div>
@@ -558,7 +561,7 @@ export default function FlightsContent() {
           <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search flights..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
@@ -571,7 +574,7 @@ export default function FlightsContent() {
             onChange={(e) => setRouteFromFilter(e.target.value)}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">From Any</option>
+            <option value="">{t('fromAny')}</option>
             {EGYPT_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -585,7 +588,7 @@ export default function FlightsContent() {
             onChange={(e) => setRouteToFilter(e.target.value)}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">To Any</option>
+            <option value="">{t('toAny')}</option>
             {EGYPT_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -599,7 +602,7 @@ export default function FlightsContent() {
             onChange={(e) => setAirlineFilter(e.target.value)}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">All Airlines</option>
+            <option value="">{t('allAirlines')}</option>
             {AIRLINES.map(airline => (
               <option key={airline.code} value={airline.name}>{airline.name}</option>
             ))}
@@ -613,7 +616,7 @@ export default function FlightsContent() {
             onChange={(e) => setFlightTypeFilter(e.target.value)}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">All Types</option>
+            <option value="">{t('allTypes')}</option>
             {FLIGHT_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
@@ -627,7 +630,7 @@ export default function FlightsContent() {
             onChange={(e) => setCabinClassFilter(e.target.value)}
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
-            <option value="">All Classes</option>
+            <option value="">{t('allClasses')}</option>
             {CABIN_CLASSES.map(cls => (
               <option key={cls.value} value={cls.value}>{cls.label}</option>
             ))}
@@ -638,12 +641,12 @@ export default function FlightsContent() {
         <button
           onClick={() => setShowInactive(!showInactive)}
           className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-            showInactive 
-              ? 'bg-gray-100 border-gray-300 text-gray-700' 
+            showInactive
+              ? 'bg-gray-100 border-gray-300 text-gray-700'
               : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
           }`}
         >
-          {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+          {showInactive ? t('hideInactive') : t('showInactive')}
         </button>
       </div>
 
@@ -652,22 +655,22 @@ export default function FlightsContent() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Route</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Airline</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Flight</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Class</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Schedule</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">EUR Rate</th>
-              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Type</th>
-              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Status</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">Actions</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('route')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('airline')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('flight')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('class')}</th>
+              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('schedule')}</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('eurRate')}</th>
+              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{tCommon('active')}</th>
+              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{tCommon('status')}</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{tCommon('actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {paginatedRates.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
-                  No flight rates found
+                  {t('noFlightsFound')}
                 </td>
               </tr>
             ) : (
@@ -728,11 +731,11 @@ export default function FlightsContent() {
                   </td>
                   <td className="px-4 py-2 text-center">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      rate.is_active 
-                        ? 'bg-green-100 text-green-800' 
+                      rate.is_active
+                        ? 'bg-green-100 text-green-800'
                         : 'bg-gray-100 text-gray-600'
                     }`}>
-                      {rate.is_active ? 'Active' : 'Inactive'}
+                      {rate.is_active ? tCommon('active') : tCommon('inactive')}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">
@@ -740,14 +743,14 @@ export default function FlightsContent() {
                       <button
                         onClick={() => openEditModal(rate)}
                         className="p-1 text-gray-400 hover:text-[#647C47] transition-colors"
-                        title="Edit"
+                        title={tCommon('edit')}
                       >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(rate)}
                         className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete"
+                        title={tCommon('delete')}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -764,7 +767,7 @@ export default function FlightsContent() {
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">Show</span>
+                <span className="text-sm text-gray-500">{tCommon('perPage')}</span>
                 <select
                   value={itemsPerPage}
                   onChange={(e) => setItemsPerPage(Number(e.target.value))}
@@ -774,10 +777,10 @@ export default function FlightsContent() {
                     <option key={option} value={option}>{option}</option>
                   ))}
                 </select>
-                <span className="text-sm text-gray-500">per page</span>
+                <span className="text-sm text-gray-500">{tCommon('showPerPage')}</span>
               </div>
               <span className="text-sm text-gray-500">
-                Showing {startIndex + 1}-{endIndex} of {totalItems} rates
+                {tCommon('showing')} {startIndex + 1}{tCommon('toOf', { end: endIndex, total: totalItems })}
               </span>
             </div>
 
@@ -855,7 +858,7 @@ export default function FlightsContent() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                {editingRate ? 'Edit Flight Rate' : 'Add Flight Rate'}
+                {editingRate ? t('editRate') : t('addRate')}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -875,7 +878,7 @@ export default function FlightsContent() {
               {/* Popular Routes Quick Select */}
               {!editingRate && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-600">Quick Select Popular Route</label>
+                  <label className="block text-sm font-medium text-gray-600">{t('quickSelectRoute')}</label>
                   <div className="flex flex-wrap gap-2">
                     {POPULAR_ROUTES.slice(0, 6).map((route, idx) => (
                       <button
@@ -899,13 +902,13 @@ export default function FlightsContent() {
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-cyan-600" />
-                  Airline / Supplier
+                  {t('supplierSection')}
                 </h3>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Airline <span className="text-red-500">*</span>
+                      {t('airline')} <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formData.airline}
@@ -921,14 +924,14 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Link to Supplier
+                      {t('linkToSupplier')}
                     </label>
                     <select
                       value={formData.supplier_id}
                       onChange={(e) => handleSupplierChange(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      <option value="">Select supplier (optional)</option>
+                      <option value="">{t('selectSupplier')}</option>
                       {suppliers.map(supplier => (
                         <option key={supplier.id} value={supplier.id}>
                           {supplier.name}
@@ -943,13 +946,13 @@ export default function FlightsContent() {
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
                   <Plane className="h-4 w-4 text-sky-600" />
-                  Route Information
+                  {t('routeInfo')}
                 </h3>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      From <span className="text-red-500">*</span>
+                      {t('from')} <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formData.route_from}
@@ -957,7 +960,7 @@ export default function FlightsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      <option value="">Select departure city</option>
+                      <option value="">{t('selectDepartureCity')}</option>
                       {EGYPT_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
@@ -966,7 +969,7 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      To <span className="text-red-500">*</span>
+                      {t('to')} <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formData.route_to}
@@ -974,7 +977,7 @@ export default function FlightsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      <option value="">Select arrival city</option>
+                      <option value="">{t('selectArrivalCity')}</option>
                       {EGYPT_CITIES.filter(c => c !== formData.route_from).map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
@@ -986,14 +989,14 @@ export default function FlightsContent() {
                   <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 border border-sky-100 rounded-md">
                     <Plane className="h-4 w-4 text-sky-600" />
                     <span className="text-sm text-sky-700">
-                      Route: <strong>{formData.route_from}</strong> → <strong>{formData.route_to}</strong>
+                      {t('route')}: <strong>{formData.route_from}</strong> → <strong>{formData.route_to}</strong>
                     </span>
                     <span className={`ml-auto px-2 py-0.5 rounded text-xs font-medium ${
-                      formData.flight_type === 'domestic' 
-                        ? 'bg-blue-100 text-blue-700' 
+                      formData.flight_type === 'domestic'
+                        ? 'bg-blue-100 text-blue-700'
                         : 'bg-purple-100 text-purple-700'
                     }`}>
-                      {formData.flight_type === 'domestic' ? 'Domestic' : 'International'}
+                      {formData.flight_type === 'domestic' ? t('domestic') : t('international')}
                     </span>
                   </div>
                 )}
@@ -1001,7 +1004,7 @@ export default function FlightsContent() {
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Flight Number
+                      {t('flightNumber')}
                     </label>
                     <input
                       type="text"
@@ -1014,7 +1017,7 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Cabin Class <span className="text-red-500">*</span>
+                      {t('cabinClass')} <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={formData.cabin_class}
@@ -1030,13 +1033,13 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Service Code
+                      {t('serviceCode')}
                     </label>
                     <input
                       type="text"
                       value={formData.service_code}
                       onChange={(e) => setFormData(prev => ({ ...prev, service_code: e.target.value }))}
-                      placeholder="Auto-generated"
+                      placeholder={t('autoGenerated')}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
                     />
                   </div>
@@ -1047,13 +1050,13 @@ export default function FlightsContent() {
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
                   <Clock className="h-4 w-4 text-orange-600" />
-                  Schedule
+                  {t('scheduleSection')}
                 </h3>
-                
+
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Departure Time
+                      {t('departureTime')}
                     </label>
                     <input
                       type="time"
@@ -1065,7 +1068,7 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Arrival Time
+                      {t('arrivalTime')}
                     </label>
                     <input
                       type="time"
@@ -1077,7 +1080,7 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Duration (min)
+                      {t('durationMin')}
                     </label>
                     <input
                       type="number"
@@ -1091,7 +1094,7 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Frequency
+                      {t('frequency')}
                     </label>
                     <select
                       value={formData.frequency}
@@ -1108,12 +1111,12 @@ export default function FlightsContent() {
 
               {/* Pricing */}
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Pricing</h3>
-                
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('pricingSection')}</h3>
+
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      EUR Rate <span className="text-red-500">*</span>
+                      {t('eurRate')} <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">€</span>
@@ -1131,7 +1134,7 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Non-EUR Rate
+                      {t('nonEurRate')}
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">$</span>
@@ -1149,7 +1152,7 @@ export default function FlightsContent() {
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5 flex items-center gap-1">
                       <Luggage className="h-3.5 w-3.5" />
-                      Baggage (kg)
+                      {t('baggage')}
                     </label>
                     <input
                       type="number"
@@ -1164,28 +1167,28 @@ export default function FlightsContent() {
 
               {/* Validity */}
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Validity Period</h3>
-                
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('validitySection')}</h3>
+
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Season
+                      {t('season')}
                     </label>
                     <select
                       value={formData.season}
                       onChange={(e) => setFormData(prev => ({ ...prev, season: e.target.value }))}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      <option value="">All Year</option>
-                      <option value="high_season">High Season</option>
-                      <option value="low_season">Low Season</option>
-                      <option value="peak">Peak</option>
+                      <option value="">{t('allYear')}</option>
+                      <option value="high_season">{t('highSeason')}</option>
+                      <option value="low_season">{t('lowSeason')}</option>
+                      <option value="peak">{t('peak')}</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Valid From
+                      {t('validFrom')}
                     </label>
                     <input
                       type="date"
@@ -1197,7 +1200,7 @@ export default function FlightsContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Valid To
+                      {t('validTo')}
                     </label>
                     <input
                       type="date"
@@ -1211,17 +1214,17 @@ export default function FlightsContent() {
 
               {/* Additional Info */}
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Additional Information</h3>
-                
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('additionalInfo')}</h3>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                    Notes
+                    {t('notes')}
                   </label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                     rows={3}
-                    placeholder="Any additional notes about this flight rate..."
+                    placeholder={t('notesPlaceholder')}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] resize-none"
                   />
                 </div>
@@ -1235,7 +1238,7 @@ export default function FlightsContent() {
                     className="h-4 w-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47]"
                   />
                   <label htmlFor="is_active" className="text-sm text-gray-600">
-                    Active (available for booking)
+                    {t('activeForBooking')}
                   </label>
                 </div>
               </div>
@@ -1247,14 +1250,14 @@ export default function FlightsContent() {
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-md hover:bg-[#4f6238] transition-colors disabled:opacity-50 min-w-[100px]"
                 >
-                  {saving ? 'Saving...' : editingRate ? 'Update Rate' : 'Add Rate'}
+                  {saving ? t('saving') : editingRate ? t('updateRate') : t('addRate')}
                 </button>
               </div>
             </form>

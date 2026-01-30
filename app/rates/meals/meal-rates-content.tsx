@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -122,6 +123,8 @@ interface MealRate {
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function MealRatesContent() {
+  const t = useTranslations('rates.meals')
+  const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -448,7 +451,7 @@ export default function MealRatesContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading meal rates...</p>
+          <p className="text-sm text-gray-600">{tCommon('loading')}</p>
         </div>
       </div>
     )
@@ -481,7 +484,7 @@ export default function MealRatesContent() {
                   'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                Got it
+                {tCommon('gotIt')}
               </button>
             </div>
           </div>
@@ -496,15 +499,15 @@ export default function MealRatesContent() {
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
                 <Trash2 className="w-7 h-7 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Meal Rate?</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteRate')}</h3>
               <p className="text-sm text-gray-600 mb-1">
-                Are you sure you want to delete
+                {tCommon('confirmDelete')}
               </p>
               <p className="text-sm font-semibold text-gray-900 mb-4">
                 "{deleteModal.name}"
               </p>
               <p className="text-xs text-gray-500 mb-6">
-                This action cannot be undone. The rate will be permanently removed.
+                {tCommon('deleteWarning')}
               </p>
               <div className="flex items-center gap-3 w-full">
                 <button
@@ -512,7 +515,7 @@ export default function MealRatesContent() {
                   disabled={isDeleting}
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button
                   onClick={handleDelete}
@@ -522,12 +525,12 @@ export default function MealRatesContent() {
                   {isDeleting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Deleting...
+                      {tCommon('deleting')}
                     </>
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      {tCommon('delete')}
                     </>
                   )}
                 </button>
@@ -545,10 +548,10 @@ export default function MealRatesContent() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              Meal Rates
+              {t('title')}
               <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
             </h1>
-            <p className="text-sm text-gray-600">Manage restaurant and meal pricing</p>
+            <p className="text-sm text-gray-600">{t('subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -557,21 +560,21 @@ export default function MealRatesContent() {
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
             <Download className="w-4 h-4" />
-            Export
+            {tCommon('export')}
           </button>
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
           >
             <Plus className="w-4 h-4" />
-            Add Rate
+            {t('addRate')}
           </button>
           <Link
             href="/suppliers?type=restaurant"
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50"
           >
             <Utensils className="w-4 h-4" />
-            Restaurants
+            {t('restaurants')}
           </Link>
         </div>
       </div>
@@ -584,7 +587,7 @@ export default function MealRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{rates.length}</p>
-          <p className="text-xs text-gray-600">Total Rates</p>
+          <p className="text-xs text-gray-600">{t('totalRates')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -592,7 +595,7 @@ export default function MealRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{activeRates}</p>
-          <p className="text-xs text-gray-600">Active</p>
+          <p className="text-xs text-gray-600">{t('active')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -600,7 +603,7 @@ export default function MealRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-orange-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{linkedRates}</p>
-          <p className="text-xs text-gray-600">Linked</p>
+          <p className="text-xs text-gray-600">{t('linked')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -608,7 +611,7 @@ export default function MealRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
-          <p className="text-xs text-gray-600">Avg. Rate</p>
+          <p className="text-xs text-gray-600">{t('avgRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -616,7 +619,7 @@ export default function MealRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{uniqueCities}</p>
-          <p className="text-xs text-gray-600">Cities</p>
+          <p className="text-xs text-gray-600">{t('cities')}</p>
         </div>
       </div>
 
@@ -629,7 +632,7 @@ export default function MealRatesContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search rates..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
@@ -643,7 +646,7 @@ export default function MealRatesContent() {
             onChange={(e) => setSelectedMealType(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Meal Types</option>
+            <option value="">{t('allMealTypes')}</option>
             {MEAL_TYPES.map(type => (
               <option key={type} value={type}>{type}</option>
             ))}
@@ -655,7 +658,7 @@ export default function MealRatesContent() {
             onChange={(e) => setSelectedCity(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Cities</option>
+            <option value="">{t('allCities')}</option>
             {EGYPT_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -667,7 +670,7 @@ export default function MealRatesContent() {
             onChange={(e) => setSelectedTier(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Tiers</option>
+            <option value="">{t('allTiers')}</option>
             {TIERS.map(tier => (
               <option key={tier.value} value={tier.value}>{tier.label}</option>
             ))}
@@ -682,7 +685,7 @@ export default function MealRatesContent() {
                 : 'bg-green-100 text-green-700'
             }`}
           >
-            {showInactive ? 'Show All' : 'Active Only'}
+            {showInactive ? tCommon('showAll') : tCommon('activeOnly')}
           </button>
 
           {/* View Mode */}
@@ -711,8 +714,8 @@ export default function MealRatesContent() {
         {/* Results Count */}
         <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
           <p className="text-xs text-gray-600">
-            Showing <span className="font-semibold">{paginatedRates.length}</span> of{' '}
-            <span className="font-semibold">{filteredRates.length}</span> rates
+            {tCommon('showing')} <span className="font-semibold">{paginatedRates.length}</span> {tCommon('of')}{' '}
+            <span className="font-semibold">{filteredRates.length}</span> {tCommon('rates')}
           </p>
           <select
             value={itemsPerPage}
@@ -720,7 +723,7 @@ export default function MealRatesContent() {
             className="text-xs border border-gray-300 rounded px-2 py-1"
           >
             {ITEMS_PER_PAGE_OPTIONS.map(n => (
-              <option key={n} value={n}>{n} per page</option>
+              <option key={n} value={n}>{n} {tCommon('perPage')}</option>
             ))}
           </select>
         </div>
@@ -731,18 +734,18 @@ export default function MealRatesContent() {
         {paginatedRates.length === 0 ? (
           <div className="p-12 text-center">
             <Utensils className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Rates Found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('noRatesFound')}</h3>
             <p className="text-sm text-gray-600 mb-4">
               {searchTerm || selectedCity || selectedMealType || selectedTier
-                ? 'Try adjusting your filters'
-                : 'Get started by adding your first meal rate'}
+                ? tCommon('adjustFilters')
+                : t('getStarted')}
             </p>
             <button
               onClick={handleAddNew}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               <Plus className="w-4 h-4" />
-              Add First Rate
+              {t('addFirstRate')}
             </button>
           </div>
         ) : viewMode === 'table' ? (
@@ -750,14 +753,14 @@ export default function MealRatesContent() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Restaurant</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Meal Type</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Tier</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('restaurant')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('mealType')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('city')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('tier')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{tCommon('eurRate')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{tCommon('nonEurRate')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -798,7 +801,7 @@ export default function MealRatesContent() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
+                        {rate.is_active ? tCommon('active') : tCommon('inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -834,7 +837,7 @@ export default function MealRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? tCommon('active') : tCommon('inactive')}
                   </span>
                 </div>
 
@@ -848,13 +851,13 @@ export default function MealRatesContent() {
                 </div>
 
                 <div className="space-y-1 text-sm text-gray-600 mb-3">
-                  <p><span className="text-gray-400">City:</span> {rate.city || '—'}</p>
-                  <p><span className="text-gray-400">Cuisine:</span> {rate.cuisine_type || '—'}</p>
+                  <p><span className="text-gray-400">{tCommon('city')}:</span> {rate.city || '—'}</p>
+                  <p><span className="text-gray-400">{t('cuisineType')}:</span> {rate.cuisine_type || '—'}</p>
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
-                    <p className="text-xs text-gray-500">EUR Rate {rate.per_person_rate && '(per person)'}</p>
+                    <p className="text-xs text-gray-500">{tCommon('eurRate')} {rate.per_person_rate && `(${t('perPerson')})`}</p>
                     <p className="text-lg font-bold text-green-600">€{rate.base_rate_eur}</p>
                   </div>
                   <div className="flex gap-1">
@@ -895,7 +898,7 @@ export default function MealRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? tCommon('active') : tCommon('inactive')}
                   </span>
                   <div className="flex gap-1">
                     <button onClick={() => handleEdit(rate)} className="p-1 text-gray-400 hover:text-primary-600">
@@ -915,8 +918,8 @@ export default function MealRatesContent() {
         {totalPages > 1 && (
           <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between bg-gray-50">
             <p className="text-sm text-gray-600">
-              Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
-              <span className="text-gray-400 ml-2">({filteredRates.length} total)</span>
+              {tCommon('page')} <span className="font-semibold">{currentPage}</span> {tCommon('of')} <span className="font-semibold">{totalPages}</span>
+              <span className="text-gray-400 ml-2">({filteredRates.length} {tCommon('total')})</span>
             </p>
             <div className="flex items-center gap-1">
               {/* First Page */}
@@ -925,7 +928,7 @@ export default function MealRatesContent() {
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                First
+                {tCommon('first')}
               </button>
               
               {/* Previous */}
@@ -981,7 +984,7 @@ export default function MealRatesContent() {
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                Last
+                {tCommon('last')}
               </button>
             </div>
           </div>
@@ -994,7 +997,7 @@ export default function MealRatesContent() {
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? 'Edit Meal Rate' : 'Add Meal Rate'}
+                {editingRate ? t('editRate') : t('addRate')}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
                 <X className="w-4 h-4" />
@@ -1006,18 +1009,18 @@ export default function MealRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">1</span>
-                  Restaurant & Meal Details
+                  {t('restaurantMealDetails')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   {/* Supplier Selection */}
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Supplier (Restaurant)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('supplierRestaurant')}</label>
                     <select
                       value={formData.supplier_id}
                       onChange={(e) => handleSupplierChange(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Supplier (Optional)</option>
+                      <option value="">{t('selectSupplierOptional')}</option>
                       {suppliers.map(supplier => (
                         <option key={supplier.id} value={supplier.id}>
                           {supplier.name} {supplier.city && `(${supplier.city})`}
@@ -1025,12 +1028,12 @@ export default function MealRatesContent() {
                       ))}
                     </select>
                     <p className="text-xs text-gray-500 mt-1">
-                      Link to a restaurant supplier for tracking. <a href="/suppliers?type=restaurant" className="text-primary-600 hover:underline">Manage restaurants →</a>
+                      {t('linkToRestaurant')} <a href="/suppliers?type=restaurant" className="text-primary-600 hover:underline">{t('manageRestaurants')}</a>
                     </p>
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Restaurant Name *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('restaurantName')} *</label>
                     <input
                       type="text"
                       name="restaurant_name"
@@ -1042,7 +1045,7 @@ export default function MealRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('serviceCode')}</label>
                     <input
                       type="text"
                       name="service_code"
@@ -1052,63 +1055,63 @@ export default function MealRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Meal Type</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('mealType')}</label>
                     <select
                       name="meal_type"
                       value={formData.meal_type}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Meal Type</option>
+                      <option value="">{t('selectMealType')}</option>
                       {MEAL_TYPES.map(type => (
                         <option key={type} value={type}>{type}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Cuisine Type</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('cuisineType')}</label>
                     <select
                       name="cuisine_type"
                       value={formData.cuisine_type}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Cuisine</option>
+                      <option value="">{t('selectCuisine')}</option>
                       {CUISINE_TYPES.map(cuisine => (
                         <option key={cuisine} value={cuisine}>{cuisine}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Restaurant Type</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('restaurantType')}</label>
                     <select
                       name="restaurant_type"
                       value={formData.restaurant_type}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Type</option>
+                      <option value="">{t('selectType')}</option>
                       {RESTAURANT_TYPES.map(type => (
                         <option key={type} value={type}>{type}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('city')}</label>
                     <select
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select City</option>
+                      <option value="">{tCommon('selectCity')}</option>
                       {EGYPT_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Service Tier</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('tier')}</label>
                     <select
                       name="tier"
                       value={formData.tier}
@@ -1127,7 +1130,7 @@ export default function MealRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">2</span>
-                  Dietary Options
+                  {t('dietaryOptions')}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {DIETARY_OPTIONS.map(option => (
@@ -1151,11 +1154,11 @@ export default function MealRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">3</span>
-                  Pricing
+                  {tCommon('pricing')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">EUR Rate (€) *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('eurRate')} (€) *</label>
                     <input
                       type="number"
                       name="base_rate_eur"
@@ -1168,7 +1171,7 @@ export default function MealRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Non-EUR Rate (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('nonEurRate')} (€)</label>
                     <input
                       type="number"
                       name="base_rate_non_eur"
@@ -1187,11 +1190,11 @@ export default function MealRatesContent() {
                         onChange={(e) => setFormData({ ...formData, per_person_rate: e.target.checked })}
                         className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                       />
-                      <span className="text-sm font-medium text-gray-900">Per person rate</span>
+                      <span className="text-sm font-medium text-gray-900">{t('perPersonRate')}</span>
                     </label>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Minimum Pax</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('minimumPax')}</label>
                     <input
                       type="number"
                       name="minimum_pax"
@@ -1208,11 +1211,11 @@ export default function MealRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">4</span>
-                  Validity Period
+                  {tCommon('validityPeriod')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('validFrom')}</label>
                     <input
                       type="date"
                       name="rate_valid_from"
@@ -1222,7 +1225,7 @@ export default function MealRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('validTo')}</label>
                     <input
                       type="date"
                       name="rate_valid_to"
@@ -1236,7 +1239,7 @@ export default function MealRatesContent() {
 
               {/* Notes & Status */}
               <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('notes')}</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
@@ -1254,7 +1257,7 @@ export default function MealRatesContent() {
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                   />
-                  <span className="text-sm font-medium text-gray-900">Active (available for bookings)</span>
+                  <span className="text-sm font-medium text-gray-900">{tCommon('activeForBookings')}</span>
                 </label>
               </div>
             </form>
@@ -1265,14 +1268,14 @@ export default function MealRatesContent() {
                 onClick={() => setShowModal(false)}
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                {tCommon('cancel')}
               </button>
               <button
                 onClick={handleSubmit}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
               >
                 <Check className="w-4 h-4" />
-                {editingRate ? 'Update Rate' : 'Create Rate'}
+                {editingRate ? tCommon('updateRate') : tCommon('createRate')}
               </button>
             </div>
           </div>

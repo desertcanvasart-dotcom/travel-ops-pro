@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import {
   BedDouble,
@@ -78,6 +79,8 @@ interface SleepingTrainRate {
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function SleepingTrainRatesContent() {
+  const t = useTranslations('rates.sleepingTrains')
+  const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
 
   const [rates, setRates] = useState<SleepingTrainRate[]>([])

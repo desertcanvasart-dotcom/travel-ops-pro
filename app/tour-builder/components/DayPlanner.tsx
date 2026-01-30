@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { Tour, TourDay } from '../types'
 import AccommodationSelector from './AccommodationSelector'
 import MealSelector from './MealSelector'
@@ -24,10 +25,11 @@ export default function DayPlanner({
   onBack,
   onNext
 }: DayPlannerProps) {
+  const t = useTranslations('tourBuilder.dayPlanner')
   const [selectedDay, setSelectedDay] = useState(0)
 
   if (!tour.days || tour.days.length === 0) {
-    return <div>No days to plan</div>
+    return <div>{t('noDaysToPlan')}</div>
   }
 
   const currentDay = tour.days[selectedDay]
@@ -52,10 +54,10 @@ export default function DayPlanner({
   return (
     <div>
       <h2 className="text-2xl font-bold text-gray-900 mb-2">
-        📅 Daily Planning
+        📅 {t('title')}
       </h2>
       <p className="text-gray-600 mb-6">
-        Plan each day of your {tour.duration_days}-day tour
+        {t('subtitle', { days: tour.duration_days })}
       </p>
 
       {/* Day Tabs */}
@@ -63,6 +65,7 @@ export default function DayPlanner({
         {tour.days.map((day, index) => (
           <button
             key={index}
+            type="button"
             onClick={() => setSelectedDay(index)}
             className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-all ${
               selectedDay === index
@@ -70,7 +73,7 @@ export default function DayPlanner({
                 : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-300'
             }`}
           >
-            Day {day.day_number}
+            {t('day')} {day.day_number}
             {day.city && (
               <span className="ml-2 text-xs opacity-75">
                 {day.city}
@@ -84,22 +87,24 @@ export default function DayPlanner({
       <div className="bg-gray-50 rounded-lg p-6 mb-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-bold text-gray-900">
-            Day {currentDay.day_number}
+            {t('day')} {currentDay.day_number}
           </h3>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => setSelectedDay(Math.max(0, selectedDay - 1))}
               disabled={selectedDay === 0}
               className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
             >
-              ← Previous
+              {t('previous')}
             </button>
             <button
+              type="button"
               onClick={() => setSelectedDay(Math.min(tour.days!.length - 1, selectedDay + 1))}
               disabled={selectedDay === tour.days!.length - 1}
               className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
             >
-              Next →
+              {t('next')}
             </button>
           </div>
         </div>
@@ -108,14 +113,15 @@ export default function DayPlanner({
           {/* City */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              📍 City *
+              📍 {t('city')} *
             </label>
             <select
               value={currentDay.city}
               onChange={(e) => handleFieldChange('city', e.target.value)}
+              title={t('city')}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
             >
-              <option value="">Select city...</option>
+              <option value="">{t('selectCity')}</option>
               {tour.cities.map((city) => (
                 <option key={city} value={city}>
                   {city}
@@ -161,13 +167,15 @@ export default function DayPlanner({
           <div className="flex items-center justify-between bg-white p-4 rounded-lg border border-gray-200">
             <div>
               <label className="font-medium text-gray-700">
-                👨‍🏫 Guide Required
+                👨‍🏫 {t('guideRequired')}
               </label>
               <p className="text-sm text-gray-500 mt-1">
-                Toggle if this day requires a tour guide
+                {t('guideRequiredDesc')}
               </p>
             </div>
             <button
+              type="button"
+              title={t('guideRequired')}
               onClick={() => handleFieldChange('guide_required', !currentDay.guide_required)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 currentDay.guide_required ? 'bg-blue-600' : 'bg-gray-200'
@@ -206,12 +214,12 @@ export default function DayPlanner({
           {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              📝 Notes (Optional)
+              📝 {t('notes')}
             </label>
             <textarea
               value={currentDay.notes || ''}
               onChange={(e) => handleFieldChange('notes', e.target.value)}
-              placeholder="Add any special notes for this day..."
+              placeholder={t('notesPlaceholder')}
               rows={3}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -222,24 +230,27 @@ export default function DayPlanner({
       {/* Navigation */}
       <div className="flex gap-4">
         <button
+          type="button"
           onClick={onBack}
           className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
         >
-          ← Back to Setup
+          {t('backToSetup')}
         </button>
         <button
+          type="button"
           onClick={onNext}
           className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
         >
-          Continue to Review →
+          {t('continueToReview')}
         </button>
       </div>
 
       {/* Quick Actions */}
       <div className="mt-6 flex gap-3">
         <button
+          type="button"
           onClick={() => {
-            if (confirm('Copy settings to all days?')) {
+            if (confirm(t('copyToAllDaysConfirm'))) {
               tour.days?.forEach((_, index) => {
                 if (index !== selectedDay) {
                   onDayUpdate(index, {
@@ -252,11 +263,12 @@ export default function DayPlanner({
           }}
           className="text-sm text-blue-600 hover:text-blue-700 font-medium"
         >
-          📋 Copy to All Days
+          📋 {t('copyToAllDays')}
         </button>
         <button
+          type="button"
           onClick={() => {
-            if (confirm('Clear all settings for this day?')) {
+            if (confirm(t('clearDayConfirm'))) {
               onDayUpdate(selectedDay, {
                 day_number: currentDay.day_number,
                 city: currentDay.city,
@@ -268,7 +280,7 @@ export default function DayPlanner({
           }}
           className="text-sm text-red-600 hover:text-red-700 font-medium"
         >
-          🗑️ Clear Day
+          🗑️ {t('clearDay')}
         </button>
       </div>
     </div>
