@@ -2338,41 +2338,80 @@
     },
     "tipping": {
       "title": "チップ料金",
-      "addRate": "チップ料金を追加",
-      "editRate": "チップ料金を編集",
-      "totalRates": "料金総数",
-      "active": "有効",
-      "roles": "役割",
-      "contexts": "コンテキスト",
-      "searchPlaceholder": "チップを検索...",
+      "loading": "チップ料金を読み込み中...",
+      "ratesHub": "料金ハブ",
+      "tippingRates": "チップ料金",
+      "searchPlaceholder": "役割、コンテキスト、または説明を検索...",
       "allRoles": "すべての役割",
-      "allContexts": "すべてのコンテキスト",
-      "allUnits": "すべての単位",
-      "showInactive": "無効を表示",
-      "hideInactive": "無効を非表示",
-      "roleType": "役割タイプ",
-      "context": "コンテキスト",
-      "rateUnit": "料金単位",
-      "description": "説明",
-      "amount": "金額",
       "noRatesFound": "チップ料金が見つかりません",
-      "guide": "ガイド",
-      "driver": "ドライバー",
-      "boatCrew": "船員",
-      "porterRole": "ポーター",
-      "waiter": "ウェイター",
-      "dayTour": "日帰りツアー",
-      "multiDayTour": "複数日ツアー",
-      "cruise": "クルーズ",
-      "airport": "空港",
-      "perDay": "1日あたり",
-      "perService": "1サービスあたり",
-      "perPerson": "1名あたり",
-      "linkToSupplier": "サプライヤーをリンク",
-      "validFrom": "有効開始日",
-      "validTo": "有効終了日",
-      "notes": "備考",
-      "activeRate": "有効（予約可能）"
+      "addFirstRate": "最初のチップ料金を追加",
+      "rateDeleted": "チップ料金を削除しました！",
+      "deleteConfirm": "「{role}」{context}のチップ料金を削除してもよろしいですか？この操作は元に戻せません。",
+
+      "stats": {
+        "guideTips": "ガイドチップ",
+        "driverTips": "ドライバーチップ",
+        "avgTip": "平均チップ"
+      },
+
+      "table": {
+        "role": "役割",
+        "context": "コンテキスト",
+        "unit": "単位",
+        "amount": "金額",
+        "description": "説明"
+      },
+
+      "modal": {
+        "addTitle": "チップ料金を追加",
+        "editTitle": "チップ料金を編集"
+      },
+
+      "form": {
+        "roleType": "役割タイプ",
+        "context": "コンテキスト",
+        "noContext": "コンテキストなし",
+        "rateUnit": "料金単位",
+        "amount": "金額 (€)",
+        "description": "説明",
+        "descriptionPlaceholder": "例：終日ツアーガイドチップ",
+        "serviceCodePlaceholder": "空欄の場合は自動生成"
+      },
+
+      "roleTypes": {
+        "guide": "ガイド",
+        "driver": "ドライバー",
+        "boat_crew": "船員",
+        "porter": "ポーター",
+        "hotel_staff": "ホテルスタッフ",
+        "restaurant": "レストラン",
+        "other": "その他"
+      },
+
+      "contexts": {
+        "day_tour": "日帰りツアー",
+        "half_day_tour": "半日ツアー",
+        "cruise": "クルーズ",
+        "transfer": "送迎",
+        "airport": "空港",
+        "hotel": "ホテル",
+        "restaurant": "レストラン",
+        "felucca": "ファルーカ",
+        "motorboat": "モーターボート"
+      },
+
+      "rateUnits": {
+        "per_day": "1日あたり",
+        "per_service": "1サービスあたり",
+        "per_cruise": "1クルーズあたり",
+        "per_night": "1泊あたり",
+        "per_person": "1名あたり"
+      },
+
+      "errors": {
+        "failedToLoad": "チップ料金の読み込みに失敗しました",
+        "failedToDelete": "チップ料金の削除に失敗しました。もう一度お試しください。"
+      }
     },
     "common": {
       "edit": "編集",
@@ -2382,6 +2421,7 @@
       "saving": "保存中...",
       "add": "追加",
       "update": "更新",
+      "create": "作成",
       "active": "有効",
       "inactive": "無効",
       "required": "必須",
@@ -2397,6 +2437,7 @@
       "saveError": "料金の保存に失敗しました。もう一度お試しください。",
       "loading": "読み込み中...",
       "export": "エクスポート",
+      "show": "表示",
       "perPage": "件表示",
       "showPerPage": "件表示",
       "showing": "表示中",
@@ -2407,8 +2448,14 @@
       "total": "合計",
       "first": "最初",
       "last": "最後",
+      "firstPage": "最初のページ",
+      "previousPage": "前のページ",
+      "nextPage": "次のページ",
+      "lastPage": "最後のページ",
       "showAll": "すべて表示",
       "activeOnly": "有効のみ",
+      "showInactive": "すべて表示",
+      "hideInactive": "有効のみ",
       "adjustFilters": "フィルターを調整してください",
       "tier": "ティア",
       "city": "都市",
@@ -2419,9 +2466,15 @@
       "validFrom": "有効開始日",
       "validTo": "有効終了日",
       "notes": "備考",
+      "notesPlaceholder": "この料金に関する追加情報...",
       "activeForBookings": "有効（予約可能）",
       "updateRate": "料金を更新",
       "createRate": "料金を作成",
+      "addRate": "料金を追加",
+      "totalRates": "料金総数",
+      "rateUpdated": "料金を更新しました！",
+      "rateCreated": "料金を作成しました！",
+      "failedToSave": "料金の保存に失敗しました。もう一度お試しください。",
       "gotIt": "了解",
       "eurRate": "EUR料金",
       "nonEurRate": "非EUR料金",

@@ -1355,7 +1355,14 @@
       "failedToSave": "Failed to save rate. Please try again.",
       "failedToDelete": "Failed to delete rate. Please try again.",
       "noDataReturned": "No data returned",
-      "loading": "Loading..."
+      "loading": "Loading...",
+      "show": "Show",
+      "firstPage": "First page",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "lastPage": "Last page",
+      "update": "Update",
+      "create": "Create"
     },
     "guides": {
       "title": "Guide Rates",
@@ -1625,6 +1632,83 @@
 
       "clickToMakeStandard": "Click to make standard",
       "clickToMakeAddon": "Click to make add-on"
+    },
+    "tipping": {
+      "title": "Tipping Rates",
+      "loading": "Loading tipping rates...",
+      "ratesHub": "Rates Hub",
+      "tippingRates": "tipping rates",
+      "searchPlaceholder": "Search roles, contexts, or descriptions...",
+      "allRoles": "All Roles",
+      "noRatesFound": "No tipping rates found",
+      "addFirstRate": "Add your first tipping rate",
+      "rateDeleted": "Tipping rate deleted!",
+      "deleteConfirm": "Are you sure you want to delete the tipping rate for \"{role}\"{context}? This action cannot be undone.",
+
+      "stats": {
+        "guideTips": "Guide Tips",
+        "driverTips": "Driver Tips",
+        "avgTip": "Avg. Tip"
+      },
+
+      "table": {
+        "role": "Role",
+        "context": "Context",
+        "unit": "Unit",
+        "amount": "Amount",
+        "description": "Description"
+      },
+
+      "modal": {
+        "addTitle": "Add Tipping Rate",
+        "editTitle": "Edit Tipping Rate"
+      },
+
+      "form": {
+        "roleType": "Role Type",
+        "context": "Context",
+        "noContext": "No specific context",
+        "rateUnit": "Rate Unit",
+        "amount": "Amount (€)",
+        "description": "Description",
+        "descriptionPlaceholder": "e.g., Full day tour guide tip",
+        "serviceCodePlaceholder": "Auto-generated if empty"
+      },
+
+      "roleTypes": {
+        "guide": "Guide",
+        "driver": "Driver",
+        "boat_crew": "Boat Crew",
+        "porter": "Porter",
+        "hotel_staff": "Hotel Staff",
+        "restaurant": "Restaurant",
+        "other": "Other"
+      },
+
+      "contexts": {
+        "day_tour": "Day Tour",
+        "half_day_tour": "Half Day Tour",
+        "cruise": "Cruise",
+        "transfer": "Transfer",
+        "airport": "Airport",
+        "hotel": "Hotel",
+        "restaurant": "Restaurant",
+        "felucca": "Felucca",
+        "motorboat": "Motorboat"
+      },
+
+      "rateUnits": {
+        "per_day": "Per Day",
+        "per_service": "Per Service",
+        "per_cruise": "Per Cruise",
+        "per_night": "Per Night",
+        "per_person": "Per Person"
+      },
+
+      "errors": {
+        "failedToLoad": "Failed to load tipping rates",
+        "failedToDelete": "Failed to delete tipping rate. Please try again."
+      }
     }
   }
 }

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { 
+import { useTranslations } from 'next-intl'
+import {
   DollarSign, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -62,6 +63,8 @@ function Pagination({
   onPageChange: (page: number) => void
   onItemsPerPageChange: (items: number) => void
 }) {
+  const tCommon = useTranslations('rates.common')
+
   const goToPage = (page: number) => {
     onPageChange(Math.max(1, Math.min(page, totalPages)))
   }
@@ -70,7 +73,7 @@ function Pagination({
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Show</span>
+          <span className="text-sm text-gray-500">{tCommon('show')}</span>
           <select
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
@@ -80,10 +83,10 @@ function Pagination({
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          <span className="text-sm text-gray-500">per page</span>
+          <span className="text-sm text-gray-500">{tCommon('perPage')}</span>
         </div>
         <span className="text-sm text-gray-500">
-          Showing {startIndex + 1}-{endIndex} of {totalItems} rates
+          {tCommon('showing')} {startIndex + 1}-{endIndex} {tCommon('of')} {totalItems} {tCommon('rates')}
         </span>
       </div>
 
@@ -92,7 +95,7 @@ function Pagination({
           onClick={() => goToPage(1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="First page"
+          title={tCommon('firstPage')}
         >
           <ChevronsLeft className="h-4 w-4" />
         </button>
@@ -100,7 +103,7 @@ function Pagination({
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Previous page"
+          title={tCommon('previousPage')}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -139,7 +142,7 @@ function Pagination({
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Next page"
+          title={tCommon('nextPage')}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -147,7 +150,7 @@ function Pagination({
           onClick={() => goToPage(totalPages)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Last page"
+          title={tCommon('lastPage')}
         >
           <ChevronsRight className="h-4 w-4" />
         </button>
@@ -161,8 +164,10 @@ function Pagination({
 // ============================================
 
 export default function TippingPage() {
+  const t = useTranslations('rates.tipping')
+  const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  
+
   const [rates, setRates] = useState<TippingRate[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -199,7 +204,7 @@ export default function TippingPage() {
       const data = await response.json()
       if (data.success) setRates(data.data)
     } catch (error) {
-      showToast('error', 'Failed to load tipping rates')
+      showToast('error', t('errors.failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -272,39 +277,39 @@ export default function TippingPage() {
       const data = await response.json()
       
       if (data.success) {
-        showToast('success', editingRate ? 'Rate updated!' : 'Rate created!')
+        showToast('success', editingRate ? tCommon('rateUpdated') : tCommon('rateCreated'))
         setShowModal(false)
         fetchRates()
       } else {
-        showToast('error', data.error || 'Failed to save')
+        showToast('error', data.error || tCommon('failedToSave'))
       }
     } catch (error) {
-      showToast('error', 'Failed to save rate')
+      showToast('error', tCommon('failedToSave'))
     }
   }
 
   const handleDelete = async (rate: TippingRate) => {
-    const roleName = rate.role_type.replace('_', ' ')
-    const contextName = rate.context ? ` (${rate.context.replace('_', ' ')})` : ''
-    
-    const confirmed = await dialog.confirmDelete('Tipping Rate',
-      `Are you sure you want to delete the tipping rate for "${roleName}"${contextName}? This action cannot be undone.`
+    const roleName = t(`roleTypes.${rate.role_type}`)
+    const contextName = rate.context ? ` (${t(`contexts.${rate.context}`)})` : ''
+
+    const confirmed = await dialog.confirmDelete(t('title'),
+      t('deleteConfirm', { role: roleName, context: contextName })
     )
-    
+
     if (!confirmed) return
 
     try {
       const response = await fetch(`/api/rates/tipping/${rate.id}`, { method: 'DELETE' })
       const data = await response.json()
-      
-      if (data.success) { 
-        showToast('success', 'Tipping rate deleted!') 
-        fetchRates() 
+
+      if (data.success) {
+        showToast('success', t('rateDeleted'))
+        fetchRates()
       } else {
-        await dialog.alert('Error', data.error || 'Failed to delete tipping rate', 'warning')
+        await dialog.alert(tCommon('error'), data.error || t('errors.failedToDelete'), 'warning')
       }
-    } catch { 
-      await dialog.alert('Error', 'Failed to delete tipping rate. Please try again.', 'warning')
+    } catch {
+      await dialog.alert(tCommon('error'), t('errors.failedToDelete'), 'warning')
     }
   }
 
@@ -342,7 +347,7 @@ export default function TippingPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading tipping rates...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -367,15 +372,15 @@ export default function TippingPage() {
         <div className="container mx-auto px-4 lg:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-green-600" />
-            <h1 className="text-xl font-bold text-gray-900">Tipping Rates</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
             <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleAddNew} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
-              <Plus className="w-4 h-4" /> Add Rate
+              <Plus className="w-4 h-4" /> {tCommon('addRate')}
             </button>
             <Link href="/rates" className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
-              ← Rates Hub
+              ← {t('ratesHub')}
             </Link>
           </div>
         </div>
@@ -385,23 +390,23 @@ export default function TippingPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Total Rates</p>
+            <p className="text-xs text-gray-600">{tCommon('totalRates')}</p>
             <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-xs text-gray-600">{tCommon('active')}</p>
             <p className="text-2xl font-bold text-green-600">{stats.active}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Guide Tips</p>
+            <p className="text-xs text-gray-600">{t('stats.guideTips')}</p>
             <p className="text-2xl font-bold text-blue-600">{stats.guides}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Driver Tips</p>
+            <p className="text-xs text-gray-600">{t('stats.driverTips')}</p>
             <p className="text-2xl font-bold text-orange-600">{stats.drivers}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Avg. Tip</p>
+            <p className="text-xs text-gray-600">{t('stats.avgTip')}</p>
             <p className="text-2xl font-bold text-green-600">€{stats.avgTip}</p>
           </div>
         </div>
@@ -411,35 +416,35 @@ export default function TippingPage() {
           <div className="flex flex-col md:flex-row gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="Search roles, contexts, or descriptions..." 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent" 
+              <input
+                type="text"
+                placeholder={t('searchPlaceholder')}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
               />
             </div>
-            <select 
-              value={selectedRole} 
-              onChange={(e) => setSelectedRole(e.target.value)} 
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
             >
-              <option value="all">All Roles</option>
+              <option value="all">{t('allRoles')}</option>
               {ROLE_TYPES.map(r => (
-                <option key={r} value={r}>{r.replace('_', ' ')}</option>
+                <option key={r} value={r}>{t(`roleTypes.${r}`)}</option>
               ))}
             </select>
-            <button 
-              onClick={() => setShowInactive(!showInactive)} 
+            <button
+              onClick={() => setShowInactive(!showInactive)}
               className={`px-3 py-2 text-sm rounded-lg font-medium ${
                 showInactive ? 'bg-gray-100 text-gray-700' : 'bg-green-50 text-green-700 border border-green-200'
               }`}
             >
-              {showInactive ? 'Show All' : 'Active Only'}
+              {showInactive ? tCommon('showInactive') : tCommon('hideInactive')}
             </button>
           </div>
           <div className="mt-2 text-xs text-gray-500">
-            Showing {filteredRates.length} of {rates.length} tipping rates
+            {tCommon('showing')} {filteredRates.length} {tCommon('of')} {rates.length} {t('tippingRates')}
           </div>
         </div>
 
@@ -449,13 +454,13 @@ export default function TippingPage() {
             <table className="w-full">
               <thead className="bg-green-50 border-b border-green-100">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">Role</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">Context</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">Unit</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-green-800">Amount</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">Description</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">{t('table.role')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{t('table.context')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{t('table.unit')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-green-800">{t('table.amount')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">{t('table.description')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{tCommon('status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{tCommon('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -471,15 +476,15 @@ export default function TippingPage() {
                         rate.role_type === 'restaurant' ? 'bg-amber-100 text-amber-800' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {rate.role_type.replace('_', ' ')}
+                        {t(`roleTypes.${rate.role_type}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-600">
-                      {rate.context?.replace('_', ' ') || '-'}
+                      {rate.context ? t(`contexts.${rate.context}`) : '-'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs font-medium">
-                        {rate.rate_unit.replace('_', ' ')}
+                        {t(`rateUnits.${rate.rate_unit}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
@@ -492,7 +497,7 @@ export default function TippingPage() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         rate.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
+                        {rate.is_active ? tCommon('active') : tCommon('inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -517,9 +522,9 @@ export default function TippingPage() {
                   <tr>
                     <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                       <DollarSign className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                      <p className="font-medium">No tipping rates found</p>
+                      <p className="font-medium">{t('noRatesFound')}</p>
                       <button onClick={handleAddNew} className="mt-2 text-sm text-green-600 hover:underline">
-                        Add your first tipping rate
+                        {t('addFirstRate')}
                       </button>
                     </td>
                   </tr>
@@ -549,7 +554,7 @@ export default function TippingPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">{editingRate ? 'Edit' : 'Add'} Tipping Rate</h2>
+              <h2 className="text-lg font-bold text-gray-900">{editingRate ? t('modal.editTitle') : t('modal.addTitle')}</h2>
               <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
                 <X className="w-5 h-5" />
               </button>
@@ -557,118 +562,118 @@ export default function TippingPage() {
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Role Type *</label>
-                  <select 
-                    name="role_type" 
-                    value={formData.role_type} 
-                    onChange={handleChange} 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.roleType')} *</label>
+                  <select
+                    name="role_type"
+                    value={formData.role_type}
+                    onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
                     {ROLE_TYPES.map(r => (
-                      <option key={r} value={r}>{r.replace('_', ' ')}</option>
+                      <option key={r} value={r}>{t(`roleTypes.${r}`)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Context</label>
-                  <select 
-                    name="context" 
-                    value={formData.context} 
-                    onChange={handleChange} 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.context')}</label>
+                  <select
+                    name="context"
+                    value={formData.context}
+                    onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
-                    <option value="">No specific context</option>
+                    <option value="">{t('form.noContext')}</option>
                     {CONTEXTS.map(c => (
-                      <option key={c} value={c}>{c.replace('_', ' ')}</option>
+                      <option key={c} value={c}>{t(`contexts.${c}`)}</option>
                     ))}
                   </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Rate Unit *</label>
-                  <select 
-                    name="rate_unit" 
-                    value={formData.rate_unit} 
-                    onChange={handleChange} 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateUnit')} *</label>
+                  <select
+                    name="rate_unit"
+                    value={formData.rate_unit}
+                    onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
                     {RATE_UNITS.map(u => (
-                      <option key={u} value={u}>{u.replace('_', ' ')}</option>
+                      <option key={u} value={u}>{t(`rateUnits.${u}`)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Amount (€) *</label>
-                  <input 
-                    type="number" 
-                    name="rate_eur" 
-                    value={formData.rate_eur} 
-                    onChange={handleChange} 
-                    min="0" 
-                    step="0.5" 
-                    required 
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600" 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.amount')} *</label>
+                  <input
+                    type="number"
+                    name="rate_eur"
+                    value={formData.rate_eur}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.5"
+                    required
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-                <input 
-                  type="text" 
-                  name="description" 
-                  value={formData.description} 
-                  onChange={handleChange} 
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600" 
-                  placeholder="e.g., Full day tour guide tip" 
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.description')}</label>
+                <input
+                  type="text"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
+                  placeholder={t('form.descriptionPlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
-                <input 
-                  type="text" 
-                  name="service_code" 
-                  value={formData.service_code} 
-                  onChange={handleChange} 
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 font-mono" 
-                  placeholder="Auto-generated if empty"
+                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('serviceCode')}</label>
+                <input
+                  type="text"
+                  name="service_code"
+                  value={formData.service_code}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 font-mono"
+                  placeholder={t('form.serviceCodePlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-                <textarea 
-                  name="notes" 
-                  value={formData.notes} 
-                  onChange={handleChange} 
+                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('notes')}</label>
+                <textarea
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleChange}
                   rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600" 
-                  placeholder="Additional notes..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
+                  placeholder={tCommon('notesPlaceholder')}
                 />
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  name="is_active" 
-                  checked={formData.is_active} 
-                  onChange={handleCheckbox} 
-                  className="w-4 h-4 text-green-600 rounded focus:ring-green-500" 
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  checked={formData.is_active}
+                  onChange={handleCheckbox}
+                  className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                 />
-                <span className="text-sm text-gray-700">Active</span>
+                <span className="text-sm text-gray-700">{tCommon('active')}</span>
               </label>
               <div className="flex gap-2 pt-3 border-t">
-                <button 
-                  type="button" 
-                  onClick={() => setShowModal(false)} 
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="flex-1 px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  {editingRate ? 'Update' : 'Create'}
+                  {editingRate ? tCommon('update') : tCommon('create')}
                 </button>
               </div>
             </form>
