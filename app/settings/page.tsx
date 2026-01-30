@@ -648,7 +648,7 @@ function SettingsContent() {
               <p className="text-sm font-medium text-gray-900">{t('gmailIntegration')}</p>
               <p className="text-xs text-gray-500">
                 {emailSettings?.gmail_connected
-                  ? t('connectedAs', { email: emailSettings.gmail_email })
+                  ? t('connectedAs', { email: String(emailSettings?.gmail_email ?? '') })
                   : t('notConnected')}
               </p>
             </div>
