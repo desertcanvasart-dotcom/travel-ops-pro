@@ -1276,8 +1276,8 @@ export default function ItineraryEditorPage() {
                                         onChange={(e) => updateService(service.id, { service_type: e.target.value })}
                                         className="w-36 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47]"
                                       >
-                                        {SERVICE_TYPES.map(t => (
-                                          <option key={t.value} value={t.value}>{t(`serviceTypes.${t.value}`)}</option>
+                                        {SERVICE_TYPES.map(type => (
+                                          <option key={type.value} value={type.value}>{t(`serviceTypes.${type.value}`)}</option>
                                         ))}
                                       </select>
                                       <input
