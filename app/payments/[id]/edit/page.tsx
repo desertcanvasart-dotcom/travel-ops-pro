@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { ArrowLeft, Save } from 'lucide-react'
 
@@ -24,6 +25,7 @@ interface Payment {
 export default function EditPaymentPage() {
   const params = useParams()
   const router = useRouter()
+  const t = useTranslations('payments.edit')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -84,7 +86,7 @@ export default function EditPaymentPage() {
     setError(null)
 
     if (!formData.amount) {
-      setError('Please fill in all required fields')
+      setError(t('errors.requiredFields'))
       setSaving(false)
       return
     }
@@ -104,10 +106,10 @@ export default function EditPaymentPage() {
       if (data.success) {
         router.push(`/payments/${params.id}`)
       } else {
-        setError(data.error || 'Failed to update payment')
+        setError(data.error || t('errors.failed'))
       }
     } catch (err) {
-      setError('Error updating payment')
+      setError(t('errors.error'))
       console.error(err)
     } finally {
       setSaving(false)
@@ -119,7 +121,7 @@ export default function EditPaymentPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading payment...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -129,9 +131,9 @@ export default function EditPaymentPage() {
     return (
       <div className="p-4 lg:p-6">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-xl font-bold text-gray-900 mb-3">Payment Not Found</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-3">{t('paymentNotFound')}</h1>
           <Link href="/payments" className="text-sm text-primary-600 hover:text-primary-700">
-            ← Back to Payments
+            ← {t('backToPayments')}
           </Link>
         </div>
       </div>
@@ -143,15 +145,15 @@ export default function EditPaymentPage() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Edit Payment</h1>
-            <p className="text-sm text-gray-600 mt-1">Update payment information</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-600 mt-1">{t('subtitle')}</p>
           </div>
           <Link
             href={`/payments/${params.id}`}
             className="bg-gray-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Payment
+            {t('backToPayment')}
           </Link>
         </div>
 
@@ -164,7 +166,7 @@ export default function EditPaymentPage() {
 
           {/* Payment Info */}
           <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Payment For</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-2">{t('paymentFor')}</h3>
             <div className="text-xs">
               <p className="font-medium">{payment.client_name}</p>
               <p className="text-gray-600 font-mono">{payment.itinerary_code}</p>
@@ -175,7 +177,7 @@ export default function EditPaymentPage() {
             {/* Payment Type */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Payment Type <span className="text-danger">*</span>
+                {t('paymentType')} <span className="text-danger">*</span>
               </label>
               <select
                 name="payment_type"
@@ -184,17 +186,17 @@ export default function EditPaymentPage() {
                 required
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="deposit">Deposit</option>
-                <option value="installment">Installment</option>
-                <option value="final">Final Payment</option>
-                <option value="full">Full Payment</option>
+                <option value="deposit">{t('paymentTypes.deposit')}</option>
+                <option value="installment">{t('paymentTypes.installment')}</option>
+                <option value="final">{t('paymentTypes.final')}</option>
+                <option value="full">{t('paymentTypes.full')}</option>
               </select>
             </div>
 
             {/* Amount */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Amount (€) <span className="text-danger">*</span>
+                {t('amount')} <span className="text-danger">*</span>
               </label>
               <input
                 type="number"
@@ -211,7 +213,7 @@ export default function EditPaymentPage() {
             {/* Currency */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Currency
+                {t('currency')}
               </label>
               <select
                 name="currency"
@@ -228,7 +230,7 @@ export default function EditPaymentPage() {
             {/* Payment Method */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Payment Method
+                {t('paymentMethod')}
               </label>
               <select
                 name="payment_method"
@@ -236,20 +238,20 @@ export default function EditPaymentPage() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="bank_transfer">Bank Transfer</option>
-                <option value="airwallex">Airwallex</option>
-                <option value="tab">Tab</option>
-                <option value="cash">Cash</option>
-                <option value="paypal">PayPal</option>
-                <option value="stripe">Stripe</option>
-                <option value="wise">Wise</option>
+                <option value="bank_transfer">{t('paymentMethods.bankTransfer')}</option>
+                <option value="airwallex">{t('paymentMethods.airwallex')}</option>
+                <option value="tab">{t('paymentMethods.tab')}</option>
+                <option value="cash">{t('paymentMethods.cash')}</option>
+                <option value="paypal">{t('paymentMethods.paypal')}</option>
+                <option value="stripe">{t('paymentMethods.stripe')}</option>
+                <option value="wise">{t('paymentMethods.wise')}</option>
               </select>
             </div>
 
             {/* Payment Status */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Payment Status
+                {t('paymentStatus')}
               </label>
               <select
                 name="payment_status"
@@ -257,20 +259,20 @@ export default function EditPaymentPage() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="completed">Completed</option>
-                <option value="pending">Pending</option>
-                <option value="deposit_received">Deposit Received</option>
-                <option value="partially_paid">Partially Paid</option>
-                <option value="partially_refunded">Partially Refunded</option>
-                <option value="failed">Failed</option>
-                <option value="refunded">Fully Refunded</option>
+                <option value="completed">{t('paymentStatuses.completed')}</option>
+                <option value="pending">{t('paymentStatuses.pending')}</option>
+                <option value="deposit_received">{t('paymentStatuses.depositReceived')}</option>
+                <option value="partially_paid">{t('paymentStatuses.partiallyPaid')}</option>
+                <option value="partially_refunded">{t('paymentStatuses.partiallyRefunded')}</option>
+                <option value="failed">{t('paymentStatuses.failed')}</option>
+                <option value="refunded">{t('paymentStatuses.refunded')}</option>
               </select>
             </div>
 
             {/* Transaction Reference */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Transaction Reference
+                {t('transactionReference')}
               </label>
               <input
                 type="text"
@@ -285,7 +287,7 @@ export default function EditPaymentPage() {
             {/* Payment Date */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Payment Date
+                {t('paymentDate')}
               </label>
               <input
                 type="date"
@@ -299,7 +301,7 @@ export default function EditPaymentPage() {
             {/* Due Date */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
-                Due Date
+                {t('dueDate')}
               </label>
               <input
                 type="date"
@@ -314,7 +316,7 @@ export default function EditPaymentPage() {
           {/* Notes */}
           <div className="mt-4">
             <label className="block text-xs font-medium text-gray-700 mb-2">
-              Notes
+              {t('notes')}
             </label>
             <textarea
               name="notes"
@@ -322,7 +324,7 @@ export default function EditPaymentPage() {
               onChange={handleChange}
               rows={3}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Add any additional notes..."
+              placeholder={t('notesPlaceholder')}
             />
           </div>
 
@@ -332,7 +334,7 @@ export default function EditPaymentPage() {
               href={`/payments/${params.id}`}
               className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors font-medium"
             >
-              Cancel
+              {t('cancel')}
             </Link>
             <button
               type="submit"
@@ -344,12 +346,12 @@ export default function EditPaymentPage() {
               {saving ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Saving...
+                  {t('saving')}
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  Update Payment
+                  {t('updatePayment')}
                 </>
               )}
             </button>

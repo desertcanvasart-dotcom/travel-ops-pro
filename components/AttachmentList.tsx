@@ -16,6 +16,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface Attachment {
   id: string
@@ -31,12 +32,13 @@ interface AttachmentListProps {
   className?: string
 }
 
-export default function AttachmentList({ 
-  attachments, 
-  messageId, 
-  userId, 
-  className = '' 
+export default function AttachmentList({
+  attachments,
+  messageId,
+  userId,
+  className = ''
 }: AttachmentListProps) {
+  const t = useTranslations('attachmentList')
   const [downloading, setDownloading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -67,7 +69,7 @@ export default function AttachmentList({
       
     } catch (err: any) {
       console.error('Download error:', err)
-      setError(err.message || 'Failed to download attachment')
+      setError(err.message || t('downloadFailed'))
     } finally {
       setDownloading(null)
     }
@@ -134,7 +136,11 @@ export default function AttachmentList({
     <div className={`border-t border-gray-100 pt-4 mt-4 ${className}`}>
       <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
         <Paperclip className="w-3.5 h-3.5" />
-        <span className="font-medium">{attachments.length} attachment{attachments.length > 1 ? 's' : ''}</span>
+        <span className="font-medium">
+          {attachments.length > 1
+            ? t('attachments', { count: attachments.length })
+            : t('attachment', { count: attachments.length })}
+        </span>
       </div>
       
       {error && (
@@ -177,10 +183,15 @@ export default function AttachmentList({
 
 // Compact indicator for email list
 export function AttachmentIndicator({ count }: { count: number }) {
+  const t = useTranslations('attachmentList')
+
   if (count === 0) return null
-  
+
   return (
-    <div className="flex items-center gap-1 text-gray-400" title={`${count} attachment${count > 1 ? 's' : ''}`}>
+    <div
+      className="flex items-center gap-1 text-gray-400"
+      title={count > 1 ? t('attachments', { count }) : t('attachment', { count })}
+    >
       <Paperclip className="w-3 h-3" />
       {count > 1 && <span className="text-[10px]">{count}</span>}
     </div>

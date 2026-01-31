@@ -29,54 +29,12 @@ type ViewMode = 'grid' | 'table' | 'list'
 type SortField = 'name' | 'email' | 'city' | 'status'
 type SortDirection = 'asc' | 'desc'
 
-// Config
-const TYPE_CONFIG = {
-  client: { 
-    icon: Users, 
-    label: 'Clients', 
-    singular: 'Client',
-    color: 'bg-primary-100 text-primary-700',
-    borderColor: 'border-primary-200'
-  },
-  staff: { 
-    icon: UserCog, 
-    label: 'Staff', 
-    singular: 'Staff',
-    color: 'bg-purple-100 text-purple-700',
-    borderColor: 'border-purple-200'
-  },
-}
+// Config (will be initialized inside component with translations)
 
-const STAFF_ROLES = ['Meet & Greet', 'Transfer Coordinator', 'VIP Assistant', 'Hotel Rep', 'Tour Leader', 'Office Staff', 'Driver', 'Operations Manager']
 const STAFF_LOCATIONS = ['Cairo (CAI)', 'Luxor (LXR)', 'Aswan (ASW)', 'Hurghada (HRG)', 'Sharm El Sheikh (SSH)', 'Alexandria (HBE)', 'Office', 'Remote']
-const CLIENT_STATUS = ['prospect', 'active', 'inactive', 'vip']
-const LANGUAGES = ['English', 'Spanish', 'Japanese', 'Chinese', 'Russian', 'German', 'French', 'Italian', 'Arabic']
+const CLIENT_STATUS_OPTIONS = ['prospect', 'active', 'inactive', 'vip']
 
-// Form fields
-const FORM_FIELDS = {
-  client: [
-    { name: 'First Name', key: 'first_name', type: 'text', required: true },
-    { name: 'Last Name', key: 'last_name', type: 'text', required: true },
-    { name: 'Email', key: 'email', type: 'email' },
-    { name: 'Phone', key: 'phone', type: 'tel' },
-    { name: 'WhatsApp', key: 'whatsapp', type: 'tel' },
-    { name: 'Nationality', key: 'nationality', type: 'text' },
-    { name: 'Status', key: 'status', type: 'select', options: CLIENT_STATUS },
-    { name: 'Preferred Language', key: 'preferred_language', type: 'text' },
-    { name: 'Notes', key: 'internal_notes', type: 'textarea' },
-  ],
-  staff: [
-    { name: 'Full Name', key: 'name', type: 'text', required: true },
-    { name: 'Role', key: 'role', type: 'select', options: STAFF_ROLES },
-    { name: 'Location', key: 'airport_location', type: 'select', options: STAFF_LOCATIONS },
-    { name: 'Email', key: 'email', type: 'email' },
-    { name: 'Phone', key: 'phone', type: 'tel' },
-    { name: 'WhatsApp', key: 'whatsapp', type: 'tel' },
-    { name: 'Languages', key: 'languages', type: 'text' },
-    { name: 'Shift Times', key: 'shift_times', type: 'text' },
-    { name: 'Notes', key: 'notes', type: 'textarea' },
-  ],
-}
+// Form fields and other configs will be initialized inside component with translations
 
 const TABLE_NAMES = {
   client: 'clients',
@@ -94,7 +52,54 @@ export default function ContactsContent() {
   const t = useTranslations('contacts')
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+
+  // Initialize translated configs
+  const TYPE_CONFIG = {
+    client: {
+      icon: Users,
+      label: t('typeConfig.clients'),
+      singular: t('typeConfig.client'),
+      color: 'bg-primary-100 text-primary-700',
+      borderColor: 'border-primary-200'
+    },
+    staff: {
+      icon: UserCog,
+      label: t('typeConfig.staffPlural'),
+      singular: t('typeConfig.staff'),
+      color: 'bg-purple-100 text-purple-700',
+      borderColor: 'border-purple-200'
+    },
+  }
+
+  const STAFF_ROLES = [t('roles.meetGreet'), t('roles.transferCoordinator'), t('roles.vipAssistant'), t('roles.hotelRep'), t('roles.tourLeader'), t('roles.officeStaff'), t('roles.driver'), t('roles.operationsManager')]
+  const CLIENT_STATUS = CLIENT_STATUS_OPTIONS
+  const LANGUAGES = [t('languages.english'), t('languages.spanish'), t('languages.japanese'), t('languages.chinese'), t('languages.russian'), t('languages.german'), t('languages.french'), t('languages.italian'), t('languages.arabic')]
+
+  const FORM_FIELDS = {
+    client: [
+      { name: t('fields.firstName'), key: 'first_name', type: 'text', required: true },
+      { name: t('fields.lastName'), key: 'last_name', type: 'text', required: true },
+      { name: t('fields.email'), key: 'email', type: 'email' },
+      { name: t('fields.phone'), key: 'phone', type: 'tel' },
+      { name: t('fields.whatsapp'), key: 'whatsapp', type: 'tel' },
+      { name: t('fields.nationality'), key: 'nationality', type: 'text' },
+      { name: t('fields.status'), key: 'status', type: 'select', options: CLIENT_STATUS },
+      { name: t('fields.preferredLanguage'), key: 'preferred_language', type: 'text' },
+      { name: t('fields.notes'), key: 'internal_notes', type: 'textarea' },
+    ],
+    staff: [
+      { name: t('fields.fullName'), key: 'name', type: 'text', required: true },
+      { name: t('fields.role'), key: 'role', type: 'select', options: STAFF_ROLES },
+      { name: t('fields.location'), key: 'airport_location', type: 'select', options: STAFF_LOCATIONS },
+      { name: t('fields.email'), key: 'email', type: 'email' },
+      { name: t('fields.phone'), key: 'phone', type: 'tel' },
+      { name: t('fields.whatsapp'), key: 'whatsapp', type: 'tel' },
+      { name: t('fields.languages'), key: 'languages', type: 'text' },
+      { name: t('fields.shiftTimes'), key: 'shift_times', type: 'text' },
+      { name: t('fields.notes'), key: 'notes', type: 'textarea' },
+    ],
+  }
+
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -338,7 +343,7 @@ export default function ContactsContent() {
 
   const handleExport = () => {
     const csv = [
-      ['Type', 'Name', 'Email', 'Phone', 'Location/Nationality', 'Status/Role'].join(','),
+      [t('export.type'), t('export.name'), t('export.email'), t('export.phone'), t('export.locationNationality'), t('export.statusRole')].join(','),
       ...filteredContacts.map(c => [c.type, c.name, c.email, c.phone, c.city, c.subtype].map(v => `"${v || ''}"`).join(','))
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -357,7 +362,7 @@ export default function ContactsContent() {
           onChange={(e) => setFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
           className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
         >
-          <option value="">Select {field.name}</option>
+          <option value="">{t('form.select')} {field.name}</option>
           {field.options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
         </select>
       )
@@ -554,12 +559,12 @@ export default function ContactsContent() {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('name')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Name <SortIcon field="name" /></button></th>
-                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">Type</span></th>
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('email')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Email <SortIcon field="email" /></button></th>
-                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">Phone</span></th>
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('status')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Status/Role <SortIcon field="status" /></button></th>
-                      <th className="text-right px-4 py-3"><span className="text-xs font-semibold text-gray-600">Actions</span></th>
+                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('name')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('table.name')} <SortIcon field="name" /></button></th>
+                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">{t('table.type')}</span></th>
+                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('email')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('table.email')} <SortIcon field="email" /></button></th>
+                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">{t('table.phone')}</span></th>
+                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('status')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('table.statusRole')} <SortIcon field="status" /></button></th>
+                      <th className="text-right px-4 py-3"><span className="text-xs font-semibold text-gray-600">{t('table.actions')}</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -615,7 +620,7 @@ export default function ContactsContent() {
             {/* Pagination */}
             {totalPages > 0 && (
               <div className="mt-6 flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
-                <p className="text-sm text-gray-600">Showing <span className="font-medium">{startIndex + 1}</span>–<span className="font-medium">{Math.min(startIndex + itemsPerPage, filteredContacts.length)}</span> of <span className="font-medium">{filteredContacts.length}</span></p>
+                <p className="text-sm text-gray-600">{t('pagination.showing')} <span className="font-medium">{startIndex + 1}</span>–<span className="font-medium">{Math.min(startIndex + itemsPerPage, filteredContacts.length)}</span> {t('pagination.of')} <span className="font-medium">{filteredContacts.length}</span></p>
                 <div className="flex items-center gap-4">
                   {totalPages > 1 && (
                     <div className="flex items-center gap-1">
@@ -629,9 +634,9 @@ export default function ContactsContent() {
                     </div>
                   )}
                   <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="h-8 w-24 px-2 text-sm border border-gray-200 rounded-lg outline-none bg-white">
-                    <option value={12}>12 / page</option>
-                    <option value={24}>24 / page</option>
-                    <option value={48}>48 / page</option>
+                    <option value={12}>{t('pagination.perPage', { count: 12 })}</option>
+                    <option value={24}>{t('pagination.perPage', { count: 24 })}</option>
+                    <option value={48}>{t('pagination.perPage', { count: 48 })}</option>
                   </select>
                 </div>
               </div>
@@ -743,19 +748,19 @@ export default function ContactsContent() {
                   {selectedContact.extra.status}
                 </span>
               )}
-              {selectedContact.email && <a href={`mailto:${selectedContact.email}`} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100"><Mail className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">Email</p><p className="text-sm font-medium text-primary-600">{selectedContact.email}</p></div></a>}
+              {selectedContact.email && <a href={`mailto:${selectedContact.email}`} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100"><Mail className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">{t('viewModal.email')}</p><p className="text-sm font-medium text-primary-600">{selectedContact.email}</p></div></a>}
               {selectedContact.phone && (
                 <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                   <Phone className="w-4 h-4 text-gray-400" />
-                  <div className="flex-1"><p className="text-xs text-gray-500">Phone</p><p className="text-sm font-medium text-gray-900">{selectedContact.phone}</p></div>
+                  <div className="flex-1"><p className="text-xs text-gray-500">{t('viewModal.phone')}</p><p className="text-sm font-medium text-gray-900">{selectedContact.phone}</p></div>
                   <div className="flex items-center gap-2">
                     <a href={`tel:${selectedContact.phone}`} className="p-2 bg-primary-100 text-primary-600 rounded-lg hover:bg-primary-200"><Phone className="w-4 h-4" /></a>
                     {selectedContact.whatsapp && <a href={`https://wa.me/${selectedContact.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200"><MessageCircle className="w-4 h-4" /></a>}
                   </div>
                 </div>
               )}
-              {selectedContact.city && <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"><MapPin className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">{selectedContact.type === 'client' ? 'Nationality' : 'Location'}</p><p className="text-sm font-medium text-gray-900">{selectedContact.city}</p></div></div>}
-              {selectedContact.notes && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Notes</p><p className="text-sm text-gray-700">{selectedContact.notes}</p></div>}
+              {selectedContact.city && <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"><MapPin className="w-4 h-4 text-gray-400" /><div><p className="text-xs text-gray-500">{selectedContact.type === 'client' ? t('viewModal.nationality') : t('viewModal.location')}</p><p className="text-sm font-medium text-gray-900">{selectedContact.city}</p></div></div>}
+              {selectedContact.notes && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">{t('viewModal.notes')}</p><p className="text-sm text-gray-700">{selectedContact.notes}</p></div>}
             </div>
             <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50">
               <button type="button" onClick={() => { setShowViewModal(false); handleDeleteClick(selectedContact) }} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">{t('delete')}</button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Trash2, FileText, Calendar, DollarSign, CreditCard } from 'lucide-react'
 
@@ -25,6 +26,7 @@ interface Payment {
 export default function PaymentDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const t = useTranslations('payments.detail')
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -89,13 +91,15 @@ export default function PaymentDetailPage() {
   }
 
   const getPaymentTypeLabel = (type: string) => {
-    const labels: any = {
-      deposit: 'Deposit',
-      installment: 'Installment',
-      final: 'Final Payment',
-      full: 'Full Payment'
-    }
-    return labels[type] || type
+    return t(`types.${type}` as any)
+  }
+
+  const getPaymentStatusLabel = (status: string) => {
+    return t(`statuses.${status}` as any)
+  }
+
+  const getPaymentMethodLabel = (method: string) => {
+    return t(`methods.${method}` as any)
   }
 
   if (loading) {
@@ -103,7 +107,7 @@ export default function PaymentDetailPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading payment...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -113,9 +117,9 @@ export default function PaymentDetailPage() {
     return (
       <div className="p-4 lg:p-6">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-xl font-bold text-gray-900 mb-3">Payment Not Found</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-3">{t('paymentNotFound')}</h1>
           <Link href="/payments" className="text-sm text-primary-600 hover:text-primary-700">
-            ← Back to Payments
+            ← {t('backToPayments')}
           </Link>
         </div>
       </div>
@@ -128,15 +132,15 @@ export default function PaymentDetailPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Payment Details</h1>
-            <p className="text-sm text-gray-600 mt-1">View and manage payment information</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-600 mt-1">{t('subtitle')}</p>
           </div>
           <Link
             href="/payments"
             className="bg-gray-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Payments
+            {t('backToPayments')}
           </Link>
         </div>
 
@@ -154,11 +158,11 @@ export default function PaymentDetailPage() {
                   </h2>
                 </div>
                 <p className="text-sm text-gray-600">
-                  {getPaymentTypeLabel(payment.payment_type)} Payment
+                  {getPaymentTypeLabel(payment.payment_type)} {t('payment')}
                 </p>
               </div>
               <div className={`px-3 py-1 rounded-lg text-sm ${getStatusColor(payment.payment_status)} font-semibold capitalize`}>
-                {payment.payment_status.replace('_', ' ')}
+                {getPaymentStatusLabel(payment.payment_status)}
               </div>
             </div>
           </div>
@@ -170,16 +174,16 @@ export default function PaymentDetailPage() {
               <div className="space-y-3">
                 <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-primary-600" />
-                  Client & Itinerary
+                  {t('clientItinerary')}
                 </h3>
                 <div className="space-y-2">
                   <div>
-                    <label className="text-xs text-gray-600">Client Name</label>
+                    <label className="text-xs text-gray-600">{t('clientName')}</label>
                     <p className="text-sm font-medium text-gray-900">{payment.client_name}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-600">Itinerary Code</label>
-                    <Link 
+                    <label className="text-xs text-gray-600">{t('itineraryCode')}</label>
+                    <Link
                       href={`/itineraries/${payment.itinerary_id}`}
                       className="text-sm font-mono text-primary-600 hover:text-primary-700 block"
                     >
@@ -193,19 +197,19 @@ export default function PaymentDetailPage() {
               <div className="space-y-3">
                 <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-primary-600" />
-                  Payment Information
+                  {t('paymentInformation')}
                 </h3>
                 <div className="space-y-2">
                   <div>
-                    <label className="text-xs text-gray-600">Payment Method</label>
+                    <label className="text-xs text-gray-600">{t('paymentMethod')}</label>
                     <p className="text-sm font-medium text-gray-900 capitalize">
-                      {payment.payment_method?.replace('_', ' ')}
+                      {getPaymentMethodLabel(payment.payment_method)}
                     </p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-600">Transaction Reference</label>
+                    <label className="text-xs text-gray-600">{t('transactionReference')}</label>
                     <p className="text-sm font-mono text-gray-900">
-                      {payment.transaction_reference || 'N/A'}
+                      {payment.transaction_reference || t('notAvailable')}
                     </p>
                   </div>
                 </div>
@@ -216,37 +220,37 @@ export default function PaymentDetailPage() {
             <div className="border-t border-gray-200 pt-4 mb-4">
               <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-3">
                 <Calendar className="w-4 h-4 text-primary-600" />
-                Dates
+                {t('dates')}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-xs text-gray-600">Payment Date</label>
+                  <label className="text-xs text-gray-600">{t('paymentDate')}</label>
                   <p className="text-sm font-medium text-gray-900">
-                    {payment.payment_date 
+                    {payment.payment_date
                       ? new Date(payment.payment_date).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric'
                         })
-                      : 'Not set'
+                      : t('notSet')
                     }
                   </p>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600">Due Date</label>
+                  <label className="text-xs text-gray-600">{t('dueDate')}</label>
                   <p className="text-sm font-medium text-gray-900">
-                    {payment.due_date 
+                    {payment.due_date
                       ? new Date(payment.due_date).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric'
                         })
-                      : 'Not set'
+                      : t('notSet')
                     }
                   </p>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600">Created At</label>
+                  <label className="text-xs text-gray-600">{t('createdAt')}</label>
                   <p className="text-sm font-medium text-gray-900">
                     {new Date(payment.created_at).toLocaleDateString('en-US', {
                       year: 'numeric',
@@ -261,7 +265,7 @@ export default function PaymentDetailPage() {
             {/* Notes */}
             {payment.notes && (
               <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-2">Notes</h3>
+                <h3 className="text-base font-semibold text-gray-900 mb-2">{t('notes')}</h3>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{payment.notes}</p>
               </div>
             )}
@@ -278,32 +282,32 @@ export default function PaymentDetailPage() {
               }`}
             >
               <Trash2 className="w-4 h-4" />
-              {deleteConfirm ? 'Click Again to Confirm' : 'Delete Payment'}
+              {deleteConfirm ? t('clickToConfirm') : t('deletePayment')}
             </button>
-            
+
             <div className="flex items-center gap-2">
               <Link
                 href={`/documents/receipt/${payment.id}`}
                 className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
               >
                 <FileText className="w-4 h-4" />
-                View Receipt
+                {t('viewReceipt')}
               </Link>
-              
+
               <Link
                 href={`/documents/invoice/${payment.id}`}
                 className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
               >
                 <FileText className="w-4 h-4" />
-                View Invoice
+                {t('viewInvoice')}
               </Link>
-              
+
               <Link
                 href={`/payments/${payment.id}/edit`}
                 className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 font-medium flex items-center gap-2"
               >
                 <Edit className="w-4 h-4" />
-                Edit Payment
+                {t('editPayment')}
               </Link>
             </div>
           </div>

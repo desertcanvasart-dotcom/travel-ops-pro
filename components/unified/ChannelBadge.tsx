@@ -2,6 +2,7 @@
 
 import { MessageSquare, Mail } from 'lucide-react'
 import { ConversationChannel } from '@/types/unified'
+import { useTranslations } from 'next-intl'
 
 interface ChannelBadgeProps {
   channel: ConversationChannel
@@ -11,7 +12,7 @@ interface ChannelBadgeProps {
 
 const channelConfig = {
   whatsapp: {
-    label: 'WhatsApp',
+    labelKey: 'whatsapp',
     bgColor: 'bg-[#25D366]',
     textColor: 'text-white',
     lightBg: 'bg-[#25D366]/10',
@@ -19,7 +20,7 @@ const channelConfig = {
     icon: MessageSquare,
   },
   email: {
-    label: 'Email',
+    labelKey: 'email',
     bgColor: 'bg-blue-500',
     textColor: 'text-white',
     lightBg: 'bg-blue-50',
@@ -29,6 +30,7 @@ const channelConfig = {
 }
 
 export function ChannelBadge({ channel, size = 'sm', showLabel = false }: ChannelBadgeProps) {
+  const t = useTranslations('channels')
   const config = channelConfig[channel]
   const Icon = config.icon
 
@@ -54,13 +56,14 @@ export function ChannelBadge({ channel, size = 'sm', showLabel = false }: Channe
       className={`inline-flex items-center rounded-full font-medium ${classes.container} ${config.bgColor} ${config.textColor}`}
     >
       <Icon className={classes.icon} />
-      {showLabel && <span>{config.label}</span>}
+      {showLabel && <span>{t(config.labelKey)}</span>}
     </span>
   )
 }
 
 // Light variant for use in lists
 export function ChannelBadgeLight({ channel, size = 'sm', showLabel = true }: ChannelBadgeProps) {
+  const t = useTranslations('channels')
   const config = channelConfig[channel]
   const Icon = config.icon
 
@@ -86,7 +89,7 @@ export function ChannelBadgeLight({ channel, size = 'sm', showLabel = true }: Ch
       className={`inline-flex items-center rounded-full font-medium ${classes.container} ${config.lightBg} ${config.lightText}`}
     >
       <Icon className={classes.icon} />
-      {showLabel && <span>{config.label}</span>}
+      {showLabel && <span>{t(config.labelKey)}</span>}
     </span>
   )
 }

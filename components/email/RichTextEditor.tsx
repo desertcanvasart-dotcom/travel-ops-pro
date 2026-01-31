@@ -13,6 +13,7 @@ import Highlight from '@tiptap/extension-highlight'
 import FontFamily from '@tiptap/extension-font-family'
 import { Extension } from '@tiptap/core'
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   Bold,
   Italic,
@@ -351,16 +352,18 @@ function ColorPicker({
 }
 
 // Link modal component
-function LinkModal({ 
-  isOpen, 
-  onClose, 
-  onSubmit, 
-  initialUrl 
-}: { 
+function LinkModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialUrl,
+  t
+}: {
   isOpen: boolean
   onClose: () => void
   onSubmit: (url: string) => void
   initialUrl: string
+  t: (key: string) => string
 }) {
   const [url, setUrl] = useState(initialUrl)
 
@@ -374,7 +377,7 @@ function LinkModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="fixed inset-0 bg-black/20" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-lg p-4 w-[360px]">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Insert Link</h3>
+        <h3 className="text-sm font-medium text-gray-900 mb-3">{t('insertLink')}</h3>
         <input
           type="url"
           value={url}
@@ -389,7 +392,7 @@ function LinkModal({
             onClick={onClose}
             className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="button"
@@ -399,7 +402,7 @@ function LinkModal({
             }}
             className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
-            Insert
+            {t('insert')}
           </button>
         </div>
       </div>
@@ -412,12 +415,14 @@ function HtmlEditorModal({
   isOpen,
   onClose,
   html,
-  onSave
+  onSave,
+  t
 }: {
   isOpen: boolean
   onClose: () => void
   html: string
   onSave: (html: string) => void
+  t: (key: string) => string
 }) {
   const [editedHtml, setEditedHtml] = useState(html)
 
@@ -432,7 +437,7 @@ function HtmlEditorModal({
       <div className="fixed inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-medium text-gray-900">Edit HTML Source</h3>
+          <h3 className="text-lg font-medium text-gray-900">{t('editHtmlSource')}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -455,7 +460,7 @@ function HtmlEditorModal({
             onClick={onClose}
             className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="button"
@@ -465,7 +470,7 @@ function HtmlEditorModal({
             }}
             className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
-            Apply Changes
+            {t('applyChanges')}
           </button>
         </div>
       </div>
@@ -513,7 +518,7 @@ function ToolbarDivider() {
 }
 
 // Main toolbar component
-function EditorToolbar({ editor }: { editor: Editor }) {
+function EditorToolbar({ editor, t }: { editor: Editor; t: (key: string) => string }) {
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [showHtmlModal, setShowHtmlModal] = useState(false)
 
@@ -567,7 +572,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           isActive={editor.isActive('bold')}
-          title="Bold (Ctrl+B)"
+          title={t('bold')}
         >
           <Bold className="w-4 h-4" />
         </ToolbarButton>
@@ -575,7 +580,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
           isActive={editor.isActive('italic')}
-          title="Italic (Ctrl+I)"
+          title={t('italic')}
         >
           <Italic className="w-4 h-4" />
         </ToolbarButton>
@@ -583,7 +588,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleUnderline().run()}
           isActive={editor.isActive('underline')}
-          title="Underline (Ctrl+U)"
+          title={t('underline')}
         >
           <UnderlineIcon className="w-4 h-4" />
         </ToolbarButton>
@@ -598,7 +603,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
             editor.chain().focus().setColor(color).run()
           }}
           icon={Palette}
-          label="Text Color"
+          label={t('textColor')}
           editor={editor}
         />
 
@@ -614,7 +619,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
             }
           }}
           icon={Highlighter}
-          label="Highlight Color"
+          label={t('highlightColor')}
           editor={editor}
         />
 
@@ -624,7 +629,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign('left').run()}
           isActive={editor.isActive({ textAlign: 'left' })}
-          title="Align Left"
+          title={t('alignLeft')}
         >
           <AlignLeft className="w-4 h-4" />
         </ToolbarButton>
@@ -632,7 +637,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign('center').run()}
           isActive={editor.isActive({ textAlign: 'center' })}
-          title="Align Center"
+          title={t('alignCenter')}
         >
           <AlignCenter className="w-4 h-4" />
         </ToolbarButton>
@@ -640,7 +645,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign('right').run()}
           isActive={editor.isActive({ textAlign: 'right' })}
-          title="Align Right"
+          title={t('alignRight')}
         >
           <AlignRight className="w-4 h-4" />
         </ToolbarButton>
@@ -648,7 +653,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().setTextAlign('justify').run()}
           isActive={editor.isActive({ textAlign: 'justify' })}
-          title="Justify"
+          title={t('justify')}
         >
           <AlignJustify className="w-4 h-4" />
         </ToolbarButton>
@@ -659,7 +664,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           isActive={editor.isActive('bulletList')}
-          title="Bullet List"
+          title={t('bulletList')}
         >
           <List className="w-4 h-4" />
         </ToolbarButton>
@@ -667,7 +672,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           isActive={editor.isActive('orderedList')}
-          title="Numbered List"
+          title={t('numberedList')}
         >
           <ListOrdered className="w-4 h-4" />
         </ToolbarButton>
@@ -678,7 +683,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => setShowLinkModal(true)}
           isActive={editor.isActive('link')}
-          title="Insert Link"
+          title={t('insertLink')}
         >
           <LinkIcon className="w-4 h-4" />
         </ToolbarButton>
@@ -686,7 +691,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         {/* HTML Source */}
         <ToolbarButton
           onClick={() => setShowHtmlModal(true)}
-          title="Edit HTML Source"
+          title={t('editHtmlSource')}
         >
           <Code className="w-4 h-4" />
         </ToolbarButton>
@@ -697,7 +702,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}
-          title="Undo (Ctrl+Z)"
+          title={t('undo')}
         >
           <Undo className="w-4 h-4" />
         </ToolbarButton>
@@ -705,7 +710,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <ToolbarButton
           onClick={() => editor.chain().focus().redo().run()}
           disabled={!editor.can().redo()}
-          title="Redo (Ctrl+Y)"
+          title={t('redo')}
         >
           <Redo className="w-4 h-4" />
         </ToolbarButton>
@@ -717,6 +722,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         onClose={() => setShowLinkModal(false)}
         onSubmit={setLink}
         initialUrl={editor.getAttributes('link').href || ''}
+        t={t}
       />
 
       {/* HTML Editor Modal */}
@@ -725,6 +731,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         onClose={() => setShowHtmlModal(false)}
         html={editor.getHTML()}
         onSave={(html) => editor.commands.setContent(html)}
+        t={t}
       />
     </>
   )
@@ -737,11 +744,13 @@ function EditorToolbar({ editor }: { editor: Editor }) {
 export default function RichTextEditor({
   content,
   onChange,
-  placeholder = 'Start typing...',
+  placeholder,
   minHeight = '200px',
   maxHeight = '400px',
   className = ''
 }: RichTextEditorProps) {
+  const t = useTranslations('richTextEditor')
+  const actualPlaceholder = placeholder || t('startTyping')
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -771,7 +780,7 @@ export default function RichTextEditor({
       
       // 4. Placeholder
       Placeholder.configure({
-        placeholder,
+        placeholder: actualPlaceholder,
       }),
       
       // 5. Text alignment
@@ -834,7 +843,7 @@ export default function RichTextEditor({
 
   return (
     <div className={`border border-gray-200 rounded-lg overflow-hidden bg-white ${className}`}>
-      <EditorToolbar editor={editor} />
+      <EditorToolbar editor={editor} t={t} />
       <EditorContent editor={editor} />
       <style jsx global>{`
         .ProseMirror {
@@ -883,17 +892,18 @@ export default function RichTextEditor({
 export function SignatureEditor({
   content,
   onChange,
-  placeholder = 'Create your email signature...'
+  placeholder
 }: {
   content: string
   onChange: (html: string) => void
   placeholder?: string
 }) {
+  const t = useTranslations('richTextEditor')
   return (
     <RichTextEditor
       content={content}
       onChange={onChange}
-      placeholder={placeholder}
+      placeholder={placeholder || t('createSignature')}
       minHeight="150px"
       maxHeight="300px"
     />
@@ -904,17 +914,18 @@ export function SignatureEditor({
 export function TemplateEditor({
   content,
   onChange,
-  placeholder = 'Create your email template...'
+  placeholder
 }: {
   content: string
   onChange: (html: string) => void
   placeholder?: string
 }) {
+  const t = useTranslations('richTextEditor')
   return (
     <RichTextEditor
       content={content}
       onChange={onChange}
-      placeholder={placeholder}
+      placeholder={placeholder || t('createTemplate')}
       minHeight="250px"
       maxHeight="500px"
     />

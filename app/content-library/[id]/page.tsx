@@ -9,6 +9,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { 
   ArrowLeft, 
   Save, 
@@ -107,6 +108,7 @@ interface DynamicFieldProps {
 }
 
 function DynamicField({ field, value, onChange }: DynamicFieldProps) {
+  const t = useTranslations('contentEditor')
   const handleChange = (newValue: unknown) => {
     onChange(field.name, newValue)
   }
@@ -188,7 +190,7 @@ function DynamicField({ field, value, onChange }: DynamicFieldProps) {
             onChange={(e) => handleChange(e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] bg-white"
           >
-            <option value="">Select...</option>
+            <option value="">{t('select')}</option>
             {(field.options as string[])?.map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
@@ -231,7 +233,7 @@ function DynamicField({ field, value, onChange }: DynamicFieldProps) {
           </div>
           {selectedValues.length > 0 && (
             <p className="mt-1.5 text-xs text-gray-500">
-              {selectedValues.length} selected
+              {t('selectedCount', { count: selectedValues.length })}
             </p>
           )}
         </div>
@@ -346,7 +348,7 @@ function DynamicField({ field, value, onChange }: DynamicFieldProps) {
                 onClick={() => handleChange(0)}
                 className="ml-2 text-xs text-gray-400 hover:text-gray-600"
               >
-                Clear
+                {t('clear')}
               </button>
             )}
           </div>
@@ -439,6 +441,7 @@ interface ListInputProps {
 }
 
 function ListInput({ label, items, onChange, placeholder = 'Add item...' }: ListInputProps) {
+  const t = useTranslations('contentEditor')
   const [newItem, setNewItem] = useState('')
 
   const addItem = () => {
@@ -493,7 +496,7 @@ function ListInput({ label, items, onChange, placeholder = 'Add item...' }: List
             className="flex items-center gap-1 px-3 py-2 text-sm text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Add
+            {t('add')}
           </button>
         </div>
       </div>
@@ -508,6 +511,7 @@ function ListInput({ label, items, onChange, placeholder = 'Add item...' }: List
 export default function ContentEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const t = useTranslations('contentEditor')
   const isNew = id === 'new'
 
   const [mounted, setMounted] = useState(false)
@@ -677,7 +681,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
   // Save content
   const handleSave = async () => {
     if (!formData.name || !formData.category_id) {
-      alert('Please fill in required fields')
+      alert(t('fillRequiredFields'))
       return
     }
 
@@ -696,11 +700,11 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
         router.push('/content-library')
       } else {
         const error = await res.json()
-        alert(error.message || 'Error saving content')
+        alert(error.message || t('errorSaving'))
       }
     } catch (error) {
       console.error('Error saving:', error)
-      alert('Error saving content')
+      alert(t('errorSaving'))
     } finally {
       setSaving(false)
     }
@@ -738,10 +742,10 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
             </Link>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">
-                {isNew ? 'New Content' : formData.name}
+                {isNew ? t('newContent') : formData.name}
               </h1>
               <p className="text-sm text-gray-500">
-                {formData.variations.filter(v => v.description).length}/4 tier variations
+                {t('tierVariations', { count: formData.variations.filter(v => v.description).length })}
               </p>
             </div>
           </div>
@@ -755,7 +759,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
             ) : (
               <Save className="w-4 h-4" />
             )}
-            Save
+            {t('save')}
           </button>
         </div>
       </div>
@@ -769,25 +773,25 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <span className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">📄</span>
-                Basic Information
+                {t('basicInformation')}
               </h2>
 
               <div className="space-y-4">
                 {/* Category */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category <span className="text-red-500">*</span>
+                    {t('category')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.category_id}
-                    onChange={(e) => setFormData(prev => ({ 
-                      ...prev, 
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
                       category_id: e.target.value,
                       metadata: {} // Reset metadata when category changes
                     }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] bg-white"
                   >
-                    <option value="">Select category...</option>
+                    <option value="">{t('selectCategory')}</option>
                     {categories.map(cat => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
@@ -797,20 +801,20 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                 {/* Name */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Name <span className="text-red-500">*</span>
+                    {t('name')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Pyramids of Giza"
+                    placeholder={t('namePlaceholder')}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   />
                 </div>
 
                 {/* Slug */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('slug')}</label>
                   <input
                     type="text"
                     value={formData.slug}
@@ -821,11 +825,11 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
 
                 {/* Short Description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Short Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('shortDescription')}</label>
                   <textarea
                     value={formData.short_description}
                     onChange={(e) => setFormData(prev => ({ ...prev, short_description: e.target.value }))}
-                    placeholder="Brief summary for listings..."
+                    placeholder={t('shortDescriptionPlaceholder')}
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
                   />
@@ -834,12 +838,12 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                 {/* Location - Show for most categories */}
                 {categorySchema?.slug !== 'phrases-expressions' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('location')}</label>
                     <input
                       type="text"
                       value={formData.location}
                       onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                      placeholder="e.g., Giza, Cairo"
+                      placeholder={t('locationPlaceholder')}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                     />
                   </div>
@@ -847,7 +851,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
 
                 {/* Tags */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('tags')}</label>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {formData.tags.map((tag, index) => (
                       <span
@@ -879,7 +883,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                           addTag()
                         }
                       }}
-                      placeholder="Add tag..."
+                      placeholder={t('addTagPlaceholder')}
                       className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                     />
                     <button
@@ -904,7 +908,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                       return <IconComponent className="w-4 h-4 text-[#647C47]" />
                     })()}
                   </span>
-                  {categorySchema.label} Details
+                  {t('categoryDetails', { category: categorySchema.label })}
                 </h2>
 
                 <div className="space-y-6">
@@ -958,13 +962,13 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                     {/* Title */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Title (Optional)
+                        {t('titleOptional')}
                       </label>
                       <input
                         type="text"
                         value={currentVariation.title}
                         onChange={(e) => updateVariation('title', e.target.value)}
-                        placeholder={`${TIER_CONFIG[activeTier].label} experience title...`}
+                        placeholder={t('titlePlaceholder', { tier: t(`tiers.${activeTier}`) })}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                       />
                     </div>
@@ -972,49 +976,49 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                     {/* Description */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Description <span className="text-red-500">*</span>
+                        {t('description')} <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         value={currentVariation.description}
                         onChange={(e) => updateVariation('description', e.target.value)}
-                        placeholder={`How you describe this at the ${activeTier} tier...`}
+                        placeholder={t('descriptionPlaceholder', { tier: t(`tiers.${activeTier}`) })}
                         rows={6}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
                       />
                       <p className="mt-1 text-xs text-gray-500">
-                        {currentVariation.description.length} characters
+                        {t('charactersCount', { count: currentVariation.description.length })}
                       </p>
                     </div>
 
                     {/* Highlights - Show if schema allows */}
                     {categorySchema?.tierConfig.showHighlights !== false && (
                       <ListInput
-                        label="Highlights"
+                        label={t('highlights')}
                         items={currentVariation.highlights}
                         onChange={(items) => updateVariation('highlights', items)}
-                        placeholder="Add highlight..."
+                        placeholder={t('addHighlightPlaceholder')}
                       />
                     )}
 
                     {/* Inclusions - Only show if schema allows */}
                     {categorySchema?.tierConfig.showInclusions && (
                       <ListInput
-                        label="Inclusions"
+                        label={t('inclusions')}
                         items={currentVariation.inclusions}
                         onChange={(items) => updateVariation('inclusions', items)}
-                        placeholder="Add inclusion..."
+                        placeholder={t('addInclusionPlaceholder')}
                       />
                     )}
 
                     {/* Internal Notes */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Internal Notes
+                        {t('internalNotes')}
                       </label>
                       <textarea
                         value={currentVariation.internal_notes}
                         onChange={(e) => updateVariation('internal_notes', e.target.value)}
-                        placeholder="Notes for your team (not shown in itineraries)..."
+                        placeholder={t('internalNotesPlaceholder')}
                         rows={3}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none bg-amber-50/50"
                       />
@@ -1027,20 +1031,20 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
             {/* Tips Card */}
             <div className="mt-6 bg-[#647C47]/5 rounded-xl border border-[#647C47]/20 p-6">
               <h3 className="text-sm font-semibold text-[#647C47] mb-2">
-                💡 Tier Writing Tips
+                {t('tierWritingTips')}
               </h3>
               <div className="text-sm text-gray-600 space-y-2">
                 {activeTier === 'budget' && (
-                  <p>Focus on <strong>value and essentials</strong>. Highlight what's included, emphasize good-value experiences, and use straightforward language.</p>
+                  <p dangerouslySetInnerHTML={{ __html: t('budgetTip') }} />
                 )}
                 {activeTier === 'standard' && (
-                  <p>Balance <strong>comfort and experience</strong>. Mention quality aspects, comfortable arrangements, and reliable service without excessive luxury language.</p>
+                  <p dangerouslySetInnerHTML={{ __html: t('standardTip') }} />
                 )}
                 {activeTier === 'deluxe' && (
-                  <p>Emphasize <strong>enhanced experiences and refinement</strong>. Highlight superior quality, added comforts, and exclusive touches that elevate the experience.</p>
+                  <p dangerouslySetInnerHTML={{ __html: t('deluxeTip') }} />
                 )}
                 {activeTier === 'luxury' && (
-                  <p>Convey <strong>exclusivity and ultimate comfort</strong>. Use sophisticated language, emphasize private access, personalized service, and exceptional quality.</p>
+                  <p dangerouslySetInnerHTML={{ __html: t('luxuryTip') }} />
                 )}
               </div>
             </div>

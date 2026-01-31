@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Plus, X, Receipt } from 'lucide-react'
+import { useState } from 'react'
+import { X, Receipt } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface AddExpenseFromItineraryProps {
   itineraryId: string
@@ -24,51 +25,41 @@ interface FormData {
   notes: string
 }
 
-const CATEGORIES = [
-  { value: 'guide', label: 'Tour Guide', icon: '👨‍🏫' },
-  { value: 'driver', label: 'Driver', icon: '🚗' },
-  { value: 'hotel', label: 'Hotel/Accommodation', icon: '🏨' },
-  { value: 'transportation', label: 'Transportation', icon: '🚐' },
-  { value: 'entrance', label: 'Entrance Fees', icon: '🎫' },
-  { value: 'meal', label: 'Meals', icon: '🍽️' },
-  { value: 'airport_staff', label: 'Airport Staff', icon: '✈️' },
-  { value: 'hotel_staff', label: 'Hotel Staff', icon: '🛎️' },
-  { value: 'ground_handler', label: 'Ground Handler', icon: '🧳' },
-  { value: 'tipping', label: 'Tipping', icon: '💵' },
-  { value: 'permits', label: 'Permits/Permissions', icon: '📋' },
-  { value: 'toll', label: 'Toll Fees', icon: '🛣️' },
-  { value: 'parking', label: 'Parking', icon: '🅿️' },
-  { value: 'fuel', label: 'Fuel', icon: '⛽' },
-  { value: 'other', label: 'Other', icon: '📦' }
-]
+const CATEGORY_KEYS = [
+  { value: 'guide', icon: '👨‍🏫' },
+  { value: 'driver', icon: '🚗' },
+  { value: 'hotel', icon: '🏨' },
+  { value: 'transportation', icon: '🚐' },
+  { value: 'entrance', icon: '🎫' },
+  { value: 'meal', icon: '🍽️' },
+  { value: 'airport_staff', icon: '✈️' },
+  { value: 'hotel_staff', icon: '🛎️' },
+  { value: 'ground_handler', icon: '🧳' },
+  { value: 'tipping', icon: '💵' },
+  { value: 'permits', icon: '📋' },
+  { value: 'toll', icon: '🛣️' },
+  { value: 'parking', icon: '🅿️' },
+  { value: 'fuel', icon: '⛽' },
+  { value: 'other', icon: '📦' }
+] as const
 
-const SUPPLIER_TYPES = [
-  { value: 'guide', label: 'Tour Guide' },
-  { value: 'driver', label: 'Driver' },
-  { value: 'hotel', label: 'Hotel' },
-  { value: 'restaurant', label: 'Restaurant' },
-  { value: 'transport_company', label: 'Transport Company' },
-  { value: 'airport_staff', label: 'Airport Staff' },
-  { value: 'hotel_staff', label: 'Hotel Staff' },
-  { value: 'ground_handler', label: 'Ground Handler' },
-  { value: 'government', label: 'Government/Authority' },
-  { value: 'other', label: 'Other' }
-]
+const SUPPLIER_TYPE_KEYS = [
+  'guide', 'driver', 'hotel', 'restaurant', 'transport_company',
+  'airport_staff', 'hotel_staff', 'ground_handler', 'government', 'other'
+] as const
 
-const PAYMENT_METHODS = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'credit_card', label: 'Credit Card' },
-  { value: 'wise', label: 'Wise' },
-  { value: 'company_card', label: 'Company Card' }
-]
+const PAYMENT_METHOD_KEYS = [
+  'cash', 'bank_transfer', 'credit_card', 'wise', 'company_card'
+] as const
 
-export default function AddExpenseFromItinerary({ 
-  itineraryId, 
-  itineraryCode, 
+export default function AddExpenseFromItinerary({
+  itineraryId,
+  itineraryCode,
   clientName,
-  onExpenseAdded 
+  onExpenseAdded
 }: AddExpenseFromItineraryProps) {
+  const t = useTranslations('expenseModal')
+  const tCommon = useTranslations('common')
   const [isOpen, setIsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<FormData>({
@@ -121,11 +112,11 @@ export default function AddExpenseFromItinerary({
         onExpenseAdded?.()
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to save expense')
+        alert(error.error || t('failedToSave'))
       }
     } catch (error) {
       console.error('Error saving expense:', error)
-      alert('Failed to save expense')
+      alert(t('failedToSave'))
     } finally {
       setSaving(false)
     }
@@ -139,7 +130,7 @@ export default function AddExpenseFromItinerary({
         className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-[#647C47] hover:text-[#647C47] transition-colors"
       >
         <Receipt className="h-4 w-4" />
-        Add Expense
+        {t('addExpense')}
       </button>
 
       {/* Modal */}
@@ -148,12 +139,14 @@ export default function AddExpenseFromItinerary({
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Add Expense</h2>
+                <h2 className="text-base font-semibold text-gray-900">{t('addExpense')}</h2>
                 <p className="text-xs text-gray-500">{itineraryCode} • {clientName}</p>
               </div>
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
                 className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title={tCommon('close')}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -164,29 +157,31 @@ export default function AddExpenseFromItinerary({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                    Category <span className="text-red-500">*</span>
+                    {t('category')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
+                    title={t('category')}
                   >
-                    <option value="">Select Category</option>
-                    {CATEGORIES.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.icon} {cat.label}</option>
+                    <option value="">{t('selectCategory')}</option>
+                    {CATEGORY_KEYS.map(cat => (
+                      <option key={cat.value} value={cat.value}>{cat.icon} {t(`categories.${cat.value}`)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                    Amount <span className="text-red-500">*</span>
+                    {t('amount')} <span className="text-red-500">*</span>
                   </label>
                   <div className="flex gap-2">
                     <select
                       value={formData.currency}
                       onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
                       className="w-20 px-2 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                      title={tCommon('currency')}
                     >
                       <option value="EUR">€</option>
                       <option value="USD">$</option>
@@ -200,6 +195,7 @@ export default function AddExpenseFromItinerary({
                       min="0"
                       required
                       className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                      title={t('amount')}
                     />
                   </div>
                 </div>
@@ -207,12 +203,12 @@ export default function AddExpenseFromItinerary({
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Description</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('description')}</label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="e.g., Guide fee for Pyramids tour"
+                  placeholder={t('descriptionPlaceholder')}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                 />
               </div>
@@ -220,7 +216,7 @@ export default function AddExpenseFromItinerary({
               {/* Date */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                  Expense Date <span className="text-red-500">*</span>
+                  {t('expenseDate')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
@@ -228,31 +224,33 @@ export default function AddExpenseFromItinerary({
                   onChange={(e) => setFormData(prev => ({ ...prev, expense_date: e.target.value }))}
                   required
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                  title={t('expenseDate')}
                 />
               </div>
 
               {/* Supplier */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Supplier Name</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('supplierName')}</label>
                   <input
                     type="text"
                     value={formData.supplier_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
-                    placeholder="e.g., Ahmed Mohamed"
+                    placeholder={t('supplierNamePlaceholder')}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Supplier Type</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('supplierType')}</label>
                   <select
                     value={formData.supplier_type}
                     onChange={(e) => setFormData(prev => ({ ...prev, supplier_type: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                    title={t('supplierType')}
                   >
-                    <option value="">Select Type</option>
-                    {SUPPLIER_TYPES.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
+                    <option value="">{t('selectType')}</option>
+                    {SUPPLIER_TYPE_KEYS.map(type => (
+                      <option key={type} value={type}>{t(`supplierTypes.${type}`)}</option>
                     ))}
                   </select>
                 </div>
@@ -260,22 +258,23 @@ export default function AddExpenseFromItinerary({
 
               {/* Payment Method */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Payment Method</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('paymentMethod')}</label>
                 <select
                   value={formData.payment_method}
                   onChange={(e) => setFormData(prev => ({ ...prev, payment_method: e.target.value }))}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                  title={t('paymentMethod')}
                 >
-                  <option value="">Select Method</option>
-                  {PAYMENT_METHODS.map(method => (
-                    <option key={method.value} value={method.value}>{method.label}</option>
+                  <option value="">{t('selectMethod')}</option>
+                  {PAYMENT_METHOD_KEYS.map(method => (
+                    <option key={method} value={method}>{t(`paymentMethods.${method}`)}</option>
                   ))}
                 </select>
               </div>
 
               {/* Receipt URL */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Receipt URL</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('receiptUrl')}</label>
                 <input
                   type="url"
                   value={formData.receipt_url}
@@ -287,12 +286,12 @@ export default function AddExpenseFromItinerary({
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('notes')}</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                   rows={2}
-                  placeholder="Additional notes..."
+                  placeholder={t('notesPlaceholder')}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] resize-none"
                 />
               </div>
@@ -304,14 +303,14 @@ export default function AddExpenseFromItinerary({
                   onClick={() => setIsOpen(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] disabled:opacity-50 transition-colors"
                 >
-                  {saving ? 'Saving...' : 'Add Expense'}
+                  {saving ? t('saving') : t('addExpense')}
                 </button>
               </div>
             </form>

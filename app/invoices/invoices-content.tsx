@@ -110,7 +110,7 @@ const initialFormData: FormData = {
   issue_date: new Date().toISOString().split('T')[0],
   due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   notes: '',
-  payment_terms: 'Payment due within 14 days',
+  payment_terms: '', // Will be set dynamically with t()
   payment_instructions: ''
 }
 
@@ -203,7 +203,7 @@ export default function InvoicesContent() {
             const clientName = c.name 
               || `${c.first_name || ''} ${c.last_name || ''}`.trim() 
               || c.full_name 
-              || 'Unknown Client'
+              || t('unknownClient')
             
             return {
               id: c.id,
@@ -267,15 +267,15 @@ export default function InvoicesContent() {
       const depositPercent = formData.deposit_percent
 
       let calculatedAmount = fullCost
-      let lineItemDescription = `Tour Package - ${itinerary.itinerary_code}`
+      let lineItemDescription = t('tourPackageWithCode', { code: itinerary.itinerary_code })
 
       if (invoiceType === 'deposit') {
         calculatedAmount = (fullCost * depositPercent) / 100
-        lineItemDescription = `Booking Deposit (${depositPercent}%) - ${itinerary.itinerary_code}`
+        lineItemDescription = t('bookingDepositWithCode', { percent: depositPercent, code: itinerary.itinerary_code })
       } else if (invoiceType === 'final') {
         const depositAmount = (fullCost * depositPercent) / 100
         calculatedAmount = fullCost - depositAmount
-        lineItemDescription = `Final Balance - ${itinerary.itinerary_code}`
+        lineItemDescription = t('finalBalanceWithCode', { code: itinerary.itinerary_code })
       }
       
       setFormData(prev => ({
@@ -308,8 +308,8 @@ export default function InvoicesContent() {
     const depositPercent = formData.deposit_percent
     
     let calculatedAmount = fullCost
-    let paymentTerms = 'Payment due within 14 days'
-    let lineItemDescription = formData.line_items[0]?.description || 'Tour Package'
+    let paymentTerms = t('paymentDueWithin14Days')
+    let lineItemDescription = formData.line_items[0]?.description || t('tourPackage')
     
     // Extract base description (remove any prefix)
     const baseDesc = lineItemDescription
@@ -319,15 +319,15 @@ export default function InvoicesContent() {
     
     if (type === 'deposit') {
       calculatedAmount = (fullCost * depositPercent) / 100
-      paymentTerms = 'Deposit required to confirm booking. Non-refundable once services are confirmed.'
-      lineItemDescription = `Booking Deposit (${depositPercent}%) - ${baseDesc}`
+      paymentTerms = t('depositPaymentTerms')
+      lineItemDescription = t('bookingDepositWithCode', { percent: depositPercent, code: baseDesc })
     } else if (type === 'final') {
       const depositAmount = (fullCost * depositPercent) / 100
       calculatedAmount = fullCost - depositAmount
-      paymentTerms = 'Balance payable in cash upon arrival or before first day of service.'
-      lineItemDescription = `Final Balance - ${baseDesc}`
+      paymentTerms = t('finalPaymentTerms')
+      lineItemDescription = t('finalBalanceWithCode', { code: baseDesc })
     } else {
-      lineItemDescription = `Tour Package - ${baseDesc}`
+      lineItemDescription = t('tourPackageWithCode', { code: baseDesc })
     }
 
     setFormData(prev => ({
@@ -350,7 +350,7 @@ export default function InvoicesContent() {
     const invoiceType = formData.invoice_type
     
     let calculatedAmount = fullCost
-    let lineItemDescription = formData.line_items[0]?.description || 'Tour Package'
+    let lineItemDescription = formData.line_items[0]?.description || t('tourPackage')
     
     const baseDesc = lineItemDescription
       .replace(/^Booking Deposit \(\d+%\) - /, '')
@@ -464,25 +464,25 @@ export default function InvoicesContent() {
         fetchInvoices()
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to create invoice')
+        alert(error.error || t('failedToCreateInvoice'))
       }
     } catch (error) {
       console.error('Error creating invoice:', error)
-      alert('Failed to create invoice')
+      alert(t('failedToCreateInvoice'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this invoice?')) return
+    if (!confirm(t('confirmDeleteInvoice'))) return
 
     try {
       const response = await fetch(`/api/invoices/${id}`, { method: 'DELETE' })
       if (response.ok) {
         fetchInvoices()
       } else {
-        alert('Failed to delete invoice')
+        alert(t('failedToDeleteInvoice'))
       }
     } catch (error) {
       console.error('Error deleting invoice:', error)
@@ -826,7 +826,7 @@ export default function InvoicesContent() {
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-amber-800">Deposit Percentage</p>
+                      <p className="text-sm font-medium text-amber-800">{t('depositPercentage')}</p>
                       <p className="text-xs text-amber-600 mt-0.5">
                         {formData.invoice_type === 'deposit' 
                           ? 'Client pays this percentage to confirm booking'
@@ -849,15 +849,15 @@ export default function InvoicesContent() {
                   {formData.full_trip_cost > 0 && (
                     <div className="mt-3 pt-3 border-t border-amber-200 grid grid-cols-3 gap-4 text-sm">
                       <div>
-                        <p className="text-amber-600">Full Trip Cost</p>
+                        <p className="text-amber-600">{t('fullTripCost')}</p>
                         <p className="font-semibold text-amber-800">{formData.currency} {formData.full_trip_cost.toFixed(2)}</p>
                       </div>
                       <div>
-                        <p className="text-amber-600">Deposit ({formData.deposit_percent}%)</p>
+                        <p className="text-amber-600">{t('depositWithPercent', { percent: formData.deposit_percent })}</p>
                         <p className="font-semibold text-amber-800">{formData.currency} {((formData.full_trip_cost * formData.deposit_percent) / 100).toFixed(2)}</p>
                       </div>
                       <div>
-                        <p className="text-amber-600">Balance</p>
+                        <p className="text-amber-600">{t('balance')}</p>
                         <p className="font-semibold text-amber-800">{formData.currency} {(formData.full_trip_cost - (formData.full_trip_cost * formData.deposit_percent) / 100).toFixed(2)}</p>
                       </div>
                     </div>
@@ -877,7 +877,7 @@ export default function InvoicesContent() {
                     required
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm bg-white"
                   >
-                    <option value="">Select Client</option>
+                    <option value="">{t('selectClient')}</option>
                     {clients.map(client => (
                       <option key={client.id} value={client.id}>
                         {client.name} {client.email ? `(${client.email})` : ''}
@@ -911,7 +911,7 @@ export default function InvoicesContent() {
               {/* Dates */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('currency')}</label>
                   <select
                     value={formData.currency}
                     onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
@@ -923,7 +923,7 @@ export default function InvoicesContent() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Issue Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('issueDate')}</label>
                   <input
                     type="date"
                     value={formData.issue_date}
@@ -932,7 +932,7 @@ export default function InvoicesContent() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('dueDate')}</label>
                   <input
                     type="date"
                     value={formData.due_date}
@@ -945,7 +945,7 @@ export default function InvoicesContent() {
               {/* Line Items */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">Line Items</label>
+                  <label className="text-sm font-medium text-gray-700">{t('lineItems')}</label>
                   <button
                     type="button"
                     onClick={addLineItem}
@@ -960,10 +960,10 @@ export default function InvoicesContent() {
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="text-left text-xs font-semibold text-gray-600 px-4 py-3">Description</th>
+                        <th className="text-left text-xs font-semibold text-gray-600 px-4 py-3">{t('description')}</th>
                         <th className="text-center text-xs font-semibold text-gray-600 px-4 py-3 w-20">Qty</th>
-                        <th className="text-right text-xs font-semibold text-gray-600 px-4 py-3 w-32">Unit Price</th>
-                        <th className="text-right text-xs font-semibold text-gray-600 px-4 py-3 w-28">Amount</th>
+                        <th className="text-right text-xs font-semibold text-gray-600 px-4 py-3 w-32">{t('unitPrice')}</th>
+                        <th className="text-right text-xs font-semibold text-gray-600 px-4 py-3 w-28">{t('amount')}</th>
                         <th className="w-12"></th>
                       </tr>
                     </thead>
@@ -975,7 +975,7 @@ export default function InvoicesContent() {
                               type="text"
                               value={item.description}
                               onChange={(e) => updateLineItem(index, 'description', e.target.value)}
-                              placeholder="Item description"
+                              placeholder={t('itemDescriptionPlaceholder')}
                               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                             />
                           </td>
@@ -1023,7 +1023,7 @@ export default function InvoicesContent() {
               <div className="flex justify-end">
                 <div className="w-72 bg-gray-50 rounded-lg p-4 space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal</span>
+                    <span className="text-gray-600">{t('subtotal')}</span>
                     <span className="font-medium text-gray-900">€{formData.subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -1042,7 +1042,7 @@ export default function InvoicesContent() {
                     <span className="text-gray-900">€{formData.tax_amount.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Discount</span>
+                    <span className="text-gray-600">{t('discount')}</span>
                     <input
                       type="number"
                       value={formData.discount_amount}
@@ -1053,7 +1053,7 @@ export default function InvoicesContent() {
                     />
                   </div>
                   <div className="flex justify-between pt-3 border-t border-gray-200">
-                    <span className="font-semibold text-gray-900">Total</span>
+                    <span className="font-semibold text-gray-900">{t('total')}</span>
                     <span className="font-bold text-xl text-gray-900">€{formData.total_amount.toFixed(2)}</span>
                   </div>
                 </div>
@@ -1062,7 +1062,7 @@ export default function InvoicesContent() {
               {/* Notes & Terms */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Terms</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('paymentTerms')}</label>
                   <input
                     type="text"
                     value={formData.payment_terms}
@@ -1071,12 +1071,12 @@ export default function InvoicesContent() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('notes')}</label>
                   <input
                     type="text"
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Additional notes..."
+                    placeholder={t('additionalNotesPlaceholder')}
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
                   />
                 </div>

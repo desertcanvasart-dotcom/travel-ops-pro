@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { 
   ArrowLeft,
@@ -92,6 +93,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 export default function TripPnLDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
+  const t = useTranslations('profitLoss.detail')
   const [pnlData, setPnlData] = useState<TripPnL | null>(null)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -161,9 +163,9 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
   if (!pnlData) {
     return (
       <div className="p-6 text-center">
-        <p className="text-gray-500">Trip not found</p>
+        <p className="text-gray-500">{t('notFound')}</p>
         <Link href="/profit-loss" className="text-[#647C47] hover:underline mt-2 inline-block">
-          Back to Profit & Loss
+          {t('backToList')}
         </Link>
       </div>
     )
@@ -188,7 +190,7 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-semibold text-gray-900">{pnlData.itinerary_code}</h1>
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_CONFIG[pnlData.status]?.bg || 'bg-gray-100'} ${STATUS_CONFIG[pnlData.status]?.color || 'text-gray-600'}`}>
-                {STATUS_CONFIG[pnlData.status]?.label || pnlData.status}
+                {t(`status.${pnlData.status}` as any) || pnlData.status}
               </span>
             </div>
             <p className="text-sm text-gray-500">{pnlData.client_name} • {pnlData.trip_name}</p>
@@ -201,14 +203,14 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Calendar className="h-4 w-4" />
-            View Itinerary
+            {t('viewItinerary')}
           </Link>
           <Link
             href={`/expenses?itineraryId=${pnlData.itinerary_id}`}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Add Expense
+            {t('addExpense')}
           </Link>
         </div>
       </div>
@@ -220,17 +222,17 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
           <div className="text-center p-4 bg-blue-50 rounded-lg">
             <div className="flex items-center justify-center gap-2 mb-2">
               <DollarSign className="h-5 w-5 text-blue-600" />
-              <span className="text-sm font-medium text-blue-600">Revenue</span>
+              <span className="text-sm font-medium text-blue-600">{t('revenue')}</span>
             </div>
             <p className="text-2xl font-bold text-blue-700">
               {getCurrencySymbol(pnlData.currency)}{revenue.toLocaleString()}
             </p>
             {pnlData.total_revenue === 0 && (
-              <p className="text-xs text-blue-500 mt-1">Quoted amount</p>
+              <p className="text-xs text-blue-500 mt-1">{t('quotedAmount')}</p>
             )}
             {pnlData.total_paid > 0 && pnlData.total_paid < revenue && (
               <p className="text-xs text-blue-500 mt-1">
-                {getCurrencySymbol(pnlData.currency)}{pnlData.total_paid.toLocaleString()} paid
+                {getCurrencySymbol(pnlData.currency)}{pnlData.total_paid.toLocaleString()} {t('paid')}
               </p>
             )}
           </div>
@@ -244,14 +246,14 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
           <div className="text-center p-4 bg-red-50 rounded-lg">
             <div className="flex items-center justify-center gap-2 mb-2">
               <Receipt className="h-5 w-5 text-red-600" />
-              <span className="text-sm font-medium text-red-600">Expenses</span>
+              <span className="text-sm font-medium text-red-600">{t('expenses')}</span>
             </div>
             <p className="text-2xl font-bold text-red-700">
               {getCurrencySymbol(pnlData.currency)}{pnlData.total_expenses.toLocaleString()}
             </p>
             {pnlData.expenses_pending > 0 && (
               <p className="text-xs text-red-500 mt-1">
-                {getCurrencySymbol(pnlData.currency)}{pnlData.expenses_pending.toLocaleString()} pending
+                {getCurrencySymbol(pnlData.currency)}{pnlData.expenses_pending.toLocaleString()} {t('pending')}
               </p>
             )}
           </div>
@@ -270,14 +272,14 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
                 <TrendingDown className="h-5 w-5 text-red-600" />
               )}
               <span className={`text-sm font-medium ${getProfitColor(pnlData.gross_profit)}`}>
-                {pnlData.gross_profit >= 0 ? 'Profit' : 'Loss'}
+                {pnlData.gross_profit >= 0 ? t('profit') : t('loss')}
               </span>
             </div>
             <p className={`text-2xl font-bold ${getProfitColor(pnlData.gross_profit)}`}>
               {pnlData.gross_profit >= 0 ? '+' : ''}{getCurrencySymbol(pnlData.currency)}{pnlData.gross_profit.toLocaleString()}
             </p>
             <p className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${getMarginColor(pnlData.profit_margin)}`}>
-              {pnlData.profit_margin >= 0 ? '+' : ''}{pnlData.profit_margin.toFixed(1)}% margin
+              {pnlData.profit_margin >= 0 ? '+' : ''}{pnlData.profit_margin.toFixed(1)}% {t('margin')}
             </p>
           </div>
         </div>
@@ -288,19 +290,19 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
         {/* Expense Breakdown */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Expense Breakdown</h3>
-            <span className="text-xs text-gray-500">{expenses.length} expenses</span>
+            <h3 className="text-sm font-semibold text-gray-900">{t('expenseBreakdown')}</h3>
+            <span className="text-xs text-gray-500">{expenses.length} {t('expensesCount')}</span>
           </div>
 
           {sortedBreakdown.length === 0 ? (
             <div className="text-center py-8">
               <Receipt className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No expenses recorded</p>
+              <p className="text-sm text-gray-500">{t('noExpensesRecorded')}</p>
               <Link
                 href={`/expenses?itineraryId=${pnlData.itinerary_id}`}
                 className="text-sm text-[#647C47] hover:underline mt-2 inline-block"
               >
-                Add expenses
+                {t('addExpenses')}
               </Link>
             </div>
           ) : (
@@ -313,7 +315,7 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
                     <div className="flex items-center justify-between text-sm mb-1">
                       <div className="flex items-center gap-2">
                         <span>{config.icon}</span>
-                        <span className="text-gray-700">{config.label}</span>
+                        <span className="text-gray-700">{t(`categories.${category}` as any) || config.label}</span>
                       </div>
                       <span className="font-medium text-gray-900">
                         {getCurrencySymbol(pnlData.currency)}{amount.toLocaleString()}
@@ -336,18 +338,18 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
         {/* Recent Expenses */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Expenses</h3>
+            <h3 className="text-sm font-semibold text-gray-900">{t('expenses')}</h3>
             <Link
               href={`/expenses?itineraryId=${pnlData.itinerary_id}`}
               className="text-xs text-[#647C47] hover:underline"
             >
-              View all
+              {t('viewAll')}
             </Link>
           </div>
 
           {expenses.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-sm text-gray-500">No expenses</p>
+              <p className="text-sm text-gray-500">{t('noExpenses')}</p>
             </div>
           ) : (
             <div className="space-y-2 max-h-[300px] overflow-y-auto">
@@ -374,7 +376,7 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
                       <p className="text-sm font-semibold text-gray-900">
                         {getCurrencySymbol(pnlData.currency)}{Number(expense.amount).toLocaleString()}
                       </p>
-                      <span className={`text-xs ${statusConfig.color}`}>{statusConfig.label}</span>
+                      <span className={`text-xs ${statusConfig.color}`}>{t(`status.${expense.status}` as any) || statusConfig.label}</span>
                     </div>
                   </Link>
                 )
@@ -386,19 +388,19 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
         {/* Invoices */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Invoices</h3>
-            <span className="text-xs text-gray-500">{invoices.length} invoice{invoices.length !== 1 ? 's' : ''}</span>
+            <h3 className="text-sm font-semibold text-gray-900">{t('invoices')}</h3>
+            <span className="text-xs text-gray-500">{invoices.length} {invoices.length === 1 ? t('invoiceSingle') : t('invoicesPlural')}</span>
           </div>
 
           {invoices.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No invoices created</p>
+              <p className="text-sm text-gray-500">{t('noInvoices')}</p>
               <Link
                 href={`/itineraries/${pnlData.itinerary_id}`}
                 className="text-sm text-[#647C47] hover:underline mt-2 inline-block"
               >
-                Create invoice
+                {t('createInvoice')}
               </Link>
             </div>
           ) : (
@@ -424,7 +426,7 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
                       <p className="text-sm font-semibold text-gray-900">
                         {getCurrencySymbol(pnlData.currency)}{Number(invoice.total_amount).toLocaleString()}
                       </p>
-                      <span className={`text-xs ${statusConfig.color}`}>{statusConfig.label}</span>
+                      <span className={`text-xs ${statusConfig.color}`}>{t(`status.${invoice.status}` as any) || statusConfig.label}</span>
                     </div>
                   </Link>
                 )
@@ -435,14 +437,14 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
 
         {/* Trip Info */}
         <div className="bg-white border border-gray-200 rounded-lg p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Trip Details</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('tripDetails')}</h3>
           <div className="space-y-4">
             <div className="flex items-start gap-3">
               <div className="p-2 bg-gray-100 rounded-lg">
                 <User className="h-4 w-4 text-gray-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Client</p>
+                <p className="text-xs text-gray-500">{t('client')}</p>
                 <p className="text-sm font-medium text-gray-900">{pnlData.client_name}</p>
               </div>
             </div>
@@ -451,7 +453,7 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
                 <MapPin className="h-4 w-4 text-gray-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Trip</p>
+                <p className="text-xs text-gray-500">{t('trip')}</p>
                 <p className="text-sm font-medium text-gray-900">{pnlData.trip_name}</p>
               </div>
             </div>
@@ -460,7 +462,7 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
                 <Calendar className="h-4 w-4 text-gray-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Dates</p>
+                <p className="text-xs text-gray-500">{t('dates')}</p>
                 <p className="text-sm font-medium text-gray-900">
                   {new Date(pnlData.start_date).toLocaleDateString()} - {new Date(pnlData.end_date).toLocaleDateString()}
                 </p>
@@ -471,7 +473,7 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
                 <DollarSign className="h-4 w-4 text-gray-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Quoted Amount</p>
+                <p className="text-xs text-gray-500">{t('quotedAmountLabel')}</p>
                 <p className="text-sm font-medium text-gray-900">
                   {getCurrencySymbol(pnlData.currency)}{pnlData.quoted_amount.toLocaleString()}
                 </p>

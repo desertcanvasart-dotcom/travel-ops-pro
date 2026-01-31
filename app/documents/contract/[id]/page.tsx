@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import Link from 'next/link'
@@ -52,6 +53,7 @@ interface ContractData {
 }
 
 export default function ContractPage() {
+  const t = useTranslations('contract')
   const params = useParams()
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -195,7 +197,7 @@ export default function ContractPage() {
       document.body.removeChild(a)
     } catch (error) {
       console.error('Error downloading PDF:', error)
-      alert('Failed to download contract')
+      alert(t('failedToDownloadContract'))
     } finally {
       setSaving(false)
     }
@@ -206,7 +208,7 @@ export default function ContractPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-12 h-12 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-500">Loading contract...</p>
+          <p className="text-sm text-gray-500">{t('loadingContract')}</p>
         </div>
       </div>
     )
@@ -216,9 +218,9 @@ export default function ContractPage() {
     return (
       <div className="p-4 lg:p-6">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-lg font-semibold text-gray-900 mb-3">Itinerary Not Found</h1>
+          <h1 className="text-lg font-semibold text-gray-900 mb-3">{t('itineraryNotFound')}</h1>
           <Link href="/itineraries" className="text-primary-600 hover:text-primary-700 text-sm">
-            ← Back to Itineraries
+            ← {t('backToItineraries')}
           </Link>
         </div>
       </div>
@@ -236,18 +238,18 @@ export default function ContractPage() {
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Itineraries
+            {t('backToItineraries')}
           </Link>
-          
+
           <div className="flex gap-2">
             <button
               onClick={() => setEditMode(!editMode)}
               className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-50 flex items-center gap-1.5 text-sm font-medium"
             >
               {editMode ? <Eye className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-              {editMode ? 'Preview' : 'Edit'}
+              {editMode ? t('preview') : t('edit')}
             </button>
-            
+
             <button
               onClick={handleDownloadPDF}
               disabled={saving}
@@ -256,24 +258,24 @@ export default function ContractPage() {
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
+                  {t('generating')}
                 </>
               ) : (
                 <>
                   <Download className="w-4 h-4" />
-                  Download PDF
+                  {t('downloadPDF')}
                 </>
               )}
             </button>
 
             {itinerary?.client_phone && !editMode && (
-              <WhatsAppButton 
+              <WhatsAppButton
                 itineraryId={params.id as string}
                 type="contract"
                 clientPhone={itinerary.client_phone}
                 clientName={itinerary.client_name}
                 onSuccess={() => {
-                  alert('Contract sent via WhatsApp! ✅')
+                  alert(t('contractSentViaWhatsApp'))
                 }}
               />
             )}
@@ -285,11 +287,11 @@ export default function ContractPage() {
           
           {/* Title */}
           <div className="text-center border-b border-gray-200 pb-4">
-            <h1 className="text-2xl font-bold text-gray-900 mb-3">TRAVEL CONTRACT</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-3">{t('travelContract')}</h1>
             {editMode ? (
               <div className="space-y-2 max-w-2xl mx-auto">
                 <div className="flex items-center gap-3">
-                  <label className="font-medium text-gray-700 w-32 text-right text-sm">Contract Number:</label>
+                  <label className="font-medium text-gray-700 w-32 text-right text-sm">{t('contractNumber')}:</label>
                   <input
                     type="text"
                     value={contractData.contractNumber}
@@ -298,7 +300,7 @@ export default function ContractPage() {
                   />
                 </div>
                 <div className="flex items-center gap-3">
-                  <label className="font-medium text-gray-700 w-32 text-right text-sm">Contract Date:</label>
+                  <label className="font-medium text-gray-700 w-32 text-right text-sm">{t('contractDate')}:</label>
                   <input
                     type="date"
                     value={contractData.contractDate}
@@ -309,48 +311,48 @@ export default function ContractPage() {
               </div>
             ) : (
               <div className="space-y-0.5 text-xs text-gray-600">
-                <p><strong>Contract Number:</strong> {contractData.contractNumber}</p>
-                <p><strong>Date:</strong> {new Date(contractData.contractDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p><strong>{t('contractNumber')}:</strong> {contractData.contractNumber}</p>
+                <p><strong>{t('date')}:</strong> {new Date(contractData.contractDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
               </div>
             )}
           </div>
 
           {/* Parties */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">PARTIES</h2>
-            
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('parties')}</h2>
+
             {editMode ? (
               <>
                 <div className="mb-4 space-y-2">
-                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">Service Provider:</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">{t('serviceProvider')}:</h3>
                   <input
                     type="text"
                     value={contractData.serviceProvider}
                     onChange={(e) => handleChange('serviceProvider', e.target.value)}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                    placeholder="Company Name"
+                    placeholder={t('companyName')}
                   />
                   <input
                     type="text"
                     value={contractData.providerWebsite}
                     onChange={(e) => handleChange('providerWebsite', e.target.value)}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                    placeholder="Website"
+                    placeholder={t('website')}
                   />
                   <input
                     type="text"
                     value={contractData.providerLocation}
                     onChange={(e) => handleChange('providerLocation', e.target.value)}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                    placeholder="Location"
+                    placeholder={t('location')}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">Client(s):</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">{t('clients')}:</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-600">Primary Traveler Name</label>
+                      <label className="text-xs text-gray-600">{t('primaryTravelerName')}</label>
                       <input
                         type="text"
                         value={contractData.clientName}
@@ -359,7 +361,7 @@ export default function ContractPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-600">Email</label>
+                      <label className="text-xs text-gray-600">{t('email')}</label>
                       <input
                         type="email"
                         value={contractData.clientEmail}
@@ -369,7 +371,7 @@ export default function ContractPage() {
                     </div>
                   </div>
                   <div className="w-40">
-                    <label className="text-xs text-gray-600">Number of Travelers</label>
+                    <label className="text-xs text-gray-600">{t('numberOfTravelers')}</label>
                     <input
                       type="number"
                       value={contractData.numTravelers || ''}
@@ -383,19 +385,19 @@ export default function ContractPage() {
             ) : (
               <>
                 <div className="mb-4">
-                  <h3 className="font-semibold text-gray-900 mb-1 text-sm">Service Provider:</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1 text-sm">{t('serviceProvider')}:</h3>
                   <p className="text-sm text-gray-700">{contractData.serviceProvider}</p>
-                  <p className="text-gray-600 text-xs">Website: {contractData.providerWebsite}</p>
+                  <p className="text-gray-600 text-xs">{t('website')}: {contractData.providerWebsite}</p>
                   <p className="text-gray-600 text-xs">{contractData.providerLocation}</p>
                 </div>
 
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-1 text-sm">Client(s):</h3>
-                  <p className="text-sm text-gray-700"><strong>Primary Traveler:</strong> {contractData.clientName}</p>
+                  <h3 className="font-semibold text-gray-900 mb-1 text-sm">{t('clients')}:</h3>
+                  <p className="text-sm text-gray-700"><strong>{t('primaryTraveler')}:</strong> {contractData.clientName}</p>
                   {contractData.clientEmail && (
                     <p className="text-gray-600 text-xs">{contractData.clientEmail}</p>
                   )}
-                  <p className="text-sm text-gray-700 mt-1"><strong>Number of Travelers:</strong> {contractData.numTravelers} {contractData.numTravelers === 1 ? 'person' : 'persons'}</p>
+                  <p className="text-sm text-gray-700 mt-1"><strong>{t('numberOfTravelers')}:</strong> {contractData.numTravelers} {contractData.numTravelers === 1 ? t('person') : t('persons')}</p>
                 </div>
               </>
             )}
@@ -403,11 +405,11 @@ export default function ContractPage() {
 
           {/* Tour Details */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">TOUR DETAILS</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('tourDetails')}</h2>
             {editMode ? (
               <div className="space-y-2">
                 <div>
-                  <label className="text-xs text-gray-600">Tour Package Name</label>
+                  <label className="text-xs text-gray-600">{t('tourPackageName')}</label>
                   <input
                     type="text"
                     value={contractData.tourPackage}
@@ -417,7 +419,7 @@ export default function ContractPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-gray-600">Start Date</label>
+                    <label className="text-xs text-gray-600">{t('startDate')}</label>
                     <input
                       type="date"
                       value={contractData.startDate}
@@ -426,7 +428,7 @@ export default function ContractPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-600">End Date</label>
+                    <label className="text-xs text-gray-600">{t('endDate')}</label>
                     <input
                       type="date"
                       value={contractData.endDate}
@@ -436,44 +438,44 @@ export default function ContractPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600">Duration</label>
+                  <label className="text-xs text-gray-600">{t('duration')}</label>
                   <input
                     type="text"
                     value={contractData.duration}
                     onChange={(e) => handleChange('duration', e.target.value)}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                    placeholder="8 Days / 7 Nights"
+                    placeholder={t('durationPlaceholder')}
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600">Destinations</label>
+                  <label className="text-xs text-gray-600">{t('destinations')}</label>
                   <input
                     type="text"
                     value={contractData.destinations}
                     onChange={(e) => handleChange('destinations', e.target.value)}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                    placeholder="Cairo, Luxor, Aswan"
+                    placeholder={t('destinationsPlaceholder')}
                   />
                 </div>
               </div>
             ) : (
               <div className="space-y-1 text-sm text-gray-700">
-                <p><strong>Tour Package:</strong> {contractData.tourPackage}</p>
-                <p><strong>Tour Start Date:</strong> {new Date(contractData.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                <p><strong>Tour End Date:</strong> {new Date(contractData.endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                <p><strong>Total Duration:</strong> {contractData.duration}</p>
-                <p><strong>Destinations:</strong> {contractData.destinations}</p>
+                <p><strong>{t('tourPackage')}:</strong> {contractData.tourPackage}</p>
+                <p><strong>{t('tourStartDate')}:</strong> {new Date(contractData.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p><strong>{t('tourEndDate')}:</strong> {new Date(contractData.endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p><strong>{t('totalDuration')}:</strong> {contractData.duration}</p>
+                <p><strong>{t('destinations')}:</strong> {contractData.destinations}</p>
               </div>
             )}
           </div>
 
           {/* Financial Terms */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">FINANCIAL TERMS</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('financialTerms')}</h2>
             {editMode ? (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-gray-600">Total Package Price (USD)</label>
+                  <label className="text-xs text-gray-600">{t('totalPackagePrice')}</label>
                   <input
                     type="number"
                     value={contractData.totalCost}
@@ -483,7 +485,7 @@ export default function ContractPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600">Deposit Percentage</label>
+                  <label className="text-xs text-gray-600">{t('depositPercentage')}</label>
                   <input
                     type="number"
                     value={contractData.depositPercentage}
@@ -494,7 +496,7 @@ export default function ContractPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-600">Payment Terms</label>
+                  <label className="text-xs text-gray-600">{t('paymentTerms')}</label>
                   <textarea
                     value={contractData.paymentTerms}
                     onChange={(e) => handleChange('paymentTerms', e.target.value)}
@@ -507,14 +509,14 @@ export default function ContractPage() {
               <>
                 <div className="bg-primary-50 border border-primary-200 rounded-md p-4 mb-3">
                   <p className="text-lg font-bold text-gray-900">
-                    Total Package Price: <span className="text-primary-600">USD ${contractData.totalCost.toLocaleString()}</span>
+                    {t('totalPackagePrice')}: <span className="text-primary-600">USD ${contractData.totalCost.toLocaleString()}</span>
                   </p>
                   <p className="text-gray-600 text-xs mt-1">
-                    (USD ${(contractData.totalCost / contractData.numTravelers).toFixed(2)} per person × {contractData.numTravelers} {contractData.numTravelers === 1 ? 'traveler' : 'travelers'})
+                    (USD ${(contractData.totalCost / contractData.numTravelers).toFixed(2)} {t('perPerson')} × {contractData.numTravelers} {contractData.numTravelers === 1 ? t('traveler') : t('travelers')})
                   </p>
                 </div>
 
-                <h3 className="font-semibold text-gray-900 mb-2 text-sm">PAYMENT SCHEDULE</h3>
+                <h3 className="font-semibold text-gray-900 mb-2 text-sm">{t('paymentSchedule')}</h3>
                 <div className="bg-gray-50 rounded-md p-3 text-xs text-gray-700">
                   <p>{contractData.paymentTerms}</p>
                 </div>
@@ -524,8 +526,8 @@ export default function ContractPage() {
 
           {/* Inclusions */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">INCLUSIONS</h2>
-            <h3 className="font-semibold text-gray-900 mb-2 text-sm">What's Included</h3>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('inclusions')}</h2>
+            <h3 className="font-semibold text-gray-900 mb-2 text-sm">{t('whatsIncluded')}</h3>
             {editMode ? (
               <div className="space-y-1.5">
                 {contractData.inclusions.map((item, index) => (
@@ -539,7 +541,7 @@ export default function ContractPage() {
                     <button
                       onClick={() => removeArrayItem('inclusions', index)}
                       className="p-1.5 text-red-600 hover:bg-red-50 rounded-md"
-                      title="Remove"
+                      title={t('remove')}
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -550,7 +552,7 @@ export default function ContractPage() {
                   className="px-3 py-1.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-xs flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" />
-                  Add Item
+                  {t('addItem')}
                 </button>
               </div>
             ) : (
@@ -561,7 +563,7 @@ export default function ContractPage() {
               </ul>
             )}
 
-            <h3 className="font-semibold text-gray-900 mb-2 mt-4 text-sm">What's Not Included</h3>
+            <h3 className="font-semibold text-gray-900 mb-2 mt-4 text-sm">{t('whatsNotIncluded')}</h3>
             {editMode ? (
               <div className="space-y-1.5">
                 {contractData.exclusions.map((item, index) => (
@@ -575,7 +577,7 @@ export default function ContractPage() {
                     <button
                       onClick={() => removeArrayItem('exclusions', index)}
                       className="p-1.5 text-red-600 hover:bg-red-50 rounded-md"
-                      title="Remove"
+                      title={t('remove')}
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -586,7 +588,7 @@ export default function ContractPage() {
                   className="px-3 py-1.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-xs flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" />
-                  Add Item
+                  {t('addItem')}
                 </button>
               </div>
             ) : (
@@ -600,12 +602,12 @@ export default function ContractPage() {
 
           {/* Cancellation Policy */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">CANCELLATION POLICY</h2>
-            
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('cancellationPolicy')}</h2>
+
             {editMode ? (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-gray-600 font-medium">45+ Days Before</label>
+                  <label className="text-xs text-gray-600 font-medium">{t('cancellation45DaysBefore')}</label>
                   <textarea
                     value={contractData.cancellation45Days}
                     onChange={(e) => handleChange('cancellation45Days', e.target.value)}
@@ -613,9 +615,9 @@ export default function ContractPage() {
                     rows={2}
                   />
                 </div>
-                
+
                 <div>
-                  <label className="text-xs text-gray-600 font-medium">44-30 Days Before</label>
+                  <label className="text-xs text-gray-600 font-medium">{t('cancellation44to30DaysBefore')}</label>
                   <textarea
                     value={contractData.cancellation44to30Days}
                     onChange={(e) => handleChange('cancellation44to30Days', e.target.value)}
@@ -625,7 +627,7 @@ export default function ContractPage() {
                 </div>
                 
                 <div>
-                  <label className="text-xs text-gray-600 font-medium">29-15 Days Before</label>
+                  <label className="text-xs text-gray-600 font-medium">{t('cancellation29to15DaysBefore')}</label>
                   <textarea
                     value={contractData.cancellation29to15Days}
                     onChange={(e) => handleChange('cancellation29to15Days', e.target.value)}
@@ -633,9 +635,9 @@ export default function ContractPage() {
                     rows={2}
                   />
                 </div>
-                
+
                 <div>
-                  <label className="text-xs text-gray-600 font-medium">14-0 Days Before</label>
+                  <label className="text-xs text-gray-600 font-medium">{t('cancellation14to0DaysBefore')}</label>
                   <textarea
                     value={contractData.cancellation14to0Days}
                     onChange={(e) => handleChange('cancellation14to0Days', e.target.value)}
@@ -643,9 +645,9 @@ export default function ContractPage() {
                     rows={2}
                   />
                 </div>
-                
+
                 <div>
-                  <label className="text-xs text-gray-600 font-medium">Flight Cancellation</label>
+                  <label className="text-xs text-gray-600 font-medium">{t('flightCancellation')}</label>
                   <textarea
                     value={contractData.flightCancellation}
                     onChange={(e) => handleChange('flightCancellation', e.target.value)}
@@ -653,9 +655,9 @@ export default function ContractPage() {
                     rows={2}
                   />
                 </div>
-                
+
                 <div>
-                  <label className="text-xs text-gray-600 font-medium">No-Show Policy</label>
+                  <label className="text-xs text-gray-600 font-medium">{t('noShowPolicy')}</label>
                   <textarea
                     value={contractData.noShowPolicy}
                     onChange={(e) => handleChange('noShowPolicy', e.target.value)}
@@ -663,9 +665,9 @@ export default function ContractPage() {
                     rows={2}
                   />
                 </div>
-                
+
                 <div>
-                  <label className="text-xs text-gray-600 font-medium">Force Majeure</label>
+                  <label className="text-xs text-gray-600 font-medium">{t('forceMajeure')}</label>
                   <textarea
                     value={contractData.forceMajeure}
                     onChange={(e) => handleChange('forceMajeure', e.target.value)}
@@ -677,34 +679,34 @@ export default function ContractPage() {
             ) : (
               <div className="space-y-3">
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">Standard Cancellation Policy</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">{t('standardCancellationPolicy')}</h3>
                   <div className="bg-gray-50 rounded-md p-3 space-y-1 text-xs text-gray-700">
-                    <p>The following cancellation charges apply from the date written notice is received:</p>
-                    <p>• Domestic tickets are the only non-refundable part of the trip from day 1.</p>
+                    <p>{t('cancellationChargesApply')}</p>
+                    <p>• {t('domesticTicketsNonRefundable')}</p>
                     <p>• {contractData.cancellation45Days}</p>
                     <p>• {contractData.cancellation44to30Days}</p>
                     <p>• {contractData.cancellation29to15Days}</p>
                     <p>• {contractData.cancellation14to0Days}</p>
-                    <p>• Cancellation fees will be applied on accommodation portions only.</p>
+                    <p>• {t('cancellationFeesAccommodationOnly')}</p>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">Flight Cancellation Policy</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">{t('flightCancellationPolicy')}</h3>
                   <p className="text-xs text-gray-700 bg-gray-50 rounded-md p-3">
                     {contractData.flightCancellation}
                   </p>
                 </div>
 
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">No-Show Policy</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">{t('noShowPolicy')}</h3>
                   <p className="text-xs text-gray-700 bg-gray-50 rounded-md p-3">
                     {contractData.noShowPolicy}
                   </p>
                 </div>
 
                 <div>
-                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">Force Majeure</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">{t('forceMajeure')}</h3>
                   <p className="text-xs text-gray-700 bg-gray-50 rounded-md p-3">
                     {contractData.forceMajeure}
                   </p>
@@ -715,57 +717,57 @@ export default function ContractPage() {
 
           {/* Terms & Conditions */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">TERMS AND CONDITIONS</h2>
-            
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('termsAndConditions')}</h2>
+
             <div className="space-y-3 text-xs">
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">1. BOOKING CONFIRMATION</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.bookingConfirmation.title')}</h3>
                 <p className="text-gray-700">
-                  This contract becomes binding upon receipt of the required deposit and signed contract by {contractData.serviceProvider}.
+                  {t('terms.bookingConfirmation.text', { serviceProvider: contractData.serviceProvider })}
                 </p>
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">2. TRAVEL DOCUMENTS</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.travelDocuments.title')}</h3>
                 <p className="text-gray-700">
-                  Clients are responsible for ensuring they have valid passports, visas, and any required health documentation for travel to Egypt.
+                  {t('terms.travelDocuments.text')}
                 </p>
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">3. HEALTH AND SAFETY</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.healthAndSafety.title')}</h3>
                 <div className="text-gray-700 space-y-0.5">
-                  <p>• Clients must disclose any medical conditions that may affect their ability to participate in tour activities</p>
-                  <p>• Travel insurance is strongly recommended and may be required</p>
-                  <p>• Clients participate in all activities at their own risk</p>
+                  <p>• {t('terms.healthAndSafety.point1')}</p>
+                  <p>• {t('terms.healthAndSafety.point2')}</p>
+                  <p>• {t('terms.healthAndSafety.point3')}</p>
                 </div>
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">4. CHANGES TO ITINERARY</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.changesToItinerary.title')}</h3>
                 <p className="text-gray-700">
-                  {contractData.serviceProvider} reserves the right to modify the itinerary due to circumstances beyond our control. Every effort will be made to provide suitable alternatives of equal value. No refunds will be provided for missed activities due to client's personal circumstances.
+                  {t('terms.changesToItinerary.text', { serviceProvider: contractData.serviceProvider })}
                 </p>
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">5. LIABILITY LIMITATIONS</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.liabilityLimitations.title')}</h3>
                 <p className="text-gray-700">
-                  {contractData.serviceProvider}'s liability is limited to the cost of the tour package. We are not responsible for delays, cancellations, or changes made by third-party suppliers.
+                  {t('terms.liabilityLimitations.text', { serviceProvider: contractData.serviceProvider })}
                 </p>
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">6. DISPUTE RESOLUTION</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.disputeResolution.title')}</h3>
                 <p className="text-gray-700">
-                  Any disputes arising from this contract shall be resolved through arbitration under Egyptian law.
+                  {t('terms.disputeResolution.text')}
                 </p>
               </div>
 
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">7. DATA PROTECTION</h3>
+                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.dataProtection.title')}</h3>
                 <p className="text-gray-700">
-                  Client information will be used solely for the purpose of providing travel services and will be handled in accordance with applicable privacy laws.
+                  {t('terms.dataProtection.text')}
                 </p>
               </div>
             </div>
@@ -773,17 +775,17 @@ export default function ContractPage() {
 
           {/* Special Notes */}
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">SPECIAL NOTES</h2>
-            
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('specialNotes')}</h2>
+
             {editMode ? (
               <div>
-                <label className="text-xs text-gray-600">Special Notes & Safety Information</label>
+                <label className="text-xs text-gray-600">{t('specialNotesSafetyInfo')}</label>
                 <textarea
                   value={contractData.specialNotes}
                   onChange={(e) => handleChange('specialNotes', e.target.value)}
                   className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs mt-1"
                   rows={5}
-                  placeholder="Add safety notes, practical tips, packing suggestions, etc."
+                  placeholder={t('specialNotesPlaceholder')}
                 />
               </div>
             ) : (
@@ -795,37 +797,37 @@ export default function ContractPage() {
 
           {/* Signatures */}
           <div className="border-t border-gray-200 pt-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-3">SIGNATURES</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-3">{t('signatures')}</h2>
             <p className="text-xs text-gray-700 mb-6">
-              By signing below, both parties acknowledge they have read, understood, and agree to be bound by the terms and conditions of this contract.
+              {t('signaturesAcknowledgement')}
             </p>
 
             <div className="space-y-6">
               <div>
                 <p className="font-semibold text-gray-900 mb-3 text-sm">{contractData.serviceProvider}</p>
                 <div className="border-b border-gray-300 w-80 mb-1.5"></div>
-                <p className="text-xs text-gray-600">Date: _______________</p>
+                <p className="text-xs text-gray-600">{t('date')}: _______________</p>
               </div>
 
               <div>
-                <p className="font-semibold text-gray-900 mb-3 text-sm">Client Acceptance:</p>
+                <p className="font-semibold text-gray-900 mb-3 text-sm">{t('clientAcceptance')}:</p>
                 <div className="mb-5">
                   <p className="text-xs text-gray-700 mb-1.5">{contractData.clientName}</p>
                   <div className="border-b border-gray-300 w-80 mb-1.5"></div>
-                  <p className="text-xs text-gray-600">Date: _______________</p>
+                  <p className="text-xs text-gray-600">{t('date')}: _______________</p>
                 </div>
               </div>
             </div>
 
             <div className="mt-6 pt-5 border-t border-gray-200">
-              <p className="font-semibold text-gray-900 mb-1 text-sm">Contract Effective Date:</p>
-              <p className="text-xs text-gray-700">Upon receipt of signed contract and deposit payment</p>
-              
-              <p className="font-semibold text-gray-900 mb-1 mt-3 text-sm">Contract Expiration:</p>
-              <p className="text-xs text-gray-700">{new Date(contractData.endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} (completion of tour services)</p>
-              
+              <p className="font-semibold text-gray-900 mb-1 text-sm">{t('contractEffectiveDate')}:</p>
+              <p className="text-xs text-gray-700">{t('uponReceiptSignedContract')}</p>
+
+              <p className="font-semibold text-gray-900 mb-1 mt-3 text-sm">{t('contractExpiration')}:</p>
+              <p className="text-xs text-gray-700">{new Date(contractData.endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} ({t('completionOfTourServices')})</p>
+
               <p className="text-xs text-gray-500 italic mt-5">
-                This contract is governed by Egyptian law and any disputes will be subject to the jurisdiction of Egyptian courts.
+                {t('contractGovernedByEgyptianLaw')}
               </p>
             </div>
           </div>

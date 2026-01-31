@@ -199,7 +199,7 @@ export default function ClientsPage() {
       fetchClients()
     } catch (error) {
       console.error('Error deleting client:', error)
-      alert('Failed to delete client. Please try again.')
+      alert(t('failedToDelete'))
     } finally {
       setDeleting(false)
     }
@@ -280,6 +280,20 @@ export default function ClientsPage() {
     return LEAD_SOURCES.find(s => s.value === source) || null
   }
 
+  const getLeadSourceLabel = (source: string | undefined): string => {
+    const labels: Record<string, string> = {
+      whatsapp: t('leadSourceWhatsApp'),
+      email: t('leadSourceEmail'),
+      website: t('leadSourceWebsite'),
+      referral: t('leadSourceReferral'),
+      phone: t('leadSourcePhone'),
+      social_media: t('leadSourceSocialMedia'),
+      trade_show: t('leadSourceTradeShow'),
+      other: t('leadSourceOther')
+    }
+    return source ? labels[source] || source : ''
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Delete Confirmation Modal */}
@@ -292,22 +306,22 @@ export default function ClientsPage() {
                   <AlertCircle className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Delete Client</h3>
-                  <p className="text-sm text-gray-500">This action cannot be undone</p>
+                  <h3 className="text-lg font-semibold text-gray-900">{t('deleteConfirmTitle')}</h3>
+                  <p className="text-sm text-gray-500">{t('deleteConfirmSubtitle')}</p>
                 </div>
               </div>
-              
+
               <p className="text-sm text-gray-700 mb-4">
-                Are you sure you want to delete <strong>{deleteModal.clientName}</strong>?
+                {t('deleteConfirmMessage')} <strong>{deleteModal.clientName}</strong>?
               </p>
-              
+
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-red-800 font-medium mb-2">This will also delete:</p>
+                <p className="text-sm text-red-800 font-medium mb-2">{t('deleteAlsoDeletes')}</p>
                 <ul className="text-sm text-red-700 space-y-1 ml-4 list-disc">
-                  <li>All client notes</li>
-                  <li>All communications history</li>
-                  <li>All follow-ups</li>
-                  <li>Client preferences</li>
+                  <li>{t('deleteItemNotes')}</li>
+                  <li>{t('deleteItemCommunications')}</li>
+                  <li>{t('deleteItemFollowups')}</li>
+                  <li>{t('deleteItemPreferences')}</li>
                 </ul>
               </div>
               
@@ -391,7 +405,7 @@ export default function ClientsPage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
               </div>
             </div>
-            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-xs text-gray-600">{t('statsActive')}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{stats.active}</p>
           </div>
 
@@ -403,7 +417,7 @@ export default function ClientsPage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
               </div>
             </div>
-            <p className="text-xs text-gray-600">VIP Clients</p>
+            <p className="text-xs text-gray-600">{t('statsVipClients')}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{stats.vip}</p>
           </div>
 
@@ -415,7 +429,7 @@ export default function ClientsPage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
               </div>
             </div>
-            <p className="text-xs text-gray-600">New (This Month)</p>
+            <p className="text-xs text-gray-600">{t('statsNewThisMonth')}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{stats.newThisMonth}</p>
           </div>
 
@@ -427,7 +441,7 @@ export default function ClientsPage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
               </div>
             </div>
-            <p className="text-xs text-gray-600">Total Revenue</p>
+            <p className="text-xs text-gray-600">{t('statsTotalRevenue')}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">
               €{stats.totalRevenue.toLocaleString()}
             </p>
@@ -443,7 +457,7 @@ export default function ClientsPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  placeholder="Search by name, email, phone, or client code..."
+                  placeholder={t('searchByNameEmailPhone')}
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
@@ -458,7 +472,7 @@ export default function ClientsPage() {
                 }`}
               >
                 <SlidersHorizontal className="w-4 h-4" />
-                Filters
+                {t('filters')}
                 {hasActiveFilters && (
                   <span className="bg-primary-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                     {[filters.status !== 'all', filters.clientType !== 'all', filters.leadSource !== 'all', filters.vipOnly, filters.dateFrom, filters.dateTo, filters.sortBy !== 'recent'].filter(Boolean).length}
@@ -471,7 +485,7 @@ export default function ClientsPage() {
                   className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <X className="w-4 h-4" />
-                  Clear
+                  {t('clearFilters')}
                 </button>
               )}
             </div>
@@ -484,83 +498,86 @@ export default function ClientsPage() {
                 {/* Status Filter */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Status
+                    {t('filterStatus')}
                   </label>
                   <select
                     value={filters.status}
                     onChange={(e) => handleFilterChange('status', e.target.value)}
                     className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
-                    <option value="all">All Statuses</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="prospect">Prospect</option>
-                    <option value="blacklisted">Blacklisted</option>
+                    <option value="all">{t('filterAllStatuses')}</option>
+                    <option value="active">{t('statusActive')}</option>
+                    <option value="inactive">{t('statusInactive')}</option>
+                    <option value="prospect">{t('statusProspect')}</option>
+                    <option value="blacklisted">{t('statusBlacklisted')}</option>
                   </select>
                 </div>
 
                 {/* Client Type Filter */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Client Type
+                    {t('filterClientType')}
                   </label>
                   <select
                     value={filters.clientType}
                     onChange={(e) => handleFilterChange('clientType', e.target.value)}
                     className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
-                    <option value="all">All Types</option>
-                    <option value="individual">Individual</option>
-                    <option value="family">Family</option>
-                    <option value="corporate">Corporate</option>
-                    <option value="agent">Travel Agent</option>
-                    <option value="group">Group</option>
+                    <option value="all">{t('filterAllTypes')}</option>
+                    <option value="individual">{t('clientTypeIndividual')}</option>
+                    <option value="family">{t('clientTypeFamily')}</option>
+                    <option value="corporate">{t('clientTypeCorporate')}</option>
+                    <option value="agent">{t('clientTypeAgent')}</option>
+                    <option value="group">{t('clientTypeGroup')}</option>
                   </select>
                 </div>
 
                 {/* Lead Source Filter */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Lead Source
+                    {t('filterLeadSource')}
                   </label>
                   <select
                     value={filters.leadSource}
                     onChange={(e) => handleFilterChange('leadSource', e.target.value)}
                     className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
-                    <option value="all">All Sources</option>
-                    {LEAD_SOURCES.map(source => (
-                      <option key={source.value} value={source.value}>
-                        {source.icon} {source.label}
-                      </option>
-                    ))}
+                    <option value="all">{t('filterAllSources')}</option>
+                    <option value="whatsapp">💬 {t('leadSourceWhatsApp')}</option>
+                    <option value="email">✉️ {t('leadSourceEmail')}</option>
+                    <option value="website">🌐 {t('leadSourceWebsite')}</option>
+                    <option value="referral">👥 {t('leadSourceReferral')}</option>
+                    <option value="phone">📞 {t('leadSourcePhone')}</option>
+                    <option value="social_media">📱 {t('leadSourceSocialMedia')}</option>
+                    <option value="trade_show">🎪 {t('leadSourceTradeShow')}</option>
+                    <option value="other">➕ {t('leadSourceOther')}</option>
                   </select>
                 </div>
 
                 {/* Sort By */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Sort By
+                    {t('filterSortBy')}
                   </label>
                   <select
                     value={filters.sortBy}
                     onChange={(e) => handleFilterChange('sortBy', e.target.value)}
                     className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
-                    <option value="recent">Most Recent</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="name">Name (A-Z)</option>
-                    <option value="name_desc">Name (Z-A)</option>
-                    <option value="revenue">Revenue (High to Low)</option>
-                    <option value="revenue_asc">Revenue (Low to High)</option>
-                    <option value="bookings">Bookings (Most)</option>
+                    <option value="recent">{t('sortMostRecent')}</option>
+                    <option value="oldest">{t('sortOldestFirst')}</option>
+                    <option value="name">{t('sortNameAZ')}</option>
+                    <option value="name_desc">{t('sortNameZA')}</option>
+                    <option value="revenue">{t('sortRevenueHighLow')}</option>
+                    <option value="revenue_asc">{t('sortRevenueLowHigh')}</option>
+                    <option value="bookings">{t('sortBookingsMost')}</option>
                   </select>
                 </div>
 
                 {/* VIP Toggle */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    VIP Clients
+                    {t('filterVipClients')}
                   </label>
                   <label className="flex items-center gap-2 px-3 py-2.5 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 shadow-sm">
                     <input
@@ -570,7 +587,7 @@ export default function ClientsPage() {
                       className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
                     />
                     <Star className="w-4 h-4 text-yellow-500" />
-                    <span className="text-sm text-gray-700">VIP Only</span>
+                    <span className="text-sm text-gray-700">{t('filterVipOnly')}</span>
                   </label>
                 </div>
               </div>
@@ -579,7 +596,7 @@ export default function ClientsPage() {
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Member Since (From)
+                    {t('filterMemberSinceFrom')}
                   </label>
                   <input
                     type="date"
@@ -590,7 +607,7 @@ export default function ClientsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Member Since (To)
+                    {t('filterMemberSinceTo')}
                   </label>
                   <input
                     type="date"
@@ -610,16 +627,16 @@ export default function ClientsPage() {
           {loading ? (
             <div className="p-8 text-center">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <p className="mt-3 text-sm text-gray-600">Loading clients...</p>
+              <p className="mt-3 text-sm text-gray-600">{t('loadingClients')}</p>
             </div>
           ) : clients.length === 0 ? (
             <div className="p-8 text-center">
               <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-gray-900 mb-2">No clients found</h3>
+              <h3 className="text-base font-semibold text-gray-900 mb-2">{t('noClientsFound')}</h3>
               <p className="text-sm text-gray-600 mb-4">
                 {hasActiveFilters
-                  ? 'Try adjusting your search or filters'
-                  : 'Get started by adding your first client'}
+                  ? t('noClientsFilterHint')
+                  : t('noClientsStartHint')}
               </p>
               {hasActiveFilters ? (
                 <button
@@ -627,7 +644,7 @@ export default function ClientsPage() {
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 shadow-sm"
                 >
                   <X className="w-4 h-4" />
-                  Clear Filters
+                  {t('clearFilters')}
                 </button>
               ) : (
                 <Link
@@ -635,7 +652,7 @@ export default function ClientsPage() {
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 shadow-sm"
                 >
                   <UserPlus className="w-4 h-4" />
-                  Add First Client
+                  {t('addFirstClient')}
                 </Link>
               )}
             </div>
@@ -645,25 +662,25 @@ export default function ClientsPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Client
+                      {t('tableHeaderClient')}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
+                      {t('tableHeaderContact')}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type & Status
+                      {t('tableHeaderTypeStatus')}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lead Source
+                      {t('tableHeaderLeadSource')}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Bookings
+                      {t('tableHeaderBookings')}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Revenue
+                      {t('tableHeaderRevenue')}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
+                      {t('tableHeaderActions')}
                     </th>
                   </tr>
                 </thead>
@@ -715,7 +732,7 @@ export default function ClientsPage() {
                           {leadSourceConfig ? (
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${leadSourceConfig.color}`}>
                               <span>{leadSourceConfig.icon}</span>
-                              {leadSourceConfig.label}
+                              {getLeadSourceLabel(client.lead_source)}
                             </span>
                           ) : (
                             <span className="text-xs text-gray-400">—</span>
@@ -723,7 +740,7 @@ export default function ClientsPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                           <div className="font-semibold">{client.total_bookings_count}</div>
-                          <div className="text-xs text-gray-500">bookings</div>
+                          <div className="text-xs text-gray-500">{t('bookings')}</div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">
                           <div className="font-semibold text-green-600">
@@ -767,8 +784,10 @@ export default function ClientsPage() {
         {/* Results Count */}
         {!loading && clients.length > 0 && (
           <div className="mt-3 text-center text-xs text-gray-600">
-            Showing {clients.length} client{clients.length !== 1 ? 's' : ''}
-            {hasActiveFilters && ' (filtered)'}
+            {clients.length === 1
+              ? t('showingClients', { count: clients.length })
+              : t('showingClientsPlural', { count: clients.length })}
+            {hasActiveFilters && ` ${t('filtered')}`}
           </div>
         )}
       </div>

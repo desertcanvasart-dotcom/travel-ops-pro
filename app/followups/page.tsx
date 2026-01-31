@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import {
-  Calendar, Clock, AlertCircle, CheckCircle, Phone, Mail, 
+  Calendar, Clock, AlertCircle, CheckCircle, Phone, Mail,
   MessageSquare, Users, TrendingUp, Filter, X
 } from 'lucide-react'
 
@@ -29,6 +30,7 @@ interface Followup {
 }
 
 export default function FollowupDashboard() {
+  const t = useTranslations('followups')
   const [followups, setFollowups] = useState<Followup[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'today' | 'week' | 'overdue'>('today')
@@ -81,11 +83,11 @@ export default function FollowupDashboard() {
       if (error) throw error
 
       // Show success message
-      alert('Follow-up marked as complete!')
+      alert(t('followupCompleted'))
       loadFollowups()
     } catch (error) {
       console.error('Error completing follow-up:', error)
-      alert('Failed to complete follow-up')
+      alert(t('failedToCompleteFollowup'))
     }
   }
 
@@ -104,16 +106,16 @@ export default function FollowupDashboard() {
       if (error) throw error
 
       // Show success message
-      alert(`Follow-up snoozed for ${days} day${days > 1 ? 's' : ''}!`)
+      alert(t('followupSnoozed', { days }))
       loadFollowups()
     } catch (error) {
       console.error('Error snoozing follow-up:', error)
-      alert('Failed to snooze follow-up')
+      alert(t('failedToSnoozeFollowup'))
     }
   }
 
   const deleteFollowup = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this follow-up?')) return
+    if (!confirm(t('confirmDeleteFollowup'))) return
 
     try {
       const { error } = await supabase
@@ -123,11 +125,11 @@ export default function FollowupDashboard() {
 
       if (error) throw error
 
-      alert('Follow-up deleted successfully!')
+      alert(t('followupDeleted'))
       loadFollowups()
     } catch (error) {
       console.error('Error deleting follow-up:', error)
-      alert('Failed to delete follow-up')
+      alert(t('failedToDeleteFollowup'))
     }
   }
 
@@ -256,14 +258,14 @@ export default function FollowupDashboard() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Follow-up Dashboard</h1>
-            <p className="text-sm text-gray-600 mt-1">Never miss a client touchpoint</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('followupDashboard')}</h1>
+            <p className="text-sm text-gray-600 mt-1">{t('neverMissClientTouchpoint')}</p>
           </div>
           <Link
             href="/clients"
             className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 font-medium"
           >
-            Back to Clients
+            {t('backToClients')}
           </Link>
         </div>
 
@@ -285,15 +287,15 @@ export default function FollowupDashboard() {
               {stats.today}
             </div>
             <div className="text-xs font-medium text-gray-600 mt-1">
-              Due Today
+              {t('dueToday')}
             </div>
           </div>
 
-          <div 
+          <div
             onClick={() => setFilter('week')}
             className={`cursor-pointer rounded-lg border p-4 transition-all ${
-              filter === 'week' 
-                ? 'border-purple-600 bg-purple-50 shadow-sm' 
+              filter === 'week'
+                ? 'border-purple-600 bg-purple-50 shadow-sm'
                 : 'border-gray-200 bg-white hover:border-purple-300 shadow-sm'
             }`}
           >
@@ -305,15 +307,15 @@ export default function FollowupDashboard() {
               {stats.week}
             </div>
             <div className="text-xs font-medium text-gray-600 mt-1">
-              This Week
+              {t('thisWeek')}
             </div>
           </div>
 
-          <div 
+          <div
             onClick={() => setFilter('overdue')}
             className={`cursor-pointer rounded-lg border p-4 transition-all ${
-              filter === 'overdue' 
-                ? 'border-danger bg-red-50 shadow-sm' 
+              filter === 'overdue'
+                ? 'border-danger bg-red-50 shadow-sm'
                 : 'border-gray-200 bg-white hover:border-red-300 shadow-sm'
             }`}
           >
@@ -325,15 +327,15 @@ export default function FollowupDashboard() {
               {stats.overdue}
             </div>
             <div className="text-xs font-medium text-gray-600 mt-1">
-              Overdue
+              {t('overdue')}
             </div>
           </div>
 
-          <div 
+          <div
             onClick={() => setFilter('all')}
             className={`cursor-pointer rounded-lg border p-4 transition-all ${
-              filter === 'all' 
-                ? 'border-gray-600 bg-gray-50 shadow-sm' 
+              filter === 'all'
+                ? 'border-gray-600 bg-gray-50 shadow-sm'
                 : 'border-gray-200 bg-white hover:border-gray-400 shadow-sm'
             }`}
           >
@@ -345,7 +347,7 @@ export default function FollowupDashboard() {
               {stats.total}
             </div>
             <div className="text-xs font-medium text-gray-600 mt-1">
-              All Pending
+              {t('allPending')}
             </div>
           </div>
         </div>
@@ -360,10 +362,10 @@ export default function FollowupDashboard() {
             onChange={(e) => setPriorityFilter(e.target.value)}
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
           >
-            <option value="all">All Priorities</option>
-            <option value="high">High Priority</option>
-            <option value="medium">Medium Priority</option>
-            <option value="low">Low Priority</option>
+            <option value="all">{t('allPriorities')}</option>
+            <option value="high">{t('highPriority')}</option>
+            <option value="medium">{t('mediumPriority')}</option>
+            <option value="low">{t('lowPriority')}</option>
           </select>
 
           <select
@@ -371,16 +373,16 @@ export default function FollowupDashboard() {
             onChange={(e) => setTypeFilter(e.target.value)}
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
           >
-            <option value="all">All Types</option>
-            <option value="call">Phone Call</option>
-            <option value="email">Email</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="meeting">Meeting</option>
-            <option value="quote">Send Quote</option>
+            <option value="all">{t('allTypes')}</option>
+            <option value="call">{t('phoneCall')}</option>
+            <option value="email">{t('email')}</option>
+            <option value="whatsapp">{t('whatsapp')}</option>
+            <option value="meeting">{t('meeting')}</option>
+            <option value="quote">{t('sendQuote')}</option>
           </select>
 
           <div className="ml-auto text-xs text-gray-600">
-            Showing {filteredFollowups.length} follow-up{filteredFollowups.length !== 1 ? 's' : ''}
+            {t('showingFollowups', { count: filteredFollowups.length })}
           </div>
         </div>
       </div>
@@ -390,8 +392,8 @@ export default function FollowupDashboard() {
         {filteredFollowups.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
             <CheckCircle className="w-12 h-12 text-success mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-gray-900 mb-2">All Caught Up!</h3>
-            <p className="text-sm text-gray-600">No follow-ups matching your filters</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">{t('allCaughtUp')}</h3>
+            <p className="text-sm text-gray-600">{t('noFollowupsMatchingFilters')}</p>
           </div>
         ) : (
           filteredFollowups.map((followup) => {
@@ -424,13 +426,13 @@ export default function FollowupDashboard() {
                           href={`/clients/${followup.client_id}`}
                           className="text-base font-bold text-gray-900 hover:text-primary-600"
                           >
-                            {followup.client?.first_name || 'Unknown'} {followup.client?.last_name || 'Client'}
+                            {followup.client?.first_name || t('unknown')} {followup.client?.last_name || t('client')}
                           </Link>
                           <span className="text-xs text-gray-500">
-                            {followup.client?.client_code || 'No client linked'}
+                            {followup.client?.client_code || t('noClientLinked')}
                         </span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(followup.priority)}`}>
-                          {followup.priority}
+                          {t(followup.priority)}
                         </span>
                       </div>
 
@@ -444,8 +446,8 @@ export default function FollowupDashboard() {
                         }`}>
                           <Calendar className="w-3 h-3" />
                           <span>{formatDate(followup.due_date)}</span>
-                          {overdue && <span className="text-xs">(Overdue)</span>}
-                          {today && <span className="text-xs">(Today)</span>}
+                          {overdue && <span className="text-xs">({t('overdue')})</span>}
+                          {today && <span className="text-xs">({t('today')})</span>}
                         </div>
                       </div>
 
@@ -487,26 +489,26 @@ export default function FollowupDashboard() {
                       className="px-3 py-1.5 bg-success text-white text-sm rounded-lg hover:bg-success/90 font-medium flex items-center gap-2 whitespace-nowrap"
                     >
                       <CheckCircle className="w-3 h-3" />
-                      Complete
+                      {t('complete')}
                     </button>
                     <button
                       onClick={() => snoozeFollowup(followup.id, 1)}
                       className="px-3 py-1.5 bg-warning/10 text-warning text-xs rounded-lg hover:bg-warning/20 font-medium whitespace-nowrap"
                     >
-                      Snooze 1 day
+                      {t('snooze1Day')}
                     </button>
                     <button
                       onClick={() => snoozeFollowup(followup.id, 7)}
                       className="px-3 py-1.5 bg-warning/10 text-warning text-xs rounded-lg hover:bg-warning/20 font-medium whitespace-nowrap"
                     >
-                      Snooze 1 week
+                      {t('snooze1Week')}
                     </button>
                     <button
                       onClick={() => deleteFollowup(followup.id)}
                       className="px-3 py-1.5 bg-danger/10 text-danger text-xs rounded-lg hover:bg-danger/20 font-medium flex items-center gap-2 whitespace-nowrap"
                     >
                       <X className="w-3 h-3" />
-                      Delete
+                      {t('delete')}
                     </button>
                   </div>
                 </div>

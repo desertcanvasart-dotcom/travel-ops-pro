@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { 
+import {
   FileText, Search, Send, Eye, Trash2, Pencil,
   Hotel, Car, Ship, MapPin, Users, CheckCircle,
   Clock, RotateCcw
@@ -56,6 +57,7 @@ const STATUS_OPTIONS = [
 ]
 
 export default function SupplierDocumentsPage() {
+  const t = useTranslations('supplierDocuments')
   const [documents, setDocuments] = useState<SupplierDocument[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -120,13 +122,13 @@ export default function SupplierDocumentsPage() {
   }
 
   const handleDelete = async (docId: string) => {
-    if (!confirm('Are you sure you want to delete this document?')) return
-    
+    if (!confirm(t('confirmDeleteDocument'))) return
+
     try {
       const response = await fetch(`/api/supplier-documents/${docId}`, {
         method: 'DELETE'
       })
-      
+
       if (response.ok) {
         fetchDocuments()
       }
@@ -169,14 +171,14 @@ export default function SupplierDocumentsPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Supplier Documents</h1>
-              <p className="text-sm text-gray-500">Vouchers, service orders, and supplier communications</p>
+              <h1 className="text-xl font-semibold text-gray-900">{t('supplierDocuments')}</h1>
+              <p className="text-sm text-gray-500">{t('supplierDocumentsSubtitle')}</p>
             </div>
             <Link
               href="/documents"
               className="text-sm text-primary-600 hover:text-primary-700 font-medium"
             >
-              ← Back to All Documents
+              ← {t('backToAllDocuments')}
             </Link>
           </div>
         </div>
@@ -187,11 +189,11 @@ export default function SupplierDocumentsPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-sm text-red-700">{error}</p>
-            <button 
+            <button
               onClick={fetchDocuments}
               className="mt-2 text-sm text-red-600 hover:text-red-800 font-medium"
             >
-              Try Again
+              {t('tryAgain')}
             </button>
           </div>
         )}
@@ -204,35 +206,35 @@ export default function SupplierDocumentsPage() {
                 <FileText className="w-4 h-4 text-gray-500" />
               </div>
               <p className="text-xl font-bold text-gray-900">{stats.total}</p>
-              <p className="text-xs text-gray-500">Total Documents</p>
+              <p className="text-xs text-gray-500">{t('totalDocuments')}</p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Clock className="w-4 h-4 text-gray-500" />
               </div>
               <p className="text-xl font-bold text-gray-900">{stats.draft}</p>
-              <p className="text-xs text-gray-500">Draft</p>
+              <p className="text-xs text-gray-500">{t('draft')}</p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <Send className="w-4 h-4 text-blue-500" />
               </div>
               <p className="text-xl font-bold text-blue-600">{stats.sent}</p>
-              <p className="text-xs text-gray-500">Sent</p>
+              <p className="text-xs text-gray-500">{t('sent')}</p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <CheckCircle className="w-4 h-4 text-green-500" />
               </div>
               <p className="text-xl font-bold text-green-600">{stats.confirmed}</p>
-              <p className="text-xs text-gray-500">Confirmed</p>
+              <p className="text-xs text-gray-500">{t('confirmed')}</p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <CheckCircle className="w-4 h-4 text-purple-500" />
               </div>
               <p className="text-xl font-bold text-purple-600">{stats.completed}</p>
-              <p className="text-xs text-gray-500">Completed</p>
+              <p className="text-xs text-gray-500">{t('completed')}</p>
             </div>
           </div>
         )}
@@ -245,7 +247,7 @@ export default function SupplierDocumentsPage() {
               !typeFilter ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
             }`}
           >
-            All Types
+            {t('allTypes')}
           </button>
           {DOCUMENT_TYPES.map(type => {
             const Icon = type.icon
@@ -273,7 +275,7 @@ export default function SupplierDocumentsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by document #, supplier, client..."
+                placeholder={t('searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -284,7 +286,7 @@ export default function SupplierDocumentsPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-200 rounded-lg"
             >
-              <option value="">All Status</option>
+              <option value="">{t('allStatus')}</option>
               {STATUS_OPTIONS.map(s => (
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
@@ -297,18 +299,18 @@ export default function SupplierDocumentsPage() {
           {loading ? (
             <div className="p-8 text-center">
               <div className="w-8 h-8 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-              <p className="text-sm text-gray-500">Loading documents...</p>
+              <p className="text-sm text-gray-500">{t('loadingDocuments')}</p>
             </div>
           ) : filteredDocuments.length === 0 ? (
             <div className="p-8 text-center">
               <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-900">No documents found</p>
-              <p className="text-xs text-gray-500 mt-1">Generate documents from an itinerary to get started</p>
+              <p className="text-sm font-medium text-gray-900">{t('noDocumentsFound')}</p>
+              <p className="text-xs text-gray-500 mt-1">{t('generateDocumentsHint')}</p>
               <Link
                 href="/itineraries"
                 className="inline-block mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
               >
-                Go to Itineraries
+                {t('goToItineraries')}
               </Link>
             </div>
           ) : (
@@ -316,11 +318,11 @@ export default function SupplierDocumentsPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Document</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Supplier</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Guest</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">{t('document')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">{t('supplier')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">{t('guest')}</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">{t('status')}</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -360,71 +362,71 @@ export default function SupplierDocumentsPage() {
                             <Link
                               href={`/documents/supplier/${doc.id}`}
                               className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
-                              title="View"
+                              title={t('view')}
                             >
                               <Eye className="w-4 h-4" />
                             </Link>
-                            
+
                             {/* Edit - available for all statuses EXCEPT cancelled */}
                             {doc.status !== 'cancelled' && (
                               <Link
                                 href={`/documents/supplier/${doc.id}/edit`}
                                 className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded"
-                                title="Edit"
+                                title={t('edit')}
                               >
                                 <Pencil className="w-4 h-4" />
                               </Link>
                             )}
-                            
+
                             {/* Mark as Sent - only for drafts */}
                             {doc.status === 'draft' && (
                               <button
                                 onClick={() => handleUpdateStatus(doc.id, 'sent')}
                                 className="p-1.5 text-blue-500 hover:bg-blue-50 rounded"
-                                title="Mark as Sent"
+                                title={t('markAsSent')}
                               >
                                 <Send className="w-4 h-4" />
                               </button>
                             )}
-                            
+
                             {/* Mark as Confirmed - only for sent */}
                             {doc.status === 'sent' && (
                               <button
                                 onClick={() => handleUpdateStatus(doc.id, 'confirmed')}
                                 className="p-1.5 text-green-500 hover:bg-green-50 rounded"
-                                title="Mark as Confirmed"
+                                title={t('markAsConfirmed')}
                               >
                                 <CheckCircle className="w-4 h-4" />
                               </button>
                             )}
-                            
+
                             {/* Mark as Completed - only for confirmed */}
                             {doc.status === 'confirmed' && (
                               <button
                                 onClick={() => handleUpdateStatus(doc.id, 'completed')}
                                 className="p-1.5 text-purple-500 hover:bg-purple-50 rounded"
-                                title="Mark as Completed"
+                                title={t('markAsCompleted')}
                               >
                                 <CheckCircle className="w-4 h-4" />
                               </button>
                             )}
-                            
+
                             {/* Revert to Draft - for sent/confirmed/completed */}
                             {['sent', 'confirmed', 'completed'].includes(doc.status) && (
                               <button
                                 onClick={() => handleUpdateStatus(doc.id, 'draft')}
                                 className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                                title="Revert to Draft"
+                                title={t('revertToDraft')}
                               >
                                 <RotateCcw className="w-4 h-4" />
                               </button>
                             )}
-                            
+
                             {/* Delete */}
                             <button
                               onClick={() => handleDelete(doc.id)}
                               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              title="Delete"
+                              title={t('delete')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

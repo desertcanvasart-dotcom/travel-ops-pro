@@ -1,21 +1,20 @@
 'use client'
 
-import { useState } from 'react'
-import { 
-  Sun, 
-  Map, 
-  Building2, 
-  Package, 
-  Ship, 
+import {
+  Sun,
+  Map,
+  Building2,
+  Package,
+  Ship,
   Anchor,
   Hotel,
   Plane,
   Car,
   MapPin,
-  Utensils,
   Check,
   X
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 export type PackageType = 
   | 'day-trips'
@@ -167,23 +166,25 @@ interface PackageTypeSelectorProps {
   className?: string
 }
 
-export default function PackageTypeSelector({ 
-  value, 
-  onChange, 
-  className = '' 
+export default function PackageTypeSelector({
+  value,
+  onChange,
+  className = ''
 }: PackageTypeSelectorProps) {
+  const t = useTranslations('packageTypeSelector')
+
   return (
     <div className={`space-y-4 ${className}`}>
       <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-1">Select Package Type</h3>
-        <p className="text-xs text-gray-500">This determines what services will be included in the itinerary</p>
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">{t('selectPackageType')}</h3>
+        <p className="text-xs text-gray-500">{t('description')}</p>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {PACKAGE_TYPES.map((pkg) => {
           const Icon = pkg.icon
           const isSelected = value === pkg.slug
-          
+
           return (
             <button
               key={pkg.slug}
@@ -191,8 +192,8 @@ export default function PackageTypeSelector({
               onClick={() => onChange(pkg.slug)}
               className={`
                 relative flex flex-col p-4 rounded-xl border-2 transition-all text-left
-                ${isSelected 
-                  ? `${pkg.borderColor} ${pkg.bgColor} ring-2 ring-offset-2 ring-${pkg.color.replace('text-', '')}` 
+                ${isSelected
+                  ? `${pkg.borderColor} ${pkg.bgColor} ring-2 ring-offset-2 ring-${pkg.color.replace('text-', '')}`
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                 }
               `}
@@ -203,7 +204,7 @@ export default function PackageTypeSelector({
                   <Check className="w-3.5 h-3.5" />
                 </div>
               )}
-              
+
               {/* Header */}
               <div className="flex items-center gap-3 mb-2">
                 <div className={`w-10 h-10 rounded-lg ${pkg.bgColor} ${pkg.color} flex items-center justify-center`}>
@@ -211,37 +212,37 @@ export default function PackageTypeSelector({
                 </div>
                 <div>
                   <h4 className={`text-sm font-semibold ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
-                    {pkg.name}
+                    {t(`types.${pkg.slug}.name`)}
                   </h4>
                 </div>
               </div>
-              
+
               {/* Description */}
               <p className="text-xs text-gray-500 mb-3 line-clamp-2">
-                {pkg.description}
+                {t(`types.${pkg.slug}.description`)}
               </p>
-              
+
               {/* Inclusions */}
               <div className="grid grid-cols-2 gap-1.5 pt-3 border-t border-gray-100">
-                <InclusionBadge 
-                  included={pkg.includes.accommodation} 
-                  label="Hotels" 
-                  icon={Hotel} 
+                <InclusionBadge
+                  included={pkg.includes.accommodation}
+                  label={t('inclusions.hotels')}
+                  icon={Hotel}
                 />
-                <InclusionBadge 
-                  included={pkg.includes.airportTransfers} 
-                  label="Airport" 
-                  icon={Plane} 
+                <InclusionBadge
+                  included={pkg.includes.airportTransfers}
+                  label={t('inclusions.airport')}
+                  icon={Plane}
                 />
-                <InclusionBadge 
-                  included={pkg.includes.internalTransfers} 
-                  label="Transfers" 
-                  icon={Car} 
+                <InclusionBadge
+                  included={pkg.includes.internalTransfers}
+                  label={t('inclusions.transfers')}
+                  icon={Car}
                 />
-                <InclusionBadge 
-                  included={pkg.includes.tours} 
-                  label="Tours" 
-                  icon={MapPin} 
+                <InclusionBadge
+                  included={pkg.includes.tours}
+                  label={t('inclusions.tours')}
+                  icon={MapPin}
                 />
               </div>
             </button>

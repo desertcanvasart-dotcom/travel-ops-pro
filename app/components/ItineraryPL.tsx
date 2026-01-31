@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  TrendingUp, 
-  DollarSign, 
+import {
+  TrendingUp,
+  DollarSign,
   Percent,
   ChevronDown,
   ChevronUp
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface Service {
   id: string
@@ -53,13 +54,14 @@ const SERVICE_ICONS: Record<string, string> = {
   other: '📦'
 }
 
-export default function ItineraryPL({ 
-  itineraryId, 
-  totalCost, 
-  currency, 
+export default function ItineraryPL({
+  itineraryId,
+  totalCost,
+  currency,
   marginPercent = 25,
-  days 
+  days
 }: ItineraryPLProps) {
+  const t = useTranslations('itineraryPL')
   const [expanded, setExpanded] = useState(false)
   const [breakdown, setBreakdown] = useState<PLBreakdown[]>([])
   const [totals, setTotals] = useState({
@@ -152,6 +154,7 @@ export default function ItineraryPL({
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
         className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
       >
@@ -160,23 +163,23 @@ export default function ItineraryPL({
             <TrendingUp className="h-5 w-5 text-green-600" />
           </div>
           <div className="text-left">
-            <h3 className="text-sm font-semibold text-gray-900">Profit & Loss</h3>
-            <p className="text-xs text-gray-500">Cost breakdown and margins</p>
+            <h3 className="text-sm font-semibold text-gray-900">{t('profitAndLoss')}</h3>
+            <p className="text-xs text-gray-500">{t('costBreakdownAndMargins')}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-4">
             <div className="text-right">
-              <p className="text-xs text-gray-500">Supplier Cost</p>
+              <p className="text-xs text-gray-500">{t('supplierCost')}</p>
               <p className="text-sm font-medium text-gray-900">{formatCurrency(totals.supplierCost)}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-500">Client Price</p>
+              <p className="text-xs text-gray-500">{t('clientPrice')}</p>
               <p className="text-sm font-medium text-blue-600">{formatCurrency(totals.clientPrice)}</p>
             </div>
             <div className={`px-3 py-1.5 rounded-lg border ${getMarginBg(totals.marginPercent)}`}>
-              <p className="text-xs text-gray-500">Margin</p>
+              <p className="text-xs text-gray-500">{t('margin')}</p>
               <p className={`text-sm font-bold ${getMarginColor(totals.marginPercent)}`}>
                 {formatCurrency(totals.margin)} ({totals.marginPercent.toFixed(1)}%)
               </p>
@@ -188,15 +191,15 @@ export default function ItineraryPL({
 
       <div className="md:hidden px-5 pb-4 grid grid-cols-3 gap-3">
         <div className="text-center p-2 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-500">Cost</p>
+          <p className="text-xs text-gray-500">{t('cost')}</p>
           <p className="text-sm font-medium text-gray-900">{formatCurrency(totals.supplierCost)}</p>
         </div>
         <div className="text-center p-2 bg-blue-50 rounded-lg">
-          <p className="text-xs text-gray-500">Price</p>
+          <p className="text-xs text-gray-500">{t('price')}</p>
           <p className="text-sm font-medium text-blue-600">{formatCurrency(totals.clientPrice)}</p>
         </div>
         <div className={`text-center p-2 rounded-lg ${getMarginBg(totals.marginPercent)}`}>
-          <p className="text-xs text-gray-500">Margin</p>
+          <p className="text-xs text-gray-500">{t('margin')}</p>
           <p className={`text-sm font-bold ${getMarginColor(totals.marginPercent)}`}>{totals.marginPercent.toFixed(1)}%</p>
         </div>
       </div>
@@ -207,39 +210,39 @@ export default function ItineraryPL({
             <div className="bg-white p-4 rounded-lg border border-gray-200">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="h-4 w-4 text-gray-400" />
-                <span className="text-xs text-gray-500">Supplier Cost</span>
+                <span className="text-xs text-gray-500">{t('supplierCost')}</span>
               </div>
               <p className="text-xl font-semibold text-gray-900">{formatCurrency(totals.supplierCost)}</p>
-              <p className="text-xs text-gray-400 mt-1">What you pay</p>
+              <p className="text-xs text-gray-400 mt-1">{t('whatYouPay')}</p>
             </div>
             <div className="bg-white p-4 rounded-lg border border-gray-200">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-gray-500">Client Price</span>
+                <span className="text-xs text-gray-500">{t('clientPrice')}</span>
               </div>
               <p className="text-xl font-semibold text-blue-600">{formatCurrency(totals.clientPrice)}</p>
-              <p className="text-xs text-gray-400 mt-1">What client pays</p>
+              <p className="text-xs text-gray-400 mt-1">{t('whatClientPays')}</p>
             </div>
             <div className="bg-white p-4 rounded-lg border border-gray-200">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="h-4 w-4 text-green-500" />
-                <span className="text-xs text-gray-500">Gross Profit</span>
+                <span className="text-xs text-gray-500">{t('grossProfit')}</span>
               </div>
               <p className={`text-xl font-semibold ${getMarginColor(totals.marginPercent)}`}>{formatCurrency(totals.margin)}</p>
-              <p className="text-xs text-gray-400 mt-1">Your earnings</p>
+              <p className="text-xs text-gray-400 mt-1">{t('yourEarnings')}</p>
             </div>
             <div className="bg-white p-4 rounded-lg border border-gray-200">
               <div className="flex items-center gap-2 mb-2">
                 <Percent className="h-4 w-4 text-purple-500" />
-                <span className="text-xs text-gray-500">Margin %</span>
+                <span className="text-xs text-gray-500">{t('marginPercent')}</span>
               </div>
               <p className={`text-xl font-semibold ${getMarginColor(totals.marginPercent)}`}>{totals.marginPercent.toFixed(1)}%</p>
-              <p className="text-xs text-gray-400 mt-1">Markup on cost</p>
+              <p className="text-xs text-gray-400 mt-1">{t('markupOnCost')}</p>
             </div>
           </div>
 
           <div className="p-5">
-            <h4 className="text-sm font-semibold text-gray-900 mb-4">Breakdown by Service Type</h4>
+            <h4 className="text-sm font-semibold text-gray-900 mb-4">{t('breakdownByServiceType')}</h4>
             <div className="space-y-3">
               {breakdown.map((item) => {
                 const icon = SERVICE_ICONS[item.service_type] || SERVICE_ICONS.other
@@ -250,7 +253,7 @@ export default function ItineraryPL({
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{icon}</span>
                         <span className="text-sm font-medium text-gray-900 capitalize">{item.service_type.replace('_', ' ')}</span>
-                        <span className="text-xs text-gray-400">({item.count} items)</span>
+                        <span className="text-xs text-gray-400">({item.count} {t('items')})</span>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
                         <span className="text-gray-500">{formatCurrency(item.supplier_cost)}</span>
@@ -260,7 +263,7 @@ export default function ItineraryPL({
                       </div>
                     </div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className={`h-full rounded-full transition-all ${
                           item.margin_percent >= 25 ? 'bg-green-500' :
                           item.margin_percent >= 15 ? 'bg-amber-500' :
@@ -269,7 +272,7 @@ export default function ItineraryPL({
                         style={{ width: `${marginWidth}%` }}
                       />
                     </div>
-                    <p className="text-xs text-gray-400 mt-1 text-right">{item.margin_percent.toFixed(1)}% margin</p>
+                    <p className="text-xs text-gray-400 mt-1 text-right">{item.margin_percent.toFixed(1)}% {t('margin').toLowerCase()}</p>
                   </div>
                 )
               })}
@@ -279,8 +282,7 @@ export default function ItineraryPL({
           <div className="px-5 pb-5">
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-700">
-                <strong>Note:</strong> Tips and water are typically pass-through costs with no margin. 
-                Transportation, guides, and entrances carry the standard {marginPercent}% markup.
+                <strong>{t('note')}</strong> {t('noteText', { marginPercent })}
               </p>
             </div>
           </div>

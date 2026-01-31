@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { 
+import {
   Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar
 } from 'lucide-react'
@@ -196,7 +197,8 @@ function Pagination({
   endIndex,
   itemsPerPage,
   onPageChange,
-  onItemsPerPageChange
+  onItemsPerPageChange,
+  t
 }: {
   currentPage: number
   totalPages: number
@@ -206,6 +208,7 @@ function Pagination({
   itemsPerPage: number
   onPageChange: (page: number) => void
   onItemsPerPageChange: (items: number) => void
+  t: any
 }) {
   const goToPage = (page: number) => {
     onPageChange(Math.max(1, Math.min(page, totalPages)))
@@ -215,7 +218,7 @@ function Pagination({
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Show</span>
+          <span className="text-sm text-gray-500">{t('pagination.show')}</span>
           <select
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
@@ -225,10 +228,10 @@ function Pagination({
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          <span className="text-sm text-gray-500">per page</span>
+          <span className="text-sm text-gray-500">{t('pagination.perPage')}</span>
         </div>
         <span className="text-sm text-gray-500">
-          Showing {startIndex + 1}-{endIndex} of {totalItems} cruises
+          {t('pagination.showing', { start: startIndex + 1, end: endIndex, total: totalItems })}
         </span>
       </div>
 
@@ -237,7 +240,7 @@ function Pagination({
           onClick={() => goToPage(1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="First page"
+          title={t('pagination.firstPage')}
         >
           <ChevronsLeft className="h-4 w-4" />
         </button>
@@ -245,7 +248,7 @@ function Pagination({
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Previous page"
+          title={t('pagination.previousPage')}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -283,7 +286,7 @@ function Pagination({
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Next page"
+          title={t('pagination.nextPage')}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -291,7 +294,7 @@ function Pagination({
           onClick={() => goToPage(totalPages)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Last page"
+          title={t('pagination.lastPage')}
         >
           <ChevronsRight className="h-4 w-4" />
         </button>
@@ -319,7 +322,8 @@ function SeasonalRateSection({
   onRateChange,
   showSecondPeriod = false,
   borderColor = 'border-gray-200',
-  bgColor = 'bg-white'
+  bgColor = 'bg-white',
+  t
 }: {
   title: string
   seasonNumber: number
@@ -345,6 +349,7 @@ function SeasonalRateSection({
   showSecondPeriod?: boolean
   borderColor?: string
   bgColor?: string
+  t: any
 }) {
   return (
     <div className={`border ${borderColor} rounded-lg p-4 ${bgColor}`}>
@@ -358,7 +363,7 @@ function SeasonalRateSection({
       {/* Date Range */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
-          <label className="block text-xs font-medium text-red-600 mb-1">From</label>
+          <label className="block text-xs font-medium text-red-600 mb-1">{t('form.from')}</label>
           <input
             type="date"
             value={startDate}
@@ -367,7 +372,7 @@ function SeasonalRateSection({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-green-600 mb-1">To</label>
+          <label className="block text-xs font-medium text-green-600 mb-1">{t('form.to')}</label>
           <input
             type="date"
             value={endDate}
@@ -381,7 +386,7 @@ function SeasonalRateSection({
       {showSecondPeriod && (
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="block text-xs font-medium text-orange-600 mb-1">Period 2 From (optional)</label>
+            <label className="block text-xs font-medium text-orange-600 mb-1">{t('form.period2From')}</label>
             <input
               type="date"
               value={startDate2 || ''}
@@ -390,7 +395,7 @@ function SeasonalRateSection({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-orange-600 mb-1">Period 2 To (optional)</label>
+            <label className="block text-xs font-medium text-orange-600 mb-1">{t('form.period2To')}</label>
             <input
               type="date"
               value={endDate2 || ''}
@@ -403,10 +408,10 @@ function SeasonalRateSection({
 
       {/* EUR Passport Rates */}
       <div className="mb-3">
-        <label className="block text-xs font-medium text-gray-500 mb-2">EUR Passport Holders</label>
+        <label className="block text-xs font-medium text-gray-500 mb-2">{t('form.eurPassportHolders')}</label>
         <div className="grid grid-cols-4 gap-2">
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Single (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.single')}</label>
             <input
               type="number"
               value={rates.single_eur}
@@ -417,7 +422,7 @@ function SeasonalRateSection({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Double (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.double')}</label>
             <input
               type="number"
               value={rates.double_eur}
@@ -428,7 +433,7 @@ function SeasonalRateSection({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Triple (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.triple')}</label>
             <input
               type="number"
               value={rates.triple_eur}
@@ -439,7 +444,7 @@ function SeasonalRateSection({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Suite (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.suite')}</label>
             <input
               type="number"
               value={rates.suite_eur}
@@ -454,10 +459,10 @@ function SeasonalRateSection({
 
       {/* Non-EUR Passport Rates */}
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">Non-EUR Passport Holders</label>
+        <label className="block text-xs font-medium text-gray-500 mb-2">{t('form.nonEurPassportHolders')}</label>
         <div className="grid grid-cols-4 gap-2">
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Single (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.single')}</label>
             <input
               type="number"
               value={rates.single_non_eur}
@@ -468,7 +473,7 @@ function SeasonalRateSection({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Double (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.double')}</label>
             <input
               type="number"
               value={rates.double_non_eur}
@@ -479,7 +484,7 @@ function SeasonalRateSection({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Triple (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.triple')}</label>
             <input
               type="number"
               value={rates.triple_non_eur}
@@ -490,7 +495,7 @@ function SeasonalRateSection({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">Suite (€)</label>
+            <label className="block text-xs text-gray-400 mb-1">{t('form.suite')}</label>
             <input
               type="number"
               value={rates.suite_non_eur}
@@ -511,8 +516,10 @@ function SeasonalRateSection({
 // ============================================
 
 export default function CruisesPage() {
+  const t = useTranslations('rates.cruises')
+  const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  
+
   const [cruises, setCruises] = useState<Cruise[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
@@ -612,7 +619,7 @@ export default function CruisesPage() {
       }
     } catch (error) {
       console.error('Error fetching cruises:', error)
-      showToast('error', 'Failed to load cruises')
+      showToast('error', t('notifications.failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -771,36 +778,36 @@ export default function CruisesPage() {
       const data = await response.json()
       
       if (data.success) {
-        showToast('success', editingCruise ? 'Cruise updated!' : 'Cruise created!')
+        showToast('success', editingCruise ? t('notifications.cruiseUpdated') : t('notifications.cruiseCreated'))
         setShowModal(false)
         fetchCruises()
       } else {
-        showToast('error', data.error || 'Failed to save')
+        showToast('error', data.error || t('notifications.failedToSave'))
       }
     } catch (error) {
-      showToast('error', 'Failed to save cruise')
+      showToast('error', t('notifications.failedToSave'))
     }
   }
 
   const handleDelete = async (cruise: Cruise) => {
-    const confirmed = await dialog.confirmDelete('Cruise Rate',
-      `Are you sure you want to delete "${cruise.ship_name}" (${cruise.cruise_code})? This action cannot be undone.`
+    const confirmed = await dialog.confirmDelete(t('deleteModal.title'),
+      t('deleteModal.confirmMessage', { name: cruise.ship_name, code: cruise.cruise_code })
     )
-    
+
     if (!confirmed) return
 
     try {
       const response = await fetch(`/api/rates/cruises/${cruise.id}`, { method: 'DELETE' })
       const data = await response.json()
-      
+
       if (data.success) {
-        showToast('success', 'Cruise deleted!')
+        showToast('success', t('notifications.cruiseDeleted'))
         fetchCruises()
       } else {
-        await dialog.alert('Error', data.error || 'Failed to delete cruise', 'warning')
+        await dialog.alert('Error', data.error || t('notifications.failedToDelete'), 'warning')
       }
     } catch (error) {
-      await dialog.alert('Error', 'Failed to delete cruise. Please try again.', 'warning')
+      await dialog.alert('Error', t('notifications.failedToDelete'), 'warning')
     }
   }
 
@@ -840,7 +847,7 @@ export default function CruisesPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading cruises...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -866,7 +873,7 @@ export default function CruisesPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Ship className="w-5 h-5 text-blue-600" />
-              <h1 className="text-xl font-bold text-gray-900">Nile Cruises</h1>
+              <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
               <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
             </div>
             <div className="flex items-center gap-2">
@@ -875,13 +882,13 @@ export default function CruisesPage() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
                 <Plus className="w-4 h-4" />
-                Add Cruise
+                {t('addCruise')}
               </button>
               <Link href="/suppliers?type=cruise" className="px-3 py-1.5 text-sm border border-indigo-300 text-indigo-700 rounded-lg hover:bg-indigo-50 font-medium">
-                Cruise Suppliers
+                {t('cruiseSuppliers')}
               </Link>
               <Link href="/rates" className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
-                ← Rates Hub
+                {t('nav.ratesHub')}
               </Link>
             </div>
           </div>
@@ -892,26 +899,26 @@ export default function CruisesPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Total Rates</p>
+            <p className="text-xs text-gray-600">{t('stats.totalRates')}</p>
             <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-xs text-gray-600">{t('stats.active')}</p>
             <p className="text-2xl font-bold text-green-600">{stats.active}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <div className="flex items-center gap-1 mb-1">
               <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
             </div>
-            <p className="text-xs text-gray-600">Preferred</p>
+            <p className="text-xs text-gray-600">{t('stats.preferred')}</p>
             <p className="text-2xl font-bold text-amber-600">{stats.preferred}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Ships</p>
+            <p className="text-xs text-gray-600">{t('stats.ships')}</p>
             <p className="text-2xl font-bold text-blue-600">{stats.ships}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Avg. Double Rate</p>
+            <p className="text-xs text-gray-600">{t('stats.avgDoubleRate')}</p>
             <p className="text-2xl font-bold text-purple-600">€{stats.avgRate}</p>
           </div>
         </div>
@@ -923,7 +930,7 @@ export default function CruisesPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by ship, code, or city..."
+                placeholder={t('filters.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
@@ -934,7 +941,7 @@ export default function CruisesPage() {
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
             >
-              <option value="all">All Categories</option>
+              <option value="all">{t('filters.allCategories')}</option>
               {SHIP_CATEGORIES.map(cat => (
                 <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
               ))}
@@ -944,7 +951,7 @@ export default function CruisesPage() {
               onChange={(e) => setSelectedCabin(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
             >
-              <option value="all">All Cabins</option>
+              <option value="all">{t('filters.allCabins')}</option>
               {CABIN_TYPES.map(type => (
                 <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
               ))}
@@ -954,11 +961,11 @@ export default function CruisesPage() {
               onChange={(e) => setFilterTier(e.target.value === 'all' ? null : e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
             >
-              <option value="all">All Tiers</option>
-              <option value="budget">Budget</option>
-              <option value="standard">Standard</option>
-              <option value="deluxe">Deluxe</option>
-              <option value="luxury">Luxury</option>
+              <option value="all">{t('filters.allTiers')}</option>
+              <option value="budget">{t('tiers.budget')}</option>
+              <option value="standard">{t('tiers.standard')}</option>
+              <option value="deluxe">{t('tiers.deluxe')}</option>
+              <option value="luxury">{t('tiers.luxury')}</option>
             </select>
             <button
               onClick={() => setShowInactive(!showInactive)}
@@ -966,11 +973,11 @@ export default function CruisesPage() {
                 showInactive ? 'bg-gray-100 text-gray-700' : 'bg-green-50 text-green-700 border border-green-200'
               }`}
             >
-              {showInactive ? 'Show All' : 'Active Only'}
+              {showInactive ? t('filters.showAll') : t('filters.activeOnly')}
             </button>
           </div>
           <div className="mt-2 text-xs text-gray-500">
-            Showing {filteredCruises.length} of {cruises.length} cruise rates
+            {t('filters.showing', { count: filteredCruises.length, total: cruises.length })}
           </div>
         </div>
 
@@ -980,17 +987,17 @@ export default function CruisesPage() {
             <table className="w-full">
               <thead className="bg-blue-50 border-b border-blue-100">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Ship / Code</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Category</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Route</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Nights</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Cabin</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Tier</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Single</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Double</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Triple</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{t('table.shipCode')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.category')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{t('table.route')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.nights')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.cabin')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.tier')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.single')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.double')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.triple')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1047,7 +1054,7 @@ export default function CruisesPage() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         cruise.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {cruise.is_active ? 'Active' : 'Inactive'}
+                        {cruise.is_active ? t('status.active') : t('status.inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -1066,9 +1073,9 @@ export default function CruisesPage() {
                   <tr>
                     <td colSpan={11} className="px-4 py-12 text-center text-gray-500">
                       <Ship className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                      <p className="font-medium">No cruises found</p>
+                      <p className="font-medium">{t('empty.noCruises')}</p>
                       <button onClick={handleAddNew} className="mt-2 text-sm text-blue-600 hover:underline">
-                        Add your first cruise
+                        {t('empty.addFirst')}
                       </button>
                     </td>
                   </tr>
@@ -1087,6 +1094,7 @@ export default function CruisesPage() {
               itemsPerPage={itemsPerPage}
               onPageChange={setCurrentPage}
               onItemsPerPageChange={setItemsPerPage}
+              t={t}
             />
           )}
         </div>
@@ -1098,7 +1106,7 @@ export default function CruisesPage() {
           <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingCruise ? 'Edit Cruise' : 'Add New Cruise'}
+                {editingCruise ? t('form.editCruise') : t('form.addNewCruise')}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
                 <X className="w-5 h-5" />
@@ -1108,26 +1116,26 @@ export default function CruisesPage() {
             <form onSubmit={handleSubmit} className="p-4 space-y-6">
               {/* Section 1: Supplier Selection */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Supplier (Cruise Company)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.supplier')}</label>
                 <select
                   value={formData.supplier_id}
                   onChange={(e) => handleSupplierChange(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                 >
-                  <option value="">Select Supplier (Optional)</option>
+                  <option value="">{t('form.selectSupplier')}</option>
                   {suppliers.map(supplier => (
                     <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Link to a cruise supplier for tracking. <Link href="/suppliers?type=cruise" className="text-blue-600 hover:underline">Manage cruise suppliers →</Link>
+                  {t('form.supplierHelp')} <Link href="/suppliers?type=cruise" className="text-blue-600 hover:underline">{t('form.manageSuppliers')}</Link>
                 </p>
               </div>
 
               {/* Section 2: Ship Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Ship Name *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.shipName')} *</label>
                   <input
                     type="text"
                     name="ship_name"
@@ -1135,11 +1143,11 @@ export default function CruisesPage() {
                     onChange={handleChange}
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                    placeholder="MS Sonesta St. George"
+                    placeholder={t('form.shipNamePlaceholder')}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Ship Category *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.shipCategory')} *</label>
                   <select
                     name="ship_category"
                     value={formData.ship_category}
@@ -1156,7 +1164,7 @@ export default function CruisesPage() {
               {/* Section 3: Route */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Embark City *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.embarkCity')} *</label>
                   <select
                     name="embark_city"
                     value={formData.embark_city}
@@ -1169,7 +1177,7 @@ export default function CruisesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Disembark City *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.disembarkCity')} *</label>
                   <select
                     name="disembark_city"
                     value={formData.disembark_city}
@@ -1182,7 +1190,7 @@ export default function CruisesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Duration (Nights) *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.durationNights')} *</label>
                   <input
                     type="number"
                     name="duration_nights"
@@ -1197,7 +1205,7 @@ export default function CruisesPage() {
 
               {/* Section 4: Cabin Type */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Cabin Type *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.cabinType')} *</label>
                 <select
                   name="cabin_type"
                   value={formData.cabin_type}
@@ -1214,7 +1222,7 @@ export default function CruisesPage() {
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs">2</span>
-                  Service Tier
+                  {t('form.serviceTier')}
                 </h3>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {TIER_OPTIONS.map((tier) => (
@@ -1224,7 +1232,7 @@ export default function CruisesPage() {
                       onClick={() => setFormData({ ...formData, tier: tier.value })}
                       className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
                         formData.tier === tier.value
-                          ? tier.value === 'luxury' 
+                          ? tier.value === 'luxury'
                             ? 'bg-amber-600 text-white'
                             : tier.value === 'deluxe'
                             ? 'bg-purple-600 text-white'
@@ -1250,10 +1258,10 @@ export default function CruisesPage() {
                     <div>
                       <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
                         <Star className="w-4 h-4 text-amber-600" />
-                        Preferred Cruise
+                        {t('form.preferredCruise')}
                       </span>
                       <p className="text-xs text-amber-700 mt-0.5">
-                        Preferred cruises are prioritized when AI generates itineraries within the same tier.
+                        {t('form.preferredCruiseHelp')}
                       </p>
                     </div>
                   </label>
@@ -1262,7 +1270,7 @@ export default function CruisesPage() {
 
               {/* Section 6: Low Season Rates */}
               <SeasonalRateSection
-                title="Low Season Rates"
+                title={t('form.lowSeasonRates')}
                 seasonNumber={3}
                 startDate={formData.low_season_start}
                 endDate={formData.low_season_end}
@@ -1281,11 +1289,12 @@ export default function CruisesPage() {
                 onRateChange={(field, value) => setFormData({ ...formData, [`rate_low_${field}`]: value })}
                 borderColor="border-green-200"
                 bgColor="bg-green-50/30"
+                t={t}
               />
 
               {/* Section 7: High Season Rates */}
               <SeasonalRateSection
-                title="High Season Rates"
+                title={t('form.highSeasonRates')}
                 seasonNumber={4}
                 startDate={formData.high_season_start}
                 endDate={formData.high_season_end}
@@ -1304,11 +1313,12 @@ export default function CruisesPage() {
                 onRateChange={(field, value) => setFormData({ ...formData, [`rate_high_${field}`]: value })}
                 borderColor="border-blue-200"
                 bgColor="bg-blue-50/30"
+                t={t}
               />
 
               {/* Section 8: Peak Season Rates */}
               <SeasonalRateSection
-                title="Peak Season Rates"
+                title={t('form.peakSeasonRates')}
                 seasonNumber={5}
                 startDate={formData.peak_season_1_start}
                 endDate={formData.peak_season_1_end}
@@ -1332,18 +1342,19 @@ export default function CruisesPage() {
                 showSecondPeriod={true}
                 borderColor="border-orange-200"
                 bgColor="bg-orange-50/30"
+                t={t}
               />
 
               {/* Section 9: Rate Card Validity */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs">6</span>
-                  Rate Card Validity
-                  <span className="text-xs font-normal text-gray-500">(When this rate sheet expires)</span>
+                  {t('form.rateCardValidity')}
+                  <span className="text-xs font-normal text-gray-500">{t('form.rateCardValidityHelp')}</span>
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
                     <input
                       type="date"
                       value={formData.rate_valid_from}
@@ -1352,7 +1363,7 @@ export default function CruisesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
                     <input
                       type="date"
                       value={formData.rate_valid_to}
@@ -1366,13 +1377,13 @@ export default function CruisesPage() {
               {/* Section 10: Options */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Cruise Code</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.cruiseCode')}</label>
                   <input
                     type="text"
                     name="cruise_code"
                     value={formData.cruise_code}
                     onChange={handleChange}
-                    placeholder="Auto-generated if empty"
+                    placeholder={t('form.cruiseCodePlaceholder')}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 font-mono"
                   />
                 </div>
@@ -1385,7 +1396,7 @@ export default function CruisesPage() {
                       onChange={handleCheckbox}
                       className="w-4 h-4 text-blue-600 rounded"
                     />
-                    <span className="text-sm text-gray-700">Sightseeing Included</span>
+                    <span className="text-sm text-gray-700">{t('form.sightseeingIncluded')}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1395,32 +1406,32 @@ export default function CruisesPage() {
                       onChange={handleCheckbox}
                       className="w-4 h-4 text-blue-600 rounded"
                     />
-                    <span className="text-sm text-gray-700">Active</span>
+                    <span className="text-sm text-gray-700">{t('form.active')}</span>
                   </label>
                 </div>
               </div>
 
               {/* Section 11: Notes */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
                   rows={2}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  placeholder="Additional information..."
+                  placeholder={t('form.notesPlaceholder')}
                 />
               </div>
 
               {/* Buttons */}
               <div className="flex gap-2 pt-3 border-t">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
-                  Cancel
+                  {t('form.cancel')}
                 </button>
                 <button type="submit" className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-2">
                   <Check className="w-4 h-4" />
-                  {editingCruise ? 'Update Rate' : 'Create Rate'}
+                  {editingCruise ? t('form.updateRate') : t('form.createRate')}
                 </button>
               </div>
             </form>

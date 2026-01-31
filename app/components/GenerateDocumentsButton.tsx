@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, ChevronDown, Loader2, Check, AlertCircle } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface GenerateDocumentsButtonProps {
   itineraryId: string
@@ -10,15 +11,16 @@ interface GenerateDocumentsButtonProps {
 }
 
 const DOCUMENT_TYPES = [
-  { value: 'all', label: 'Generate All', icon: '📄' },
-  { value: 'hotel_voucher', label: 'Hotel Vouchers', icon: '🏨' },
-  { value: 'transport_voucher', label: 'Transport Vouchers', icon: '🚗' },
-  { value: 'guide_assignment', label: 'Guide Assignments', icon: '👨‍🏫' },
-  { value: 'service_order', label: 'Service Orders (Meals & Entrance)', icon: '📋' },
-  { value: 'cruise_voucher', label: 'Cruise Vouchers', icon: '🚢' },
+  { value: 'all', labelKey: 'generateAll', icon: '📄' },
+  { value: 'hotel_voucher', labelKey: 'hotelVouchers', icon: '🏨' },
+  { value: 'transport_voucher', labelKey: 'transportVouchers', icon: '🚗' },
+  { value: 'guide_assignment', labelKey: 'guideAssignments', icon: '👨‍🏫' },
+  { value: 'service_order', labelKey: 'serviceOrders', icon: '📋' },
+  { value: 'cruise_voucher', labelKey: 'cruiseVouchers', icon: '🚢' },
 ]
 
 export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: GenerateDocumentsButtonProps) {
+  const t = useTranslations('generateDocuments')
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -98,6 +100,7 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: 
     <div className="relative" ref={dropdownRef}>
       {/* Main Button */}
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         disabled={generating}
         className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${
@@ -109,12 +112,12 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: 
         {generating ? (
           <>
             <Loader2 size={16} className="animate-spin" />
-            <span>Generating...</span>
+            <span>{t('generating')}</span>
           </>
         ) : (
           <>
             <FileText size={16} />
-            <span>Documents</span>
+            <span>{t('documents')}</span>
             <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           </>
         )}
@@ -125,31 +128,33 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: 
         <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
           {/* View Documents Option */}
           <button
+            type="button"
             onClick={viewDocuments}
             className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 border-b border-gray-100"
           >
             <span>👁️</span>
-            <span>View Documents</span>
+            <span>{t('viewDocuments')}</span>
           </button>
 
           {/* Divider with label */}
           <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide bg-gray-50">
-            Generate New
+            {t('generateNew')}
           </div>
 
           {/* Generation Options */}
           {DOCUMENT_TYPES.map((type) => (
             <button
+              type="button"
               key={type.value}
               onClick={() => generateDocuments(type.value)}
               className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-3 ${
-                type.value === 'all' 
-                  ? 'text-blue-700 font-medium bg-blue-50 hover:bg-blue-100' 
+                type.value === 'all'
+                  ? 'text-blue-700 font-medium bg-blue-50 hover:bg-blue-100'
                   : 'text-gray-700'
               }`}
             >
               <span>{type.icon}</span>
-              <span>{type.label}</span>
+              <span>{t(type.labelKey)}</span>
             </button>
           ))}
         </div>

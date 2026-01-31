@@ -1,88 +1,91 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { FileText, Hotel, Car, Ship, MapPin, Users, Building, ArrowRight, FileCheck } from 'lucide-react'
 
-const DOCUMENT_SECTIONS = [
-  {
-    title: 'Customer Documents',
-    description: 'Contracts and invoices for clients',
-    items: [
-        {
-            name: 'Customer Contracts', 
-            description: 'Travel agreements and booking confirmations',
-            href: '/itineraries', 
-        icon: FileCheck,
-        color: 'bg-purple-100 text-purple-700'
-      }
-    ]
-  },
-  {
-    title: 'Supplier Documents',
-    description: 'Vouchers and service orders for suppliers',
-    href: '/documents/supplier',
-    items: [
-      {
-        name: 'All Supplier Documents',
-        description: 'View and manage all vouchers and service orders',
-        href: '/documents/supplier',
-        icon: Building,
-        color: 'bg-indigo-100 text-indigo-700'
-      },
-      {
-        name: 'Hotel Vouchers',
-        description: 'Accommodation confirmations',
-        href: '/documents/supplier?type=hotel_voucher',
-        icon: Hotel,
-        color: 'bg-blue-100 text-blue-700'
-      },
-      {
-        name: 'Transport Vouchers',
-        description: 'Transfer and transportation orders',
-        href: '/documents/supplier?type=transport_voucher',
-        icon: Car,
-        color: 'bg-amber-100 text-amber-700'
-      },
-      {
-        name: 'Cruise Vouchers',
-        description: 'Nile cruise booking confirmations',
-        href: '/documents/supplier?type=cruise_voucher',
-        icon: Ship,
-        color: 'bg-cyan-100 text-cyan-700'
-      },
-      {
-        name: 'Activity Vouchers',
-        description: 'Tours and excursion confirmations',
-        href: '/documents/supplier?type=activity_voucher',
-        icon: MapPin,
-        color: 'bg-green-100 text-green-700'
-      },
-      {
-        name: 'Guide Assignments',
-        description: 'Guide briefings and assignments',
-        href: '/documents/supplier?type=guide_assignment',
-        icon: Users,
-        color: 'bg-pink-100 text-pink-700'
-      },
-      {
-        name: 'Service Orders',
-        description: 'General service instructions',
-        href: '/documents/supplier?type=service_order',
-        icon: FileText,
-        color: 'bg-purple-100 text-purple-700'
-      }
-    ]
-  }
-]
-
 export default function DocumentsPage() {
+  const t = useTranslations('documents')
+
+  const DOCUMENT_SECTIONS = [
+    {
+      title: t('customerDocuments'),
+      description: t('customerDocumentsDescription'),
+      items: [
+        {
+          name: t('customerContracts'),
+          description: t('customerContractsDescription'),
+          href: '/itineraries',
+          icon: FileCheck,
+          color: 'bg-purple-100 text-purple-700'
+        }
+      ]
+    },
+    {
+      title: t('supplierDocuments'),
+      description: t('supplierDocumentsDescription'),
+      href: '/documents/supplier',
+      items: [
+        {
+          name: t('allSupplierDocuments'),
+          description: t('allSupplierDocumentsDescription'),
+          href: '/documents/supplier',
+          icon: Building,
+          color: 'bg-indigo-100 text-indigo-700'
+        },
+        {
+          name: t('hotelVouchers'),
+          description: t('hotelVouchersDescription'),
+          href: '/documents/supplier?type=hotel_voucher',
+          icon: Hotel,
+          color: 'bg-blue-100 text-blue-700'
+        },
+        {
+          name: t('transportVouchers'),
+          description: t('transportVouchersDescription'),
+          href: '/documents/supplier?type=transport_voucher',
+          icon: Car,
+          color: 'bg-amber-100 text-amber-700'
+        },
+        {
+          name: t('cruiseVouchers'),
+          description: t('cruiseVouchersDescription'),
+          href: '/documents/supplier?type=cruise_voucher',
+          icon: Ship,
+          color: 'bg-cyan-100 text-cyan-700'
+        },
+        {
+          name: t('activityVouchers'),
+          description: t('activityVouchersDescription'),
+          href: '/documents/supplier?type=activity_voucher',
+          icon: MapPin,
+          color: 'bg-green-100 text-green-700'
+        },
+        {
+          name: t('guideAssignments'),
+          description: t('guideAssignmentsDescription'),
+          href: '/documents/supplier?type=guide_assignment',
+          icon: Users,
+          color: 'bg-pink-100 text-pink-700'
+        },
+        {
+          name: t('serviceOrders'),
+          description: t('serviceOrdersDescription'),
+          href: '/documents/supplier?type=service_order',
+          icon: FileText,
+          color: 'bg-purple-100 text-purple-700'
+        }
+      ]
+    }
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="container mx-auto px-4 py-4">
-          <h1 className="text-xl font-semibold text-gray-900">Documents</h1>
-          <p className="text-sm text-gray-500">Manage customer contracts and supplier vouchers</p>
+          <h1 className="text-xl font-semibold text-gray-900">{t('documents')}</h1>
+          <p className="text-sm text-gray-500">{t('documentsSubtitle')}</p>
         </div>
       </header>
 
@@ -99,7 +102,7 @@ export default function DocumentsPage() {
                   href={section.href}
                   className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
                 >
-                  View All <ArrowRight className="w-4 h-4" />
+                  {t('viewAll')} <ArrowRight className="w-4 h-4" />
                 </Link>
               )}
             </div>
@@ -134,12 +137,12 @@ export default function DocumentsPage() {
 
         {/* Quick Tips */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-blue-800 mb-2">💡 Quick Tips</h3>
+          <h3 className="text-sm font-semibold text-blue-800 mb-2">💡 {t('quickTips')}</h3>
           <ul className="text-sm text-blue-700 space-y-1">
-            <li>• Generate supplier documents from any itinerary using the "Documents" button</li>
-            <li>• Documents are auto-grouped by supplier from your itinerary services</li>
-            <li>• Send vouchers directly via Email or WhatsApp to suppliers</li>
-            <li>• Track confirmation status for each document</li>
+            <li>• {t('tip1')}</li>
+            <li>• {t('tip2')}</li>
+            <li>• {t('tip3')}</li>
+            <li>• {t('tip4')}</li>
           </ul>
         </div>
       </div>

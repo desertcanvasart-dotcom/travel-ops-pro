@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText } from 'lucide-react'
 
 // ============================================
@@ -67,6 +68,7 @@ interface SavedQuote {
 }
 
 export default function TourPriceCalculator() {
+  const t = useTranslations('b2bCalculator')
   const params = useParams()
   const variationId = params?.id as string
 
@@ -135,9 +137,9 @@ export default function TourPriceCalculator() {
       })
       const data = await res.json()
       if (data.success) setResult(data.data)
-      else setError(data.error || 'Failed to calculate price')
+      else setError(data.error || t('failedToCalculate'))
     } catch (err) {
-      setError('Failed to calculate price')
+      setError(t('failedToCalculate'))
     } finally {
       setLoading(false)
     }
@@ -175,10 +177,10 @@ export default function TourPriceCalculator() {
           })
         setRateSheet(sheet)
       } else {
-        setError(data.error || 'Failed to generate rate sheet')
+        setError(data.error || t('failedToGenerateSheet'))
       }
     } catch (err) {
-      setError('Failed to generate rate sheet')
+      setError(t('failedToGenerateSheet'))
     } finally {
       setGeneratingSheet(false)
     }
@@ -237,10 +239,10 @@ export default function TourPriceCalculator() {
           notes: ''
         })
       } else {
-        setError(data.error || 'Failed to save quote')
+        setError(data.error || t('failedToSaveQuote'))
       }
     } catch (err) {
-      setError('Failed to save quote')
+      setError(t('failedToSaveQuote'))
     } finally {
       setSaving(false)
     }
@@ -285,17 +287,17 @@ export default function TourPriceCalculator() {
           </Link>
           <div>
             <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-[#647C47]" /> B2B Price Calculator
+              <Calculator className="w-5 h-5 text-[#647C47]" /> {t('title')}
             </h1>
-            <p className="text-sm text-gray-500">Calculate dynamic pricing based on actual rates</p>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
-        <Link 
-          href="/b2b/quotes" 
+        <Link
+          href="/b2b/quotes"
           className="flex items-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
         >
           <FileText className="w-4 h-4" />
-          View Saved Quotes
+          {t('viewSavedQuotes')}
         </Link>
       </div>
 
@@ -305,15 +307,15 @@ export default function TourPriceCalculator() {
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-5 h-5 text-green-600" />
             <div>
-              <p className="text-sm font-medium text-green-800">Quote saved successfully!</p>
-              <p className="text-sm text-green-600">Reference: <span className="font-mono font-bold">{savedQuote.quote_number}</span></p>
+              <p className="text-sm font-medium text-green-800">{t('quoteSavedSuccess')}</p>
+              <p className="text-sm text-green-600">{t('reference')}: <span className="font-mono font-bold">{savedQuote.quote_number}</span></p>
             </div>
           </div>
           <Link
             href={`/b2b/quotes/${savedQuote.id}`}
             className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            View Quote
+            {t('viewQuote')}
           </Link>
         </div>
       )}
@@ -322,12 +324,12 @@ export default function TourPriceCalculator() {
         {/* Calculator Panel */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h2 className="text-lg font-semibold mb-4">Calculate Price</h2>
+            <h2 className="text-lg font-semibold mb-4">{t('calculatePrice')}</h2>
             <div className="space-y-4">
               {/* Number of Passengers */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Users className="w-4 h-4 inline mr-1" />Number of Passengers
+                  <Users className="w-4 h-4 inline mr-1" />{t('numberOfPassengers')}
                 </label>
                 <input
                   type="number"
@@ -342,7 +344,7 @@ export default function TourPriceCalculator() {
               {/* Tour Leader Toggle (+0/+1) */}
               <div className="bg-gray-50 rounded-lg p-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <UserPlus className="w-4 h-4 inline mr-1" />Tour Leader
+                  <UserPlus className="w-4 h-4 inline mr-1" />{t('tourLeader')}
                 </label>
                 <div className="flex gap-2">
                   <button
@@ -354,7 +356,7 @@ export default function TourPriceCalculator() {
                         : 'bg-white border text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    +0 (No TL)
+                    {t('noTourLeader')}
                   </button>
                   <button
                     type="button"
@@ -365,20 +367,20 @@ export default function TourPriceCalculator() {
                         : 'bg-white border text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    +1 (With TL)
+                    {t('withTourLeader')}
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  {tourLeaderIncluded 
-                    ? 'Tour leader costs (meals, entrance, single room) distributed across paying guests'
-                    : 'Standard calculation without tour leader'}
+                  {tourLeaderIncluded
+                    ? t('tourLeaderCostDistributed')
+                    : t('standardCalculation')}
                 </p>
               </div>
 
               {/* Travel Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Calendar className="w-4 h-4 inline mr-1" />Travel Date
+                  <Calendar className="w-4 h-4 inline mr-1" />{t('travelDate')}
                 </label>
                 <input
                   type="date"
@@ -391,22 +393,22 @@ export default function TourPriceCalculator() {
               {/* Passport Type */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Globe className="w-4 h-4 inline mr-1" />Passport Type
+                  <Globe className="w-4 h-4 inline mr-1" />{t('passportType')}
                 </label>
                 <select
                   value={isEurPassport ? 'eur' : 'non-eur'}
                   onChange={(e) => setIsEurPassport(e.target.value === 'eur')}
                   className="w-full px-3 py-2 border rounded-lg bg-white"
                 >
-                  <option value="eur">European Passport</option>
-                  <option value="non-eur">Non-European Passport</option>
+                  <option value="eur">{t('europeanPassport')}</option>
+                  <option value="non-eur">{t('nonEuropeanPassport')}</option>
                 </select>
               </div>
 
               {/* Profit Margin */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <TrendingUp className="w-4 h-4 inline mr-1" />Profit Margin (%)
+                  <TrendingUp className="w-4 h-4 inline mr-1" />{t('profitMargin')}
                 </label>
                 <input
                   type="number"
@@ -426,7 +428,7 @@ export default function TourPriceCalculator() {
                   onChange={(e) => setIncludeOptionals(e.target.checked)}
                   className="w-4 h-4 text-[#647C47] rounded"
                 />
-                <span className="text-sm">Include optional extras</span>
+                <span className="text-sm">{t('includeOptionalExtras')}</span>
               </label>
 
               {/* Calculate Button */}
@@ -436,9 +438,9 @@ export default function TourPriceCalculator() {
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium disabled:opacity-50"
               >
                 {loading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />Calculating...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" />{t('calculating')}</>
                 ) : (
-                  <><Calculator className="w-4 h-4" />Calculate Price</>
+                  <><Calculator className="w-4 h-4" />{t('calculatePriceBtn')}</>
                 )}
               </button>
 
@@ -449,9 +451,9 @@ export default function TourPriceCalculator() {
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 border text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
               >
                 {generatingSheet ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />Generating...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" />{t('generating')}</>
                 ) : (
-                  <><FileSpreadsheet className="w-4 h-4" />Generate Rate Sheet (1-10 pax)</>
+                  <><FileSpreadsheet className="w-4 h-4" />{t('generateRateSheet')}</>
                 )}
               </button>
             </div>
@@ -480,39 +482,39 @@ export default function TourPriceCalculator() {
                   <div className="flex items-center gap-2">
                     {result.tour_leader_included && (
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                        +1 Tour Leader
+                        {t('tourLeaderBadge')}
                       </span>
                     )}
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getSeasonBadge(result.season)}`}>
-                      {result.season.charAt(0).toUpperCase() + result.season.slice(1)} Season
+                      {result.season.charAt(0).toUpperCase() + result.season.slice(1)} {t('season')}
                     </span>
                   </div>
                 </div>
 
                 {result.tour_leader_included && result.num_paying_pax && (
                   <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-                    <strong>Group:</strong> {result.num_pax} total ({result.num_paying_pax} paying guests + 1 tour leader)
+                    <strong>{t('group')}:</strong> {t('totalPax', { total: result.num_pax, paying: result.num_paying_pax })}
                     {result.tour_leader_cost && (
-                      <span className="ml-2">• <strong>TL Cost:</strong> €{result.tour_leader_cost.toFixed(2)}</span>
+                      <span className="ml-2">• <strong>{t('tlCost')}:</strong> €{result.tour_leader_cost.toFixed(2)}</span>
                     )}
                   </div>
                 )}
 
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">Total Cost</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('totalCost')}</p>
                     <p className="text-xl font-bold">€{result.total_cost.toFixed(2)}</p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">Margin ({result.margin_percent}%)</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('margin')} ({result.margin_percent}%)</p>
                     <p className="text-xl font-bold text-green-600">€{result.margin_amount.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">Selling Price</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}</p>
                     <p className="text-xl font-bold text-[#647C47]">€{result.selling_price.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">Per Person</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('perPerson')}</p>
                     <p className="text-xl font-bold text-[#647C47]">€{result.price_per_person.toFixed(2)}</p>
                   </div>
                 </div>
@@ -522,14 +524,14 @@ export default function TourPriceCalculator() {
                   <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-amber-800">
-                        Single Supplement (for solo travelers)
+                        {t('singleSupplement')}
                       </span>
                       <span className="text-lg font-bold text-amber-700">
                         €{result.single_supplement.toFixed(2)}
                       </span>
                     </div>
                     <p className="text-xs text-amber-600 mt-1">
-                      Additional charge per person for single room occupancy
+                      {t('singleSupplementNote')}
                     </p>
                   </div>
                 )}
@@ -541,23 +543,23 @@ export default function TourPriceCalculator() {
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
                   >
                     <Save className="w-4 h-4" />
-                    Save as Quote
+                    {t('saveAsQuote')}
                   </button>
                 </div>
               </div>
 
               {/* Cost Breakdown Table */}
               <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-base font-semibold mb-4">Cost Breakdown</h3>
+                <h3 className="text-base font-semibold mb-4">{t('costBreakdown')}</h3>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-600">Service</th>
-                      <th className="px-4 py-2 text-center font-medium text-gray-600">Source</th>
-                      <th className="px-4 py-2 text-center font-medium text-gray-600">Mode</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Qty</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Unit</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-600">Total</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-600">{t('tableService')}</th>
+                      <th className="px-4 py-2 text-center font-medium text-gray-600">{t('tableSource')}</th>
+                      <th className="px-4 py-2 text-center font-medium text-gray-600">{t('tableMode')}</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableQty')}</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableUnit')}</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableTotal')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -584,21 +586,21 @@ export default function TourPriceCalculator() {
                   </tbody>
                   <tfoot className="bg-gray-50 font-medium">
                     <tr>
-                      <td colSpan={5} className="px-4 py-2 text-right">Subtotal:</td>
+                      <td colSpan={5} className="px-4 py-2 text-right">{t('subtotal')}:</td>
                       <td className="px-4 py-2 text-right">€{result.subtotal_cost.toFixed(2)}</td>
                     </tr>
                     {result.tour_leader_included && result.tour_leader_cost && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-2 text-right text-blue-600">Tour Leader Cost:</td>
+                        <td colSpan={5} className="px-4 py-2 text-right text-blue-600">{t('tourLeaderCost')}:</td>
                         <td className="px-4 py-2 text-right text-blue-600">€{result.tour_leader_cost.toFixed(2)}</td>
                       </tr>
                     )}
                     <tr>
-                      <td colSpan={5} className="px-4 py-2 text-right text-green-600">Margin ({result.margin_percent}%):</td>
+                      <td colSpan={5} className="px-4 py-2 text-right text-green-600">{t('margin')} ({result.margin_percent}%):</td>
                       <td className="px-4 py-2 text-right text-green-600">€{result.margin_amount.toFixed(2)}</td>
                     </tr>
                     <tr className="text-lg">
-                      <td colSpan={5} className="px-4 py-2 text-right text-[#647C47]">Total:</td>
+                      <td colSpan={5} className="px-4 py-2 text-right text-[#647C47]">{t('total')}:</td>
                       <td className="px-4 py-2 text-right text-[#647C47]">€{result.selling_price.toFixed(2)}</td>
                     </tr>
                   </tfoot>
@@ -612,26 +614,26 @@ export default function TourPriceCalculator() {
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-base font-semibold">Rate Sheet</h3>
+                  <h3 className="text-base font-semibold">{t('rateSheet')}</h3>
                   {tourLeaderIncluded && (
-                    <p className="text-xs text-blue-600">+1 Tour Leader included in calculations</p>
+                    <p className="text-xs text-blue-600">{t('tourLeaderIncludedNote')}</p>
                   )}
                 </div>
                 <button
                   onClick={exportToCSV}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"
                 >
-                  <Download className="w-4 h-4" />Export CSV
+                  <Download className="w-4 h-4" />{t('exportCsv')}
                 </button>
               </div>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-center font-medium text-gray-600">Pax</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">Cost</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">Margin</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">Selling</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">Per Person</th>
+                    <th className="px-4 py-2 text-center font-medium text-gray-600">{t('tablePax')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableCost')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableMargin')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableSelling')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tablePerPerson')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -661,7 +663,7 @@ export default function TourPriceCalculator() {
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Save className="w-5 h-5 text-[#647C47]" />
-                Save Quote
+                {t('saveQuote')}
               </h2>
               <button onClick={() => setShowSaveModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5" />
@@ -672,14 +674,14 @@ export default function TourPriceCalculator() {
               {/* Partner Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <Building2 className="w-4 h-4 inline mr-1" />Partner (Optional)
+                  <Building2 className="w-4 h-4 inline mr-1" />{t('partnerOptional')}
                 </label>
                 <select
                   value={quoteForm.partner_id}
                   onChange={(e) => setQuoteForm({ ...quoteForm, partner_id: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-[#647C47] outline-none"
                 >
-                  <option value="">No partner / Direct client</option>
+                  <option value="">{t('noPartnerDirect')}</option>
                   {partners.map(partner => (
                     <option key={partner.id} value={partner.id}>
                       {partner.company_name} ({partner.partner_code})
@@ -689,57 +691,57 @@ export default function TourPriceCalculator() {
               </div>
 
               <div className="border-t pt-4">
-                <p className="text-sm font-medium text-gray-700 mb-3">Client Details (Optional)</p>
-                
+                <p className="text-sm font-medium text-gray-700 mb-3">{t('clientDetailsOptional')}</p>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-600 mb-1">
-                      <User className="w-3 h-3 inline mr-1" />Client Name
+                      <User className="w-3 h-3 inline mr-1" />{t('clientName')}
                     </label>
                     <input
                       type="text"
                       value={quoteForm.client_name}
                       onChange={(e) => setQuoteForm({ ...quoteForm, client_name: e.target.value })}
-                      placeholder="John Smith"
+                      placeholder={t('clientNamePlaceholder')}
                       className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">
-                      <Mail className="w-3 h-3 inline mr-1" />Email
+                      <Mail className="w-3 h-3 inline mr-1" />{t('email')}
                     </label>
                     <input
                       type="email"
                       value={quoteForm.client_email}
                       onChange={(e) => setQuoteForm({ ...quoteForm, client_email: e.target.value })}
-                      placeholder="john@example.com"
+                      placeholder={t('emailPlaceholder')}
                       className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs text-gray-600 mb-1">
-                      <Phone className="w-3 h-3 inline mr-1" />Phone
+                      <Phone className="w-3 h-3 inline mr-1" />{t('phone')}
                     </label>
                     <input
                       type="tel"
                       value={quoteForm.client_phone}
                       onChange={(e) => setQuoteForm({ ...quoteForm, client_phone: e.target.value })}
-                      placeholder="+1 234 567 8900"
+                      placeholder={t('phonePlaceholder')}
                       className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none"
                     />
                   </div>
-                  
+
                   <div className="col-span-2">
                     <label className="block text-xs text-gray-600 mb-1">
-                      <Globe className="w-3 h-3 inline mr-1" />Nationality
+                      <Globe className="w-3 h-3 inline mr-1" />{t('nationality')}
                     </label>
                     <input
                       type="text"
                       value={quoteForm.client_nationality}
                       onChange={(e) => setQuoteForm({ ...quoteForm, client_nationality: e.target.value })}
-                      placeholder="American, British, etc."
+                      placeholder={t('nationalityPlaceholder')}
                       className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none"
                     />
                   </div>
@@ -747,11 +749,11 @@ export default function TourPriceCalculator() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs text-gray-600 mb-1">{t('notes')}</label>
                 <textarea
                   value={quoteForm.notes}
                   onChange={(e) => setQuoteForm({ ...quoteForm, notes: e.target.value })}
-                  placeholder="Any special requests or notes..."
+                  placeholder={t('notesPlaceholder')}
                   rows={2}
                   className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none resize-none"
                 />
@@ -760,19 +762,19 @@ export default function TourPriceCalculator() {
               {/* Quote Summary */}
               <div className="bg-gray-50 rounded-lg p-3 text-sm">
                 <div className="flex justify-between mb-1">
-                  <span className="text-gray-600">Tour:</span>
+                  <span className="text-gray-600">{t('summaryTour')}:</span>
                   <span className="font-medium">{result?.template_name}</span>
                 </div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-gray-600">Pax:</span>
+                  <span className="text-gray-600">{t('summaryPax')}:</span>
                   <span className="font-medium">{numPax} {tourLeaderIncluded ? '(+1 TL)' : ''}</span>
                 </div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-gray-600">Travel Date:</span>
+                  <span className="text-gray-600">{t('summaryTravelDate')}:</span>
                   <span className="font-medium">{travelDate}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t mt-2">
-                  <span className="text-gray-600">Selling Price:</span>
+                  <span className="text-gray-600">{t('summarySellingPrice')}:</span>
                   <span className="font-bold text-[#647C47]">€{result?.selling_price.toFixed(2)}</span>
                 </div>
               </div>
@@ -783,7 +785,7 @@ export default function TourPriceCalculator() {
                 onClick={() => setShowSaveModal(false)}
                 className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-white font-medium"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSaveQuote}
@@ -791,9 +793,9 @@ export default function TourPriceCalculator() {
                 className="flex-1 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />Saving...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" />{t('saving')}</>
                 ) : (
-                  <><Save className="w-4 h-4" />Save Quote</>
+                  <><Save className="w-4 h-4" />{t('saveQuote')}</>
                 )}
               </button>
             </div>

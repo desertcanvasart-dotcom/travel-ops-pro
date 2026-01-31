@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  ArrowLeft, 
-  Download, 
-  Loader2, 
-  Check, 
+import {
+  ArrowLeft,
+  Download,
+  Loader2,
+  Check,
   MessageCircle,
   Calendar,
   CreditCard,
@@ -37,6 +38,7 @@ interface Payment {
 }
 
 export default function ReceiptPage() {
+  const t = useTranslations('receipt')
   const params = useParams()
   const router = useRouter()
   const [payment, setPayment] = useState<Payment | null>(null)
@@ -91,7 +93,7 @@ export default function ReceiptPage() {
       })
     } catch (error) {
       console.error('Error downloading PDF:', error)
-      alert('Failed to download receipt')
+      alert(t('failedToDownloadReceipt'))
     } finally {
       setDownloading(false)
     }
@@ -99,7 +101,7 @@ export default function ReceiptPage() {
 
   const handleSendWhatsApp = async () => {
     if (!payment?.client_phone) {
-      alert('No phone number available for this client')
+      alert(t('noPhoneAvailable'))
       return
     }
 
@@ -118,11 +120,11 @@ export default function ReceiptPage() {
         setSent(true)
         setTimeout(() => setSent(false), 3000)
       } else {
-        alert(data.error || 'Failed to send receipt')
+        alert(data.error || t('failedToSendReceipt'))
       }
     } catch (error) {
       console.error('Error sending receipt:', error)
-      alert('Failed to send receipt via WhatsApp')
+      alert(t('failedToSendReceiptWhatsApp'))
     } finally {
       setSending(false)
     }
@@ -138,7 +140,7 @@ export default function ReceiptPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading receipt...</p>
+          <p className="text-sm text-gray-600">{t('loadingReceipt')}</p>
         </div>
       </div>
     )
@@ -149,10 +151,10 @@ export default function ReceiptPage() {
       <div className="p-4 lg:p-6">
         <div className="max-w-3xl mx-auto text-center py-12">
           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-gray-900 mb-3">Payment Not Found</h1>
-          <p className="text-sm text-gray-600 mb-4">The receipt you're looking for doesn't exist.</p>
+          <h1 className="text-xl font-bold text-gray-900 mb-3">{t('paymentNotFound')}</h1>
+          <p className="text-sm text-gray-600 mb-4">{t('receiptNotExist')}</p>
           <Link href="/receipts" className="text-sm text-primary-600 hover:text-primary-700">
-            ← Back to Receipts
+            ← {t('backToReceipts')}
           </Link>
         </div>
       </div>
@@ -171,9 +173,9 @@ export default function ReceiptPage() {
             className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            {t('back')}
           </button>
-          
+
           <div className="flex items-center gap-2">
             {/* WhatsApp Button */}
             {payment.client_phone && (
@@ -181,8 +183,8 @@ export default function ReceiptPage() {
                 onClick={handleSendWhatsApp}
                 disabled={sending}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  sent 
-                    ? 'bg-green-600 text-white' 
+                  sent
+                    ? 'bg-green-600 text-white'
                     : 'bg-[#25D366] text-white hover:bg-[#20BD5A]'
                 } disabled:opacity-50`}
               >
@@ -193,10 +195,10 @@ export default function ReceiptPage() {
                 ) : (
                   <MessageCircle className="w-4 h-4" />
                 )}
-                {sending ? 'Sending...' : sent ? 'Sent!' : 'Send via WhatsApp'}
+                {sending ? t('sending') : sent ? t('sent') : t('sendViaWhatsApp')}
               </button>
             )}
-            
+
             {/* Download Button */}
             <button
               onClick={handleDownloadPDF}
@@ -208,7 +210,7 @@ export default function ReceiptPage() {
               ) : (
                 <Download className="w-4 h-4" />
               )}
-              {downloading ? 'Generating...' : 'Download PDF'}
+              {downloading ? t('generating') : t('downloadPDF')}
             </button>
           </div>
         </div>
@@ -219,7 +221,7 @@ export default function ReceiptPage() {
           <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-primary-200 text-xs uppercase tracking-wider mb-1">Payment Receipt</p>
+                <p className="text-primary-200 text-xs uppercase tracking-wider mb-1">{t('paymentReceipt')}</p>
                 <h1 className="text-2xl font-bold">{receiptNumber}</h1>
               </div>
               <div className="text-right">
@@ -232,7 +234,7 @@ export default function ReceiptPage() {
           {/* Status Badge */}
           <div className="px-6 py-3 bg-green-50 border-b border-green-100 flex items-center justify-center gap-2">
             <Check className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-medium text-green-700">Payment Completed Successfully</span>
+            <span className="text-sm font-medium text-green-700">{t('paymentCompletedSuccessfully')}</span>
           </div>
 
           {/* Receipt Body */}
@@ -240,7 +242,7 @@ export default function ReceiptPage() {
             {/* Client & Date Info */}
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Received From</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('receivedFrom')}</p>
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
                     <User className="w-5 h-5 text-primary-600" />
@@ -263,7 +265,7 @@ export default function ReceiptPage() {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Date & Reference</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('dateAndReference')}</p>
                 <p className="font-semibold text-gray-900">
                   {new Date(payment.payment_date || Date.now()).toLocaleDateString('en-GB', {
                     day: 'numeric',
@@ -271,7 +273,7 @@ export default function ReceiptPage() {
                     year: 'numeric'
                   })}
                 </p>
-                <Link 
+                <Link
                   href={`/itineraries/${payment.itinerary_id}`}
                   className="text-sm text-primary-600 hover:text-primary-700 font-mono"
                 >
@@ -282,14 +284,14 @@ export default function ReceiptPage() {
 
             {/* Payment Details */}
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Payment Details</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">{t('paymentDetails')}</p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center">
                     <CreditCard className="w-4 h-4 text-gray-500" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Payment Method</p>
+                    <p className="text-xs text-gray-500">{t('paymentMethod')}</p>
                     <p className="text-sm font-medium text-gray-900 capitalize">
                       {payment.payment_method?.replace('_', ' ')}
                     </p>
@@ -300,7 +302,7 @@ export default function ReceiptPage() {
                     <FileText className="w-4 h-4 text-gray-500" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Payment Type</p>
+                    <p className="text-xs text-gray-500">{t('paymentType')}</p>
                     <p className="text-sm font-medium text-gray-900 capitalize">
                       {payment.payment_type?.replace('_', ' ')}
                     </p>
@@ -312,7 +314,7 @@ export default function ReceiptPage() {
                       <Hash className="w-4 h-4 text-gray-500" />
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Transaction Reference</p>
+                      <p className="text-xs text-gray-500">{t('transactionReference')}</p>
                       <p className="text-sm font-mono font-medium text-gray-900">
                         {payment.transaction_reference}
                       </p>
@@ -324,7 +326,7 @@ export default function ReceiptPage() {
 
             {/* Amount */}
             <div className="bg-primary-600 text-white rounded-lg p-6 text-center mb-6">
-              <p className="text-primary-200 text-xs uppercase tracking-wider mb-2">Amount Received</p>
+              <p className="text-primary-200 text-xs uppercase tracking-wider mb-2">{t('amountReceived')}</p>
               <p className="text-4xl font-bold">
                 {formatCurrency(payment.amount, payment.currency)}
               </p>
@@ -333,7 +335,7 @@ export default function ReceiptPage() {
             {/* Notes */}
             {payment.notes && (
               <div className="mb-6">
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Notes</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{t('notes')}</p>
                 <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{payment.notes}</p>
               </div>
             )}
@@ -341,13 +343,13 @@ export default function ReceiptPage() {
             {/* Footer */}
             <div className="border-t border-gray-200 pt-6 text-center">
               <p className="text-lg font-semibold text-gray-900 mb-1">
-                Thank you for your payment!
+                {t('thankYouForPayment')}
               </p>
               <p className="text-sm text-gray-600">
-                This receipt confirms your payment has been received and processed.
+                {t('receiptConfirmation')}
               </p>
               <p className="text-xs text-gray-500 mt-3">
-                Questions? Contact us at info@travel2egypt.com
+                {t('questionsContact')}
               </p>
             </div>
           </div>

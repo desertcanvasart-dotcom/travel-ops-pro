@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  ArrowLeft, FileText, Download, Send, Calendar, Users, 
+import { useTranslations } from 'next-intl'
+import {
+  ArrowLeft, FileText, Download, Send, Calendar, Users,
   Building2, Loader2, Globe, Mail, Phone, User, Clock, CheckCircle2,
   XCircle, TrendingUp
 } from 'lucide-react'
@@ -67,6 +68,7 @@ interface Quote {
 export default function QuoteDetailPage() {
   const params = useParams()
   const quoteId = params?.id as string
+  const t = useTranslations('b2bQuotes')
 
   const [quote, setQuote] = useState<Quote | null>(null)
   const [loading, setLoading] = useState(true)
@@ -84,10 +86,10 @@ export default function QuoteDetailPage() {
       if (data.success) {
         setQuote(data.data)
       } else {
-        setError(data.error || 'Quote not found')
+        setError(data.error || t('quoteNotFound'))
       }
     } catch (err) {
-      setError('Failed to load quote')
+      setError(t('failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -123,20 +125,39 @@ export default function QuoteDetailPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const styles: Record<string, { bg: string; text: string; icon: any }> = {
-      draft: { bg: 'bg-gray-100', text: 'text-gray-700', icon: Clock },
-      sent: { bg: 'bg-blue-100', text: 'text-blue-700', icon: Send },
-      accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2 },
-      rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle },
+    const styles: Record<string, { bg: string; text: string; icon: any; label: string }> = {
+      draft: { bg: 'bg-gray-100', text: 'text-gray-700', icon: Clock, label: t('statusDraft') },
+      sent: { bg: 'bg-blue-100', text: 'text-blue-700', icon: Send, label: t('statusSent') },
+      accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: t('statusAccepted') },
+      rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle, label: t('statusRejected') },
     }
     const style = styles[status] || styles.draft
     const Icon = style.icon
     return (
       <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${style.bg} ${style.text}`}>
         <Icon className="w-4 h-4" />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {style.label}
       </span>
     )
+  }
+
+  const getStatusLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+      draft: t('statusDraft'),
+      sent: t('statusSent'),
+      accepted: t('statusAccepted'),
+      rejected: t('statusRejected'),
+    }
+    return labels[status] || status
+  }
+
+  const getTierLabel = (tier: string): string => {
+    const labels: Record<string, string> = {
+      budget: t('tierBudget'),
+      standard: t('tierStandard'),
+      luxury: t('tierLuxury'),
+    }
+    return labels[tier] || tier
   }
 
   const getTierBadge = (tier: string) => {
@@ -160,10 +181,10 @@ export default function QuoteDetailPage() {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <Link href="/b2b/quotes" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
-          <ArrowLeft className="w-4 h-4" />Back to Quotes
+          <ArrowLeft className="w-4 h-4" />{t('backToQuotes')}
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <p className="text-red-800 font-medium">Quote not found</p>
+          <p className="text-red-800 font-medium">{t('quoteNotFound')}</p>
           <p className="text-red-600 text-sm mt-1">{error}</p>
         </div>
       </div>
@@ -189,7 +210,7 @@ export default function QuoteDetailPage() {
               {quote.quote_number}
               {getStatusBadge(quote.status)}
             </h1>
-            <p className="text-sm text-gray-500">Created {formatDate(quote.created_at, 'long')}</p>
+            <p className="text-sm text-gray-500">{t('created')} {formatDate(quote.created_at, 'long')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -198,7 +219,7 @@ export default function QuoteDetailPage() {
             target="_blank"
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
           >
-            <Download className="w-4 h-4" />Download PDF
+            <Download className="w-4 h-4" />{t('downloadPdf')}
           </a>
         </div>
       </div>
@@ -210,7 +231,7 @@ export default function QuoteDetailPage() {
           <div className="bg-white rounded-lg border p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{template?.template_name || 'Tour Package'}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{template?.template_name || t('tourPackage')}</h2>
                 <p className="text-sm text-gray-500">{variation?.variation_name}</p>
               </div>
               {variation?.tier && (
@@ -222,19 +243,19 @@ export default function QuoteDetailPage() {
 
             <div className="grid grid-cols-4 gap-4">
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1">Duration</p>
+                <p className="text-xs text-gray-500 mb-1">{t('duration')}</p>
                 <p className="text-sm font-semibold">{template?.duration_days || '-'}D / {template?.duration_nights || '-'}N</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1">Travelers</p>
+                <p className="text-xs text-gray-500 mb-1">{t('travelers')}</p>
                 <p className="text-sm font-semibold">{quote.num_adults} pax{quote.tour_leader_included && <span className="text-blue-600"> (+1 TL)</span>}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1">Travel Date</p>
-                <p className="text-sm font-semibold">{quote.travel_date ? formatDate(quote.travel_date) : 'TBD'}</p>
+                <p className="text-xs text-gray-500 mb-1">{t('travelDate')}</p>
+                <p className="text-sm font-semibold">{quote.travel_date ? formatDate(quote.travel_date) : t('tbd')}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1">Season</p>
+                <p className="text-xs text-gray-500 mb-1">{t('season')}</p>
                 <p className="text-sm font-semibold">{quote.season ? quote.season.charAt(0).toUpperCase() + quote.season.slice(1) : '-'}</p>
               </div>
             </div>
@@ -243,20 +264,20 @@ export default function QuoteDetailPage() {
           {/* Services Table */}
           {services.length > 0 && (
             <div className="bg-white rounded-lg border p-6">
-              <h3 className="text-base font-semibold mb-4">Services Included</h3>
+              <h3 className="text-base font-semibold mb-4">{t('servicesIncluded')}</h3>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-2 text-left font-medium text-gray-600">Service</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">Qty</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">Unit</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">Total</th>
+                    <th className="px-4 py-2 text-left font-medium text-gray-600">{t('serviceColumn')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('qtyColumn')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('unitColumn')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('totalColumn')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {services.map((service: any, idx: number) => (
                     <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-2">{service.service_name || 'Service'}</td>
+                      <td className="px-4 py-2">{service.service_name || t('serviceColumn')}</td>
                       <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
                       <td className="px-4 py-2 text-right">€{(service.unit_cost || 0).toFixed(2)}</td>
                       <td className="px-4 py-2 text-right font-medium">€{(service.line_total || 0).toFixed(2)}</td>
@@ -270,7 +291,7 @@ export default function QuoteDetailPage() {
           {/* Notes */}
           {quote.notes && (
             <div className="bg-white rounded-lg border p-6">
-              <h3 className="text-base font-semibold mb-2">Notes</h3>
+              <h3 className="text-base font-semibold mb-2">{t('notes')}</h3>
               <p className="text-sm text-gray-600">{quote.notes}</p>
             </div>
           )}
@@ -281,34 +302,34 @@ export default function QuoteDetailPage() {
           {/* Pricing */}
           <div className="bg-white rounded-lg border p-6">
             <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-[#647C47]" />Pricing
+              <TrendingUp className="w-4 h-4 text-[#647C47]" />{t('pricing')}
             </h3>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal</span>
+                <span className="text-gray-600">{t('subtotal')}</span>
                 <span>€{quote.total_cost?.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Margin ({quote.margin_percent}%)</span>
+                <span className="text-gray-600">{t('margin')} ({quote.margin_percent}%)</span>
                 <span className="text-green-600">€{quote.margin_amount?.toFixed(2)}</span>
               </div>
               {quote.tour_leader_included && quote.tour_leader_cost && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Tour Leader Cost</span>
+                  <span className="text-gray-600">{t('tourLeaderCost')}</span>
                   <span className="text-blue-600">€{quote.tour_leader_cost.toFixed(2)}</span>
                 </div>
               )}
               <div className="pt-3 border-t">
                 <div className="flex justify-between">
-                  <span className="font-medium">Selling Price</span>
+                  <span className="font-medium">{t('sellingPrice')}</span>
                   <span className="text-xl font-bold text-[#647C47]">€{quote.selling_price?.toFixed(2)}</span>
                 </div>
-                <p className="text-xs text-gray-500 text-right mt-1">€{quote.price_per_person?.toFixed(2)} per person</p>
+                <p className="text-xs text-gray-500 text-right mt-1">€{quote.price_per_person?.toFixed(2)} {t('perPersonLong')}</p>
               </div>
               {quote.single_supplement && quote.single_supplement > 0 && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <div className="flex justify-between text-sm">
-                    <span className="text-amber-800">Single Supplement</span>
+                    <span className="text-amber-800">{t('singleSupplement')}</span>
                     <span className="font-medium text-amber-700">€{quote.single_supplement.toFixed(2)}</span>
                   </div>
                 </div>
@@ -318,7 +339,7 @@ export default function QuoteDetailPage() {
 
           {/* Client / Partner */}
           <div className="bg-white rounded-lg border p-6">
-            <h3 className="text-base font-semibold mb-4">Client Details</h3>
+            <h3 className="text-base font-semibold mb-4">{t('clientDetails')}</h3>
             {quote.client_name ? (
               <div className="space-y-2 text-sm">
                 <p className="flex items-center gap-2"><User className="w-4 h-4 text-gray-400" />{quote.client_name}</p>
@@ -327,12 +348,12 @@ export default function QuoteDetailPage() {
                 {quote.client_nationality && <p className="flex items-center gap-2"><Globe className="w-4 h-4 text-gray-400" />{quote.client_nationality}</p>}
               </div>
             ) : (
-              <p className="text-sm text-gray-400 italic">No client details</p>
+              <p className="text-sm text-gray-400 italic">{t('noClientDetails')}</p>
             )}
 
             {partner && (
               <div className="mt-4 pt-4 border-t">
-                <p className="text-xs text-gray-500 mb-2">Partner</p>
+                <p className="text-xs text-gray-500 mb-2">{t('partner')}</p>
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <Building2 className="w-4 h-4 text-blue-500" />
                   {partner.company_name}
@@ -344,7 +365,7 @@ export default function QuoteDetailPage() {
 
           {/* Status Actions */}
           <div className="bg-white rounded-lg border p-6">
-            <h3 className="text-base font-semibold mb-4">Update Status</h3>
+            <h3 className="text-base font-semibold mb-4">{t('updateStatus')}</h3>
             <div className="grid grid-cols-2 gap-2">
               {['draft', 'sent', 'accepted', 'rejected'].map((status) => (
                 <button
@@ -357,7 +378,7 @@ export default function QuoteDetailPage() {
                       : 'border hover:bg-gray-50 disabled:opacity-50'
                   }`}
                 >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {getStatusLabel(status)}
                 </button>
               ))}
             </div>
@@ -365,7 +386,7 @@ export default function QuoteDetailPage() {
 
           {/* Validity */}
           <div className="bg-gray-50 rounded-lg border p-4">
-            <p className="text-xs text-gray-500">Valid Until</p>
+            <p className="text-xs text-gray-500">{t('validUntil')}</p>
             <p className="text-sm font-medium flex items-center gap-2">
               <Calendar className="w-4 h-4 text-gray-400" />
               {formatDate(quote.valid_until, 'long')}

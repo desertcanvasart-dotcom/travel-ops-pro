@@ -1,16 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  Send, 
-  Mail, 
-  MessageSquare, 
+import {
+  Send,
+  Mail,
+  MessageSquare,
   FileText,
   X,
   Loader2,
   ChevronDown,
   Check
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 // ============================================
 // TYPES
@@ -58,13 +59,14 @@ interface QuickSendButtonProps {
 // QUICK SEND BUTTON COMPONENT
 // ============================================
 
-export function QuickSendButton({ 
-  client, 
-  itinerary, 
+export function QuickSendButton({
+  client,
+  itinerary,
   category,
   variant = 'secondary',
   className = ''
 }: QuickSendButtonProps) {
+  const t = useTranslations('quickSendButton')
   const [showModal, setShowModal] = useState(false)
 
   const buttonStyles = {
@@ -76,12 +78,13 @@ export function QuickSendButton({
   return (
     <>
       <button
+        type="button"
         onClick={() => setShowModal(true)}
         className={`${buttonStyles[variant]} ${className}`}
-        title="Send Template"
+        title={t('sendTemplate')}
       >
         <Send className="w-4 h-4" />
-        {variant !== 'icon' && <span>Send Template</span>}
+        {variant !== 'icon' && <span>{t('sendTemplate')}</span>}
       </button>
 
       {showModal && (
@@ -108,6 +111,7 @@ interface QuickSendModalProps {
 }
 
 function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModalProps) {
+  const t = useTranslations('quickSendButton')
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
@@ -189,7 +193,7 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
       const recipient = channel === 'email' ? client.email : client.phone
       
       if (!recipient) {
-        alert(`Client has no ${channel === 'email' ? 'email' : 'phone'} address`)
+        alert(channel === 'email' ? t('noEmailAddress') : t('noPhoneNumber'))
         setSending(false)
         return
       }
@@ -220,11 +224,11 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
         }, 1500)
       } else {
         const data = await response.json()
-        alert(data.error || 'Failed to send message')
+        alert(data.error || t('failedToSend'))
       }
     } catch (error) {
       console.error('Error sending:', error)
-      alert('Failed to send message')
+      alert(t('failedToSend'))
     } finally {
       setSending(false)
     }
@@ -244,12 +248,12 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
         {/* Header */}
         <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Quick Send Template</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t('quickSendTemplate')}</h2>
             {client && (
-              <p className="text-sm text-gray-500">To: {client.name}</p>
+              <p className="text-sm text-gray-500">{t('to', { name: client.name })}</p>
             )}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -259,7 +263,7 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
           {/* Left: Template Selection */}
           <div className="w-1/3 border-r border-gray-200 overflow-y-auto">
             <div className="p-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Select Template</h3>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t('selectTemplate')}</h3>
               
               {loading ? (
                 <div className="flex items-center justify-center py-8">
@@ -313,10 +317,11 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
                   <div className="p-4 border-b border-gray-200">
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={() => setChannel('whatsapp')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm ${
-                          channel === 'whatsapp' 
-                            ? 'border-green-500 bg-green-50 text-green-700' 
+                          channel === 'whatsapp'
+                            ? 'border-green-500 bg-green-50 text-green-700'
                             : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                         }`}
                       >
@@ -324,10 +329,11 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
                         WhatsApp
                       </button>
                       <button
+                        type="button"
                         onClick={() => setChannel('email')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm ${
-                          channel === 'email' 
-                            ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                          channel === 'email'
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
                             : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                         }`}
                       >
@@ -342,17 +348,17 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
                 <div className="flex-1 p-4 overflow-y-auto">
                   {selectedTemplate.subject && channel === 'email' && (
                     <div className="mb-3">
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Subject</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t('subject')}</label>
                       <div className="p-2 bg-gray-50 rounded text-sm">
                         {Object.entries(filledValues).reduce(
-                          (s, [k, v]) => s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v || k), 
+                          (s, [k, v]) => s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v || k),
                           selectedTemplate.subject
                         )}
                       </div>
                     </div>
                   )}
-                  
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Message Preview</label>
+
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('messagePreview')}</label>
                   <div className="p-4 bg-gray-50 rounded-lg whitespace-pre-wrap text-sm h-full min-h-[200px]">
                     {preview}
                   </div>
@@ -363,16 +369,17 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
                   {sent ? (
                     <div className="flex items-center justify-center gap-2 text-green-600">
                       <Check className="w-5 h-5" />
-                      <span>Message sent successfully!</span>
+                      <span>{t('messageSentSuccess')}</span>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-500">
-                        Send to: {client?.name} 
+                        {t('sendTo', { name: client?.name || '' })}
                         {channel === 'email' && client?.email && ` (${client.email})`}
                         {channel === 'whatsapp' && client?.phone && ` (${client.phone})`}
                       </span>
                       <button
+                        type="button"
                         onClick={handleSend}
                         disabled={sending || !client}
                         className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6339] transition-colors disabled:opacity-50"
@@ -382,7 +389,7 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
                         ) : (
                           <Send className="w-4 h-4" />
                         )}
-                        Send {channel === 'whatsapp' ? 'WhatsApp' : 'Email'}
+                        {channel === 'whatsapp' ? t('sendWhatsApp') : t('sendEmail')}
                       </button>
                     </div>
                   )}
@@ -392,7 +399,7 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
               <div className="flex-1 flex items-center justify-center text-gray-400">
                 <div className="text-center">
                   <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Select a template to preview</p>
+                  <p>{t('selectTemplateToPreview')}</p>
                 </div>
               </div>
             )}

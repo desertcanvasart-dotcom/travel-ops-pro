@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   Filter,
   Download,
   TrendingUp,
@@ -32,6 +32,7 @@ import {
   Heart
 } from 'lucide-react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 
 interface Commission {
   id: string
@@ -83,29 +84,29 @@ interface Itinerary {
   client_name: string
 }
 
-const CATEGORY_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
-    hotel: { label: 'Hotel', icon: Building, color: 'text-blue-600 bg-blue-50' },
-    shopping: { label: 'Shopping', icon: Store, color: 'text-pink-600 bg-pink-50' },
-    restaurant: { label: 'Restaurant', icon: UtensilsCrossed, color: 'text-orange-600 bg-orange-50' },
-    transport: { label: 'Transport', icon: Car, color: 'text-purple-600 bg-purple-50' },
-    cruise: { label: 'Cruise', icon: Ship, color: 'text-cyan-600 bg-cyan-50' },
-    attraction: { label: 'Attraction', icon: Receipt, color: 'text-amber-600 bg-amber-50' },
-    optional_tour: { label: 'Optional Tour', icon: MapPin, color: 'text-teal-600 bg-teal-50' },
-    activity: { label: 'Activity', icon: Sparkles, color: 'text-rose-600 bg-rose-50' },
-    show: { label: 'Show/Event', icon: Ticket, color: 'text-violet-600 bg-violet-50' },
-    spa: { label: 'Spa/Wellness', icon: Heart, color: 'text-red-600 bg-red-50' },
-    agent_referral: { label: 'Agent Referral', icon: Users, color: 'text-indigo-600 bg-indigo-50' },
-    partner: { label: 'Partner', icon: Handshake, color: 'text-emerald-600 bg-emerald-50' },
-    other: { label: 'Other', icon: MoreHorizontal, color: 'text-gray-600 bg-gray-50' }
-  }
+const CATEGORY_CONFIG: Record<string, { labelKey: string; icon: any; color: string }> = {
+  hotel: { labelKey: 'categoryHotel', icon: Building, color: 'text-blue-600 bg-blue-50' },
+  shopping: { labelKey: 'categoryShopping', icon: Store, color: 'text-pink-600 bg-pink-50' },
+  restaurant: { labelKey: 'categoryRestaurant', icon: UtensilsCrossed, color: 'text-orange-600 bg-orange-50' },
+  transport: { labelKey: 'categoryTransport', icon: Car, color: 'text-purple-600 bg-purple-50' },
+  cruise: { labelKey: 'categoryCruise', icon: Ship, color: 'text-cyan-600 bg-cyan-50' },
+  attraction: { labelKey: 'categoryAttraction', icon: Receipt, color: 'text-amber-600 bg-amber-50' },
+  optional_tour: { labelKey: 'categoryOptionalTour', icon: MapPin, color: 'text-teal-600 bg-teal-50' },
+  activity: { labelKey: 'categoryActivity', icon: Sparkles, color: 'text-rose-600 bg-rose-50' },
+  show: { labelKey: 'categoryShow', icon: Ticket, color: 'text-violet-600 bg-violet-50' },
+  spa: { labelKey: 'categorySpa', icon: Heart, color: 'text-red-600 bg-red-50' },
+  agent_referral: { labelKey: 'categoryAgentReferral', icon: Users, color: 'text-indigo-600 bg-indigo-50' },
+  partner: { labelKey: 'categoryPartner', icon: Handshake, color: 'text-emerald-600 bg-emerald-50' },
+  other: { labelKey: 'categoryOther', icon: MoreHorizontal, color: 'text-gray-600 bg-gray-50' }
+}
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
-  pending: { label: 'Pending', color: 'text-amber-700 bg-amber-50', icon: Clock },
-  invoiced: { label: 'Invoiced', color: 'text-blue-700 bg-blue-50', icon: Receipt },
-  received: { label: 'Received', color: 'text-green-700 bg-green-50', icon: Check },
-  paid: { label: 'Paid', color: 'text-green-700 bg-green-50', icon: Check },
-  cancelled: { label: 'Cancelled', color: 'text-gray-500 bg-gray-100', icon: X },
-  disputed: { label: 'Disputed', color: 'text-red-700 bg-red-50', icon: AlertCircle }
+const STATUS_CONFIG: Record<string, { labelKey: string; color: string; icon: any }> = {
+  pending: { labelKey: 'statusPending', color: 'text-amber-700 bg-amber-50', icon: Clock },
+  invoiced: { labelKey: 'statusInvoiced', color: 'text-blue-700 bg-blue-50', icon: Receipt },
+  received: { labelKey: 'statusReceived', color: 'text-green-700 bg-green-50', icon: Check },
+  paid: { labelKey: 'statusPaid', color: 'text-green-700 bg-green-50', icon: Check },
+  cancelled: { labelKey: 'statusCancelled', color: 'text-gray-500 bg-gray-100', icon: X },
+  disputed: { labelKey: 'statusDisputed', color: 'text-red-700 bg-red-50', icon: AlertCircle }
 }
 
 interface FormData {
@@ -145,6 +146,7 @@ const initialFormData: FormData = {
 }
 
 export default function CommissionsPage() {
+  const t = useTranslations('commissions')
   const [commissions, setCommissions] = useState<Commission[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -271,7 +273,7 @@ export default function CommissionsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this commission record?')) return
+    if (!confirm(t('deleteConfirm'))) return
 
     try {
       const response = await fetch(`/api/commissions/${id}`, { method: 'DELETE' })
@@ -337,16 +339,17 @@ export default function CommissionsPage() {
             <Handshake className="h-5 w-5 text-emerald-600" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Commission Tracking</h1>
-            <p className="text-sm text-gray-500">Track commissions from hotels, shops, and partners</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
         <button
+          type="button"
           onClick={openAddModal}
           className="flex items-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors shadow-sm"
         >
           <Plus className="h-4 w-4" />
-          Add Commission
+          {t('addCommission')}
         </button>
       </div>
 
@@ -356,49 +359,49 @@ export default function CommissionsPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="h-4 w-4 text-green-500" />
-              <span className="text-xs text-gray-500">Receivable</span>
+              <span className="text-xs text-gray-500">{t('receivable')}</span>
             </div>
             <p className="text-xl font-bold text-green-600">{formatCurrency(summary.total_receivable)}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <TrendingDown className="h-4 w-4 text-red-500" />
-              <span className="text-xs text-gray-500">Payable</span>
+              <span className="text-xs text-gray-500">{t('payable')}</span>
             </div>
             <p className="text-xl font-bold text-red-600">{formatCurrency(summary.total_payable)}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Clock className="h-4 w-4 text-amber-500" />
-              <span className="text-xs text-gray-500">Pending In</span>
+              <span className="text-xs text-gray-500">{t('pendingIn')}</span>
             </div>
             <p className="text-xl font-bold text-amber-600">{formatCurrency(summary.pending_receivable)}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Clock className="h-4 w-4 text-orange-500" />
-              <span className="text-xs text-gray-500">Pending Out</span>
+              <span className="text-xs text-gray-500">{t('pendingOut')}</span>
             </div>
             <p className="text-xl font-bold text-orange-600">{formatCurrency(summary.pending_payable)}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Check className="h-4 w-4 text-emerald-500" />
-              <span className="text-xs text-gray-500">Received</span>
+              <span className="text-xs text-gray-500">{t('received')}</span>
             </div>
             <p className="text-xl font-bold text-emerald-600">{formatCurrency(summary.received)}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Check className="h-4 w-4 text-blue-500" />
-              <span className="text-xs text-gray-500">Paid Out</span>
+              <span className="text-xs text-gray-500">{t('paidOut')}</span>
             </div>
             <p className="text-xl font-bold text-blue-600">{formatCurrency(summary.paid)}</p>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="h-4 w-4 text-purple-500" />
-              <span className="text-xs text-gray-500">Net</span>
+              <span className="text-xs text-gray-500">{t('net')}</span>
             </div>
             <p className={`text-xl font-bold ${summary.net_commission >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatCurrency(summary.net_commission)}
@@ -413,7 +416,7 @@ export default function CommissionsPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search commissions..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
@@ -424,11 +427,12 @@ export default function CommissionsPage() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
+            title={t('filterByType')}
             className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white cursor-pointer"
           >
-            <option value="">All Types</option>
-            <option value="receivable">Receivable</option>
-            <option value="payable">Payable</option>
+            <option value="">{t('allTypes')}</option>
+            <option value="receivable">{t('receivable')}</option>
+            <option value="payable">{t('payable')}</option>
           </select>
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -437,11 +441,12 @@ export default function CommissionsPage() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
+            title={t('filterByCategory')}
             className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white cursor-pointer"
           >
-            <option value="">All Categories</option>
+            <option value="">{t('allCategories')}</option>
             {Object.entries(CATEGORY_CONFIG).map(([key, config]) => (
-              <option key={key} value={key}>{config.label}</option>
+              <option key={key} value={key}>{t(config.labelKey)}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -451,14 +456,15 @@ export default function CommissionsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            title={t('filterByStatus')}
             className="appearance-none pl-4 pr-10 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white cursor-pointer"
           >
-            <option value="">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="invoiced">Invoiced</option>
-            <option value="received">Received</option>
-            <option value="paid">Paid</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="">{t('allStatus')}</option>
+            <option value="pending">{t('statusPending')}</option>
+            <option value="invoiced">{t('statusInvoiced')}</option>
+            <option value="received">{t('statusReceived')}</option>
+            <option value="paid">{t('statusPaid')}</option>
+            <option value="cancelled">{t('statusCancelled')}</option>
           </select>
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -469,16 +475,16 @@ export default function CommissionsPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Type</th>
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Category</th>
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Source / Supplier</th>
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Itinerary</th>
-              <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Base Amount</th>
-              <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">Rate</th>
-              <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Commission</th>
-              <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">Status</th>
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Date</th>
-              <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Actions</th>
+              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableType')}</th>
+              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableCategory')}</th>
+              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableSourceSupplier')}</th>
+              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableItinerary')}</th>
+              <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableBaseAmount')}</th>
+              <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableRate')}</th>
+              <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableCommission')}</th>
+              <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableStatus')}</th>
+              <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableDate')}</th>
+              <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('tableActions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -486,12 +492,13 @@ export default function CommissionsPage() {
               <tr>
                 <td colSpan={10} className="px-4 py-12 text-center">
                   <Handshake className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-500">No commissions found</p>
+                  <p className="text-sm text-gray-500">{t('noCommissionsFound')}</p>
                   <button
+                    type="button"
                     onClick={openAddModal}
                     className="mt-3 text-sm text-[#647C47] hover:underline font-medium"
                   >
-                    Add your first commission
+                    {t('addFirstCommission')}
                   </button>
                 </td>
               </tr>
@@ -506,8 +513,8 @@ export default function CommissionsPage() {
                   <tr key={commission.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
-                        commission.commission_type === 'receivable' 
-                          ? 'bg-green-50 text-green-700' 
+                        commission.commission_type === 'receivable'
+                          ? 'bg-green-50 text-green-700'
                           : 'bg-red-50 text-red-700'
                       }`}>
                         {commission.commission_type === 'receivable' ? (
@@ -515,13 +522,13 @@ export default function CommissionsPage() {
                         ) : (
                           <TrendingDown className="h-3 w-3" />
                         )}
-                        {commission.commission_type === 'receivable' ? 'In' : 'Out'}
+                        {commission.commission_type === 'receivable' ? t('typeIn') : t('typeOut')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${categoryConfig.color}`}>
                         <CategoryIcon className="h-3 w-3" />
-                        {categoryConfig.label}
+                        {t(categoryConfig.labelKey)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -562,7 +569,7 @@ export default function CommissionsPage() {
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
                         <StatusIcon className="h-3 w-3" />
-                        {statusConfig.label}
+                        {t(statusConfig.labelKey)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -574,24 +581,27 @@ export default function CommissionsPage() {
                       <div className="flex items-center justify-end gap-1">
                         {commission.status === 'pending' && (
                           <button
+                            type="button"
                             onClick={() => handleMarkAs(commission.id, commission.commission_type === 'receivable' ? 'received' : 'paid')}
                             className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title={commission.commission_type === 'receivable' ? 'Mark as Received' : 'Mark as Paid'}
+                            title={commission.commission_type === 'receivable' ? t('markAsReceived') : t('markAsPaid')}
                           >
                             <Check className="h-4 w-4" />
                           </button>
                         )}
                         <button
+                          type="button"
                           onClick={() => handleEdit(commission)}
                           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit"
+                          title={t('edit')}
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleDelete(commission.id)}
                           className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete"
+                          title={t('delete')}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -611,11 +621,13 @@ export default function CommissionsPage() {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50 rounded-t-xl">
               <h2 className="text-lg font-semibold text-gray-900">
-                {editingId ? 'Edit Commission' : 'Add Commission'}
+                {editingId ? t('editCommission') : t('addCommission')}
               </h2>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title={t('close')}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -624,7 +636,7 @@ export default function CommissionsPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               {/* Type Selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Commission Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('formCommissionType')}</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -638,9 +650,9 @@ export default function CommissionsPage() {
                     <TrendingUp className={`h-5 w-5 ${formData.commission_type === 'receivable' ? 'text-green-600' : 'text-gray-400'}`} />
                     <div className="text-left">
                       <p className={`text-sm font-medium ${formData.commission_type === 'receivable' ? 'text-green-700' : 'text-gray-700'}`}>
-                        Receivable (Income)
+                        {t('receivableIncome')}
                       </p>
-                      <p className="text-xs text-gray-500">Commission you receive</p>
+                      <p className="text-xs text-gray-500">{t('commissionYouReceive')}</p>
                     </div>
                   </button>
                   <button
@@ -655,9 +667,9 @@ export default function CommissionsPage() {
                     <TrendingDown className={`h-5 w-5 ${formData.commission_type === 'payable' ? 'text-red-600' : 'text-gray-400'}`} />
                     <div className="text-left">
                       <p className={`text-sm font-medium ${formData.commission_type === 'payable' ? 'text-red-700' : 'text-gray-700'}`}>
-                        Payable (Expense)
+                        {t('payableExpense')}
                       </p>
-                      <p className="text-xs text-gray-500">Commission you pay out</p>
+                      <p className="text-xs text-gray-500">{t('commissionYouPay')}</p>
                     </div>
                   </button>
                 </div>
@@ -665,7 +677,7 @@ export default function CommissionsPage() {
 
               {/* Category */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('formCategory')}</label>
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(CATEGORY_CONFIG).map(([key, config]) => {
                     const Icon = config.icon
@@ -682,7 +694,7 @@ export default function CommissionsPage() {
                       >
                         <Icon className={`h-4 w-4 ${formData.category === key ? 'text-[#647C47]' : 'text-gray-400'}`} />
                         <span className={`text-sm ${formData.category === key ? 'text-[#647C47] font-medium' : 'text-gray-600'}`}>
-                          {config.label}
+                          {t(config.labelKey)}
                         </span>
                       </button>
                     )
@@ -693,25 +705,26 @@ export default function CommissionsPage() {
               {/* Source / Supplier */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Supplier (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formSupplierOptional')}</label>
                   <select
                     value={formData.supplier_id}
                     onChange={(e) => setFormData(prev => ({ ...prev, supplier_id: e.target.value }))}
+                    title={t('formSupplierOptional')}
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                   >
-                    <option value="">Select Supplier</option>
+                    <option value="">{t('selectSupplier')}</option>
                     {suppliers.map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Or Enter Source Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formOrEnterSourceName')}</label>
                   <input
                     type="text"
                     value={formData.source_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, source_name: e.target.value }))}
-                    placeholder="e.g., Khan El Khalili Shop"
+                    placeholder={t('sourceNamePlaceholder')}
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
@@ -719,13 +732,14 @@ export default function CommissionsPage() {
 
               {/* Itinerary Link */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Link to Itinerary (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('formLinkToItinerary')}</label>
                 <select
                   value={formData.itinerary_id}
                   onChange={(e) => setFormData(prev => ({ ...prev, itinerary_id: e.target.value }))}
+                  title={t('formLinkToItinerary')}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                 >
-                  <option value="">No Itinerary Link</option>
+                  <option value="">{t('noItineraryLink')}</option>
                   {itineraries.map(it => (
                     <option key={it.id} value={it.id}>{it.itinerary_code} - {it.client_name}</option>
                   ))}
@@ -735,7 +749,7 @@ export default function CommissionsPage() {
               {/* Financial Details */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Base Amount</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formBaseAmount')}</label>
                   <input
                     type="number"
                     value={formData.base_amount}
@@ -745,10 +759,10 @@ export default function CommissionsPage() {
                     min="0"
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Sale/booking amount</p>
+                  <p className="text-xs text-gray-500 mt-1">{t('saleBookingAmount')}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Rate (%)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formRatePercent')}</label>
                   <input
                     type="number"
                     value={formData.commission_rate}
@@ -761,7 +775,7 @@ export default function CommissionsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Commission Amount <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formCommissionAmount')} <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     value={formData.commission_amount}
@@ -778,60 +792,63 @@ export default function CommissionsPage() {
               {/* Date and Status */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Transaction Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formTransactionDate')}</label>
                   <input
                     type="date"
                     value={formData.transaction_date}
                     onChange={(e) => setFormData(prev => ({ ...prev, transaction_date: e.target.value }))}
+                    title={t('formTransactionDate')}
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formDueDate')}</label>
                   <input
                     type="date"
                     value={formData.due_date}
                     onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                    title={t('formDueDate')}
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formStatus')}</label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                    title={t('formStatus')}
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                   >
-                    <option value="pending">Pending</option>
-                    <option value="invoiced">Invoiced</option>
-                    <option value="received">Received</option>
-                    <option value="paid">Paid</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="disputed">Disputed</option>
+                    <option value="pending">{t('statusPending')}</option>
+                    <option value="invoiced">{t('statusInvoiced')}</option>
+                    <option value="received">{t('statusReceived')}</option>
+                    <option value="paid">{t('statusPaid')}</option>
+                    <option value="cancelled">{t('statusCancelled')}</option>
+                    <option value="disputed">{t('statusDisputed')}</option>
                   </select>
                 </div>
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('formDescription')}</label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="e.g., 10% commission on guest purchases"
+                  placeholder={t('descriptionPlaceholder')}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('formNotes')}</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                   rows={2}
-                  placeholder="Additional notes..."
+                  placeholder={t('notesPlaceholder')}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] resize-none"
                 />
               </div>
@@ -843,14 +860,14 @@ export default function CommissionsPage() {
                   onClick={() => setIsModalOpen(false)}
                   className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-5 py-2.5 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : editingId ? 'Update Commission' : 'Add Commission'}
+                  {saving ? t('saving') : editingId ? t('updateCommission') : t('addCommission')}
                 </button>
               </div>
             </form>

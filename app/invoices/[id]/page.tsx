@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { 
   ArrowLeft, 
@@ -98,44 +99,46 @@ interface PaymentFormData {
   notes: string
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  draft: { label: 'Draft', color: 'text-gray-600', bg: 'bg-gray-100', icon: FileText },
-  sent: { label: 'Sent', color: 'text-blue-700', bg: 'bg-blue-100', icon: Send },
-  viewed: { label: 'Viewed', color: 'text-purple-700', bg: 'bg-purple-100', icon: FileText },
-  partial: { label: 'Partial', color: 'text-orange-700', bg: 'bg-orange-100', icon: Clock },
-  paid: { label: 'Paid', color: 'text-green-700', bg: 'bg-green-100', icon: CheckCircle },
-  overdue: { label: 'Overdue', color: 'text-red-700', bg: 'bg-red-100', icon: AlertCircle },
-  cancelled: { label: 'Cancelled', color: 'text-gray-500', bg: 'bg-gray-100', icon: X }
+const STATUS_CONFIG: Record<string, { labelKey: string; color: string; bg: string; icon: any }> = {
+  draft: { labelKey: 'status.draft', color: 'text-gray-600', bg: 'bg-gray-100', icon: FileText },
+  sent: { labelKey: 'status.sent', color: 'text-blue-700', bg: 'bg-blue-100', icon: Send },
+  viewed: { labelKey: 'status.viewed', color: 'text-purple-700', bg: 'bg-purple-100', icon: FileText },
+  partial: { labelKey: 'status.partial', color: 'text-orange-700', bg: 'bg-orange-100', icon: Clock },
+  paid: { labelKey: 'status.paid', color: 'text-green-700', bg: 'bg-green-100', icon: CheckCircle },
+  overdue: { labelKey: 'status.overdue', color: 'text-red-700', bg: 'bg-red-100', icon: AlertCircle },
+  cancelled: { labelKey: 'status.cancelled', color: 'text-gray-500', bg: 'bg-gray-100', icon: X }
 }
 
-const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-  standard: { label: 'Standard', color: 'text-gray-600', bg: 'bg-gray-50', icon: FileText },
-  deposit: { label: 'Deposit', color: 'text-amber-700', bg: 'bg-amber-50', icon: Wallet },
-  final: { label: 'Final', color: 'text-emerald-700', bg: 'bg-emerald-50', icon: Receipt }
+const TYPE_CONFIG: Record<string, { labelKey: string; color: string; bg: string; icon: any }> = {
+  standard: { labelKey: 'type.standard', color: 'text-gray-600', bg: 'bg-gray-50', icon: FileText },
+  deposit: { labelKey: 'type.deposit', color: 'text-amber-700', bg: 'bg-amber-50', icon: Wallet },
+  final: { labelKey: 'type.final', color: 'text-emerald-700', bg: 'bg-emerald-50', icon: Receipt }
 }
 
 const PAYMENT_METHODS = [
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'credit_card', label: 'Credit Card' },
-  { value: 'cash', label: 'Cash' },
-  { value: 'paypal', label: 'PayPal' },
-  { value: 'wise', label: 'Wise' },
-  { value: 'airwallex', label: 'Airwallex' },
-  { value: 'stripe', label: 'Stripe' },
+  { value: 'bank_transfer', labelKey: 'paymentMethods.bankTransfer' },
+  { value: 'credit_card', labelKey: 'paymentMethods.creditCard' },
+  { value: 'cash', labelKey: 'paymentMethods.cash' },
+  { value: 'paypal', labelKey: 'paymentMethods.paypal' },
+  { value: 'wise', labelKey: 'paymentMethods.wise' },
+  { value: 'airwallex', labelKey: 'paymentMethods.airwallex' },
+  { value: 'stripe', labelKey: 'paymentMethods.stripe' },
 ]
 
-const REMINDER_TYPE_LABELS: Record<string, string> = {
-  before_due_7: '7 days before',
-  before_due_3: '3 days before',
-  on_due: 'On due date',
-  overdue_7: '7 days overdue',
-  overdue_14: '14 days overdue',
-  overdue_30: '30+ days overdue',
-  manual: 'Manual'
+const REMINDER_TYPE_LABEL_KEYS: Record<string, string> = {
+  before_due_7: 'reminderTypes.beforeDue7',
+  before_due_3: 'reminderTypes.beforeDue3',
+  on_due: 'reminderTypes.onDue',
+  overdue_7: 'reminderTypes.overdue7',
+  overdue_14: 'reminderTypes.overdue14',
+  overdue_30: 'reminderTypes.overdue30',
+  manual: 'reminderTypes.manual'
 }
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
+  const t = useTranslations('invoices.detail')
+  const tCommon = useTranslations('common')
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [linkedInvoice, setLinkedInvoice] = useState<Invoice | null>(null)
   const [childInvoice, setChildInvoice] = useState<Invoice | null>(null)
@@ -251,11 +254,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         })
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to record payment')
+        alert(error.error || t('failedToRecordPayment'))
       }
     } catch (error) {
       console.error('Error recording payment:', error)
-      alert('Failed to record payment')
+      alert(t('failedToRecordPayment'))
     } finally {
       setSavingPayment(false)
     }
@@ -284,7 +287,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       downloadInvoicePDF(invoice)
     } catch (error) {
       console.error('Error generating PDF:', error)
-      alert('Failed to generate PDF. Please try again.')
+      alert(t('failedToGeneratePDF'))
     } finally {
       setGeneratingPDF(false)
     }
@@ -302,16 +305,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       })
       
       const data = await response.json()
-      
+
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to send invoice')
+        throw new Error(data.error || t('failedToSendInvoice'))
       }
-      
-      alert('Invoice sent via WhatsApp! ✅')
+
+      alert(t('invoiceSentWhatsApp'))
       fetchInvoice()
     } catch (error: any) {
       console.error('Error sending WhatsApp:', error)
-      alert(`Failed to send: ${error.message}`)
+      alert(t('failedToSendError', { error: error.message }))
     } finally {
       setSendingWhatsApp(false)
     }
@@ -337,7 +340,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleDeletePayment = async (paymentId: string) => {
-    if (!confirm('Are you sure you want to delete this payment?')) return
+    if (!confirm(t('confirmDeletePayment'))) return
 
     try {
       const response = await fetch(`/api/invoices/${resolvedParams.id}/payments/${paymentId}`, {
@@ -354,8 +357,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const handleCreateFinalInvoice = async () => {
     if (!invoice) return
-    
-    if (!confirm('Create a Final Invoice for the remaining balance?')) return
+
+    if (!confirm(t('confirmCreateFinalInvoice'))) return
 
     setCreatingFinalInvoice(true)
     try {
@@ -375,7 +378,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           client_email: invoice.client_email,
           full_trip_cost: fullTripCost,
           line_items: [{
-            description: `Final Balance - ${invoice.line_items[0]?.description.replace(/^Booking Deposit \(\d+%\) - /, '')}`,
+            description: t('finalBalanceDescription', { description: invoice.line_items[0]?.description.replace(/^Booking Deposit \(\d+%\) - /, '') }),
             quantity: 1,
             unit_price: balanceAmount,
             amount: balanceAmount
@@ -385,8 +388,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           currency: invoice.currency,
           issue_date: new Date().toISOString().split('T')[0],
           due_date: null,
-          payment_terms: 'Balance payable in cash upon arrival or before first day of service.',
-          notes: `Related Deposit Invoice: ${invoice.invoice_number}`
+          payment_terms: t('balancePaymentTerms'),
+          notes: t('relatedDepositInvoice', { invoiceNumber: invoice.invoice_number })
         })
       })
 
@@ -395,11 +398,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         router.push(`/invoices/${newInvoice.id}`)
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to create final invoice')
+        alert(error.error || t('failedToCreateFinalInvoice'))
       }
     } catch (error) {
       console.error('Error creating final invoice:', error)
-      alert('Failed to create final invoice')
+      alert(t('failedToCreateFinalInvoice'))
     } finally {
       setCreatingFinalInvoice(false)
     }
@@ -451,9 +454,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   if (!invoice) {
     return (
       <div className="p-6 text-center">
-        <p className="text-gray-500">Invoice not found</p>
+        <p className="text-gray-500">{t('invoiceNotFound')}</p>
         <Link href="/invoices" className="text-[#647C47] hover:underline mt-2 inline-block">
-          Back to Invoices
+          {t('backToInvoices')}
         </Link>
       </div>
     )
@@ -487,12 +490,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <h1 className="text-xl font-semibold text-gray-900">{invoice.invoice_number}</h1>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${typeConfig.bg} ${typeConfig.color}`}>
                 <TypeIcon className="h-3.5 w-3.5" />
-                {typeConfig.label}
+                {t(typeConfig.labelKey)}
                 {invoice.invoice_type !== 'standard' && ` (${invoice.deposit_percent}%)`}
               </span>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.color}`}>
                 <StatusIcon className="h-3.5 w-3.5" />
-                {statusConfig.label}
+                {t(statusConfig.labelKey)}
               </span>
             </div>
             <p className="text-sm text-gray-500 mt-0.5">{invoice.client_name}</p>
@@ -509,12 +512,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             {sendingWhatsApp ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Sending...
+                {t('sending')}
               </>
             ) : (
               <>
                 <MessageCircle className="h-4 w-4" />
-                Send via WhatsApp
+                {t('sendViaWhatsApp')}
               </>
             )}
           </button>
@@ -527,12 +530,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             {generatingPDF ? (
               <>
                 <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                Generating...
+                {t('generating')}
               </>
             ) : (
               <>
                 <Download className="h-4 w-4" />
-                Download PDF
+                {t('downloadPDF')}
               </>
             )}
           </button>
@@ -543,7 +546,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <Send className="h-4 w-4" />
-              Mark as Sent
+              {t('markAsSent')}
             </button>
           )}
 
@@ -556,12 +559,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               {creatingFinalInvoice ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Creating...
+                  {t('creating')}
                 </>
               ) : (
                 <>
                   <Receipt className="h-4 w-4" />
-                  Create Final Invoice
+                  {t('createFinalInvoice')}
                 </>
               )}
             </button>
@@ -573,7 +576,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"
             >
               <Plus className="h-4 w-4" />
-              Record Payment
+              {t('recordPayment')}
             </button>
           )}
         </div>
@@ -591,25 +594,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <LinkIcon className={`h-5 w-5 ${invoice.invoice_type === 'final' ? 'text-amber-600' : 'text-emerald-600'}`} />
               <div>
                 <p className={`text-sm font-medium ${invoice.invoice_type === 'final' ? 'text-amber-800' : 'text-emerald-800'}`}>
-                  {invoice.invoice_type === 'final' ? 'Deposit Invoice' : 'Final Invoice'}
+                  {invoice.invoice_type === 'final' ? t('depositInvoice') : t('finalInvoice')}
                 </p>
                 <p className={`text-xs ${invoice.invoice_type === 'final' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {linkedInvoice?.invoice_number || childInvoice?.invoice_number} • 
+                  {linkedInvoice?.invoice_number || childInvoice?.invoice_number} •
                   {' '}{getCurrencySymbol(linkedInvoice?.currency || childInvoice?.currency || 'EUR')}
-                  {Number(linkedInvoice?.total_amount || childInvoice?.total_amount).toFixed(2)} • 
-                  {' '}{STATUS_CONFIG[linkedInvoice?.status || childInvoice?.status || 'draft'].label}
+                  {Number(linkedInvoice?.total_amount || childInvoice?.total_amount).toFixed(2)} •
+                  {' '}{t(STATUS_CONFIG[linkedInvoice?.status || childInvoice?.status || 'draft'].labelKey)}
                 </p>
               </div>
             </div>
             <Link
               href={`/invoices/${linkedInvoice?.id || childInvoice?.id}`}
               className={`flex items-center gap-1 text-sm font-medium ${
-                invoice.invoice_type === 'final' 
-                  ? 'text-amber-700 hover:text-amber-800' 
+                invoice.invoice_type === 'final'
+                  ? 'text-amber-700 hover:text-amber-800'
                   : 'text-emerald-700 hover:text-emerald-800'
               }`}
             >
-              View
+              {t('view')}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -619,25 +622,25 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       {/* Trip Cost Summary */}
       {invoice.invoice_type !== 'standard' && (
         <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Trip Cost Breakdown</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">{t('tripCostBreakdown')}</h3>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <p className="text-xs text-gray-500">Full Trip Cost</p>
+              <p className="text-xs text-gray-500">{t('fullTripCost')}</p>
               <p className="text-lg font-bold text-gray-900">
                 {getCurrencySymbol(invoice.currency)}{fullTripCost.toFixed(2)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Deposit ({invoice.deposit_percent}%)</p>
+              <p className="text-xs text-gray-500">{t('depositWithPercent', { percent: invoice.deposit_percent })}</p>
               <p className="text-lg font-bold text-amber-600">
                 {getCurrencySymbol(invoice.currency)}{((fullTripCost * invoice.deposit_percent) / 100).toFixed(2)}
                 {invoice.invoice_type === 'deposit' && linkedInvoice === null && childInvoice === null && invoice.status === 'paid' && (
-                  <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Paid</span>
+                  <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{t('paid')}</span>
                 )}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Balance Due on Arrival</p>
+              <p className="text-xs text-gray-500">{t('balanceDueOnArrival')}</p>
               <p className="text-lg font-bold text-emerald-600">
                 {getCurrencySymbol(invoice.currency)}{(fullTripCost - (fullTripCost * invoice.deposit_percent) / 100).toFixed(2)}
               </p>
@@ -654,7 +657,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           <div className="bg-white rounded-lg border border-gray-200 p-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Bill To</h3>
+                <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">{t('billTo')}</h3>
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-gray-100 rounded-lg">
                     <Building className="h-4 w-4 text-gray-500" />
@@ -673,7 +676,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <Calendar className="h-4 w-4 text-gray-500" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Issue Date</p>
+                    <p className="text-xs text-gray-500">{t('issueDate')}</p>
                     <p className="text-sm font-medium text-gray-900">{new Date(invoice.issue_date).toLocaleDateString()}</p>
                   </div>
                 </div>
@@ -682,9 +685,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <Clock className="h-4 w-4 text-gray-500" />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Due Date</p>
+                    <p className="text-xs text-gray-500">{t('dueDate')}</p>
                     <p className={`text-sm font-medium ${displayStatus === 'overdue' ? 'text-red-600' : 'text-gray-900'}`}>
-                      {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'On Arrival'}
+                      {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : t('onArrival')}
                     </p>
                   </div>
                 </div>
@@ -697,10 +700,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3">Description</th>
-                  <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3 w-24">Qty</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3 w-32">Unit Price</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3 w-32">Amount</th>
+                  <th className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3">{t('description')}</th>
+                  <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3 w-24">{t('qty')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3 w-32">{t('unitPrice')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-5 py-3 w-32">{t('amount')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -719,7 +722,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </tbody>
               <tfoot className="bg-gray-50">
                 <tr className="border-t border-gray-200">
-                  <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">Subtotal</td>
+                  <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">{t('subtotal')}</td>
                   <td className="px-5 py-3 text-sm font-medium text-gray-900 text-right">
                     {getCurrencySymbol(invoice.currency)}{Number(invoice.subtotal).toFixed(2)}
                   </td>
@@ -727,7 +730,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 {Number(invoice.tax_amount) > 0 && (
                   <tr>
                     <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">
-                      Tax ({invoice.tax_rate}%)
+                      {t('taxWithRate', { rate: invoice.tax_rate })}
                     </td>
                     <td className="px-5 py-3 text-sm text-gray-900 text-right">
                       {getCurrencySymbol(invoice.currency)}{Number(invoice.tax_amount).toFixed(2)}
@@ -736,7 +739,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 )}
                 {Number(invoice.discount_amount) > 0 && (
                   <tr>
-                    <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">Discount</td>
+                    <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">{t('discount')}</td>
                     <td className="px-5 py-3 text-sm text-green-600 text-right">
                       -{getCurrencySymbol(invoice.currency)}{Number(invoice.discount_amount).toFixed(2)}
                     </td>
@@ -744,8 +747,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 )}
                 <tr className="border-t-2 border-gray-200">
                   <td colSpan={3} className="px-5 py-4 text-sm font-semibold text-gray-900 text-right">
-                    {invoice.invoice_type === 'deposit' ? 'Deposit Amount' : 
-                     invoice.invoice_type === 'final' ? 'Balance Due' : 'Total'}
+                    {invoice.invoice_type === 'deposit' ? t('depositAmount') :
+                     invoice.invoice_type === 'final' ? t('balanceDue') : t('total')}
                   </td>
                   <td className="px-5 py-4 text-lg font-bold text-gray-900 text-right">
                     {getCurrencySymbol(invoice.currency)}{Number(invoice.total_amount).toFixed(2)}
@@ -761,13 +764,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {invoice.payment_terms && (
                   <div>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Payment Terms</h3>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('paymentTerms')}</h3>
                     <p className="text-sm text-gray-700">{invoice.payment_terms}</p>
                   </div>
                 )}
                 {invoice.notes && (
                   <div>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Notes</h3>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('notes')}</h3>
                     <p className="text-sm text-gray-700">{invoice.notes}</p>
                   </div>
                 )}
@@ -780,26 +783,26 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <div className="space-y-6">
           {/* Payment Summary */}
           <div className="bg-white rounded-lg border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Payment Summary</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('paymentSummary')}</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-500">
-                  {invoice.invoice_type === 'deposit' ? 'Deposit Amount' : 
-                   invoice.invoice_type === 'final' ? 'Balance Amount' : 'Total Amount'}
+                  {invoice.invoice_type === 'deposit' ? t('depositAmount') :
+                   invoice.invoice_type === 'final' ? t('balanceAmount') : t('totalAmount')}
                 </span>
                 <span className="text-sm font-medium text-gray-900">
                   {getCurrencySymbol(invoice.currency)}{Number(invoice.total_amount).toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-500">Amount Paid</span>
+                <span className="text-sm text-gray-500">{t('amountPaid')}</span>
                 <span className="text-sm font-medium text-green-600">
                   {getCurrencySymbol(invoice.currency)}{Number(invoice.amount_paid).toFixed(2)}
                 </span>
               </div>
               <div className="pt-3 border-t border-gray-200">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold text-gray-900">Balance Due</span>
+                  <span className="text-sm font-semibold text-gray-900">{t('balanceDue')}</span>
                   <span className={`text-xl font-bold ${Number(invoice.balance_due) > 0 ? 'text-red-600' : 'text-green-600'}`}>
                     {getCurrencySymbol(invoice.currency)}{Number(invoice.balance_due).toFixed(2)}
                   </span>
@@ -813,7 +816,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"
               >
                 <Plus className="h-4 w-4" />
-                Record Payment
+                {t('recordPayment')}
               </button>
             )}
 
@@ -826,17 +829,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 {creatingFinalInvoice ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Creating...
+                    {t('creating')}
                   </>
                 ) : (
                   <>
                     <Receipt className="h-4 w-4" />
-                    Create Final Invoice
+                    {t('createFinalInvoice')}
                   </>
                 )}
               </button>
             )}
-            
+
             <button
               onClick={handleDownloadPDF}
               disabled={generatingPDF}
@@ -845,12 +848,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               {generatingPDF ? (
                 <>
                   <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                  Generating...
+                  {t('generating')}
                 </>
               ) : (
                 <>
                   <Download className="h-4 w-4" />
-                  Download PDF
+                  {t('downloadPDF')}
                 </>
               )}
             </button>
@@ -858,13 +861,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
           {/* Payment History */}
           <div className="bg-white rounded-lg border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Payment History</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('paymentHistory')}</h3>
             {payments.length === 0 ? (
               <div className="text-center py-6">
                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
                   <CreditCard className="h-5 w-5 text-gray-400" />
                 </div>
-                <p className="text-sm text-gray-500">No payments recorded</p>
+                <p className="text-sm text-gray-500">{t('noPaymentsRecorded')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -890,14 +893,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={() => handleGenerateReceipt(payment)}
                         className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Download Receipt"
+                        title={t('downloadReceipt')}
                       >
                         <Receipt className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDeletePayment(payment.id)}
                         className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete Payment"
+                        title={t('deletePayment')}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -911,12 +914,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           {/* Reminder History */}
           <div className="bg-white rounded-lg border border-gray-200 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Reminder History</h3>
-              <Link 
-                href="/reminders" 
+              <h3 className="text-sm font-semibold text-gray-900">{t('reminderHistory')}</h3>
+              <Link
+                href="/reminders"
                 className="text-xs text-[#647C47] hover:underline"
               >
-                View All
+                {t('viewAll')}
               </Link>
             </div>
             {reminders.length === 0 ? (
@@ -924,7 +927,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
                   <Bell className="h-5 w-5 text-gray-400" />
                 </div>
-                <p className="text-sm text-gray-500">No reminders sent</p>
+                <p className="text-sm text-gray-500">{t('noRemindersSent')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -940,11 +943,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-gray-900">
-                          {REMINDER_TYPE_LABELS[reminder.reminder_type] || reminder.reminder_type}
+                          {t(REMINDER_TYPE_LABEL_KEYS[reminder.reminder_type]) || reminder.reminder_type}
                         </p>
                         <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                          reminder.status === 'sent' 
-                            ? 'bg-green-100 text-green-700' 
+                          reminder.status === 'sent'
+                            ? 'bg-green-100 text-green-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
                           {reminder.status}
@@ -954,7 +957,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                         {formatReminderDate(reminder.sent_at)}
                       </p>
                       <p className="text-xs text-gray-400 truncate mt-0.5">
-                        To: {reminder.recipient_email}
+                        {t('to')}: {reminder.recipient_email}
                       </p>
                       {reminder.error_message && (
                         <p className="text-xs text-red-500 mt-1">{reminder.error_message}</p>
@@ -973,7 +976,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-900">Record Payment</h2>
+              <h2 className="text-base font-semibold text-gray-900">{t('recordPayment')}</h2>
               <button
                 onClick={() => setShowPaymentModal(false)}
                 className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -985,14 +988,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <form onSubmit={handleRecordPayment} className="p-5 space-y-4">
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  Balance Due: <span className="font-bold">{getCurrencySymbol(invoice.currency)}{Number(invoice.balance_due).toFixed(2)}</span>
+                  {t('balanceDueLabel')}: <span className="font-bold">{getCurrencySymbol(invoice.currency)}{Number(invoice.balance_due).toFixed(2)}</span>
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                    Amount <span className="text-red-500">*</span>
+                    {t('amount')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1006,7 +1009,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Currency</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('currency')}</label>
                   <select
                     value={paymentForm.currency}
                     onChange={(e) => setPaymentForm(prev => ({ ...prev, currency: e.target.value }))}
@@ -1021,19 +1024,19 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Payment Method</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('paymentMethod')}</label>
                   <select
                     value={paymentForm.payment_method}
                     onChange={(e) => setPaymentForm(prev => ({ ...prev, payment_method: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
                   >
                     {PAYMENT_METHODS.map(method => (
-                      <option key={method.value} value={method.value}>{method.label}</option>
+                      <option key={method.value} value={method.value}>{t(method.labelKey)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Payment Date</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('paymentDate')}</label>
                   <input
                     type="date"
                     value={paymentForm.payment_date}
@@ -1044,23 +1047,23 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Transaction Reference</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('transactionReference')}</label>
                 <input
                   type="text"
                   value={paymentForm.transaction_reference}
                   onChange={(e) => setPaymentForm(prev => ({ ...prev, transaction_reference: e.target.value }))}
-                  placeholder="e.g., TXN-12345"
+                  placeholder={t('transactionRefPlaceholder')}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('notes')}</label>
                 <textarea
                   value={paymentForm.notes}
                   onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
                   rows={2}
-                  placeholder="Optional notes..."
+                  placeholder={t('optionalNotesPlaceholder')}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] resize-none"
                 />
               </div>
@@ -1071,14 +1074,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   onClick={() => setShowPaymentModal(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={savingPayment}
                   className="px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] disabled:opacity-50 transition-colors"
                 >
-                  {savingPayment ? 'Recording...' : 'Record Payment'}
+                  {savingPayment ? t('recording') : t('recordPayment')}
                 </button>
               </div>
             </form>

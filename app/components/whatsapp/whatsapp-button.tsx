@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Send, MessageCircle, Check, AlertCircle } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface WhatsAppButtonProps {
   itineraryId?: string
@@ -26,6 +27,7 @@ export default function WhatsAppButton({
   onSuccess,
   className = ''
 }: WhatsAppButtonProps) {
+  const t = useTranslations('whatsappButton')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -88,39 +90,39 @@ export default function WhatsAppButton({
 
   const getButtonText = () => {
     if (loading) {
-      if (type === 'quote') return 'Sending Quote...'
-      if (type === 'guide') return 'Notifying Guide...'
-      if (type === 'contract') return 'Sending Contract...'
-      if (status === 'confirmed') return 'Sending Confirmation...'
-      if (status === 'pending_payment') return 'Sending Reminder...'
-      if (status === 'paid') return 'Sending Confirmation...'
-      return 'Sending...'
+      if (type === 'quote') return t('sendingQuote')
+      if (type === 'guide') return t('notifyingGuide')
+      if (type === 'contract') return t('sendingContract')
+      if (status === 'confirmed') return t('sendingConfirmation')
+      if (status === 'pending_payment') return t('sendingReminder')
+      if (status === 'paid') return t('sendingConfirmation')
+      return t('sending')
     }
-    
-    if (sent) return 'Sent!'
-    
-    if (type === 'quote') return 'Send Quote via WhatsApp'
-    if (type === 'guide') return 'Notify Guide via WhatsApp'
-    if (type === 'contract') return 'Send Contract via WhatsApp'
-    
+
+    if (sent) return t('sent')
+
+    if (type === 'quote') return t('sendQuoteViaWhatsApp')
+    if (type === 'guide') return t('notifyGuideViaWhatsApp')
+    if (type === 'contract') return t('sendContractViaWhatsApp')
+
     if (type === 'status') {
       switch (status) {
         case 'confirmed':
-          return 'Send Confirmation'
+          return t('sendConfirmation')
         case 'pending_payment':
-          return 'Payment Reminder'
+          return t('paymentReminder')
         case 'paid':
-          return 'Payment Received'
+          return t('paymentReceived')
         case 'cancelled':
-          return 'Send Cancellation'
+          return t('sendCancellation')
         case 'completed':
-          return 'Send Thank You'
+          return t('sendThankYou')
         default:
-          return 'Send Update via WhatsApp'
+          return t('sendUpdateViaWhatsApp')
       }
     }
-    
-    return 'Send via WhatsApp'
+
+    return t('sendViaWhatsApp')
   }
 
   const getIcon = () => {
@@ -138,6 +140,7 @@ export default function WhatsAppButton({
   return (
     <div className="space-y-2">
       <button
+        type="button"
         onClick={handleSend}
         disabled={loading || sent}
         className={`

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { 
+import { useTranslations } from 'next-intl'
+import {
   Plane, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -53,14 +54,6 @@ function getAirportName(code: string): string {
   return AIRPORTS.find(a => a.code === code)?.name || code
 }
 
-function formatServiceType(type: string): string {
-  return type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-}
-
-function formatDirection(direction: string): string {
-  return direction.charAt(0).toUpperCase() + direction.slice(1)
-}
-
 // ============================================
 // PAGINATION COMPONENT
 // ============================================
@@ -84,6 +77,9 @@ function Pagination({
   onPageChange: (page: number) => void
   onItemsPerPageChange: (items: number) => void
 }) {
+  const t = useTranslations('rates.airportServices')
+  const tCommon = useTranslations('rates.common')
+
   const goToPage = (page: number) => {
     onPageChange(Math.max(1, Math.min(page, totalPages)))
   }
@@ -92,7 +88,7 @@ function Pagination({
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Show</span>
+          <span className="text-sm text-gray-500">{tCommon('show')}</span>
           <select
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
@@ -102,10 +98,10 @@ function Pagination({
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          <span className="text-sm text-gray-500">per page</span>
+          <span className="text-sm text-gray-500">{tCommon('perPage')}</span>
         </div>
         <span className="text-sm text-gray-500">
-          Showing {startIndex + 1}-{endIndex} of {totalItems} rates
+          {t('pagination.showingRange', { start: startIndex + 1, end: endIndex, total: totalItems })}
         </span>
       </div>
 
@@ -114,7 +110,7 @@ function Pagination({
           onClick={() => goToPage(1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="First page"
+          title={tCommon('firstPage')}
         >
           <ChevronsLeft className="h-4 w-4" />
         </button>
@@ -122,7 +118,7 @@ function Pagination({
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Previous page"
+          title={tCommon('previousPage')}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -140,7 +136,7 @@ function Pagination({
             } else {
               pageNum = currentPage - 2 + i
             }
-            
+
             return (
               <button
                 key={pageNum}
@@ -161,7 +157,7 @@ function Pagination({
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Next page"
+          title={tCommon('nextPage')}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -169,7 +165,7 @@ function Pagination({
           onClick={() => goToPage(totalPages)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-          title="Last page"
+          title={tCommon('lastPage')}
         >
           <ChevronsRight className="h-4 w-4" />
         </button>
@@ -183,6 +179,8 @@ function Pagination({
 // ============================================
 
 export default function AirportServicesPage() {
+  const t = useTranslations('rates.airportServices')
+  const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   
   const [rates, setRates] = useState<AirportStaffRate[]>([])
@@ -222,7 +220,7 @@ export default function AirportServicesPage() {
       const data = await response.json()
       if (data.success) setRates(data.data)
     } catch (error) {
-      showToast('error', 'Failed to load airport service rates')
+      showToast('error', t('errors.failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -296,39 +294,39 @@ export default function AirportServicesPage() {
       const data = await response.json()
       
       if (data.success) {
-        showToast('success', editingRate ? 'Rate updated!' : 'Rate created!')
+        showToast('success', editingRate ? t('notifications.rateUpdated') : t('notifications.rateCreated'))
         setShowModal(false)
         fetchRates()
       } else {
-        showToast('error', data.error || 'Failed to save')
+        showToast('error', data.error || t('errors.failedToSave'))
       }
     } catch (error) {
-      showToast('error', 'Failed to save rate')
+      showToast('error', t('errors.failedToSave'))
     }
   }
 
   const handleDelete = async (rate: AirportStaffRate) => {
-    const serviceName = formatServiceType(rate.service_type)
+    const serviceName = t(`serviceTypes.${rate.service_type}`)
     const airportName = getAirportName(rate.airport_code)
-    
-    const confirmed = await dialog.confirmDelete('Airport Service Rate',
-      `Are you sure you want to delete the "${serviceName}" service at ${airportName} (${rate.direction})? This action cannot be undone.`
+
+    const confirmed = await dialog.confirmDelete(t('deleteModal.title'),
+      t('deleteModal.confirmText', { service: serviceName, airport: airportName, direction: t(`directions.${rate.direction}`) })
     )
-    
+
     if (!confirmed) return
 
     try {
       const response = await fetch(`/api/rates/airport-services/${rate.id}`, { method: 'DELETE' })
       const data = await response.json()
-      
-      if (data.success) { 
-        showToast('success', 'Airport service rate deleted!') 
-        fetchRates() 
+
+      if (data.success) {
+        showToast('success', t('notifications.rateDeleted'))
+        fetchRates()
       } else {
-        await dialog.alert('Error', data.error || 'Failed to delete airport service rate', 'warning')
+        await dialog.alert(tCommon('error'), data.error || t('errors.failedToDelete'), 'warning')
       }
-    } catch { 
-      await dialog.alert('Error', 'Failed to delete airport service rate. Please try again.', 'warning')
+    } catch {
+      await dialog.alert(tCommon('error'), t('errors.failedToDelete'), 'warning')
     }
   }
 
@@ -369,7 +367,7 @@ export default function AirportServicesPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading airport service rates...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -394,15 +392,15 @@ export default function AirportServicesPage() {
         <div className="container mx-auto px-4 lg:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Plane className="w-5 h-5 text-sky-600" />
-            <h1 className="text-xl font-bold text-gray-900">Airport Services</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
             <div className="w-1.5 h-1.5 rounded-full bg-sky-600" />
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleAddNew} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium">
-              <Plus className="w-4 h-4" /> Add Rate
+            <button type="button" onClick={handleAddNew} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium">
+              <Plus className="w-4 h-4" /> {tCommon('addRate')}
             </button>
             <Link href="/rates" className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
-              ← Rates Hub
+              ← {t('ratesHub')}
             </Link>
           </div>
         </div>
@@ -412,23 +410,23 @@ export default function AirportServicesPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Total Rates</p>
+            <p className="text-xs text-gray-600">{t('stats.totalRates')}</p>
             <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-xs text-gray-600">{tCommon('active')}</p>
             <p className="text-2xl font-bold text-green-600">{stats.active}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Airports</p>
+            <p className="text-xs text-gray-600">{t('stats.airports')}</p>
             <p className="text-2xl font-bold text-sky-600">{stats.airports}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">VIP Services</p>
+            <p className="text-xs text-gray-600">{t('stats.vipServices')}</p>
             <p className="text-2xl font-bold text-amber-600">{stats.vipServices}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">Avg. Rate</p>
+            <p className="text-xs text-gray-600">{tCommon('avgRate')}</p>
             <p className="text-2xl font-bold text-green-600">€{stats.avgRate}</p>
           </div>
         </div>
@@ -438,45 +436,48 @@ export default function AirportServicesPage() {
           <div className="flex flex-col md:flex-row gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input 
-                type="text" 
-                placeholder="Search airports, services, or descriptions..." 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600 focus:border-transparent" 
+              <input
+                type="text"
+                placeholder={t('searchPlaceholder')}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600 focus:border-transparent"
               />
             </div>
-            <select 
-              value={selectedAirport} 
-              onChange={(e) => setSelectedAirport(e.target.value)} 
+            <select
+              value={selectedAirport}
+              onChange={(e) => setSelectedAirport(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+              title={t('filters.allAirports')}
             >
-              <option value="all">All Airports</option>
+              <option value="all">{t('filters.allAirports')}</option>
               {AIRPORTS.map(a => (
                 <option key={a.code} value={a.code}>{a.code} - {a.name}</option>
               ))}
             </select>
-            <select 
-              value={selectedService} 
-              onChange={(e) => setSelectedService(e.target.value)} 
+            <select
+              value={selectedService}
+              onChange={(e) => setSelectedService(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+              title={t('filters.allServices')}
             >
-              <option value="all">All Services</option>
+              <option value="all">{t('filters.allServices')}</option>
               {SERVICE_TYPES.map(s => (
-                <option key={s} value={s}>{formatServiceType(s)}</option>
+                <option key={s} value={s}>{t(`serviceTypes.${s}`)}</option>
               ))}
             </select>
-            <button 
-              onClick={() => setShowInactive(!showInactive)} 
+            <button
+              type="button"
+              onClick={() => setShowInactive(!showInactive)}
               className={`px-3 py-2 text-sm rounded-lg font-medium ${
                 showInactive ? 'bg-gray-100 text-gray-700' : 'bg-green-50 text-green-700 border border-green-200'
               }`}
             >
-              {showInactive ? 'Show All' : 'Active Only'}
+              {showInactive ? t('filters.showAll') : t('filters.activeOnly')}
             </button>
           </div>
           <div className="mt-2 text-xs text-gray-500">
-            Showing {filteredRates.length} of {rates.length} airport service rates
+            {t('filters.showing', { filtered: filteredRates.length, total: rates.length })}
           </div>
         </div>
 
@@ -486,13 +487,13 @@ export default function AirportServicesPage() {
             <table className="w-full">
               <thead className="bg-sky-50 border-b border-sky-100">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-sky-800">Airport</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">Service</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">Direction</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-sky-800">Rate</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-sky-800">Description</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-sky-800">{t('table.airport')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">{t('table.service')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">{t('table.direction')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-sky-800">{t('table.rate')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-sky-800">{t('table.description')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">{tCommon('status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-sky-800">{tCommon('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -509,7 +510,7 @@ export default function AirportServicesPage() {
                         rate.service_type === 'customs_assist' ? 'bg-purple-100 text-purple-800' :
                         'bg-sky-100 text-sky-800'
                       }`}>
-                        {formatServiceType(rate.service_type)}
+                        {t(`serviceTypes.${rate.service_type}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -518,7 +519,7 @@ export default function AirportServicesPage() {
                         rate.direction === 'arrival' ? 'bg-blue-100 text-blue-800' :
                         'bg-orange-100 text-orange-800'
                       }`}>
-                        {formatDirection(rate.direction)}
+                        {t(`directions.${rate.direction}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
@@ -531,20 +532,24 @@ export default function AirportServicesPage() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         rate.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
+                        {rate.is_active ? tCommon('active') : tCommon('inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <button 
-                          onClick={() => handleEdit(rate)} 
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(rate)}
                           className="p-1 text-gray-500 hover:text-sky-600 hover:bg-sky-50 rounded"
+                          title={tCommon('editRate')}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button 
-                          onClick={() => handleDelete(rate)} 
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(rate)}
                           className="p-1 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                          title={tCommon('deleteRate')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -556,9 +561,9 @@ export default function AirportServicesPage() {
                   <tr>
                     <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                       <Plane className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                      <p className="font-medium">No airport service rates found</p>
-                      <button onClick={handleAddNew} className="mt-2 text-sm text-sky-600 hover:underline">
-                        Add your first airport service rate
+                      <p className="font-medium">{t('emptyState.noRatesFound')}</p>
+                      <button type="button" onClick={handleAddNew} className="mt-2 text-sm text-sky-600 hover:underline">
+                        {t('emptyState.addFirstRate')}
                       </button>
                     </td>
                   </tr>
@@ -588,20 +593,21 @@ export default function AirportServicesPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">{editingRate ? 'Edit' : 'Add'} Airport Service Rate</h2>
-              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+              <h2 className="text-lg font-bold text-gray-900">{editingRate ? t('modal.editTitle') : t('modal.addTitle')}</h2>
+              <button type="button" onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title={tCommon('cancel')}>
                 <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Airport *</label>
-                  <select 
-                    name="airport_code" 
-                    value={formData.airport_code} 
-                    onChange={handleChange} 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.airport')} *</label>
+                  <select
+                    name="airport_code"
+                    value={formData.airport_code}
+                    onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+                    title={t('form.airport')}
                   >
                     {AIRPORTS.map(a => (
                       <option key={a.code} value={a.code}>{a.code} - {a.name}</option>
@@ -609,104 +615,107 @@ export default function AirportServicesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Service Type *</label>
-                  <select 
-                    name="service_type" 
-                    value={formData.service_type} 
-                    onChange={handleChange} 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceType')} *</label>
+                  <select
+                    name="service_type"
+                    value={formData.service_type}
+                    onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+                    title={t('form.serviceType')}
                   >
                     {SERVICE_TYPES.map(s => (
-                      <option key={s} value={s}>{formatServiceType(s)}</option>
+                      <option key={s} value={s}>{t(`serviceTypes.${s}`)}</option>
                     ))}
                   </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Direction *</label>
-                  <select 
-                    name="direction" 
-                    value={formData.direction} 
-                    onChange={handleChange} 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.direction')} *</label>
+                  <select
+                    name="direction"
+                    value={formData.direction}
+                    onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+                    title={t('form.direction')}
                   >
                     {DIRECTIONS.map(d => (
-                      <option key={d} value={d}>{formatDirection(d)}</option>
+                      <option key={d} value={d}>{t(`directions.${d}`)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Rate (€) *</label>
-                  <input 
-                    type="number" 
-                    name="rate_eur" 
-                    value={formData.rate_eur} 
-                    onChange={handleChange} 
-                    min="0" 
-                    step="0.01" 
-                    required 
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600" 
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateEur')} *</label>
+                  <input
+                    type="number"
+                    name="rate_eur"
+                    value={formData.rate_eur}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.01"
+                    required
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+                    title={t('form.rateEur')}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-                <input 
-                  type="text" 
-                  name="description" 
-                  value={formData.description} 
-                  onChange={handleChange} 
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600" 
-                  placeholder="e.g., VIP meet & greet with lounge access" 
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.description')}</label>
+                <input
+                  type="text"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+                  placeholder={t('form.descriptionPlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
-                <input 
-                  type="text" 
-                  name="service_code" 
-                  value={formData.service_code} 
-                  onChange={handleChange} 
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600 font-mono" 
-                  placeholder="Auto-generated if empty"
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
+                <input
+                  type="text"
+                  name="service_code"
+                  value={formData.service_code}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600 font-mono"
+                  placeholder={t('form.serviceCodePlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
-                <textarea 
-                  name="notes" 
-                  value={formData.notes} 
-                  onChange={handleChange} 
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
+                <textarea
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleChange}
                   rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600" 
-                  placeholder="Internal notes..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
+                  placeholder={t('form.notesPlaceholder')}
                 />
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  name="is_active" 
-                  checked={formData.is_active} 
-                  onChange={handleCheckbox} 
-                  className="w-4 h-4 text-sky-600 rounded focus:ring-sky-500" 
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  checked={formData.is_active}
+                  onChange={handleCheckbox}
+                  className="w-4 h-4 text-sky-600 rounded focus:ring-sky-500"
                 />
-                <span className="text-sm text-gray-700">Active</span>
+                <span className="text-sm text-gray-700">{tCommon('active')}</span>
               </label>
               <div className="flex gap-2 pt-3 border-t">
-                <button 
-                  type="button" 
-                  onClick={() => setShowModal(false)} 
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="flex-1 px-3 py-2 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  {editingRate ? 'Update' : 'Create'}
+                  {editingRate ? tCommon('update') : tCommon('create')}
                 </button>
               </div>
             </form>

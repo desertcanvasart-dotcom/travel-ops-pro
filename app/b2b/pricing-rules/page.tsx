@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { 
+import { useTranslations } from 'next-intl'
+import {
   Settings2, Plus, Edit, Trash2, X, Save, Loader2,
   Car, Ticket, AlertCircle, CheckCircle2,
   ChevronDown, ChevronUp
@@ -117,26 +118,6 @@ interface PackageFormData {
   is_active: boolean
 }
 
-const PRICING_MODELS = [
-  { value: 'per_person', label: 'Per Person', desc: 'Fixed rate per traveler' },
-  { value: 'per_unit', label: 'Per Unit (Boat/Vehicle)', desc: 'Flat rate for the whole unit' },
-  { value: 'tiered', label: 'Tiered (Volume Discount)', desc: 'Rate decreases with group size' },
-]
-
-const UNIT_TYPES = [
-  { value: 'boat', label: 'Boat' },
-  { value: 'vehicle', label: 'Vehicle' },
-  { value: 'table', label: 'Table' },
-  { value: 'room', label: 'Room' },
-]
-
-const SERVICE_CATEGORIES = [
-  { value: 'activity', label: 'Activity' },
-  { value: 'transportation', label: 'Transportation' },
-  { value: 'entrance', label: 'Entrance Fee' },
-  { value: 'meal', label: 'Meal' },
-]
-
 const DEFAULT_RULE_FORM: RuleFormData = {
   service_name: '',
   service_category: 'activity',
@@ -185,6 +166,7 @@ const DEFAULT_PACKAGE_FORM: PackageFormData = {
 }
 
 export default function B2BPricingRulesPage() {
+  const t = useTranslations('b2bPricingRules')
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([])
   const [transportPackages, setTransportPackages] = useState<TransportPackage[]>([])
   const [loading, setLoading] = useState(true)
@@ -224,7 +206,7 @@ export default function B2BPricingRulesPage() {
       }
     } catch (error) {
       console.error('Error fetching data:', error)
-      showToast('error', 'Failed to load pricing rules')
+      showToast('error', t('failedToLoadRules'))
     } finally {
       setLoading(false)
     }
@@ -275,7 +257,7 @@ export default function B2BPricingRulesPage() {
 
   const handleSaveRule = async () => {
     if (!ruleForm.service_name) {
-      showToast('error', 'Service name is required')
+      showToast('error', t('serviceNameRequired'))
       return
     }
 
@@ -307,33 +289,33 @@ export default function B2BPricingRulesPage() {
 
       const data = await res.json()
       if (data.success) {
-        showToast('success', editingRule ? 'Rule updated!' : 'Rule created!')
+        showToast('success', editingRule ? t('ruleUpdated') : t('ruleCreated'))
         setShowRuleModal(false)
         fetchData()
       } else {
-        showToast('error', data.error || 'Failed to save rule')
+        showToast('error', data.error || t('failedToSaveRule'))
       }
     } catch (error) {
-      showToast('error', 'Failed to save rule')
+      showToast('error', t('failedToSaveRule'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteRule = async (rule: PricingRule) => {
-    if (!confirm(`Delete pricing rule for "${rule.service_name}"?`)) return
+    if (!confirm(t('deleteRuleConfirm', { serviceName: rule.service_name }))) return
 
     try {
       const res = await fetch(`/api/b2b/pricing-rules/${rule.id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.success) {
-        showToast('success', 'Rule deleted!')
+        showToast('success', t('ruleDeleted'))
         fetchData()
       } else {
-        showToast('error', data.error || 'Failed to delete')
+        showToast('error', data.error || t('failedToDeleteRule'))
       }
     } catch (error) {
-      showToast('error', 'Failed to delete rule')
+      showToast('error', t('failedToDeleteRule'))
     }
   }
 
@@ -375,7 +357,7 @@ export default function B2BPricingRulesPage() {
 
   const handleSavePackage = async () => {
     if (!packageForm.package_name) {
-      showToast('error', 'Package name is required')
+      showToast('error', t('packageNameRequired'))
       return
     }
 
@@ -396,33 +378,33 @@ export default function B2BPricingRulesPage() {
 
       const data = await res.json()
       if (data.success) {
-        showToast('success', editingPackage ? 'Package updated!' : 'Package created!')
+        showToast('success', editingPackage ? t('packageUpdated') : t('packageCreated'))
         setShowPackageModal(false)
         fetchData()
       } else {
-        showToast('error', data.error || 'Failed to save package')
+        showToast('error', data.error || t('failedToSavePackage'))
       }
     } catch (error) {
-      showToast('error', 'Failed to save package')
+      showToast('error', t('failedToSavePackage'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeletePackage = async (pkg: TransportPackage) => {
-    if (!confirm(`Delete transport package "${pkg.package_name}"?`)) return
+    if (!confirm(t('deletePackageConfirm', { packageName: pkg.package_name }))) return
 
     try {
       const res = await fetch(`/api/b2b/transport-packages/${pkg.id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.success) {
-        showToast('success', 'Package deleted!')
+        showToast('success', t('packageDeleted'))
         fetchData()
       } else {
-        showToast('error', data.error || 'Failed to delete')
+        showToast('error', data.error || t('failedToDeletePackage'))
       }
     } catch (error) {
-      showToast('error', 'Failed to delete package')
+      showToast('error', t('failedToDeletePackage'))
     }
   }
 
@@ -435,7 +417,7 @@ export default function B2BPricingRulesPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-600">Loading pricing rules...</p>
+          <p className="text-sm text-gray-600">{t('loadingPricingRules')}</p>
         </div>
       </div>
     )
@@ -462,12 +444,12 @@ export default function B2BPricingRulesPage() {
             <div className="flex items-center gap-3">
               <Settings2 className="w-6 h-6 text-blue-600" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">B2B Pricing Rules</h1>
-                <p className="text-sm text-gray-500">Manage tiered pricing, boat sizes, and transport packages</p>
+                <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
+                <p className="text-sm text-gray-500">{t('subtitle')}</p>
               </div>
             </div>
             <Link href="/b2b" className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
-              ← Back to B2B
+              ← {t('backToB2B')}
             </Link>
           </div>
         </div>
@@ -483,9 +465,9 @@ export default function B2BPricingRulesPage() {
           >
             <div className="flex items-center gap-3">
               <Ticket className="w-5 h-5 text-amber-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Activity Pricing Rules</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t('activityPricingRules')}</h2>
               <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
-                {pricingRules.length} rules
+                {t('rulesCount', { count: pricingRules.length })}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -494,7 +476,7 @@ export default function B2BPricingRulesPage() {
                 className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
               >
                 <Plus className="w-4 h-4" />
-                Add Rule
+                {t('addRule')}
               </button>
               {expandedRules ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
             </div>
@@ -505,9 +487,9 @@ export default function B2BPricingRulesPage() {
               {pricingRules.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Ticket className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p>No pricing rules yet</p>
+                  <p>{t('noPricingRulesYet')}</p>
                   <button onClick={handleAddRule} className="mt-2 text-amber-600 hover:underline text-sm">
-                    Add your first rule
+                    {t('addYourFirstRule')}
                   </button>
                 </div>
               ) : (
@@ -523,39 +505,39 @@ export default function B2BPricingRulesPage() {
                               rule.pricing_model === 'tiered' ? 'bg-purple-100 text-purple-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>
-                              {rule.pricing_model === 'per_unit' ? `Per ${rule.unit_type}` : 
-                               rule.pricing_model === 'tiered' ? 'Tiered' : 'Per Person'}
+                              {rule.pricing_model === 'per_unit' ? t('perUnit', { unit: rule.unit_type }) :
+                               rule.pricing_model === 'tiered' ? t('tiered') : t('perPerson')}
                             </span>
                             {!rule.is_active && (
-                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">Inactive</span>
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">{t('inactive')}</span>
                             )}
                           </div>
                           
                           <div className="flex flex-wrap gap-3 text-sm">
                             {rule.tier1_rate_eur && (
                               <div className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                                <span className="text-green-700 font-medium">{rule.tier1_label || 'Tier 1'}</span>
+                                <span className="text-green-700 font-medium">{rule.tier1_label || t('tier1Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier1_min_pax}-{rule.tier1_max_pax} pax)</span>
                                 <span className="text-green-600 font-bold">€{rule.tier1_rate_eur}</span>
                               </div>
                             )}
                             {rule.tier2_rate_eur && (
                               <div className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-                                <span className="text-blue-700 font-medium">{rule.tier2_label || 'Tier 2'}</span>
+                                <span className="text-blue-700 font-medium">{rule.tier2_label || t('tier2Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier2_min_pax}-{rule.tier2_max_pax || '∞'} pax)</span>
                                 <span className="text-blue-600 font-bold">€{rule.tier2_rate_eur}</span>
                               </div>
                             )}
                             {rule.tier3_rate_eur && (
                               <div className="px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg">
-                                <span className="text-purple-700 font-medium">{rule.tier3_label || 'Tier 3'}</span>
+                                <span className="text-purple-700 font-medium">{rule.tier3_label || t('tier3Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier3_min_pax}-{rule.tier3_max_pax || '∞'} pax)</span>
                                 <span className="text-purple-600 font-bold">€{rule.tier3_rate_eur}</span>
                               </div>
                             )}
                             {rule.tier4_rate_eur && (
                               <div className="px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
-                                <span className="text-orange-700 font-medium">{rule.tier4_label || 'Tier 4'}</span>
+                                <span className="text-orange-700 font-medium">{rule.tier4_label || t('tier4Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier4_min_pax}+ pax)</span>
                                 <span className="text-orange-600 font-bold">€{rule.tier4_rate_eur}</span>
                               </div>
@@ -592,9 +574,9 @@ export default function B2BPricingRulesPage() {
           >
             <div className="flex items-center gap-3">
               <Car className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Transport Packages</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t('transportPackages')}</h2>
               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                {transportPackages.length} packages
+                {t('packagesCount', { count: transportPackages.length })}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -603,7 +585,7 @@ export default function B2BPricingRulesPage() {
                 className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
                 <Plus className="w-4 h-4" />
-                Add Package
+                {t('addPackage')}
               </button>
               {expandedPackages ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
             </div>
@@ -614,9 +596,9 @@ export default function B2BPricingRulesPage() {
               {transportPackages.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Car className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                  <p>No transport packages yet</p>
+                  <p>{t('noTransportPackagesYet')}</p>
                   <button onClick={handleAddPackage} className="mt-2 text-blue-600 hover:underline text-sm">
-                    Add your first package
+                    {t('addYourFirstPackage')}
                   </button>
                 </div>
               ) : (
@@ -634,41 +616,41 @@ export default function B2BPricingRulesPage() {
                               {pkg.origin_city} → {pkg.destination_city}
                             </span>
                             {!pkg.is_active && (
-                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">Inactive</span>
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">{t('inactive')}</span>
                             )}
                           </div>
                           
                           <div className="grid grid-cols-5 gap-2 text-sm mt-3">
                             <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">Sedan</p>
+                              <p className="text-xs text-gray-500">{t('sedan')}</p>
                               <p className="font-semibold text-gray-900">€{pkg.sedan_rate}</p>
                               <p className="text-xs text-gray-400">1-{pkg.sedan_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">Minivan</p>
+                              <p className="text-xs text-gray-500">{t('minivan')}</p>
                               <p className="font-semibold text-gray-900">€{pkg.minivan_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.sedan_capacity + 1}-{pkg.minivan_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">Van</p>
+                              <p className="text-xs text-gray-500">{t('van')}</p>
                               <p className="font-semibold text-gray-900">€{pkg.van_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.minivan_capacity + 1}-{pkg.van_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">Minibus</p>
+                              <p className="text-xs text-gray-500">{t('minibus')}</p>
                               <p className="font-semibold text-gray-900">€{pkg.minibus_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.van_capacity + 1}-{pkg.minibus_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">Bus</p>
+                              <p className="text-xs text-gray-500">{t('bus')}</p>
                               <p className="font-semibold text-gray-900">€{pkg.bus_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.minibus_capacity + 1}+ pax</p>
                             </div>
                           </div>
-                          
+
                           {pkg.includes && (
                             <p className="text-xs text-gray-500 mt-2">
-                              <strong>Includes:</strong> {pkg.includes}
+                              <strong>{t('includes')}</strong> {pkg.includes}
                             </p>
                           )}
                         </div>
@@ -697,7 +679,7 @@ export default function B2BPricingRulesPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">
-                {editingRule ? 'Edit Pricing Rule' : 'Add Pricing Rule'}
+                {editingRule ? t('editPricingRule') : t('addPricingRule')}
               </h2>
               <button onClick={() => setShowRuleModal(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X className="w-5 h-5 text-gray-500" />
@@ -707,7 +689,7 @@ export default function B2BPricingRulesPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Service Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('serviceName')} *</label>
                   <input
                     type="text"
                     value={ruleForm.service_name}
@@ -717,51 +699,74 @@ export default function B2BPricingRulesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('category')}</label>
                   <select
                     value={ruleForm.service_category}
                     onChange={(e) => setRuleForm({ ...ruleForm, service_category: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
-                    {SERVICE_CATEGORIES.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
+                    <option value="activity">{t('categoryActivity')}</option>
+                    <option value="transportation">{t('categoryTransportation')}</option>
+                    <option value="entrance">{t('categoryEntrance')}</option>
+                    <option value="meal">{t('categoryMeal')}</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Pricing Model</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('pricingModel')}</label>
                 <div className="grid grid-cols-3 gap-3">
-                  {PRICING_MODELS.map(model => (
-                    <button
-                      key={model.value}
-                      type="button"
-                      onClick={() => setRuleForm({ ...ruleForm, pricing_model: model.value })}
-                      className={`p-3 rounded-lg border text-left ${
-                        ruleForm.pricing_model === model.value 
-                          ? 'border-blue-500 bg-blue-50' 
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <p className="font-medium text-sm">{model.label}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{model.desc}</p>
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setRuleForm({ ...ruleForm, pricing_model: 'per_person' })}
+                    className={`p-3 rounded-lg border text-left ${
+                      ruleForm.pricing_model === 'per_person'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-medium text-sm">{t('modelPerPerson')}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{t('modelPerPersonDesc')}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRuleForm({ ...ruleForm, pricing_model: 'per_unit' })}
+                    className={`p-3 rounded-lg border text-left ${
+                      ruleForm.pricing_model === 'per_unit'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-medium text-sm">{t('modelPerUnit')}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{t('modelPerUnitDesc')}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRuleForm({ ...ruleForm, pricing_model: 'tiered' })}
+                    className={`p-3 rounded-lg border text-left ${
+                      ruleForm.pricing_model === 'tiered'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-medium text-sm">{t('modelTiered')}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{t('modelTieredDesc')}</p>
+                  </button>
                 </div>
               </div>
 
               {ruleForm.pricing_model === 'per_unit' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('unitType')}</label>
                   <select
                     value={ruleForm.unit_type}
                     onChange={(e) => setRuleForm({ ...ruleForm, unit_type: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
-                    {UNIT_TYPES.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
+                    <option value="boat">{t('unitBoat')}</option>
+                    <option value="vehicle">{t('unitVehicle')}</option>
+                    <option value="table">{t('unitTable')}</option>
+                    <option value="room">{t('unitRoom')}</option>
                   </select>
                 </div>
               )}
@@ -769,11 +774,11 @@ export default function B2BPricingRulesPage() {
               {/* Tier 1 */}
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <h4 className="font-medium text-green-800 mb-3">
-                  {ruleForm.pricing_model === 'per_unit' ? 'Small Size' : 'Tier 1'}
+                  {ruleForm.pricing_model === 'per_unit' ? t('smallSize') : t('tier1Default')}
                 </h4>
                 <div className="grid grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Min Pax</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('minPax')}</label>
                     <input
                       type="number"
                       value={ruleForm.tier1_min_pax}
@@ -782,7 +787,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Max Pax</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('maxPax')}</label>
                     <input
                       type="number"
                       value={ruleForm.tier1_max_pax || ''}
@@ -791,7 +796,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Rate (€)</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
                     <input
                       type="number"
                       value={ruleForm.tier1_rate_eur || ''}
@@ -800,7 +805,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Label</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('label')}</label>
                     <input
                       type="text"
                       value={ruleForm.tier1_label}
@@ -815,11 +820,11 @@ export default function B2BPricingRulesPage() {
               {/* Tier 2 */}
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <h4 className="font-medium text-blue-800 mb-3">
-                  {ruleForm.pricing_model === 'per_unit' ? 'Large Size' : 'Tier 2'}
+                  {ruleForm.pricing_model === 'per_unit' ? t('largeSize') : t('tier2Default')}
                 </h4>
                 <div className="grid grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Min Pax</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('minPax')}</label>
                     <input
                       type="number"
                       value={ruleForm.tier2_min_pax || ''}
@@ -828,7 +833,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Max Pax</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('maxPax')}</label>
                     <input
                       type="number"
                       value={ruleForm.tier2_max_pax || ''}
@@ -837,7 +842,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Rate (€)</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
                     <input
                       type="number"
                       value={ruleForm.tier2_rate_eur || ''}
@@ -846,7 +851,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Label</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('label')}</label>
                     <input
                       type="text"
                       value={ruleForm.tier2_label}
@@ -862,10 +867,10 @@ export default function B2BPricingRulesPage() {
               {ruleForm.pricing_model === 'tiered' && (
                 <>
                   <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                    <h4 className="font-medium text-purple-800 mb-3">Tier 3 (Optional)</h4>
+                    <h4 className="font-medium text-purple-800 mb-3">{t('tier3Optional')}</h4>
                     <div className="grid grid-cols-4 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Min Pax</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('minPax')}</label>
                         <input
                           type="number"
                           value={ruleForm.tier3_min_pax || ''}
@@ -874,7 +879,7 @@ export default function B2BPricingRulesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Max Pax</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('maxPax')}</label>
                         <input
                           type="number"
                           value={ruleForm.tier3_max_pax || ''}
@@ -883,7 +888,7 @@ export default function B2BPricingRulesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Rate (€)</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
                         <input
                           type="number"
                           value={ruleForm.tier3_rate_eur || ''}
@@ -892,7 +897,7 @@ export default function B2BPricingRulesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Label</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('label')}</label>
                         <input
                           type="text"
                           value={ruleForm.tier3_label}
@@ -904,10 +909,10 @@ export default function B2BPricingRulesPage() {
                   </div>
 
                   <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                    <h4 className="font-medium text-orange-800 mb-3">Tier 4 (Optional)</h4>
+                    <h4 className="font-medium text-orange-800 mb-3">{t('tier4Optional')}</h4>
                     <div className="grid grid-cols-4 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Min Pax</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('minPax')}</label>
                         <input
                           type="number"
                           value={ruleForm.tier4_min_pax || ''}
@@ -916,17 +921,17 @@ export default function B2BPricingRulesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Max Pax</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('maxPax')}</label>
                         <input
                           type="number"
                           value={ruleForm.tier4_max_pax || ''}
                           onChange={(e) => setRuleForm({ ...ruleForm, tier4_max_pax: parseInt(e.target.value) || 0 })}
-                          placeholder="Leave 0 for unlimited"
+                          placeholder={t('leaveZeroUnlimited')}
                           className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Rate (€)</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
                         <input
                           type="number"
                           value={ruleForm.tier4_rate_eur || ''}
@@ -935,7 +940,7 @@ export default function B2BPricingRulesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">Label</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('label')}</label>
                         <input
                           type="text"
                           value={ruleForm.tier4_label}
@@ -949,13 +954,13 @@ export default function B2BPricingRulesPage() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('notes')}</label>
                 <textarea
                   value={ruleForm.notes}
                   onChange={(e) => setRuleForm({ ...ruleForm, notes: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  placeholder="Additional notes..."
+                  placeholder={t('additionalNotes')}
                 />
               </div>
 
@@ -966,7 +971,7 @@ export default function B2BPricingRulesPage() {
                   onChange={(e) => setRuleForm({ ...ruleForm, is_active: e.target.checked })}
                   className="w-4 h-4 text-blue-600 rounded"
                 />
-                <span className="text-sm text-gray-700">Active</span>
+                <span className="text-sm text-gray-700">{t('active')}</span>
               </label>
             </div>
 
@@ -975,7 +980,7 @@ export default function B2BPricingRulesPage() {
                 onClick={() => setShowRuleModal(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm font-medium"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSaveRule}
@@ -983,7 +988,7 @@ export default function B2BPricingRulesPage() {
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingRule ? 'Update Rule' : 'Create Rule'}
+                {editingRule ? t('updateRule') : t('createRule')}
               </button>
             </div>
           </div>
@@ -996,7 +1001,7 @@ export default function B2BPricingRulesPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">
-                {editingPackage ? 'Edit Transport Package' : 'Add Transport Package'}
+                {editingPackage ? t('editTransportPackage') : t('addTransportPackage')}
               </h2>
               <button onClick={() => setShowPackageModal(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X className="w-5 h-5 text-gray-500" />
@@ -1006,7 +1011,7 @@ export default function B2BPricingRulesPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Package Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('packageName')} *</label>
                   <input
                     type="text"
                     value={packageForm.package_name}
@@ -1016,23 +1021,23 @@ export default function B2BPricingRulesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Package Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('packageType')}</label>
                   <select
                     value={packageForm.package_type}
                     onChange={(e) => setPackageForm({ ...packageForm, package_type: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
-                    <option value="cruise_sightseeing">Cruise Sightseeing</option>
-                    <option value="cruise_transfer">Cruise Transfer</option>
-                    <option value="multi_day">Multi-Day Tour</option>
-                    <option value="day_tour">Day Tour</option>
+                    <option value="cruise_sightseeing">{t('typeCruiseSightseeing')}</option>
+                    <option value="cruise_transfer">{t('typeCruiseTransfer')}</option>
+                    <option value="multi_day">{t('typeMultiDay')}</option>
+                    <option value="day_tour">{t('typeDayTour')}</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Origin City</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('originCity')}</label>
                   <input
                     type="text"
                     value={packageForm.origin_city}
@@ -1041,7 +1046,7 @@ export default function B2BPricingRulesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Destination City</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('destinationCity')}</label>
                   <input
                     type="text"
                     value={packageForm.destination_city}
@@ -1050,7 +1055,7 @@ export default function B2BPricingRulesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (Days)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('durationDays')}</label>
                   <input
                     type="number"
                     value={packageForm.duration_days}
@@ -1061,10 +1066,10 @@ export default function B2BPricingRulesPage() {
               </div>
 
               <div>
-                <h4 className="font-medium text-gray-900 mb-3">Vehicle Rates (€)</h4>
+                <h4 className="font-medium text-gray-900 mb-3">{t('vehicleRates')}</h4>
                 <div className="grid grid-cols-5 gap-3">
                   <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">Sedan</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('sedan')}</label>
                     <input
                       type="number"
                       value={packageForm.sedan_rate || ''}
@@ -1085,7 +1090,7 @@ export default function B2BPricingRulesPage() {
                   </div>
                   
                   <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">Minivan</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('minivan')}</label>
                     <input
                       type="number"
                       value={packageForm.minivan_rate || ''}
@@ -1104,9 +1109,9 @@ export default function B2BPricingRulesPage() {
                       <span>pax</span>
                     </div>
                   </div>
-                  
+
                   <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">Van</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('van')}</label>
                     <input
                       type="number"
                       value={packageForm.van_rate || ''}
@@ -1125,9 +1130,9 @@ export default function B2BPricingRulesPage() {
                       <span>pax</span>
                     </div>
                   </div>
-                  
+
                   <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">Minibus</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('minibus')}</label>
                     <input
                       type="number"
                       value={packageForm.minibus_rate || ''}
@@ -1146,9 +1151,9 @@ export default function B2BPricingRulesPage() {
                       <span>pax</span>
                     </div>
                   </div>
-                  
+
                   <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">Bus</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('bus')}</label>
                     <input
                       type="number"
                       value={packageForm.bus_rate || ''}
@@ -1164,7 +1169,7 @@ export default function B2BPricingRulesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">What&apos;s Included</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('whatsIncluded')}</label>
                 <textarea
                   value={packageForm.includes}
                   onChange={(e) => setPackageForm({ ...packageForm, includes: e.target.value })}
@@ -1181,7 +1186,7 @@ export default function B2BPricingRulesPage() {
                   onChange={(e) => setPackageForm({ ...packageForm, is_active: e.target.checked })}
                   className="w-4 h-4 text-blue-600 rounded"
                 />
-                <span className="text-sm text-gray-700">Active</span>
+                <span className="text-sm text-gray-700">{t('active')}</span>
               </label>
             </div>
 
@@ -1190,7 +1195,7 @@ export default function B2BPricingRulesPage() {
                 onClick={() => setShowPackageModal(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm font-medium"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSavePackage}
@@ -1198,7 +1203,7 @@ export default function B2BPricingRulesPage() {
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingPackage ? 'Update Package' : 'Create Package'}
+                {editingPackage ? t('updatePackage') : t('createPackage')}
               </button>
             </div>
           </div>

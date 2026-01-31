@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, use } from 'react'
+import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -106,6 +107,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 export default function ExpenseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
+  const t = useTranslations('expenseDetail')
   const [expense, setExpense] = useState<Expense | null>(null)
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -167,11 +169,11 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
       if (response.ok) {
         fetchExpense()
       } else {
-        alert('Failed to update status')
+        alert(t('failedToUpdateStatus'))
       }
     } catch (error) {
       console.error('Error updating expense:', error)
-      alert('Failed to update status')
+      alert(t('failedToUpdateStatus'))
     } finally {
       setUpdating(false)
     }
@@ -179,18 +181,18 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
 
   const handleDelete = async () => {
     if (!expense) return
-    if (!confirm('Are you sure you want to delete this expense? This action cannot be undone.')) return
+    if (!confirm(t('confirmDeleteExpense'))) return
 
     try {
       const response = await fetch(`/api/expenses/${expense.id}`, { method: 'DELETE' })
       if (response.ok) {
         router.push('/expenses')
       } else {
-        alert('Failed to delete expense')
+        alert(t('failedToDeleteExpense'))
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
-      alert('Failed to delete expense')
+      alert(t('failedToDeleteExpense'))
     }
   }
 
@@ -210,9 +212,9 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
   if (!expense) {
     return (
       <div className="p-6 text-center">
-        <p className="text-gray-500">Expense not found</p>
+        <p className="text-gray-500">{t('expenseNotFound')}</p>
         <Link href="/expenses" className="text-[#647C47] hover:underline mt-2 inline-block">
-          Back to Expenses
+          {t('backToExpenses')}
         </Link>
       </div>
     )
@@ -258,7 +260,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
             >
               <CheckCircle className="h-4 w-4" />
-              Approve
+              {t('approve')}
             </button>
           )}
           {expense.status === 'approved' && (
@@ -268,7 +270,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-600 border border-green-200 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
             >
               <Wallet className="h-4 w-4" />
-              Mark as Paid
+              {t('markAsPaid')}
             </button>
           )}
           <Link
@@ -276,14 +278,14 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Edit2 className="h-4 w-4" />
-            Edit
+            {t('edit')}
           </Link>
           <button
             onClick={handleDelete}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
           >
             <Trash2 className="h-4 w-4" />
-            Delete
+            {t('delete')}
           </button>
         </div>
       </div>
@@ -296,19 +298,19 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 mb-1">Total Amount</p>
+                <p className="text-sm text-gray-500 mb-1">{t('totalAmount')}</p>
                 <p className="text-4xl font-bold text-gray-900">
                   {getCurrencySymbol(expense.currency)}{Number(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-500 mb-1">Expense Date</p>
+                <p className="text-sm text-gray-500 mb-1">{t('expenseDate')}</p>
                 <p className="text-lg font-medium text-gray-900">
-                  {new Date(expense.expense_date).toLocaleDateString('en-US', { 
+                  {new Date(expense.expense_date).toLocaleDateString('en-US', {
                     weekday: 'short',
-                    year: 'numeric', 
-                    month: 'short', 
-                    day: 'numeric' 
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
                   })}
                 </p>
               </div>
@@ -317,12 +319,12 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
 
           {/* Details Card */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Expense Details</h3>
-            
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('expenseDetails')}</h3>
+
             <div className="grid grid-cols-2 gap-6">
               {/* Category */}
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Category</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('category')}</p>
                 <div className="flex items-center gap-2">
                   <span className="text-lg">{category.icon}</span>
                   <span className="text-sm font-medium text-gray-900">{category.label}</span>
@@ -331,14 +333,14 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
 
               {/* Currency */}
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Currency</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('currency')}</p>
                 <p className="text-sm font-medium text-gray-900">{expense.currency}</p>
               </div>
 
               {/* Description */}
               {expense.description && (
                 <div className="col-span-2">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Description</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('description')}</p>
                   <p className="text-sm text-gray-900">{expense.description}</p>
                 </div>
               )}
@@ -346,7 +348,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
               {/* Notes */}
               {expense.notes && (
                 <div className="col-span-2">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Notes</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('notes')}</p>
                   <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{expense.notes}</p>
                 </div>
               )}
@@ -356,14 +358,14 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
           {/* Supplier Card */}
           {(expense.supplier_name || expense.supplier_type) && (
             <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Supplier Information</h3>
-              
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('supplierInformation')}</h3>
+
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
                   <Building className="h-5 w-5 text-gray-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{expense.supplier_name || 'Unknown Supplier'}</p>
+                  <p className="text-sm font-medium text-gray-900">{expense.supplier_name || t('unknownSupplier')}</p>
                   {expense.supplier_type && (
                     <p className="text-sm text-gray-500">{SUPPLIER_TYPES[expense.supplier_type] || expense.supplier_type}</p>
                   )}
@@ -375,9 +377,9 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
           {/* Linked Trip Card */}
           {itinerary && (
             <div className="bg-white border border-gray-200 rounded-lg p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Linked Trip</h3>
-              
-              <Link 
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('linkedTrip')}</h3>
+
+              <Link
                 href={`/itineraries/${itinerary.id}`}
                 className="flex items-start gap-4 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
@@ -403,7 +405,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
         <div className="space-y-6">
           {/* Status Card */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Status</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('status')}</h3>
             
             <div className="space-y-2">
               {Object.entries(STATUS_CONFIG).map(([key, config]) => {
@@ -433,32 +435,32 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
 
           {/* Payment Info Card */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Payment Information</h3>
-            
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('paymentInformation')}</h3>
+
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Payment Method</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('paymentMethod')}</p>
                 <div className="flex items-center gap-2">
                   <CreditCard className="h-4 w-4 text-gray-400" />
                   <span className="text-sm text-gray-900">
-                    {expense.payment_method ? PAYMENT_METHODS[expense.payment_method] || expense.payment_method : 'Not specified'}
+                    {expense.payment_method ? PAYMENT_METHODS[expense.payment_method] || expense.payment_method : t('notSpecified')}
                   </span>
                 </div>
               </div>
 
               <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Payment Date</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('paymentDate')}</p>
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-gray-400" />
                   <span className="text-sm text-gray-900">
-                    {expense.payment_date ? new Date(expense.payment_date).toLocaleDateString() : 'Not paid yet'}
+                    {expense.payment_date ? new Date(expense.payment_date).toLocaleDateString() : t('notPaidYet')}
                   </span>
                 </div>
               </div>
 
               {expense.payment_reference && (
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Reference</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('reference')}</p>
                   <p className="text-sm font-mono text-gray-900 bg-gray-50 px-2 py-1 rounded">
                     {expense.payment_reference}
                   </p>
@@ -469,8 +471,8 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
 
           {/* Receipt Card */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Receipt</h3>
-            
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('receipt')}</h3>
+
             {expense.receipt_url ? (
               <a
                 href={expense.receipt_url}
@@ -482,9 +484,9 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
                   <Receipt className="h-5 w-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-blue-700">View Receipt</p>
+                  <p className="text-sm font-medium text-blue-700">{t('viewReceipt')}</p>
                   <p className="text-xs text-blue-600 truncate">
-                    {expense.receipt_filename || 'External Link'}
+                    {expense.receipt_filename || t('externalLink')}
                   </p>
                 </div>
                 <ExternalLink className="h-4 w-4 text-blue-500" />
@@ -494,7 +496,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
                 <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
                   <Receipt className="h-6 w-6 text-gray-400" />
                 </div>
-                <p className="text-sm text-gray-500">No receipt attached</p>
+                <p className="text-sm text-gray-500">{t('noReceiptAttached')}</p>
               </div>
             )}
           </div>
@@ -503,15 +505,15 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
             <div className="space-y-2 text-xs text-gray-500">
               <div className="flex justify-between">
-                <span>Created</span>
+                <span>{t('created')}</span>
                 <span>{new Date(expense.created_at).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span>Last Updated</span>
+                <span>{t('lastUpdated')}</span>
                 <span>{new Date(expense.updated_at).toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span>ID</span>
+                <span>{t('id')}</span>
                 <span className="font-mono">{expense.id.slice(0, 8)}...</span>
               </div>
             </div>

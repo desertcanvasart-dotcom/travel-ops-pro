@@ -321,7 +321,7 @@ export function UnifiedConversationList({
   const syncEmails = async () => {
     if (!userId || syncing) return
     setSyncing(true)
-    setSyncMessage('Syncing emails...')
+    setSyncMessage(t('syncingEmails'))
     try {
       const res = await fetch('/api/email/sync', {
         method: 'POST',
@@ -335,13 +335,13 @@ export function UnifiedConversationList({
       })
       const data = await res.json()
       if (data.success) {
-        setSyncMessage(`Synced ${data.messages_created || 0} new messages`)
+        setSyncMessage(t('syncedMessages', { count: data.messages_created || 0 }))
         fetchConversations(false)
       } else {
-        setSyncMessage(data.error || 'Sync failed')
+        setSyncMessage(data.error || t('syncFailed'))
       }
     } catch (error: any) {
-      setSyncMessage(error.message || 'Sync failed')
+      setSyncMessage(error.message || t('syncFailed'))
     } finally {
       setSyncing(false)
       setTimeout(() => setSyncMessage(null), 3000)
@@ -376,7 +376,7 @@ export function UnifiedConversationList({
     const now = new Date()
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
     if (diffDays === 0) return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-    if (diffDays === 1) return 'Yesterday'
+    if (diffDays === 1) return t('yesterday')
     if (diffDays < 7) return date.toLocaleDateString('en-GB', { weekday: 'short' })
     return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
   }
@@ -602,7 +602,7 @@ export function UnifiedConversationList({
           conversations.map((conv) => {
             const ChannelIconComponent = getChannelIcon(conv.channel)
             const isSelected = selectedConversationId === conv.id
-            const displayName = conv.client_name || conv.contact_info?.split('@')[0] || 'Unknown'
+            const displayName = conv.client_name || conv.contact_info?.split('@')[0] || t('unknown')
 
             return (
               <div

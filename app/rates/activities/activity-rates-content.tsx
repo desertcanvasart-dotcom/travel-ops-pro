@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -141,6 +142,8 @@ interface ActivityRate {
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function ActivityRatesContent() {
+  const t = useTranslations('rates.activities')
+  const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -351,16 +354,16 @@ export default function ActivityRatesContent() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        showNotification('error', 'Error', data.error || 'Failed to save rate')
+        showNotification('error', 'Error', data.error || t('notifications.failedToSave'))
         return
       }
 
-      showNotification('success', 'Success', editingRate ? 'Activity rate updated successfully!' : 'Activity rate created successfully!')
+      showNotification('success', 'Success', editingRate ? t('notifications.activityUpdated') : t('notifications.activityCreated'))
       setShowModal(false)
       fetchRates()
     } catch (error) {
       console.error('Error saving rate:', error)
-      showNotification('error', 'Error', 'Failed to save rate. Please try again.')
+      showNotification('error', 'Error', t('notifications.failedToSave'))
     }
   }
 
@@ -382,14 +385,14 @@ export default function ActivityRatesContent() {
       const data = await response.json()
 
       if (data.success) {
-        showNotification('success', 'Deleted', `"${deleteModal.name}" has been deleted successfully.`)
+        showNotification('success', t('notifications.deleted'), t('notifications.deletedMessage', { name: deleteModal.name }))
         fetchRates()
       } else {
-        showNotification('error', 'Cannot Delete', data.error || 'Failed to delete rate')
+        showNotification('error', t('notifications.cannotDelete'), data.error || t('notifications.failedToDelete'))
       }
     } catch (error) {
       console.error('Error deleting rate:', error)
-      showNotification('error', 'Error', 'Failed to delete rate. Please try again.')
+      showNotification('error', 'Error', t('notifications.failedToDelete'))
     } finally {
       setIsDeleting(false)
       setDeleteModal(null)
@@ -428,11 +431,11 @@ export default function ActivityRatesContent() {
   const getPricingTypeBadge = (pricingType: string | undefined) => {
     switch (pricingType) {
       case 'per_unit':
-        return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">Per Unit</span>
+        return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">{t('perUnit')}</span>
       case 'flat':
-        return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">Flat</span>
+        return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">{t('flatRate')}</span>
       default:
-        return <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">Per Person</span>
+        return <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">{t('perPerson')}</span>
     }
   }
 
@@ -456,7 +459,7 @@ export default function ActivityRatesContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading activity rates...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -489,7 +492,7 @@ export default function ActivityRatesContent() {
                   'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                Got it
+                {t('gotIt')}
               </button>
             </div>
           </div>
@@ -504,15 +507,15 @@ export default function ActivityRatesContent() {
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
                 <Trash2 className="w-7 h-7 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Activity Rate?</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteModal.title')}</h3>
               <p className="text-sm text-gray-600 mb-1">
-                Are you sure you want to delete the rate for
+                {t('deleteModal.confirmMessage')}
               </p>
               <p className="text-sm font-semibold text-gray-900 mb-4">
                 "{deleteModal.name}"
               </p>
               <p className="text-xs text-gray-500 mb-6">
-                This action cannot be undone. The rate will be permanently removed.
+                {t('deleteModal.warningMessage')}
               </p>
               <div className="flex items-center gap-3 w-full">
                 <button
@@ -520,7 +523,7 @@ export default function ActivityRatesContent() {
                   disabled={isDeleting}
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
-                  Cancel
+                  {t('deleteModal.cancel')}
                 </button>
                 <button
                   onClick={handleDelete}
@@ -530,12 +533,12 @@ export default function ActivityRatesContent() {
                   {isDeleting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Deleting...
+                      {t('deleteModal.deleting')}
                     </>
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      {t('deleteModal.delete')}
                     </>
                   )}
                 </button>
@@ -553,10 +556,10 @@ export default function ActivityRatesContent() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              Activities & Add-ons
+              {t('title')}
               <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
             </h1>
-            <p className="text-sm text-gray-600">Manage pricing for tours, activities, and optional add-ons</p>
+            <p className="text-sm text-gray-600">{t('subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -565,21 +568,21 @@ export default function ActivityRatesContent() {
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
             <Download className="w-4 h-4" />
-            Export
+            {t('export')}
           </button>
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
           >
             <Plus className="w-4 h-4" />
-            Add Rate
+            {t('addRate')}
           </button>
           <Link
             href="/suppliers?type=activity_provider"
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50"
           >
             <Users className="w-4 h-4" />
-            Suppliers
+            {t('suppliers')}
           </Link>
         </div>
       </div>
@@ -592,7 +595,7 @@ export default function ActivityRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{rates.length}</p>
-          <p className="text-xs text-gray-600">Total Rates</p>
+          <p className="text-xs text-gray-600">{t('stats.totalRates')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -600,7 +603,7 @@ export default function ActivityRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{activeRates}</p>
-          <p className="text-xs text-gray-600">Active</p>
+          <p className="text-xs text-gray-600">{t('stats.active')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -608,7 +611,7 @@ export default function ActivityRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{perPersonRates}</p>
-          <p className="text-xs text-gray-600">Per Person</p>
+          <p className="text-xs text-gray-600">{t('stats.perPerson')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -616,7 +619,7 @@ export default function ActivityRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{perUnitRates}</p>
-          <p className="text-xs text-gray-600">Per Unit</p>
+          <p className="text-xs text-gray-600">{t('stats.perUnit')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -624,7 +627,7 @@ export default function ActivityRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{flatRates}</p>
-          <p className="text-xs text-gray-600">Flat Rate</p>
+          <p className="text-xs text-gray-600">{t('stats.flatRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -632,7 +635,7 @@ export default function ActivityRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-orange-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{uniqueCities}</p>
-          <p className="text-xs text-gray-600">Cities</p>
+          <p className="text-xs text-gray-600">{t('stats.cities')}</p>
         </div>
       </div>
 
@@ -645,7 +648,7 @@ export default function ActivityRatesContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search rates..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
@@ -659,10 +662,10 @@ export default function ActivityRatesContent() {
             onChange={(e) => setSelectedPricingType(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Pricing Types</option>
-            <option value="per_person">Per Person</option>
-            <option value="per_unit">Per Unit (Boat/Ride)</option>
-            <option value="flat">Flat Rate</option>
+            <option value="">{t('allPricingTypes')}</option>
+            <option value="per_person">{t('pricingTypes.per_person')}</option>
+            <option value="per_unit">{t('pricingTypes.per_unit')}</option>
+            <option value="flat">{t('pricingTypes.flat')}</option>
           </select>
 
           {/* Category Filter */}
@@ -671,7 +674,7 @@ export default function ActivityRatesContent() {
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Categories</option>
+            <option value="">{t('allCategories')}</option>
             {ACTIVITY_CATEGORIES.map(cat => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
@@ -683,7 +686,7 @@ export default function ActivityRatesContent() {
             onChange={(e) => setSelectedCity(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Cities</option>
+            <option value="">{t('allCities')}</option>
             {EGYPT_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -698,7 +701,7 @@ export default function ActivityRatesContent() {
                 : 'bg-green-100 text-green-700'
             }`}
           >
-            {showInactive ? 'Show All' : 'Active Only'}
+            {showInactive ? t('showAll') : t('activeOnly')}
           </button>
 
           {/* View Mode */}
@@ -727,8 +730,8 @@ export default function ActivityRatesContent() {
         {/* Results Count */}
         <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
           <p className="text-xs text-gray-600">
-            Showing <span className="font-semibold">{paginatedRates.length}</span> of{' '}
-            <span className="font-semibold">{filteredRates.length}</span> rates
+            {t('pagination.showing')} <span className="font-semibold">{paginatedRates.length}</span> {t('pagination.of')}{' '}
+            <span className="font-semibold">{filteredRates.length}</span> {t('pagination.rates')}
           </p>
           <select
             value={itemsPerPage}
@@ -736,7 +739,7 @@ export default function ActivityRatesContent() {
             className="text-xs border border-gray-300 rounded px-2 py-1"
           >
             {ITEMS_PER_PAGE_OPTIONS.map(n => (
-              <option key={n} value={n}>{n} per page</option>
+              <option key={n} value={n}>{n} {t('pagination.perPage')}</option>
             ))}
           </select>
         </div>
@@ -747,7 +750,7 @@ export default function ActivityRatesContent() {
         {paginatedRates.length === 0 ? (
           <div className="p-12 text-center">
             <Ticket className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Rates Found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('noRatesFound')}</h3>
             <p className="text-sm text-gray-600 mb-4">
               {searchTerm || selectedCity || selectedCategory || selectedPricingType
                 ? 'Try adjusting your filters'
@@ -758,7 +761,7 @@ export default function ActivityRatesContent() {
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               <Plus className="w-4 h-4" />
-              Add First Rate
+              {t('addFirstRate')}
             </button>
           </div>
         ) : viewMode === 'table' ? (
@@ -766,15 +769,15 @@ export default function ActivityRatesContent() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Activity</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Category</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Pricing</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Capacity</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.activity')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.category')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.pricing')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.capacity')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.eurRate')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.nonEurRate')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1039,19 +1042,19 @@ export default function ActivityRatesContent() {
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Activity Name *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.activityName')} {t('form.required')}</label>
                     <input
                       type="text"
                       name="activity_name"
                       value={formData.activity_name}
                       onChange={handleChange}
                       required
-                      placeholder="e.g., Felucca Ride - 1 Hour"
+                      placeholder={t('form.activityNamePlaceholder')}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
                     <input
                       type="text"
                       name="service_code"
@@ -1061,56 +1064,56 @@ export default function ActivityRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.category')}</label>
                     <select
                       name="activity_category"
                       value={formData.activity_category}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Category</option>
+                      <option value="">{t('form.selectCategory')}</option>
                       {ACTIVITY_CATEGORIES.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Activity Type</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.activityType')}</label>
                     <select
                       name="activity_type"
                       value={formData.activity_type}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Type</option>
+                      <option value="">{t('form.selectType')}</option>
                       {ACTIVITY_TYPES.map(type => (
                         <option key={type} value={type}>{type}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Duration</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.duration')}</label>
                     <select
                       name="duration"
                       value={formData.duration}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Duration</option>
+                      <option value="">{t('form.selectDuration')}</option>
                       {DURATIONS.map(dur => (
                         <option key={dur} value={dur}>{dur}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.city')}</label>
                     <select
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select City</option>
+                      <option value="">{t('form.selectCity')}</option>
                       {EGYPT_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
@@ -1123,7 +1126,7 @@ export default function ActivityRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  Pricing Model
+                  {t('form.pricingType')}
                 </h3>
                 
                 {/* Pricing Type Selection */}
@@ -1162,21 +1165,21 @@ export default function ActivityRatesContent() {
                     </p>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Unit Label *</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.unitLabel')} {t('form.required')}</label>
                         <select
                           name="unit_label"
                           value={formData.unit_label}
                           onChange={handleChange}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                         >
-                          <option value="">Select unit</option>
+                          <option value="">{t('form.selectUnit')}</option>
                           {UNIT_LABELS.map(label => (
                             <option key={label} value={label}>{label}</option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Min Capacity</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.minCapacity')}</label>
                         <input
                           type="number"
                           name="min_capacity"
@@ -1187,7 +1190,7 @@ export default function ActivityRatesContent() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Max Capacity</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.maxCapacity')}</label>
                         <input
                           type="number"
                           name="max_capacity"
@@ -1209,12 +1212,12 @@ export default function ActivityRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
-                  Pricing
+                  {t('form.pricing')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      EUR Rate (€) * 
+                      {t('form.eurRate')} {t('form.required')}
                       <span className="text-gray-400 font-normal ml-1">
                         {formData.pricing_type === 'per_person' && '/ person'}
                         {formData.pricing_type === 'per_unit' && `/ ${formData.unit_label || 'unit'}`}
@@ -1234,7 +1237,7 @@ export default function ActivityRatesContent() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Non-EUR Rate (€)
+                      {t('form.nonEurRate')}
                       <span className="text-gray-400 font-normal ml-1">
                         {formData.pricing_type === 'per_person' && '/ person'}
                         {formData.pricing_type === 'per_unit' && `/ ${formData.unit_label || 'unit'}`}
@@ -1279,11 +1282,11 @@ export default function ActivityRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">5</span>
-                  Validity Period
+                  {t('form.validityPeriod')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
                     <input
                       type="date"
                       name="rate_valid_from"
@@ -1293,7 +1296,7 @@ export default function ActivityRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
                     <input
                       type="date"
                       name="rate_valid_to"
@@ -1307,13 +1310,13 @@ export default function ActivityRatesContent() {
 
               {/* Notes & Status */}
               <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
                   rows={2}
-                  placeholder="e.g., Includes tea service, best at sunset"
+                  placeholder={t('form.notesPlaceholder')}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                 />
               </div>
@@ -1326,7 +1329,7 @@ export default function ActivityRatesContent() {
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                   />
-                  <span className="text-sm font-medium text-gray-900">Active (available for bookings)</span>
+                  <span className="text-sm font-medium text-gray-900">{t('form.activeStatus')}</span>
                 </label>
               </div>
             </form>
@@ -1337,14 +1340,14 @@ export default function ActivityRatesContent() {
                 onClick={() => setShowModal(false)}
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                {t('form.cancel')}
               </button>
               <button
                 onClick={handleSubmit}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
               >
                 <Check className="w-4 h-4" />
-                {editingRate ? 'Update Rate' : 'Create Rate'}
+                {editingRate ? t('form.update') : t('form.create')}
               </button>
             </div>
           </div>

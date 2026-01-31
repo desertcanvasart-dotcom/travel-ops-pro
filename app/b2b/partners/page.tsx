@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   Users, Plus, Search, Edit, Trash2, X, Check, Building2,
   Mail, Phone, Globe, Percent, AlertCircle, CheckCircle2
@@ -46,6 +47,7 @@ const COUNTRIES = [
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'AUD', 'CAD', 'JPY']
 
 export default function B2BPartnersPage() {
+  const t = useTranslations('b2bPartners')
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -68,7 +70,7 @@ export default function B2BPartnersPage() {
       const data = await res.json()
       if (data.success) setPartners(data.data)
     } catch (err) {
-      showToast('error', 'Failed to load partners')
+      showToast('error', t('failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -116,30 +118,30 @@ export default function B2BPartnersPage() {
       })
       const data = await res.json()
       if (data.success) {
-        showToast('success', editingPartner ? 'Partner updated!' : 'Partner created!')
+        showToast('success', editingPartner ? t('partnerUpdated') : t('partnerCreated'))
         setShowModal(false)
         fetchPartners()
       } else {
-        showToast('error', data.error || 'Failed to save')
+        showToast('error', data.error || t('failedToSave'))
       }
     } catch (err) {
-      showToast('error', 'Failed to save partner')
+      showToast('error', t('failedToSave'))
     }
   }
 
   const handleDelete = async (partner: B2BPartner) => {
-    if (!confirm(`Delete ${partner.company_name}?`)) return
+    if (!confirm(t('deleteConfirm', { companyName: partner.company_name }))) return
     try {
       const res = await fetch(`/api/b2b/partners/${partner.id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.success) {
-        showToast('success', 'Partner deleted!')
+        showToast('success', t('partnerDeleted'))
         fetchPartners()
       } else {
-        showToast('error', data.error || 'Failed to delete')
+        showToast('error', data.error || t('failedToDelete'))
       }
     } catch (err) {
-      showToast('error', 'Failed to delete partner')
+      showToast('error', t('failedToDelete'))
     }
   }
 
@@ -175,31 +177,31 @@ export default function B2BPartnersPage() {
             <Building2 className="w-5 h-5 text-[#647C47]" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">B2B Partners</h1>
-            <p className="text-sm text-gray-500">Manage partner accounts and pricing</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
         <button onClick={handleAddNew} className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm">
-          <Plus className="w-4 h-4" /> Add Partner
+          <Plus className="w-4 h-4" /> {t('addPartner')}
         </button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Total Partners</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsTotal')}</p>
           <p className="text-2xl font-bold">{partners.length}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Active</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsActive')}</p>
           <p className="text-2xl font-bold text-green-600">{partners.filter(p => p.is_active).length}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Countries</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsCountries')}</p>
           <p className="text-2xl font-bold">{new Set(partners.map(p => p.country).filter(Boolean)).size}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Avg Margin</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsAvgMargin')}</p>
           <p className="text-2xl font-bold text-[#647C47]">
             {partners.length > 0 ? (partners.reduce((sum, p) => sum + p.default_margin_percent, 0) / partners.length).toFixed(1) : 0}%
           </p>
@@ -210,10 +212,10 @@ export default function B2BPartnersPage() {
       <div className="bg-white rounded-lg border p-4 mb-6 flex gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search partners..." className="w-full pl-10 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none" />
+          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder={t('searchPlaceholder')} className="w-full pl-10 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none" />
         </div>
         <button onClick={() => setShowInactive(!showInactive)} className={`px-4 py-2 text-sm rounded-lg font-medium ${showInactive ? 'bg-gray-100 border text-gray-700' : 'bg-green-50 border border-green-200 text-green-700'}`}>
-          {showInactive ? 'Show All' : 'Active Only'}
+          {showInactive ? t('showAll') : t('activeOnly')}
         </button>
       </div>
 
@@ -222,12 +224,12 @@ export default function B2BPartnersPage() {
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Partner</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Contact</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Country</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Margin</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Status</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tablePartner')}</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableContact')}</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableCountry')}</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableMargin')}</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableStatus')}</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableActions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -247,7 +249,7 @@ export default function B2BPartnersPage() {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${partner.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {partner.is_active ? 'Active' : 'Inactive'}
+                    {partner.is_active ? t('statusActive') : t('statusInactive')}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -259,7 +261,7 @@ export default function B2BPartnersPage() {
               </tr>
             ))}
             {filteredPartners.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">No partners found</td></tr>
+              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">{t('noPartnersFound')}</td></tr>
             )}
           </tbody>
         </table>
@@ -270,53 +272,53 @@ export default function B2BPartnersPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{editingPartner ? 'Edit Partner' : 'Add New Partner'}</h2>
+              <h2 className="text-lg font-semibold">{editingPartner ? t('editPartner') : t('addNewPartner')}</h2>
               <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Company Name *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('companyNameRequired')}</label>
                   <input type="text" value={formData.company_name} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} required className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Partner Code</label>
-                  <input type="text" value={formData.partner_code} onChange={(e) => setFormData({ ...formData, partner_code: e.target.value })} placeholder="Auto-generated" className="w-full px-3 py-2 text-sm border rounded-lg font-mono" />
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('partnerCode')}</label>
+                  <input type="text" value={formData.partner_code} onChange={(e) => setFormData({ ...formData, partner_code: e.target.value })} placeholder={t('partnerCodePlaceholder')} className="w-full px-3 py-2 text-sm border rounded-lg font-mono" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Contact Name</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('contactName')}</label>
                   <input type="text" value={formData.contact_name} onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })} className="w-full px-3 py-2 text-sm border rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('email')}</label>
                   <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2 text-sm border rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('phone')}</label>
                   <input type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full px-3 py-2 text-sm border rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Country</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('country')}</label>
                   <select value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })} className="w-full px-3 py-2 text-sm border rounded-lg bg-white">
-                    <option value="">Select...</option>
+                    <option value="">{t('selectCountry')}</option>
                     {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Default Margin (%)</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('defaultMargin')}</label>
                   <input type="number" value={formData.default_margin_percent} onChange={(e) => setFormData({ ...formData, default_margin_percent: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 text-sm border rounded-lg" />
                 </div>
                 <div className="col-span-2">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={formData.is_active} onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })} className="w-4 h-4 text-[#647C47] rounded" />
-                    <span className="text-sm">Partner is active</span>
+                    <span className="text-sm">{t('partnerIsActive')}</span>
                   </label>
                 </div>
               </div>
               <div className="flex gap-3 pt-4 border-t">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 font-medium">{t('cancel')}</button>
                 <button type="submit" className="flex-1 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium flex items-center justify-center gap-2">
-                  <Check className="w-4 h-4" /> {editingPartner ? 'Update' : 'Create'}
+                  <Check className="w-4 h-4" /> {editingPartner ? t('update') : t('create')}
                 </button>
               </div>
             </form>

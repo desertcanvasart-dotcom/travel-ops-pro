@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   ArrowLeft,
   Plus,
@@ -83,6 +84,7 @@ const DEFAULT_FORM: PromptFormData = {
 }
 
 export default function AIPromptsPage() {
+  const t = useTranslations('aiPrompts')
   const [prompts, setPrompts] = useState<PromptTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -101,12 +103,12 @@ export default function AIPromptsPage() {
   async function fetchPrompts() {
     try {
       const response = await fetch('/api/content-library/prompts')
-      if (!response.ok) throw new Error('Failed to fetch prompts')
+      if (!response.ok) throw new Error(t('failedToFetch'))
       const data = await response.json()
       setPrompts(data)
     } catch (err) {
       console.error('Error fetching prompts:', err)
-      setError('Failed to load prompts')
+      setError(t('failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -147,7 +149,7 @@ export default function AIPromptsPage() {
 
   async function handleSave() {
     if (!formData.name || !formData.user_prompt_template) {
-      setError('Name and user prompt template are required')
+      setError(t('nameAndTemplateRequired'))
       return
     }
 
@@ -162,7 +164,7 @@ export default function AIPromptsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
         })
-        if (!response.ok) throw new Error('Failed to update')
+        if (!response.ok) throw new Error(t('failedToUpdate'))
       } else {
         // Create
         const response = await fetch('/api/content-library/prompts', {
@@ -170,16 +172,16 @@ export default function AIPromptsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
         })
-        if (!response.ok) throw new Error('Failed to create')
+        if (!response.ok) throw new Error(t('failedToCreate'))
       }
 
-      setSuccess(formData.id ? 'Prompt updated!' : 'Prompt created!')
+      setSuccess(formData.id ? t('promptUpdated') : t('promptCreated'))
       setShowForm(false)
       fetchPrompts()
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       console.error('Save error:', err)
-      setError('Failed to save prompt')
+      setError(t('failedToSave'))
     } finally {
       setSaving(false)
     }
@@ -192,16 +194,16 @@ export default function AIPromptsPage() {
       })
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.error || 'Failed to delete')
+        throw new Error(data.error || t('failedToDelete'))
       }
-      
+
       setPrompts(prompts.filter(p => p.id !== id))
       setDeleteId(null)
-      setSuccess('Prompt deleted')
+      setSuccess(t('promptDeleted'))
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       console.error('Delete error:', err)
-      setError(err instanceof Error ? err.message : 'Failed to delete prompt')
+      setError(err instanceof Error ? err.message : t('failedToDeletePrompt'))
       setDeleteId(null)
     }
   }
@@ -235,9 +237,9 @@ export default function AIPromptsPage() {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">AI Prompts</h1>
+                <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {prompts.length} prompt templates for content generation
+                  {t('promptTemplatesCount', { count: prompts.length })}
                 </p>
               </div>
             </div>
@@ -246,7 +248,7 @@ export default function AIPromptsPage() {
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Add Prompt
+              {t('addPrompt')}
             </button>
           </div>
         </div>
@@ -279,14 +281,14 @@ export default function AIPromptsPage() {
         ) : prompts.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
             <Wand2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No prompts yet</h3>
-            <p className="text-gray-500 mb-6">Create your first AI prompt template</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('noPromptsYet')}</h3>
+            <p className="text-gray-500 mb-6">{t('createFirstTemplate')}</p>
             <button
               onClick={handleNew}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Add First Prompt
+              {t('addFirstPrompt')}
             </button>
           </div>
         ) : (
@@ -301,7 +303,7 @@ export default function AIPromptsPage() {
                 <div key={purpose.id}>
                   <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                     <Icon className="w-4 h-4" />
-                    {purpose.label}
+                    {t(`purposes.${purpose.id}`)}
                     <span className="text-gray-400 font-normal">({purposePrompts.length})</span>
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -317,7 +319,7 @@ export default function AIPromptsPage() {
                             {prompt.is_default && (
                               <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded">
                                 <Star className="w-3 h-3" />
-                                Default
+                                {t('default')}
                               </span>
                             )}
                           </div>
@@ -325,14 +327,14 @@ export default function AIPromptsPage() {
                             <button
                               onClick={() => setViewPromptId(prompt.id)}
                               className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded-lg transition-colors"
-                              title="View"
+                              title={t('view')}
                             >
                               <Code className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleEdit(prompt)}
                               className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded-lg transition-colors"
-                              title="Edit"
+                              title={t('edit')}
                             >
                               <Edit className="w-4 h-4" />
                             </button>
@@ -340,7 +342,7 @@ export default function AIPromptsPage() {
                               <button
                                 onClick={() => setDeleteId(prompt.id)}
                                 className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Delete"
+                                title={t('delete')}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -357,16 +359,16 @@ export default function AIPromptsPage() {
                             {prompt.model}
                           </span>
                           <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
-                            Temp: {prompt.temperature}
+                            {t('temp')}: {prompt.temperature}
                           </span>
                           <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
                             v{prompt.version}
                           </span>
                         </div>
-                        
+
                         {prompt.variables && prompt.variables.length > 0 && (
                           <div>
-                            <p className="text-xs text-gray-400 mb-1">Variables:</p>
+                            <p className="text-xs text-gray-400 mb-1">{t('variables')}:</p>
                             <div className="flex flex-wrap gap-1">
                               {prompt.variables.slice(0, 5).map(v => (
                                 <code key={v} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">
@@ -375,7 +377,7 @@ export default function AIPromptsPage() {
                               ))}
                               {prompt.variables.length > 5 && (
                                 <span className="text-xs text-gray-400">
-                                  +{prompt.variables.length - 5} more
+                                  {t('moreVariables', { count: prompt.variables.length - 5 })}
                                 </span>
                               )}
                             </div>
@@ -409,13 +411,13 @@ export default function AIPromptsPage() {
               {viewingPrompt.system_prompt && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700">System Prompt</label>
+                    <label className="text-sm font-medium text-gray-700">{t('systemPrompt')}</label>
                     <button
                       onClick={() => copyToClipboard(viewingPrompt.system_prompt || '', 'system')}
                       className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
                     >
                       {copiedId === 'system' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copiedId === 'system' ? 'Copied!' : 'Copy'}
+                      {copiedId === 'system' ? t('copied') : t('copy')}
                     </button>
                   </div>
                   <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap">
@@ -423,27 +425,27 @@ export default function AIPromptsPage() {
                   </pre>
                 </div>
               )}
-              
+
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">User Prompt Template</label>
+                  <label className="text-sm font-medium text-gray-700">{t('userPromptTemplate')}</label>
                   <button
                     onClick={() => copyToClipboard(viewingPrompt.user_prompt_template, 'user')}
                     className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
                   >
                     {copiedId === 'user' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    {copiedId === 'user' ? 'Copied!' : 'Copy'}
+                    {copiedId === 'user' ? t('copied') : t('copy')}
                   </button>
                 </div>
                 <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap">
                   {viewingPrompt.user_prompt_template}
                 </pre>
               </div>
-              
+
               {viewingPrompt.variables && viewingPrompt.variables.length > 0 && (
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-2">
-                    Variables ({viewingPrompt.variables.length})
+                    {t('variablesCount', { count: viewingPrompt.variables.length })}
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {viewingPrompt.variables.map(v => (
@@ -465,7 +467,7 @@ export default function AIPromptsPage() {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] transition-colors"
               >
                 <Edit className="w-4 h-4" />
-                Edit Prompt
+                {t('editPrompt')}
               </button>
             </div>
           </div>
@@ -478,7 +480,7 @@ export default function AIPromptsPage() {
           <div className="bg-white rounded-xl max-w-3xl w-full my-8 shadow-xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                {formData.id ? 'Edit Prompt' : 'New Prompt Template'}
+                {formData.id ? t('editPrompt') : t('newPromptTemplate')}
               </h2>
               <button
                 onClick={() => setShowForm(false)}
@@ -493,25 +495,25 @@ export default function AIPromptsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Name <span className="text-red-500">*</span>
+                    {t('name')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Day Description Generator"
+                    placeholder={t('namePlaceholder')}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Purpose</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('purpose')}</label>
                   <select
                     value={formData.purpose}
                     onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   >
                     {PURPOSES.map(p => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
+                      <option key={p.id} value={p.id}>{t(`purposes.${p.id}`)}</option>
                     ))}
                   </select>
                 </div>
@@ -519,23 +521,23 @@ export default function AIPromptsPage() {
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('description')}</label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="What does this prompt generate?"
+                  placeholder={t('descriptionPlaceholder')}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                 />
               </div>
 
               {/* System Prompt */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">System Prompt</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('systemPrompt')}</label>
                 <textarea
                   value={formData.system_prompt}
                   onChange={(e) => setFormData({ ...formData, system_prompt: e.target.value })}
-                  placeholder="Instructions for the AI's behavior and role..."
+                  placeholder={t('systemPromptPlaceholder')}
                   rows={4}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
                 />
@@ -544,18 +546,18 @@ export default function AIPromptsPage() {
               {/* User Prompt Template */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  User Prompt Template <span className="text-red-500">*</span>
+                  {t('userPromptTemplate')} <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={formData.user_prompt_template}
                   onChange={(e) => handleTemplateChange(e.target.value)}
-                  placeholder="Use {{variable_name}} for dynamic content..."
+                  placeholder={t('userPromptPlaceholder')}
                   rows={8}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
                 />
                 {formData.variables.length > 0 && (
                   <div className="mt-2">
-                    <p className="text-xs text-gray-500 mb-1">Detected variables:</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('detectedVariables')}:</p>
                     <div className="flex flex-wrap gap-1">
                       {formData.variables.map(v => (
                         <code key={v} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">
@@ -570,7 +572,7 @@ export default function AIPromptsPage() {
               {/* Model Settings */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('model')}</label>
                   <select
                     value={formData.model}
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
@@ -585,7 +587,7 @@ export default function AIPromptsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Temperature: {formData.temperature}
+                    {t('temperature')}: {formData.temperature}
                   </label>
                   <input
                     type="range"
@@ -598,7 +600,7 @@ export default function AIPromptsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Tokens</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('maxTokens')}</label>
                   <input
                     type="number"
                     value={formData.max_tokens}
@@ -620,7 +622,7 @@ export default function AIPromptsPage() {
                   className="w-4 h-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47]"
                 />
                 <label htmlFor="is_default" className="text-sm text-gray-700">
-                  Set as default for this purpose
+                  {t('setAsDefault')}
                 </label>
               </div>
             </div>
@@ -630,7 +632,7 @@ export default function AIPromptsPage() {
                 onClick={() => setShowForm(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSave}
@@ -638,7 +640,7 @@ export default function AIPromptsPage() {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] disabled:opacity-50 transition-colors"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {saving ? 'Saving...' : 'Save Prompt'}
+                {saving ? t('saving') : t('savePrompt')}
               </button>
             </div>
           </div>
@@ -649,22 +651,22 @@ export default function AIPromptsPage() {
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Prompt?</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deletePromptTitle')}</h3>
             <p className="text-gray-600 mb-6">
-              This prompt template will be permanently deleted. This cannot be undone.
+              {t('deletePromptConfirmation')}
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setDeleteId(null)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={() => handleDelete(deleteId)}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
               >
-                Delete
+                {t('delete')}
               </button>
             </div>
           </div>

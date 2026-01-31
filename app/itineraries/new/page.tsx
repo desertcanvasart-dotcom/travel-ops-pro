@@ -75,10 +75,10 @@ export default function NewItineraryPage() {
       if (data.success) {
         router.push(`/itineraries/${data.data.id}`)
       } else {
-        setError(data.error || 'Failed to create itinerary')
+        setError(data.error || t('errorFailed'))
       }
     } catch (err) {
-      setError('Error creating itinerary')
+      setError(t('errorCreating'))
       console.error(err)
     } finally {
       setLoading(false)

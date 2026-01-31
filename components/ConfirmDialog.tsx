@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react'
 import { AlertTriangle, X, Trash2, Info, HelpCircle, CheckCircle } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 // ============================================
 // TYPES
@@ -51,6 +52,7 @@ export function useConfirmDialog() {
 // ============================================
 
 export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
+  const t = useTranslations('confirmDialog')
   const [state, setState] = useState<DialogState>({
     type: 'confirm',
     isOpen: false,
@@ -58,7 +60,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
     resolve: null,
   })
   const [inputValue, setInputValue] = useState('')
-  
+
   const overlayRef = useRef<HTMLDivElement>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -148,8 +150,8 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const alert = useCallback((
-    title: string, 
-    message: string, 
+    title: string,
+    message: string,
     variant: 'info' | 'success' | 'warning' = 'info'
   ): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -159,11 +161,11 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
         title,
         message,
         variant,
-        confirmText: 'OK',
+        confirmText: t('ok'),
         resolve: resolve as (value: boolean | string | null) => void,
       })
     })
-  }, [])
+  }, [t])
 
   const prompt = useCallback((
     title: string,
@@ -178,29 +180,29 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
         title,
         message,
         variant: 'info',
-        confirmText: options?.confirmText || 'OK',
-        cancelText: options?.cancelText || 'Cancel',
+        confirmText: options?.confirmText || t('ok'),
+        cancelText: options?.cancelText || t('cancel'),
         placeholder: options?.placeholder,
         defaultValue: options?.defaultValue,
         resolve: resolve as (value: boolean | string | null) => void,
       })
     })
-  }, [])
+  }, [t])
 
   const confirmDelete = useCallback((itemName: string, customMessage?: string): Promise<boolean> => {
     return new Promise((resolve) => {
       setState({
         type: 'confirm',
         isOpen: true,
-        title: `Delete ${itemName}?`,
-        message: customMessage || `Are you sure you want to delete this ${itemName.toLowerCase()}? This action cannot be undone.`,
+        title: t('deleteTitle', { itemName }),
+        message: customMessage || t('deleteMessage', { itemName: itemName.toLowerCase() }),
         variant: 'danger',
-        confirmText: 'Delete',
-        cancelText: 'Cancel',
+        confirmText: t('delete'),
+        cancelText: t('cancel'),
         resolve: resolve as (value: boolean | string | null) => void,
       })
     })
-  }, [])
+  }, [t])
 
   // ============================================
   // STYLING
@@ -278,11 +280,11 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
                 
                 {/* Text */}
                 <div className="flex-1 pt-1">
-                  <h3 
+                  <h3
                     id="dialog-title"
                     className={`text-lg font-semibold ${isDestructive ? 'text-red-900' : 'text-gray-900'}`}
                   >
-                    {state.title || 'Confirm Action'}
+                    {state.title || t('confirmAction')}
                   </h3>
                   <p 
                     id="dialog-description"
@@ -312,7 +314,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
               {isDestructive && !isAlert && (
                 <div className="mt-4 ml-16 p-3 bg-red-50 border border-red-100 rounded-lg">
                   <p className="text-xs text-red-700">
-                    <strong>Warning:</strong> This action cannot be undone.
+                    {t('warningCannotUndo')}
                   </p>
                 </div>
               )}
@@ -322,18 +324,20 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
             <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-100">
               {!isAlert && (
                 <button
+                  type="button"
                   onClick={handleCancel}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
                 >
-                  {state.cancelText || 'Cancel'}
+                  {state.cancelText || t('cancel')}
                 </button>
               )}
               <button
+                type="button"
                 ref={confirmButtonRef}
                 onClick={handleConfirm}
                 className={`px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 transition-colors ${styles.button}`}
               >
-                {state.confirmText || 'Confirm'}
+                {state.confirmText || t('confirm')}
               </button>
             </div>
           </div>

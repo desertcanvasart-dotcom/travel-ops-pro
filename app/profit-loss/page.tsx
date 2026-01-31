@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { 
+import { useTranslations } from 'next-intl'
+import {
   Search,
   TrendingUp,
   TrendingDown,
@@ -81,6 +82,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const ITEMS_PER_PAGE = 15
 
 export default function ProfitLossPage() {
+  const t = useTranslations('profitLoss')
   const [data, setData] = useState<TripPnL[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -207,8 +209,8 @@ export default function ProfitLossPage() {
             📊
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Profit & Loss</h1>
-            <p className="text-sm text-gray-500">Trip profitability analysis</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
       </div>
@@ -221,7 +223,7 @@ export default function ProfitLossPage() {
               <span className="text-lg">🎯</span>
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
             </div>
-            <p className="text-xs text-gray-500 mb-1">Total Trips</p>
+            <p className="text-xs text-gray-500 mb-1">{t('summary.totalTrips')}</p>
             <p className="text-2xl font-semibold text-gray-900">{summary.total_trips}</p>
           </div>
 
@@ -230,7 +232,7 @@ export default function ProfitLossPage() {
               <span className="text-lg">💰</span>
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
             </div>
-            <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
+            <p className="text-xs text-gray-500 mb-1">{t('summary.totalRevenue')}</p>
             <p className="text-2xl font-semibold text-blue-600">€{summary.total_revenue.toLocaleString()}</p>
           </div>
 
@@ -239,7 +241,7 @@ export default function ProfitLossPage() {
               <span className="text-lg">💸</span>
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
-            <p className="text-xs text-gray-500 mb-1">Total Expenses</p>
+            <p className="text-xs text-gray-500 mb-1">{t('summary.totalExpenses')}</p>
             <p className="text-2xl font-semibold text-red-600">€{summary.total_expenses.toLocaleString()}</p>
           </div>
 
@@ -248,7 +250,7 @@ export default function ProfitLossPage() {
               <span className="text-lg">📈</span>
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
             </div>
-            <p className="text-xs text-gray-500 mb-1">Gross Profit</p>
+            <p className="text-xs text-gray-500 mb-1">{t('summary.grossProfit')}</p>
             <p className={`text-2xl font-semibold ${getProfitColor(summary.total_profit)}`}>
               €{summary.total_profit.toLocaleString()}
             </p>
@@ -259,7 +261,7 @@ export default function ProfitLossPage() {
               <span className="text-lg">📊</span>
               <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
             </div>
-            <p className="text-xs text-gray-500 mb-1">Avg Margin</p>
+            <p className="text-xs text-gray-500 mb-1">{t('summary.avgMargin')}</p>
             <p className="text-2xl font-semibold text-purple-600">{summary.average_margin.toFixed(1)}%</p>
           </div>
 
@@ -268,7 +270,7 @@ export default function ProfitLossPage() {
               <span className="text-lg">✅</span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             </div>
-            <p className="text-xs text-gray-500 mb-1">Profitable</p>
+            <p className="text-xs text-gray-500 mb-1">{t('summary.profitable')}</p>
             <p className="text-2xl font-semibold text-emerald-600">{summary.profitable_trips}</p>
           </div>
 
@@ -277,7 +279,7 @@ export default function ProfitLossPage() {
               <span className="text-lg">⚠️</span>
               <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
             </div>
-            <p className="text-xs text-gray-500 mb-1">Loss-Making</p>
+            <p className="text-xs text-gray-500 mb-1">{t('summary.lossMaking')}</p>
             <p className="text-2xl font-semibold text-orange-600">{summary.loss_trips}</p>
           </div>
         </div>
@@ -289,7 +291,7 @@ export default function ProfitLossPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search trips..."
+            placeholder={t('search')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
@@ -302,15 +304,15 @@ export default function ProfitLossPage() {
             onChange={(e) => setSortField(e.target.value as any)}
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
           >
-            <option value="start_date">Sort by Date</option>
-            <option value="gross_profit">Sort by Profit</option>
-            <option value="profit_margin">Sort by Margin</option>
+            <option value="start_date">{t('sort.byDate')}</option>
+            <option value="gross_profit">{t('sort.byProfit')}</option>
+            <option value="profit_margin">{t('sort.byMargin')}</option>
           </select>
 
           <button
             onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
             className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50"
-            title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+            title={sortOrder === 'asc' ? t('sort.ascending') : t('sort.descending')}
           >
             {sortOrder === 'asc' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
           </button>
@@ -324,13 +326,13 @@ export default function ProfitLossPage() {
             }`}
           >
             <Filter className="h-4 w-4" />
-            Filters
+            {t('filters')}
             {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-[#647C47]"></span>}
           </button>
 
           {hasActiveFilters && (
             <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-700">
-              Clear
+              {t('clear')}
             </button>
           )}
         </div>
@@ -341,22 +343,22 @@ export default function ProfitLossPage() {
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Trip Status</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('filterLabels.tripStatus')}</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
               >
-                <option value="">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="">{t('filterLabels.allStatuses')}</option>
+                <option value="draft">{t('status.draft')}</option>
+                <option value="sent">{t('status.sent')}</option>
+                <option value="confirmed">{t('status.confirmed')}</option>
+                <option value="completed">{t('status.completed')}</option>
+                <option value="cancelled">{t('status.cancelled')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">From Date</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('filterLabels.fromDate')}</label>
               <input
                 type="date"
                 value={startDate}
@@ -365,7 +367,7 @@ export default function ProfitLossPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">To Date</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('filterLabels.toDate')}</label>
               <input
                 type="date"
                 value={endDate}
@@ -382,26 +384,27 @@ export default function ProfitLossPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Trip</th>
-              <th className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Date</th>
-              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Revenue</th>
-              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Expenses</th>
-              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Profit</th>
-              <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Margin</th>
-              <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Status</th>
-              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">Actions</th>
+              <th className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.trip')}</th>
+              <th className="text-left text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.date')}</th>
+              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.revenue')}</th>
+              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.expenses')}</th>
+              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.profit')}</th>
+              <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.margin')}</th>
+              <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.status')}</th>
+              <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {paginatedData.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
-                  No trips found
+                  {t('noTripsFound')}
                 </td>
               </tr>
             ) : (
               paginatedData.map((trip) => {
                 const statusConfig = STATUS_CONFIG[trip.status] || STATUS_CONFIG.draft
+                const statusLabel = t(`status.${trip.status}` as any) || t('status.draft')
                 const revenue = trip.total_revenue > 0 ? trip.total_revenue : trip.quoted_amount
                 return (
                   <tr key={trip.itinerary_id} className={`hover:bg-gray-50 ${getProfitBg(trip.gross_profit)}`}>
@@ -430,11 +433,11 @@ export default function ProfitLossPage() {
                       </div>
                       {trip.invoice_count > 0 && (
                         <div className="text-xs text-gray-500">
-                          {trip.invoice_count} invoice{trip.invoice_count > 1 ? 's' : ''}
+                          {trip.invoice_count} {trip.invoice_count === 1 ? t('invoice') : t('invoices')}
                         </div>
                       )}
                       {trip.total_revenue === 0 && (
-                        <div className="text-xs text-gray-400 italic">quoted</div>
+                        <div className="text-xs text-gray-400 italic">{t('quoted')}</div>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -443,7 +446,7 @@ export default function ProfitLossPage() {
                       </div>
                       {trip.expense_count > 0 && (
                         <div className="text-xs text-gray-500">
-                          {trip.expense_count} expense{trip.expense_count > 1 ? 's' : ''}
+                          {trip.expense_count} {trip.expense_count === 1 ? t('expense') : t('expenses')}
                         </div>
                       )}
                     </td>
@@ -459,7 +462,7 @@ export default function ProfitLossPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.color}`}>
-                        {statusConfig.label}
+                        {statusLabel}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -467,14 +470,14 @@ export default function ProfitLossPage() {
                         <Link
                           href={`/profit-loss/${trip.itinerary_id}`}
                           className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
-                          title="View Details"
+                          title={t('actions.viewDetails')}
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
                         <Link
                           href={`/itineraries/${trip.itinerary_id}`}
                           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="View Itinerary"
+                          title={t('actions.viewItinerary')}
                         >
                           <Calendar className="h-4 w-4" />
                         </Link>
@@ -492,7 +495,7 @@ export default function ProfitLossPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-500">
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} of {filteredData.length} trips
+            {t('pagination.showing')} {((currentPage - 1) * ITEMS_PER_PAGE) + 1} {t('pagination.to')} {Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} {t('pagination.of')} {filteredData.length} {t('pagination.trips')}
           </p>
           <div className="flex items-center gap-1">
             <button
@@ -540,7 +543,7 @@ export default function ProfitLossPage() {
 
       {/* Footer */}
       <div className="text-center pt-4">
-        <p className="text-xs text-gray-400">© 2024 Autoura Operations System</p>
+        <p className="text-xs text-gray-400">{t('footer')}</p>
       </div>
     </div>
   )

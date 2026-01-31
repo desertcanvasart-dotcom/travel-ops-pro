@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { 
+import {
   Calendar, MessageSquare, Phone, Mail, FileText, MapPin,
   CheckCircle, Clock, AlertCircle, Users
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 const supabase = createClient()
 
@@ -25,6 +26,7 @@ interface ClientTimelineProps {
 }
 
 export default function ClientTimeline({ clientId }: ClientTimelineProps) {
+  const t = useTranslations('clientTimeline')
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
@@ -81,8 +83,8 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
           id: 'created',
           type: 'created',
           date: client.created_at,
-          title: 'Client Created',
-          description: `${client.first_name} ${client.last_name} was added to the system`,
+          title: t('eventTypes.clientCreated'),
+          description: t('eventTypes.addedToSystem', { name: `${client.first_name} ${client.last_name}` }),
           icon: Users,
           color: 'blue'
         })
@@ -123,7 +125,7 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
           id: booking.id,
           type: 'booking',
           date: booking.created_at,
-          title: `Booking: ${booking.trip_name}`,
+          title: t('eventTypes.booking', { name: booking.trip_name }),
           description: `${booking.itinerary_code} • €${booking.total_cost} • ${booking.status}`,
           icon: MapPin,
           color: statusColor[booking.status] || 'gray',
@@ -132,19 +134,18 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
       })
 
       // Note events
-      // Note events
       notes?.forEach((note) => {
-      allEvents.push({
-      id: note.id,
-      type: 'note',
-      date: note.created_at,
-      title: note.note_type === 'internal' ? 'Internal Note' : 'Note',
-      description: note.content?.substring(0, 100) || '',  // ← Changed to content
-      icon: FileText,
-      color: note.is_important ? 'orange' : 'yellow',  // ← Changed to is_important
-      details: note
-    })
-  })
+        allEvents.push({
+          id: note.id,
+          type: 'note',
+          date: note.created_at,
+          title: note.note_type === 'internal' ? t('eventTypes.internalNote') : t('eventTypes.note'),
+          description: note.content?.substring(0, 100) || '',
+          icon: FileText,
+          color: note.is_important ? 'orange' : 'yellow',
+          details: note
+        })
+      })
 
       // Follow-up events
       followups?.forEach((followup) => {
@@ -158,10 +159,10 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
           id: followup.id,
           type: 'followup',
           date: followup.due_date,
-          title: `Follow-up: ${followup.followup_type}`,
-          description: followup.notes || 'No notes',
+          title: t('eventTypes.followup', { type: followup.followup_type }),
+          description: followup.notes || t('eventTypes.noNotes'),
           icon: statusIcon[followup.status] || Clock,
-          color: followup.status === 'completed' ? 'green' : 
+          color: followup.status === 'completed' ? 'green' :
                  followup.status === 'cancelled' ? 'red' : 'yellow',
           details: followup
         })
@@ -188,12 +189,12 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
     const diffTime = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
 
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return `${diffDays} days ago`
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`
-    return `${Math.floor(diffDays / 365)} years ago`
+    if (diffDays === 0) return t('relativeTime.today')
+    if (diffDays === 1) return t('relativeTime.yesterday')
+    if (diffDays < 7) return t('relativeTime.daysAgo', { count: diffDays })
+    if (diffDays < 30) return t('relativeTime.weeksAgo', { count: Math.floor(diffDays / 7) })
+    if (diffDays < 365) return t('relativeTime.monthsAgo', { count: Math.floor(diffDays / 30) })
+    return t('relativeTime.yearsAgo', { count: Math.floor(diffDays / 365) })
   }
 
   const formatFullDate = (dateString: string) => {
@@ -235,15 +236,16 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
     <div className="bg-white rounded-xl shadow-lg p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Client Timeline</h2>
+        <h2 className="text-2xl font-bold text-gray-900">{t('title')}</h2>
         <div className="text-sm text-gray-600">
-          {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}
+          {filteredEvents.length} {filteredEvents.length === 1 ? t('event') : t('events')}
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-6">
         <button
+          type="button"
           onClick={() => setFilter('all')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === 'all'
@@ -251,9 +253,10 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          All Events
+          {t('filters.all')}
         </button>
         <button
+          type="button"
           onClick={() => setFilter('communication')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === 'communication'
@@ -261,9 +264,10 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          Communications
+          {t('filters.communication')}
         </button>
         <button
+          type="button"
           onClick={() => setFilter('booking')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === 'booking'
@@ -271,9 +275,10 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          Bookings
+          {t('filters.booking')}
         </button>
         <button
+          type="button"
           onClick={() => setFilter('note')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === 'note'
@@ -281,9 +286,10 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          Notes
+          {t('filters.note')}
         </button>
         <button
+          type="button"
           onClick={() => setFilter('followup')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             filter === 'followup'
@@ -291,7 +297,7 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          Follow-ups
+          {t('filters.followup')}
         </button>
       </div>
 
@@ -301,7 +307,7 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
           <div className="text-gray-400 mb-2">
             <Calendar className="w-12 h-12 mx-auto" />
           </div>
-          <p className="text-gray-600">No events in timeline yet</p>
+          <p className="text-gray-600">{t('noEvents')}</p>
         </div>
       ) : (
         <div className="relative">
@@ -337,15 +343,15 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
                       <div className="mt-3 pt-3 border-t border-gray-200">
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div>
-                            <div className="text-gray-500">Dates</div>
+                            <div className="text-gray-500">{t('bookingDetails.dates')}</div>
                             <div className="font-medium">{event.details.start_date} - {event.details.end_date}</div>
                           </div>
                           <div>
-                            <div className="text-gray-500">Travelers</div>
-                            <div className="font-medium">{event.details.num_adults} adults</div>
+                            <div className="text-gray-500">{t('bookingDetails.travelers')}</div>
+                            <div className="font-medium">{t('bookingDetails.adults', { count: event.details.num_adults })}</div>
                           </div>
                           <div>
-                            <div className="text-gray-500">Status</div>
+                            <div className="text-gray-500">{t('bookingDetails.status')}</div>
                             <div className={`font-medium capitalize ${
                               event.details.status === 'confirmed' ? 'text-green-600' :
                               event.details.status === 'completed' ? 'text-emerald-600' :

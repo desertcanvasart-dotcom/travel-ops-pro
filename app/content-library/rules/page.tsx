@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   ArrowLeft,
   Plus,
@@ -93,6 +94,7 @@ const DEFAULT_FORM: RuleFormData = {
 }
 
 export default function WritingRulesPage() {
+  const t = useTranslations('writingRules')
   const [rules, setRules] = useState<WritingRule[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -111,12 +113,12 @@ export default function WritingRulesPage() {
   async function fetchRules() {
     try {
       const response = await fetch('/api/content-library/writing-rules')
-      if (!response.ok) throw new Error('Failed to fetch rules')
+      if (!response.ok) throw new Error(t('failedToFetch'))
       const data = await response.json()
       setRules(data)
     } catch (err) {
       console.error('Error fetching rules:', err)
-      setError('Failed to load writing rules')
+      setError(t('failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -156,7 +158,7 @@ export default function WritingRulesPage() {
 
   async function handleSave() {
     if (!formData.name || !formData.description) {
-      setError('Name and description are required')
+      setError(t('nameAndDescriptionRequired'))
       return
     }
 
@@ -179,7 +181,7 @@ export default function WritingRulesPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         })
-        if (!response.ok) throw new Error('Failed to update')
+        if (!response.ok) throw new Error(t('failedToUpdate'))
       } else {
         // Create
         const response = await fetch('/api/content-library/writing-rules', {
@@ -187,16 +189,16 @@ export default function WritingRulesPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         })
-        if (!response.ok) throw new Error('Failed to create')
+        if (!response.ok) throw new Error(t('failedToCreate'))
       }
 
-      setSuccess(formData.id ? 'Rule updated!' : 'Rule created!')
+      setSuccess(formData.id ? t('ruleUpdated') : t('ruleCreated'))
       setShowForm(false)
       fetchRules()
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       console.error('Save error:', err)
-      setError('Failed to save rule')
+      setError(t('failedToSave'))
     } finally {
       setSaving(false)
     }
@@ -207,15 +209,15 @@ export default function WritingRulesPage() {
       const response = await fetch(`/api/content-library/writing-rules?id=${id}`, {
         method: 'DELETE'
       })
-      if (!response.ok) throw new Error('Failed to delete')
-      
+      if (!response.ok) throw new Error(t('failedToDelete'))
+
       setRules(rules.filter(r => r.id !== id))
       setDeleteId(null)
-      setSuccess('Rule deleted')
+      setSuccess(t('ruleDeleted'))
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
       console.error('Delete error:', err)
-      setError('Failed to delete rule')
+      setError(t('failedToDeleteRule'))
     }
   }
 
@@ -261,9 +263,9 @@ export default function WritingRulesPage() {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Writing Rules</h1>
+                <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {rules.length} rules defining your content style
+                  {t('rulesCount', { count: rules.length })}
                 </p>
               </div>
             </div>
@@ -272,7 +274,7 @@ export default function WritingRulesPage() {
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Add Rule
+              {t('addRule')}
             </button>
           </div>
         </div>
@@ -307,7 +309,7 @@ export default function WritingRulesPage() {
                 : 'bg-white text-gray-600 border border-gray-200 hover:border-[#647C47]'
             }`}
           >
-            All Rules
+            {t('allRules')}
           </button>
           {CATEGORIES.map(cat => {
             const Icon = cat.icon
@@ -323,7 +325,7 @@ export default function WritingRulesPage() {
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
-                {cat.label}
+                {t(`categories.${cat.id}`)}
                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${
                   filterCategory === cat.id ? 'bg-white/20' : 'bg-gray-100'
                 }`}>
@@ -349,7 +351,7 @@ export default function WritingRulesPage() {
                 <div key={type.id}>
                   <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 text-${type.color}-700`}>
                     <span className={`w-2 h-2 rounded-full bg-${type.color}-500`}></span>
-                    {type.label}
+                    {t(`ruleTypes.${type.id}`)}
                     <span className="text-gray-400 font-normal">({typeRules.length})</span>
                   </h2>
                   <div className="space-y-2">
@@ -371,10 +373,10 @@ export default function WritingRulesPage() {
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-gray-900">{rule.name}</span>
                                 <span className={`text-xs px-1.5 py-0.5 rounded bg-${type.color}-50 text-${type.color}-700`}>
-                                  {type.label}
+                                  {t(`ruleTypes.${type.id}`)}
                                 </span>
                                 <span className="text-xs text-gray-400">
-                                  Priority: {rule.priority}
+                                  {t('priority')}: {rule.priority}
                                 </span>
                               </div>
                               {!isExpanded && (
@@ -420,7 +422,7 @@ export default function WritingRulesPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                   {rule.examples.bad && rule.examples.bad.length > 0 && (
                                     <div>
-                                      <h4 className="text-xs font-medium text-red-600 mb-2">❌ Avoid</h4>
+                                      <h4 className="text-xs font-medium text-red-600 mb-2">{t('avoid')}</h4>
                                       <div className="space-y-1">
                                         {rule.examples.bad.map((ex, i) => (
                                           <p key={i} className="text-sm text-gray-600 bg-red-50 px-3 py-2 rounded-lg">
@@ -432,7 +434,7 @@ export default function WritingRulesPage() {
                                   )}
                                   {rule.examples.good && rule.examples.good.length > 0 && (
                                     <div>
-                                      <h4 className="text-xs font-medium text-emerald-600 mb-2">✓ Better</h4>
+                                      <h4 className="text-xs font-medium text-emerald-600 mb-2">{t('better')}</h4>
                                       <div className="space-y-1">
                                         {rule.examples.good.map((ex, i) => (
                                           <p key={i} className="text-sm text-gray-600 bg-emerald-50 px-3 py-2 rounded-lg">
@@ -444,12 +446,12 @@ export default function WritingRulesPage() {
                                   )}
                                 </div>
                               )}
-                              
+
                               <div className="mt-3 flex flex-wrap gap-2">
-                                <span className="text-xs text-gray-400">Applies to:</span>
+                                <span className="text-xs text-gray-400">{t('appliesTo')}:</span>
                                 {(rule.applies_to || ['all']).map(a => (
                                   <span key={a} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-                                    {APPLIES_TO.find(at => at.id === a)?.label || a}
+                                    {t(`appliesOptions.${a}`)}
                                   </span>
                                 ))}
                               </div>
@@ -472,7 +474,7 @@ export default function WritingRulesPage() {
           <div className="bg-white rounded-xl max-w-2xl w-full my-8 shadow-xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                {formData.id ? 'Edit Rule' : 'New Writing Rule'}
+                {formData.id ? t('editRule') : t('newWritingRule')}
               </h2>
               <button
                 onClick={() => setShowForm(false)}
@@ -486,13 +488,13 @@ export default function WritingRulesPage() {
               {/* Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Rule Name <span className="text-red-500">*</span>
+                  {t('ruleName')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder='e.g., "Avoid Generic Superlatives"'
+                  placeholder={t('ruleNamePlaceholder')}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                 />
               </div>
@@ -500,26 +502,26 @@ export default function WritingRulesPage() {
               {/* Category & Type */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('category')}</label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value as RuleCategory })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   >
                     {CATEGORIES.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.label}</option>
+                      <option key={cat.id} value={cat.id}>{t(`categories.${cat.id}`)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rule Type</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('ruleType')}</label>
                   <select
                     value={formData.rule_type}
                     onChange={(e) => setFormData({ ...formData, rule_type: e.target.value as RuleType })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   >
                     {RULE_TYPES.map(type => (
-                      <option key={type.id} value={type.id}>{type.label}</option>
+                      <option key={type.id} value={type.id}>{t(`ruleTypes.${type.id}`)}</option>
                     ))}
                   </select>
                 </div>
@@ -528,12 +530,12 @@ export default function WritingRulesPage() {
               {/* Description */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description <span className="text-red-500">*</span>
+                  {t('description')} <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Explain this rule clearly..."
+                  placeholder={t('descriptionPlaceholder')}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
                 />
@@ -542,7 +544,7 @@ export default function WritingRulesPage() {
               {/* Priority */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Priority: {formData.priority}
+                  {t('priority')}: {formData.priority}
                 </label>
                 <input
                   type="range"
@@ -553,14 +555,14 @@ export default function WritingRulesPage() {
                   className="w-full accent-[#647C47]"
                 />
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>Low</span>
-                  <span>High</span>
+                  <span>{t('low')}</span>
+                  <span>{t('high')}</span>
                 </div>
               </div>
 
               {/* Applies To */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Applies To</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('appliesTo')}</label>
                 <div className="flex flex-wrap gap-2">
                   {APPLIES_TO.map(opt => (
                     <button
@@ -584,7 +586,7 @@ export default function WritingRulesPage() {
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      {opt.label}
+                      {t(`appliesOptions.${opt.id}`)}
                     </button>
                   ))}
                 </div>
@@ -594,7 +596,7 @@ export default function WritingRulesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Bad Examples */}
                 <div>
-                  <label className="block text-sm font-medium text-red-600 mb-2">❌ Bad Examples</label>
+                  <label className="block text-sm font-medium text-red-600 mb-2">{t('badExamples')}</label>
                   <div className="space-y-2">
                     {formData.examples.bad.map((ex, i) => (
                       <div key={i} className="flex gap-2">
@@ -602,7 +604,7 @@ export default function WritingRulesPage() {
                           type="text"
                           value={ex}
                           onChange={(e) => updateExample('bad', i, e.target.value)}
-                          placeholder="What to avoid..."
+                          placeholder={t('badExamplePlaceholder')}
                           className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                         />
                         <button
@@ -617,14 +619,14 @@ export default function WritingRulesPage() {
                       onClick={() => addExample('bad')}
                       className="text-sm text-gray-500 hover:text-gray-700"
                     >
-                      + Add example
+                      {t('addExample')}
                     </button>
                   </div>
                 </div>
 
                 {/* Good Examples */}
                 <div>
-                  <label className="block text-sm font-medium text-emerald-600 mb-2">✓ Good Examples</label>
+                  <label className="block text-sm font-medium text-emerald-600 mb-2">{t('goodExamples')}</label>
                   <div className="space-y-2">
                     {formData.examples.good.map((ex, i) => (
                       <div key={i} className="flex gap-2">
@@ -632,7 +634,7 @@ export default function WritingRulesPage() {
                           type="text"
                           value={ex}
                           onChange={(e) => updateExample('good', i, e.target.value)}
-                          placeholder="Better alternative..."
+                          placeholder={t('goodExamplePlaceholder')}
                           className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                         />
                         <button
@@ -647,7 +649,7 @@ export default function WritingRulesPage() {
                       onClick={() => addExample('good')}
                       className="text-sm text-gray-500 hover:text-gray-700"
                     >
-                      + Add example
+                      {t('addExample')}
                     </button>
                   </div>
                 </div>
@@ -659,7 +661,7 @@ export default function WritingRulesPage() {
                 onClick={() => setShowForm(false)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={handleSave}
@@ -667,7 +669,7 @@ export default function WritingRulesPage() {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] disabled:opacity-50 transition-colors"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {saving ? 'Saving...' : 'Save Rule'}
+                {saving ? t('saving') : t('saveRule')}
               </button>
             </div>
           </div>
@@ -678,22 +680,22 @@ export default function WritingRulesPage() {
       {deleteId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Rule?</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteRuleTitle')}</h3>
             <p className="text-gray-600 mb-6">
-              This writing rule will be permanently deleted. This cannot be undone.
+              {t('deleteRuleConfirmation')}
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setDeleteId(null)}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={() => handleDelete(deleteId)}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
               >
-                Delete
+                {t('delete')}
               </button>
             </div>
           </div>

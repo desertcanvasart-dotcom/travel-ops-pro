@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { 
-  Bell, 
-  Check, 
-  CheckCheck, 
-  Trash2, 
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Trash2,
   ExternalLink,
   Search,
   ArrowLeft,
@@ -33,6 +34,7 @@ interface Notification {
 }
 
 export default function NotificationsPage() {
+  const t = useTranslations('notifications')
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
@@ -96,7 +98,7 @@ export default function NotificationsPage() {
   }
 
   const deleteNotification = async (id: string) => {
-    if (!confirm('Delete this notification?')) return
+    if (!confirm(t('deleteConfirm'))) return
 
     try {
       const response = await fetch(`/api/notifications/${id}`, {
@@ -144,18 +146,11 @@ export default function NotificationsPage() {
   }
 
   const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'task_assigned': return 'Task Assigned'
-      case 'task_due_soon': return 'Due Soon'
-      case 'task_overdue': return 'Overdue'
-      case 'task_completed': return 'Completed'
-      case 'whatsapp_assigned': return 'Chat Assigned'
-      case 'whatsapp_new_message': return 'New Message'
-      case 'whatsapp_mention': return 'Mentioned'
-      case 'invoice_paid': return 'Payment'
-      case 'booking_confirmed': return 'Booking'
-      case 'client_created': return 'New Client'
-      default: return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    const typeKey = `types.${type}` as any
+    try {
+      return t(typeKey)
+    } catch {
+      return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
     }
   }
 
@@ -167,12 +162,12 @@ export default function NotificationsPage() {
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
 
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays === 1) return 'Yesterday'
-    if (diffDays < 7) return `${diffDays} days ago`
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    if (diffMins < 1) return t('time.justNow')
+    if (diffMins < 60) return t('time.minutesAgo', { minutes: diffMins })
+    if (diffHours < 24) return t('time.hoursAgo', { hours: diffHours })
+    if (diffDays === 1) return t('time.yesterday')
+    if (diffDays < 7) return t('time.daysAgo', { days: diffDays })
+    return date.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   // Filter notifications
@@ -213,9 +208,9 @@ export default function NotificationsPage() {
             <Bell className="h-5 w-5 text-gray-600" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Notifications</h1>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
             <p className="text-sm text-gray-500">
-              {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
+              {unreadCount > 0 ? `${unreadCount}${t('unread')}` : t('allCaughtUp')}
             </p>
           </div>
         </div>
@@ -226,7 +221,7 @@ export default function NotificationsPage() {
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#647C47] border border-[#647C47] rounded-lg hover:bg-[#647C47]/10 transition-colors"
           >
             <CheckCheck className="h-4 w-4" />
-            Mark All Read
+            {t('markAllReadButton')}
           </button>
         )}
       </div>
@@ -237,7 +232,7 @@ export default function NotificationsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search notifications..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
@@ -250,8 +245,8 @@ export default function NotificationsPage() {
             onChange={(e) => setFilter(e.target.value as 'all' | 'unread')}
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
           >
-            <option value="all">All</option>
-            <option value="unread">Unread Only</option>
+            <option value="all">{t('filters.all')}</option>
+            <option value="unread">{t('filters.unreadOnly')}</option>
           </select>
 
           <select
@@ -259,18 +254,18 @@ export default function NotificationsPage() {
             onChange={(e) => setTypeFilter(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
           >
-            <option value="">All Types</option>
-            <optgroup label="WhatsApp">
-              <option value="whatsapp_assigned">💬 Chat Assigned</option>
-              <option value="whatsapp_new_message">📱 New Message</option>
+            <option value="">{t('filters.allTypes')}</option>
+            <optgroup label={t('groups.whatsapp')}>
+              <option value="whatsapp_assigned">💬 {t('types.whatsapp_assigned')}</option>
+              <option value="whatsapp_new_message">📱 {t('types.whatsapp_new_message')}</option>
             </optgroup>
-            <optgroup label="Tasks">
-              <option value="task_assigned">📋 Task Assigned</option>
-              <option value="task_due_soon">⏰ Due Soon</option>
-              <option value="task_overdue">🚨 Overdue</option>
-              <option value="task_completed">✅ Completed</option>
+            <optgroup label={t('groups.tasks')}>
+              <option value="task_assigned">📋 {t('types.task_assigned')}</option>
+              <option value="task_due_soon">⏰ {t('types.task_due_soon')}</option>
+              <option value="task_overdue">🚨 {t('types.task_overdue')}</option>
+              <option value="task_completed">✅ {t('types.task_completed')}</option>
             </optgroup>
-            {types.filter(t => !t.startsWith('whatsapp_') && !t.startsWith('task_')).map(type => (
+            {types.filter(type => !type.startsWith('whatsapp_') && !type.startsWith('task_')).map(type => (
               <option key={type} value={type}>{getNotificationIcon(type)} {getTypeLabel(type)}</option>
             ))}
           </select>
@@ -280,22 +275,22 @@ export default function NotificationsPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <p className="text-xs text-gray-500">Total</p>
+          <p className="text-xs text-gray-500">{t('stats.total')}</p>
           <p className="text-xl font-semibold text-gray-900">{notifications.length}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <p className="text-xs text-gray-500">Unread</p>
+          <p className="text-xs text-gray-500">{t('stats.unread')}</p>
           <p className="text-xl font-semibold text-[#647C47]">{unreadCount}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-3">
           <div className="flex items-center gap-1">
             <MessageSquare className="h-3 w-3 text-[#25D366]" />
-            <p className="text-xs text-gray-500">WhatsApp</p>
+            <p className="text-xs text-gray-500">{t('stats.whatsapp')}</p>
           </div>
           <p className="text-xl font-semibold text-[#25D366]">{whatsappCount}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-3">
-          <p className="text-xs text-gray-500">Tasks</p>
+          <p className="text-xs text-gray-500">{t('stats.tasks')}</p>
           <p className="text-xl font-semibold text-gray-900">{taskCount}</p>
         </div>
       </div>
@@ -305,13 +300,13 @@ export default function NotificationsPage() {
         {filteredNotifications.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
             <Bell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No notifications found</p>
+            <p className="text-gray-500">{t('empty.noNotificationsFound')}</p>
             {(searchTerm || typeFilter) && (
-              <button 
+              <button
                 onClick={() => { setSearchTerm(''); setTypeFilter(''); }}
                 className="mt-2 text-sm text-[#647C47] hover:underline"
               >
-                Clear filters
+                {t('empty.clearFilters')}
               </button>
             )}
           </div>
@@ -365,7 +360,7 @@ export default function NotificationsPage() {
                             : 'bg-[#647C47] hover:bg-[#4f6238]'
                         }`}
                       >
-                        {notification.type.startsWith('whatsapp_') ? 'Open Chat' : 'View'} 
+                        {notification.type.startsWith('whatsapp_') ? t('actions.openChat') : t('actions.view')}
                         <ExternalLink className="h-3 w-3" />
                       </Link>
                     )}
@@ -376,7 +371,7 @@ export default function NotificationsPage() {
                         className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         <Check className="h-3 w-3" />
-                        Mark Read
+                        {t('actions.markRead')}
                       </button>
                     )}
 
@@ -385,12 +380,12 @@ export default function NotificationsPage() {
                       className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     >
                       <Trash2 className="h-3 w-3" />
-                      Delete
+                      {t('actions.delete')}
                     </button>
 
                     {notification.email_sent && (
                       <span className="text-[10px] text-gray-400">
-                        ✉️ Email sent
+                        ✉️ {t('actions.emailSent')}
                       </span>
                     )}
                   </div>
@@ -404,7 +399,7 @@ export default function NotificationsPage() {
       {/* Load more hint */}
       {filteredNotifications.length >= 100 && (
         <div className="text-center py-4">
-          <p className="text-sm text-gray-500">Showing latest 100 notifications</p>
+          <p className="text-sm text-gray-500">{t('showingLatest')}</p>
         </div>
       )}
     </div>

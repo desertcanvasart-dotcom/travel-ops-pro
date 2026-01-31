@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { 
-  FileText, Search, Download, Trash2, Eye, 
+import { useTranslations } from 'next-intl'
+import {
+  FileText, Search, Download, Trash2, Eye,
   Building2, Loader2, Plus, RefreshCw,
   CheckCircle2, Clock, XCircle, Send
 } from 'lucide-react'
@@ -37,6 +38,7 @@ interface Quote {
 }
 
 export default function QuotesListPage() {
+  const t = useTranslations('b2bQuotes')
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -67,7 +69,7 @@ export default function QuotesListPage() {
   }
 
   const handleDelete = async (id: string, quoteNumber: string) => {
-    if (!confirm(`Delete quote ${quoteNumber}?`)) return
+    if (!confirm(t('deleteConfirm', { quoteNumber }))) return
     
     setDeleting(id)
     try {
@@ -84,19 +86,19 @@ export default function QuotesListPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const styles: Record<string, { bg: string; text: string; icon: any }> = {
-      draft: { bg: 'bg-gray-100', text: 'text-gray-700', icon: Clock },
-      sent: { bg: 'bg-blue-100', text: 'text-blue-700', icon: Send },
-      accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2 },
-      rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle },
-      expired: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock },
+    const styles: Record<string, { bg: string; text: string; icon: any; label: string }> = {
+      draft: { bg: 'bg-gray-100', text: 'text-gray-700', icon: Clock, label: t('statusDraft') },
+      sent: { bg: 'bg-blue-100', text: 'text-blue-700', icon: Send, label: t('statusSent') },
+      accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: t('statusAccepted') },
+      rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle, label: t('statusRejected') },
+      expired: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock, label: t('statusExpired') },
     }
     const style = styles[status] || styles.draft
     const Icon = style.icon
     return (
       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
         <Icon className="w-3 h-3" />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {style.label}
       </span>
     )
   }
@@ -132,16 +134,16 @@ export default function QuotesListPage() {
             <FileText className="w-5 h-5 text-[#647C47]" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">B2B Quotes</h1>
-            <p className="text-sm text-gray-500">Manage saved quotations</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={fetchQuotes} className="p-2 border rounded-lg hover:bg-gray-50" title="Refresh">
+          <button onClick={fetchQuotes} className="p-2 border rounded-lg hover:bg-gray-50" title={t('refresh')}>
             <RefreshCw className="w-4 h-4 text-gray-600" />
           </button>
           <Link href="/tours/manager" className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm">
-            <Plus className="w-4 h-4" />New Quote
+            <Plus className="w-4 h-4" />{t('newQuote')}
           </Link>
         </div>
       </div>
@@ -149,19 +151,19 @@ export default function QuotesListPage() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Total</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsTotal')}</p>
           <p className="text-2xl font-bold">{stats.total}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Draft</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsDraft')}</p>
           <p className="text-2xl font-bold text-gray-600">{stats.draft}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Sent</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsSent')}</p>
           <p className="text-2xl font-bold text-blue-600">{stats.sent}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
-          <p className="text-xs text-gray-500 mb-1">Accepted</p>
+          <p className="text-xs text-gray-500 mb-1">{t('statsAccepted')}</p>
           <p className="text-2xl font-bold text-green-600">{stats.accepted}</p>
         </div>
       </div>
@@ -170,14 +172,14 @@ export default function QuotesListPage() {
       <div className="bg-white rounded-lg border p-4 mb-6 flex gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search quotes..." className="w-full pl-10 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none" />
+          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder={t('searchPlaceholder')} className="w-full pl-10 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none" />
         </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-2 text-sm border rounded-lg bg-white">
-          <option value="all">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="sent">Sent</option>
-          <option value="accepted">Accepted</option>
-          <option value="rejected">Rejected</option>
+          <option value="all">{t('allStatus')}</option>
+          <option value="draft">{t('statusDraft')}</option>
+          <option value="sent">{t('statusSent')}</option>
+          <option value="accepted">{t('statusAccepted')}</option>
+          <option value="rejected">{t('statusRejected')}</option>
         </select>
       </div>
 
@@ -190,20 +192,20 @@ export default function QuotesListPage() {
         ) : filteredQuotes.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No quotes found</p>
+            <p className="text-gray-500">{t('noQuotesFound')}</p>
           </div>
         ) : (
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Quote</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Tour</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Client / Partner</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Pax</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Travel Date</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-600">Price</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableQuote')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableTour')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableClientPartner')}</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tablePax')}</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableTravelDate')}</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-600">{t('tablePrice')}</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableStatus')}</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableActions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -214,25 +216,25 @@ export default function QuotesListPage() {
                     <p className="text-xs text-gray-500">{formatDate(quote.created_at)}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{quote.tour_variations?.tour_templates?.template_name || 'Unknown'}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{quote.tour_variations?.tour_templates?.template_name || t('unknown')}</p>
                     <p className="text-xs text-gray-500">{quote.tour_variations?.variation_name || ''}</p>
                   </td>
                   <td className="px-4 py-3">
-                    {quote.client_name ? <p className="text-sm">{quote.client_name}</p> : <p className="text-sm text-gray-400 italic">No client</p>}
+                    {quote.client_name ? <p className="text-sm">{quote.client_name}</p> : <p className="text-sm text-gray-400 italic">{t('noClient')}</p>}
                     {quote.b2b_partners && <p className="text-xs text-blue-600 flex items-center gap-1"><Building2 className="w-3 h-3" />{quote.b2b_partners.company_name}</p>}
                   </td>
                   <td className="px-4 py-3 text-center text-sm">{quote.num_adults}{quote.tour_leader_included && <span className="text-xs text-blue-500 ml-1">(+1)</span>}</td>
                   <td className="px-4 py-3 text-center text-sm">{quote.travel_date ? formatDate(quote.travel_date) : '-'}</td>
                   <td className="px-4 py-3 text-right">
                     <p className="text-sm font-bold text-[#647C47]">€{quote.selling_price?.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500">€{quote.price_per_person?.toFixed(2)}/pp</p>
+                    <p className="text-xs text-gray-500">€{quote.price_per_person?.toFixed(2)}{t('perPerson')}</p>
                   </td>
                   <td className="px-4 py-3 text-center">{getStatusBadge(quote.status)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
-                      <Link href={`/b2b/quotes/${quote.id}`} className="p-1.5 hover:bg-gray-100 rounded" title="View"><Eye className="w-4 h-4 text-gray-500" /></Link>
-                      <a href={`/api/b2b/quotes/${quote.id}/pdf`} target="_blank" className="p-1.5 hover:bg-red-50 rounded" title="PDF"><Download className="w-4 h-4 text-red-500" /></a>
-                      <button onClick={() => handleDelete(quote.id, quote.quote_number)} disabled={deleting === quote.id} className="p-1.5 hover:bg-red-50 rounded disabled:opacity-50" title="Delete">
+                      <Link href={`/b2b/quotes/${quote.id}`} className="p-1.5 hover:bg-gray-100 rounded" title={t('view')}><Eye className="w-4 h-4 text-gray-500" /></Link>
+                      <a href={`/api/b2b/quotes/${quote.id}/pdf`} target="_blank" className="p-1.5 hover:bg-red-50 rounded" title={t('pdf')}><Download className="w-4 h-4 text-red-500" /></a>
+                      <button onClick={() => handleDelete(quote.id, quote.quote_number)} disabled={deleting === quote.id} className="p-1.5 hover:bg-red-50 rounded disabled:opacity-50" title={t('delete')}>
                         {deleting === quote.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />}
                       </button>
                     </div>

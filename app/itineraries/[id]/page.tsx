@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake } from 'lucide-react'
@@ -73,6 +74,8 @@ interface ExistingInvoice {
 }
 
 export default function ViewItineraryPage() {
+  const t = useTranslations('itineraries.detail')
+  const tCommon = useTranslations('common')
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
@@ -112,7 +115,7 @@ export default function ViewItineraryPage() {
       const itinData = await itinResponse.json()
 
       if (!itinData.success) {
-        setError('Itinerary not found')
+        setError(t('itineraryNotFound'))
         setLoading(false)
         return
       }
@@ -129,7 +132,7 @@ export default function ViewItineraryPage() {
 
       setLoading(false)
     } catch (err) {
-      setError('Error loading itinerary')
+      setError(t('errorLoadingItinerary'))
       setLoading(false)
     }
   }
@@ -169,7 +172,7 @@ export default function ViewItineraryPage() {
       }
     } catch (error) {
       console.error('Error updating cost mode:', error)
-      alert('Failed to update cost mode')
+      alert(t('failedToUpdateCostMode'))
     } finally {
       setSavingCostMode(false)
     }
@@ -189,7 +192,7 @@ export default function ViewItineraryPage() {
   const handleSaveServiceCost = async (serviceId: string, dayId: string) => {
     const newCost = parseFloat(editedCost)
     if (isNaN(newCost) || newCost < 0) {
-      alert('Please enter a valid cost')
+      alert(t('pleaseEnterValidCost'))
       return
     }
 
@@ -239,31 +242,31 @@ export default function ViewItineraryPage() {
       setEditedCost('')
     } catch (error) {
       console.error('Error updating service cost:', error)
-      alert('Failed to update cost')
+      alert(t('failedToUpdateCost'))
     } finally {
       setSavingServiceCost(false)
     }
   }
   const handleGenerateCommissions = async () => {
     if (!itinerary) return
-    
+
     setGeneratingCommissions(true)
     try {
       const response = await fetch(`/api/itineraries/${itinerary.id}/generate-commissions`, {
         method: 'POST'
       })
-      
+
       const result = await response.json()
-      
+
       if (result.success) {
         setCommissionResult(`✅ ${result.message}`)
         setTimeout(() => setCommissionResult(null), 5000)
       } else {
-        alert(result.error || 'Failed to generate commissions')
+        alert(result.error || t('failedToGenerateCommissions'))
       }
     } catch (error) {
       console.error('Error generating commissions:', error)
-      alert('Failed to generate commissions')
+      alert(t('failedToGenerateCommissions'))
     } finally {
       setGeneratingCommissions(false)
     }
@@ -357,21 +360,24 @@ export default function ViewItineraryPage() {
           currency: itinerary.currency || 'EUR',
           issue_date: new Date().toISOString().split('T')[0],
           due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          payment_terms: 'Payment due within 14 days',
-          notes: `Trip dates: ${new Date(itinerary.start_date).toLocaleDateString()} - ${new Date(itinerary.end_date).toLocaleDateString()}`
+          payment_terms: t('paymentDueWithin14Days'),
+          notes: t('tripDatesNote', {
+            startDate: new Date(itinerary.start_date).toLocaleDateString(),
+            endDate: new Date(itinerary.end_date).toLocaleDateString()
+          })
         })
       })
-  
+
       if (response.ok) {
         const invoice = await response.json()
         router.push(`/invoices/${invoice.id}`)
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to create invoice')
+        alert(error.error || t('failedToCreateInvoice'))
       }
     } catch (error) {
       console.error('Error creating invoice:', error)
-      alert('Failed to create invoice')
+      alert(t('failedToCreateInvoice'))
     } finally {
       setGeneratingInvoice(false)
     }
@@ -387,7 +393,7 @@ export default function ViewItineraryPage() {
       pdf.save(filename)
     } catch (error) {
       console.error('Error generating PDF:', error)
-      alert('Failed to generate PDF. Please try again.')
+      alert(t('failedToGeneratePDF'))
     } finally {
       setGeneratingPDF(false)
     }
@@ -397,7 +403,7 @@ export default function ViewItineraryPage() {
     if (!itinerary) return
   
     if (!itinerary.client_phone) {
-      alert('Client phone number is required for WhatsApp. Please add it in edit mode.')
+      alert(t('clientPhoneRequired'))
       return
     }
   
@@ -418,15 +424,15 @@ export default function ViewItineraryPage() {
       const data = await response.json()
   
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to send WhatsApp message')
+        throw new Error(data.error || t('failedToSendWhatsApp'))
       }
   
       markAsSent('WhatsApp')
-      setSendSuccess('Quote sent via WhatsApp! ✅')
+      setSendSuccess(t('quoteSentWhatsApp'))
       setTimeout(() => setSendSuccess(null), 5000)
     } catch (error: any) {
       console.error('WhatsApp send error:', error)
-      alert(`Failed to send WhatsApp: ${error.message}`)
+      alert(t('failedToSendWhatsAppError', { error: error.message }))
     } finally {
       setSendingEmail(false)
     }
@@ -436,7 +442,7 @@ export default function ViewItineraryPage() {
     if (!itinerary || days.length === 0) return
 
     if (!itinerary.client_email) {
-      alert('Client email is required. Please add it in edit mode.')
+      alert(t('clientEmailRequired'))
       return
     }
 
@@ -466,15 +472,15 @@ export default function ViewItineraryPage() {
       const data = await response.json()
 
       if (data.success) {
-        setSendSuccess('Email sent successfully! ✅')
+        setSendSuccess(t('emailSentSuccessfully'))
         markAsSent('Email')
         setTimeout(() => setSendSuccess(null), 5000)
       } else {
-        throw new Error(data.error || 'Failed to send email')
+        throw new Error(data.error || t('failedToSendEmail'))
       }
     } catch (error) {
       console.error('Error sending email:', error)
-      alert(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      alert(t('failedToSendEmailError', { error: error instanceof Error ? error.message : tCommon('unknownError') }))
     } finally {
       setSendingEmail(false)
     }
@@ -559,7 +565,7 @@ export default function ViewItineraryPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-12 h-12 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-500">Loading itinerary...</p>
+          <p className="text-sm text-gray-500">{t('loadingItinerary')}</p>
         </div>
       </div>
     )
@@ -572,11 +578,11 @@ export default function ViewItineraryPage() {
           <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-red-500 text-xl">⚠️</span>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Itinerary</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">{t('errorLoadingTitle')}</h2>
           <p className="text-sm text-red-600 mb-4">{error}</p>
           <Link href="/itineraries" className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 text-sm transition-colors">
             <ArrowLeft className="w-4 h-4" />
-            Back to List
+            {tCommon('backToList')}
           </Link>
         </div>
       </div>
@@ -593,7 +599,7 @@ export default function ViewItineraryPage() {
               <Link 
                 href="/itineraries"
                 className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-                title="Back to list"
+                title={tCommon('backToList')}
               >
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
@@ -627,7 +633,7 @@ export default function ViewItineraryPage() {
                 className="bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 transition-colors text-sm font-medium flex items-center gap-1.5"
               >
                 <Send className="w-4 h-4" />
-                Send Quote
+                {t('sendQuote')}
               </button>
               <button
                 onClick={handleGenerateInvoice}
@@ -637,17 +643,17 @@ export default function ViewItineraryPage() {
                     ? 'bg-green-600 text-white hover:bg-green-700' 
                     : 'bg-amber-600 text-white hover:bg-amber-700'
                 } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={existingInvoice ? `View ${existingInvoice.invoice_number}` : 'Generate Invoice'}
+                title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
               >
                 {generatingInvoice ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Creating...</span>
+                    <span>{t('creating')}</span>
                   </>
                 ) : (
                   <>
                     <Receipt className="w-4 h-4" />
-                    {existingInvoice ? existingInvoice.invoice_number : 'Invoice'}
+                    {existingInvoice ? existingInvoice.invoice_number : t('invoice')}
                   </>
                 )}
               </button>
@@ -655,17 +661,17 @@ export default function ViewItineraryPage() {
                 onClick={handleGenerateCommissions}
                 disabled={generatingCommissions}
                 className="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
-                title="Generate commission records from services"
+                title={t('generateCommissionRecords')}
               >
                 {generatingCommissions ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Generating...</span>
+                    <span>{t('generating')}</span>
                   </>
                 ) : (
                   <>
                     <Handshake className="w-4 h-4" />
-                    <span>Commissions</span>
+                    <span>{t('commissions')}</span>
                   </>
                 )}
               </button>
@@ -678,7 +684,7 @@ export default function ViewItineraryPage() {
                 className="px-3 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-1.5"
               >
                 <FileText className="w-4 h-4" />
-                Contract
+                {t('contract')}
               </Link>
               <button
                 onClick={handleDownloadPDF}
@@ -690,12 +696,12 @@ export default function ViewItineraryPage() {
                 {generatingPDF ? (
                   <>
                     <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                    <span>Generating...</span>
+                    <span>{t('generating')}</span>
                   </>
                 ) : (
                   <>
                     <Download className="w-4 h-4" />
-                    PDF
+                    {t('pdf')}
                   </>
                 )}
               </button>
@@ -707,7 +713,7 @@ export default function ViewItineraryPage() {
               <Link 
                 href={`/itineraries/${itinerary.id}/edit`}
                 className="p-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                title="Edit"
+                title={tCommon('edit')}
               >
                 <Edit2 className="w-4 h-4" />
               </Link>
@@ -737,9 +743,9 @@ export default function ViewItineraryPage() {
       {showSendModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Send Quote to Client</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">{t('sendQuoteToClient')}</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Choose how you'd like to send the itinerary to <strong>{itinerary.client_name}</strong>
+              {t('chooseHowToSend', { clientName: itinerary.client_name })}
             </p>
 
             <div className="space-y-2">
@@ -754,7 +760,7 @@ export default function ViewItineraryPage() {
               >
                 <span className="text-lg">📱</span>
                 <div className="text-left">
-                  <div>Send via WhatsApp</div>
+                  <div>{t('sendViaWhatsApp')}</div>
                   {itinerary.client_phone && (
                     <div className="text-xs opacity-80">{itinerary.client_phone}</div>
                   )}
@@ -773,13 +779,13 @@ export default function ViewItineraryPage() {
                 {sendingEmail ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Sending Email...</span>
+                    <span>{t('sendingEmail')}</span>
                   </>
                 ) : (
                   <>
                     <span className="text-lg">📧</span>
                     <div className="text-left">
-                      <div>Send via Email</div>
+                      <div>{t('sendViaEmail')}</div>
                       {itinerary.client_email && (
                         <div className="text-xs opacity-80">{itinerary.client_email}</div>
                       )}
@@ -793,7 +799,7 @@ export default function ViewItineraryPage() {
               onClick={() => setShowSendModal(false)}
               className="w-full mt-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium"
             >
-              Cancel
+              {tCommon('cancel')}
             </button>
           </div>
         </div>
@@ -804,7 +810,7 @@ export default function ViewItineraryPage() {
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-gray-500 mb-1">Client</p>
+              <p className="text-xs text-gray-500 mb-1">{t('client')}</p>
               <p className="text-sm font-semibold text-gray-900">{itinerary.client_name}</p>
               {itinerary.client_email && (
                 <p className="text-xs text-gray-600 truncate">{itinerary.client_email}</p>
@@ -814,26 +820,26 @@ export default function ViewItineraryPage() {
               )}
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Dates</p>
+              <p className="text-xs text-gray-500 mb-1">{t('dates')}</p>
               <p className="text-sm font-semibold text-gray-900">
                 {new Date(itinerary.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </p>
               <p className="text-xs text-gray-600">
-                to {new Date(itinerary.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {t('to')} {new Date(itinerary.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </p>
-              <p className="text-xs text-primary-600 font-medium mt-0.5">{itinerary.total_days} days</p>
+              <p className="text-xs text-primary-600 font-medium mt-0.5">{t('daysCount', { count: itinerary.total_days })}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Passengers</p>
+              <p className="text-xs text-gray-500 mb-1">{t('passengers')}</p>
               <p className="text-sm font-semibold text-gray-900">
-                {itinerary.num_adults} {itinerary.num_adults === 1 ? 'adult' : 'adults'}
+                {t('adultsCount', { count: itinerary.num_adults })}
               </p>
               {itinerary.num_children > 0 && (
-                <p className="text-xs text-gray-600">{itinerary.num_children} {itinerary.num_children === 1 ? 'child' : 'children'}</p>
+                <p className="text-xs text-gray-600">{t('childrenCount', { count: itinerary.num_children })}</p>
               )}
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Total Cost</p>
+              <p className="text-xs text-gray-500 mb-1">{t('totalCost')}</p>
               <p className="text-xl font-bold text-gray-900">{itinerary.currency} {itinerary.total_cost.toFixed(2)}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
@@ -849,7 +855,7 @@ export default function ViewItineraryPage() {
           </div>
           {itinerary.notes && (
             <div className="mt-3 pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">Notes</p>
+              <p className="text-xs text-gray-500 mb-1">{t('notes')}</p>
               <p className="text-sm text-gray-700">{itinerary.notes}</p>
             </div>
           )}
@@ -863,21 +869,21 @@ export default function ViewItineraryPage() {
                 {costMode === 'auto' ? <Calculator className="w-5 h-5 text-blue-600" /> : <Settings className="w-5 h-5 text-amber-600" />}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">Cost Calculation: {costMode === 'auto' ? 'Automatic' : 'Manual'}</h3>
-                <p className="text-xs text-gray-600">{costMode === 'auto' ? 'Costs are calculated from the rates database' : 'Click on any cost to edit it manually'}</p>
+                <h3 className="text-sm font-semibold text-gray-900">{t('costCalculation')}: {costMode === 'auto' ? t('automatic') : t('manual')}</h3>
+                <p className="text-xs text-gray-600">{costMode === 'auto' ? t('costsCalculatedFromDatabase') : t('clickToEditManually')}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {costModeChanged && <span className="text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3 h-3" />Saved</span>}
+              {costModeChanged && <span className="text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3 h-3" />{tCommon('saved')}</span>}
               <button onClick={handleToggleCostMode} disabled={savingCostMode} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${costMode === 'manual' ? 'bg-amber-600' : 'bg-gray-300'} ${savingCostMode ? 'opacity-50' : ''}`}>
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${costMode === 'manual' ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
-              <span className="text-xs font-medium text-gray-700">{costMode === 'manual' ? 'Manual' : 'Auto'}</span>
+              <span className="text-xs font-medium text-gray-700">{costMode === 'manual' ? t('manual') : t('auto')}</span>
             </div>
           </div>
           {costMode === 'manual' && (
             <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-xs text-amber-800"><strong>Manual Mode:</strong> Click on any service cost below to edit it. Changes are saved immediately.</p>
+              <p className="text-xs text-amber-800">{t('manualModeDescription')}</p>
             </div>
           )}
         </div>
@@ -889,21 +895,21 @@ export default function ViewItineraryPage() {
         <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center"><span className="text-white text-lg">📱</span></div>
-            <div><h3 className="text-sm font-semibold text-gray-900">WhatsApp Actions</h3><p className="text-xs text-gray-600">Send updates to {itinerary.client_name}</p></div>
+            <div><h3 className="text-sm font-semibold text-gray-900">{t('whatsappActions')}</h3><p className="text-xs text-gray-600">{t('sendUpdatesTo', { clientName: itinerary.client_name })}</p></div>
           </div>
-          {!itinerary.client_phone && <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md"><p className="text-yellow-800 text-xs">⚠️ Client phone number required. Add it in edit mode.</p></div>}
+          {!itinerary.client_phone && <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md"><p className="text-yellow-800 text-xs">{t('clientPhoneRequiredWarning')}</p></div>}
           {itinerary.client_phone && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess('Booking confirmation sent! ✅'); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
-            {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess('Payment reminder sent! ✅'); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
-            <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess('Payment confirmation sent! ✅'); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
+            {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess(t('bookingConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
+            {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess(t('paymentReminderSent')); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
+            <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess(t('paymentConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
           </div>
           )}
           {itinerary.client_phone && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <div className="flex flex-wrap gap-2 text-xs">
                 <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full"><span>📱</span><span>{itinerary.client_phone}</span></div>
-                {itinerary.status === 'sent' && <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 rounded-full"><span>✅</span><span>Quote sent</span></div>}
+                {itinerary.status === 'sent' && <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 rounded-full"><span>✅</span><span>{t('quoteSent')}</span></div>}
               </div>
             </div>
           )}
@@ -917,10 +923,10 @@ export default function ViewItineraryPage() {
 
         {/* DAY CONTROLS */}
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-900">Daily Itinerary</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t('dailyItinerary')}</h2>
           <div className="flex gap-2">
-            <button onClick={expandAll} className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors">Expand All</button>
-            <button onClick={collapseAll} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">Collapse All</button>
+            <button onClick={expandAll} className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors">{t('expandAll')}</button>
+            <button onClick={collapseAll} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">{t('collapseAll')}</button>
           </div>
         </div>
 
@@ -932,7 +938,7 @@ export default function ViewItineraryPage() {
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-primary-600 text-white rounded-md flex items-center justify-center font-semibold text-sm">{day.day_number}</div>
                   <div className="text-left">
-                    <h3 className="text-sm font-semibold text-gray-900">{day.title || `Day ${day.day_number}`}</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">{day.title || t('dayNumber', { number: day.day_number })}</h3>
                     <p className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{day.city && ` • ${day.city}`}</p>
                   </div>
                 </div>
@@ -943,7 +949,7 @@ export default function ViewItineraryPage() {
                   {day.description && <div className="mb-4"><p className="text-sm text-gray-700">{day.description}</p></div>}
                   {day.services && day.services.length > 0 ? (
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Services Included</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">{t('servicesIncluded')}</h4>
                       <div className="space-y-2">
                         {day.services.map((service) => (
                           <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
@@ -951,7 +957,7 @@ export default function ViewItineraryPage() {
                               <span className="text-lg">{getServiceIcon(service.service_type)}</span>
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
-                                <p className="text-xs text-gray-500 capitalize">{service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • Qty: ${service.quantity}`}</p>
+                                <p className="text-xs text-gray-500 capitalize">{service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}</p>
                                 {service.notes && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
                               </div>
                             </div>
@@ -964,7 +970,7 @@ export default function ViewItineraryPage() {
                                   <button onClick={handleCancelEditCost} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X className="w-4 h-4" /></button>
                                 </div>
                               ) : (
-                                <button onClick={() => handleStartEditCost(service)} disabled={costMode !== 'manual'} className={`text-sm font-semibold ${costMode === 'manual' ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' : 'text-gray-900 cursor-default'}`} title={costMode === 'manual' ? 'Click to edit' : 'Switch to Manual mode to edit'}>
+                                <button onClick={() => handleStartEditCost(service)} disabled={costMode !== 'manual'} className={`text-sm font-semibold ${costMode === 'manual' ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' : 'text-gray-900 cursor-default'}`} title={costMode === 'manual' ? t('clickToEdit') : t('switchToManualMode')}>
                                   {itinerary.currency} {service.total_cost.toFixed(2)}
                                 </button>
                               )}
@@ -974,9 +980,9 @@ export default function ViewItineraryPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-6 text-gray-500"><p className="text-sm">No services added yet</p></div>
+                    <div className="text-center py-6 text-gray-500"><p className="text-sm">{t('noServicesAdded')}</p></div>
                   )}
-                  {day.overnight_city && <div className="mt-3 pt-3 border-t border-gray-200"><p className="text-xs text-gray-600">🌙 Overnight in <span className="font-medium">{day.overnight_city}</span></p></div>}
+                  {day.overnight_city && <div className="mt-3 pt-3 border-t border-gray-200"><p className="text-xs text-gray-600">🌙 {t('overnightIn', { city: day.overnight_city })}</p></div>}
                 </div>
               )}
             </div>

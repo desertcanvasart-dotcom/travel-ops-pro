@@ -2,10 +2,11 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { createBrowserClient } from '@supabase/ssr'
-import { 
-  CheckCircle, 
-  XCircle, 
+import {
+  CheckCircle,
+  XCircle,
   Loader2,
   Eye,
   EyeOff,
@@ -25,6 +26,7 @@ interface InvitationData {
 function AcceptInvitationContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const t = useTranslations('invite')
   const token = searchParams.get('token')
 
   const [loading, setLoading] = useState(true)
@@ -47,7 +49,7 @@ function AcceptInvitationContent() {
     if (token) {
       verifyToken()
     } else {
-      setError('Invalid invitation link')
+      setError(t('invalidInvitationLink'))
       setLoading(false)
     }
   }, [token])
@@ -60,10 +62,10 @@ function AcceptInvitationContent() {
       if (data.success) {
         setInvitation(data.data)
       } else {
-        setError(data.error || 'Invalid or expired invitation')
+        setError(data.error || t('invalidOrExpiredInvitation'))
       }
     } catch (err) {
-      setError('Failed to verify invitation')
+      setError(t('failedToVerifyInvitation'))
     } finally {
       setLoading(false)
     }
@@ -75,17 +77,17 @@ function AcceptInvitationContent() {
 
     // Validation
     if (!fullName.trim()) {
-      setError('Please enter your full name')
+      setError(t('pleaseEnterFullName'))
       return
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters')
+      setError(t('passwordMinLength'))
       return
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
+      setError(t('passwordsDoNotMatch'))
       return
     }
 
@@ -108,7 +110,7 @@ function AcceptInvitationContent() {
       }
 
       if (!authData.user) {
-        throw new Error('Failed to create account')
+        throw new Error(t('failedToCreateAccount'))
       }
 
       // Mark invitation as accepted
@@ -126,7 +128,7 @@ function AcceptInvitationContent() {
       }, 2000)
 
     } catch (err: any) {
-      setError(err.message || 'Failed to create account')
+      setError(err.message || t('failedToCreateAccount'))
     } finally {
       setSubmitting(false)
     }
@@ -138,7 +140,7 @@ function AcceptInvitationContent() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <Loader2 className="w-10 h-10 text-[#647C47] animate-spin mx-auto" />
-          <p className="mt-4 text-gray-600">Verifying invitation...</p>
+          <p className="mt-4 text-gray-600">{t('verifyingInvitation')}</p>
         </div>
       </div>
     )
@@ -152,13 +154,13 @@ function AcceptInvitationContent() {
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <XCircle className="w-8 h-8 text-red-600" />
           </div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Invalid Invitation</h1>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">{t('invalidInvitation')}</h1>
           <p className="text-gray-600 mb-6">{error}</p>
           <a
             href="/login"
             className="inline-flex items-center justify-center px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6339] transition-colors"
           >
-            Go to Login
+            {t('goToLogin')}
           </a>
         </div>
       </div>
@@ -173,9 +175,9 @@ function AcceptInvitationContent() {
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Welcome to Autoura!</h1>
-          <p className="text-gray-600 mb-4">Your account has been created successfully.</p>
-          <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">{t('welcomeToAutoura')}</h1>
+          <p className="text-gray-600 mb-4">{t('accountCreatedSuccessfully')}</p>
+          <p className="text-sm text-gray-500">{t('redirectingToDashboard')}</p>
         </div>
       </div>
     )
@@ -190,8 +192,8 @@ function AcceptInvitationContent() {
           <div className="w-16 h-16 bg-[#647C47]/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Shield className="w-8 h-8 text-[#647C47]" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Accept Invitation</h1>
-          <p className="text-gray-600 mt-2">Create your account to join the team</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('acceptInvitation')}</h1>
+          <p className="text-gray-600 mt-2">{t('createAccountToJoinTeam')}</p>
         </div>
 
         {/* Invitation Info Card */}
@@ -203,13 +205,13 @@ function AcceptInvitationContent() {
           <div className="flex items-center gap-3 mb-3">
             <User className="w-5 h-5 text-[#647C47]" />
             <span className="text-sm text-gray-700">
-              Invited by <span className="font-medium">{invitation?.invited_by_name || 'Admin'}</span>
+              {t('invitedBy')} <span className="font-medium">{invitation?.invited_by_name || t('admin')}</span>
             </span>
           </div>
           <div className="flex items-center gap-3">
             <Shield className="w-5 h-5 text-[#647C47]" />
             <span className="text-sm text-gray-700">
-              Role: <span className="font-medium capitalize">{invitation?.role}</span>
+              {t('role')}: <span className="font-medium capitalize">{invitation?.role}</span>
             </span>
           </div>
         </div>
@@ -224,7 +226,7 @@ function AcceptInvitationContent() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Full Name
+              {t('fullName')}
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -233,7 +235,7 @@ function AcceptInvitationContent() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-transparent"
-                placeholder="Enter your full name"
+                placeholder={t('enterFullNamePlaceholder')}
                 required
               />
             </div>
@@ -241,7 +243,7 @@ function AcceptInvitationContent() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
+              {t('password')}
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -250,7 +252,7 @@ function AcceptInvitationContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-transparent"
-                placeholder="Create a password"
+                placeholder={t('createPasswordPlaceholder')}
                 required
                 minLength={8}
               />
@@ -262,12 +264,12 @@ function AcceptInvitationContent() {
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
+            <p className="text-xs text-gray-500 mt-1">{t('passwordMinLengthHint')}</p>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm Password
+              {t('confirmPassword')}
             </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -276,7 +278,7 @@ function AcceptInvitationContent() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-transparent"
-                placeholder="Confirm your password"
+                placeholder={t('confirmPasswordPlaceholder')}
                 required
               />
             </div>
@@ -290,18 +292,18 @@ function AcceptInvitationContent() {
             {submitting ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Creating Account...
+                {t('creatingAccount')}
               </>
             ) : (
-              'Create Account'
+              t('createAccount')
             )}
           </button>
         </form>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          Already have an account?{' '}
+          {t('alreadyHaveAccount')}{' '}
           <a href="/login" className="text-[#647C47] hover:underline font-medium">
-            Sign in
+            {t('signIn')}
           </a>
         </p>
       </div>

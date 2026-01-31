@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { X, AlertTriangle, Info, HelpCircle, Trash2, CheckCircle } from 'lucide-react'
 
 // ============================================
@@ -64,6 +65,7 @@ interface ModalComponentProps {
 }
 
 function ModalComponent({ state, onClose, inputValue, setInputValue }: ModalComponentProps) {
+  const t = useTranslations('modal')
   const overlayRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
@@ -169,7 +171,7 @@ function ModalComponent({ state, onClose, inputValue, setInputValue }: ModalComp
         <button
           onClick={handleCancel}
           className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          aria-label="Close"
+          aria-label={t('close')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -220,7 +222,7 @@ function ModalComponent({ state, onClose, inputValue, setInputValue }: ModalComp
           {isDestructive && (
             <div className="mt-4 ml-16 p-3 bg-red-50 border border-red-100 rounded-lg">
               <p className="text-xs text-red-700">
-                <strong>Warning:</strong> This action cannot be undone.
+                <strong>{t('warning')}:</strong> {t('cannotBeUndone')}
               </p>
             </div>
           )}
@@ -233,7 +235,7 @@ function ModalComponent({ state, onClose, inputValue, setInputValue }: ModalComp
               onClick={handleCancel}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
             >
-              {state.cancelText || 'Cancel'}
+              {state.cancelText || t('cancel')}
             </button>
           )}
           <button
@@ -245,7 +247,7 @@ function ModalComponent({ state, onClose, inputValue, setInputValue }: ModalComp
                 : 'text-white bg-[#647C47] hover:bg-[#4f6238] focus:ring-[#647C47]/30'
             }`}
           >
-            {state.confirmText || (isDestructive ? 'Delete' : isAlert ? 'OK' : 'Confirm')}
+            {state.confirmText || (isDestructive ? t('delete') : isAlert ? t('ok') : t('confirm'))}
           </button>
         </div>
       </div>
@@ -258,6 +260,7 @@ function ModalComponent({ state, onClose, inputValue, setInputValue }: ModalComp
 // ============================================
 
 export function ModalProvider({ children }: { children: React.ReactNode }) {
+  const t = useTranslations('modal')
   const [modalState, setModalState] = useState<ModalState>({
     isOpen: false,
     type: 'confirm',
@@ -326,14 +329,14 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
     (itemName: string, options?: Partial<ModalConfig>): Promise<boolean> => {
       return openModal({
         type: 'destructive',
-        title: `Delete ${itemName}?`,
-        message: `Are you sure you want to delete this ${itemName.toLowerCase()}? This action cannot be undone.`,
-        confirmText: 'Delete',
-        cancelText: 'Cancel',
+        title: t('deleteItem', { item: itemName }),
+        message: t('deleteItemConfirmation', { item: itemName.toLowerCase() }),
+        confirmText: t('delete'),
+        cancelText: t('cancel'),
         ...options,
       }) as Promise<boolean>
     },
-    [openModal]
+    [openModal, t]
   )
 
   const confirmDestructive = useCallback(

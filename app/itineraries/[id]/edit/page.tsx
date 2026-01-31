@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import {
@@ -187,6 +188,8 @@ const getServiceIcon = (type: string) => {
 // ============================================
 
 export default function ItineraryEditorPage() {
+  const t = useTranslations('itineraries.edit')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const params = useParams()
   const itineraryId = params?.id as string
@@ -395,7 +398,7 @@ export default function ItineraryEditorPage() {
       setItinerary({ ...itinerary, status: newStatus })
     } catch (error) {
       console.error('Error updating status:', error)
-      alert('Failed to update status')
+      alert(t('failedToUpdateStatus'))
     } finally {
       setUpdatingStatus(false)
     }
@@ -455,7 +458,7 @@ export default function ItineraryEditorPage() {
     const newDay: ItineraryDay = {
       id: generateId(),
       day_number: days.length + 1,
-      title: 'New Day',
+      title: t('newDay'),
       city: lastDay?.city || 'Cairo',
       description: '',
       overnight_city: lastDay?.city || 'Cairo',
@@ -489,7 +492,7 @@ export default function ItineraryEditorPage() {
       itinerary_day_id: dayId,
       day_number: dayNumber,
       service_type: 'activity',
-      service_name: 'New Service',
+      service_name: t('newService'),
       supplier_id: null,
       supplier_name: null,
       quantity: 1,
@@ -682,7 +685,7 @@ export default function ItineraryEditorPage() {
 
     } catch (error: any) {
       console.error('❌ Error saving draft:', error)
-      alert(`Failed to save: ${error.message || 'Unknown error'}`)
+      alert(t('failedToSave', { error: error.message || tCommon('unknownError') }))
       return false
     } finally {
       setSaving(false)
@@ -698,7 +701,7 @@ export default function ItineraryEditorPage() {
       const saveSuccess = await saveDraft()
       
       if (!saveSuccess) {
-        alert('Failed to save draft. Please try again.')
+        alert(t('failedToSaveDraft'))
         setCalculating(false)
         return
       }
@@ -728,7 +731,7 @@ export default function ItineraryEditorPage() {
 
       if (!response.ok) {
         console.error('❌ Pricing API error:', result)
-        throw new Error(result.error || 'Pricing calculation failed')
+        throw new Error(result.error || t('pricingCalculationFailed'))
       }
 
       console.log('✅ Pricing calculated:', result)
@@ -736,7 +739,7 @@ export default function ItineraryEditorPage() {
 
     } catch (error: any) {
       console.error('❌ Error calculating pricing:', error)
-      alert(`Failed to calculate pricing: ${error.message || 'Unknown error'}`)
+      alert(t('failedToCalculatePricing', { error: error.message || tCommon('unknownError') }))
     } finally {
       setCalculating(false)
     }
@@ -786,7 +789,7 @@ export default function ItineraryEditorPage() {
   if (!itinerary) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Itinerary not found</p>
+        <p className="text-gray-500">{t('itineraryNotFound')}</p>
       </div>
     )
   }
@@ -801,7 +804,7 @@ export default function ItineraryEditorPage() {
             <button
               onClick={() => router.push(`/itineraries/${itineraryId}`)}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-              title="Back to view"
+              title={t('backToView')}
             >
               <ArrowLeft size={18} className="text-gray-600" />
             </button>
@@ -816,7 +819,7 @@ export default function ItineraryEditorPage() {
               }`}
             >
               {STATUS_OPTIONS.map(status => (
-                <option key={status.value} value={status.value}>{status.label}</option>
+                <option key={status.value} value={status.value}>{t(`status.${status.value}`)}</option>
               ))}
             </select>
             
@@ -828,8 +831,8 @@ export default function ItineraryEditorPage() {
             
             {/* Client Info */}
             <span className="text-gray-600 text-sm whitespace-nowrap">
-              {itinerary.client_name} • {days.length} days • {itinerary.num_adults} adults
-              {itinerary.num_children > 0 && ` • ${itinerary.num_children} children`}
+              {itinerary.client_name} • {t('daysCount', { count: days.length })} • {t('adultsCount', { count: itinerary.num_adults })}
+              {itinerary.num_children > 0 && ` • ${t('childrenCount', { count: itinerary.num_children })}`}
             </span>
           </div>
 
@@ -841,7 +844,7 @@ export default function ItineraryEditorPage() {
               className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 flex items-center gap-1.5"
             >
               <Eye size={14} />
-              View
+              {tCommon('view')}
             </Link>
 
             {/* Invoice Button */}
@@ -884,7 +887,7 @@ export default function ItineraryEditorPage() {
                 className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 flex items-center gap-1.5"
               >
                 <Receipt size={14} />
-                Invoice
+                {t('invoice')}
               </button>
             )}
 
@@ -900,7 +903,7 @@ export default function ItineraryEditorPage() {
               className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5"
             >
               <FileText size={14} />
-              Contract
+              {t('contract')}
             </Link>
 
             {/* Add Expense */}
@@ -917,7 +920,7 @@ export default function ItineraryEditorPage() {
               className="px-3 py-1.5 bg-[#647C47] text-white rounded-lg text-sm font-semibold hover:bg-[#4a5c35] flex items-center gap-1.5 disabled:opacity-50"
             >
               <Calculator size={14} />
-              {calculating ? 'Calculating...' : 'Calculate'}
+              {calculating ? t('calculating') : t('calculate')}
             </button>
           </div>
         </div>
@@ -929,35 +932,35 @@ export default function ItineraryEditorPage() {
           <span className="w-6 h-6 bg-[#647C47] rounded-full flex items-center justify-center text-white text-xs font-bold">
             <Check size={14} />
           </span>
-          <span className="text-sm font-semibold text-[#4a5c35]">AI Generated</span>
+          <span className="text-sm font-semibold text-[#4a5c35]">{t('aiGenerated')}</span>
         </div>
         <div className="w-10 h-0.5 bg-[#647C47]"></div>
         <div className="flex items-center gap-2 px-4 py-2 bg-[#f4f7f1] rounded-full border-2 border-[#647C47]">
           <span className="w-6 h-6 bg-[#647C47] rounded-full flex items-center justify-center text-white text-xs font-bold">2</span>
-          <span className="text-sm font-semibold text-[#647C47]">Edit Content</span>
+          <span className="text-sm font-semibold text-[#647C47]">{t('editContent')}</span>
         </div>
         <div className="w-10 h-0.5 bg-gray-200"></div>
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full">
           <span className="w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold">3</span>
-          <span className="text-sm font-medium text-gray-500">Calculate Pricing</span>
+          <span className="text-sm font-medium text-gray-500">{t('calculatePricing')}</span>
         </div>
         <div className="w-10 h-0.5 bg-gray-200"></div>
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-full">
           <span className="w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold">4</span>
-          <span className="text-sm font-medium text-gray-500">Download PDF</span>
+          <span className="text-sm font-medium text-gray-500">{t('downloadPDF')}</span>
         </div>
       </div>
 
       {/* PACKAGE TYPE SELECTOR */}
       <div className="bg-white rounded-xl p-5 mb-5 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-sm font-semibold text-gray-900">Package Type</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{t('packageType')}</h3>
           <button
             onClick={() => setShowAdvancedPackages(!showAdvancedPackages)}
             className="text-sm text-gray-500 hover:text-[#647C47] flex items-center gap-1"
           >
             {showAdvancedPackages ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            {showAdvancedPackages ? 'Hide' : 'Show'} advanced options
+            {showAdvancedPackages ? t('hide') : t('show')} {t('advancedOptions')}
           </button>
         </div>
         
@@ -974,9 +977,9 @@ export default function ItineraryEditorPage() {
             >
               <div className="text-2xl mb-1">{pkg.icon}</div>
               <div className={`text-sm font-semibold ${itinerary.package_type === pkg.id ? 'text-[#4a5c35]' : 'text-gray-700'}`}>
-                {pkg.name}
+                {t(`packageTypes.${pkg.id}.name`)}
               </div>
-              <div className="text-xs text-gray-500 mt-0.5">{pkg.desc}</div>
+              <div className="text-xs text-gray-500 mt-0.5">{t(`packageTypes.${pkg.id}.desc`)}</div>
             </button>
           ))}
         </div>
@@ -995,9 +998,9 @@ export default function ItineraryEditorPage() {
               >
                 <div className="text-2xl mb-1">{pkg.icon}</div>
                 <div className={`text-sm font-semibold ${itinerary.package_type === pkg.id ? 'text-[#4a5c35]' : 'text-gray-700'}`}>
-                  {pkg.name}
+                  {t(`packageTypes.${pkg.id}.name`)}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">{pkg.desc}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{t(`packageTypes.${pkg.id}.desc`)}</div>
               </button>
             ))}
           </div>
@@ -1011,7 +1014,7 @@ export default function ItineraryEditorPage() {
           {/* Trip Name */}
           <div className="bg-white rounded-xl p-5 mb-4 shadow-sm">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">
-              Trip Name
+              {t('tripName')}
             </label>
             <input
               type="text"
@@ -1023,8 +1026,8 @@ export default function ItineraryEditorPage() {
 
           {/* Section Header */}
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-base font-semibold text-gray-900">Itinerary Days</h2>
-            <span className="text-xs text-gray-500">💡 Drag to reorder • Click Edit to expand</span>
+            <h2 className="text-base font-semibold text-gray-900">{t('itineraryDays')}</h2>
+            <span className="text-xs text-gray-500">💡 {t('dragToReorder')}</span>
           </div>
 
           {/* Days List */}
@@ -1053,13 +1056,13 @@ export default function ItineraryEditorPage() {
                     value={day.title}
                     onChange={(e) => updateDay(day.id, { title: e.target.value })}
                     className="w-full border-none text-[15px] font-semibold text-gray-900 bg-transparent focus:outline-none"
-                    placeholder="Day title..."
+                    placeholder={t('dayTitlePlaceholder')}
                   />
                   <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
                     <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${getCityColor(day.city).bg} ${getCityColor(day.city).text}`}>
                       📍 {day.city}
                     </span>
-                    {day.flight_from && <span className="flex items-center gap-1"><Plane size={12} /> from {day.flight_from}</span>}
+                    {day.flight_from && <span className="flex items-center gap-1"><Plane size={12} /> {t('from')} {day.flight_from}</span>}
                     {day.overnight_city && <span className="flex items-center gap-1"><Moon size={12} /> {day.overnight_city}</span>}
                   </div>
                 </div>
@@ -1071,7 +1074,7 @@ export default function ItineraryEditorPage() {
                       : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {expandedDays.has(day.id) ? 'Collapse' : 'Edit'}
+                  {expandedDays.has(day.id) ? t('collapse') : tCommon('edit')}
                 </button>
               </div>
 
@@ -1081,7 +1084,7 @@ export default function ItineraryEditorPage() {
                   {/* City Selector */}
                   <div className="mb-4">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">
-                      City
+                      {t('city')}
                     </label>
                     <div className="flex flex-wrap gap-2">
                       {CITIES.map(city => (
@@ -1103,21 +1106,21 @@ export default function ItineraryEditorPage() {
                   {/* Description */}
                   <div className="mb-4">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">
-                      Description
+                      {t('description')}
                     </label>
                     <textarea
                       value={day.description}
                       onChange={(e) => updateDay(day.id, { description: e.target.value })}
                       rows={3}
                       className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#647C47] resize-y"
-                      placeholder="Describe this day..."
+                      placeholder={t('describeDayPlaceholder')}
                     />
                   </div>
 
                   {/* Attractions */}
                   <div className="mb-4">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">
-                      Attractions / Sites
+                      {t('attractionsSites')}
                     </label>
                     <div className="flex flex-wrap gap-2">
                       {day.attractions.map((attr, i) => (
@@ -1141,7 +1144,7 @@ export default function ItineraryEditorPage() {
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-dashed border-gray-300 rounded-full text-sm text-gray-500 hover:border-[#647C47] hover:text-[#647C47]"
                       >
                         <Plus size={14} />
-                        Add attraction
+                        {t('addAttraction')}
                       </button>
                     </div>
                   </div>
@@ -1150,34 +1153,34 @@ export default function ItineraryEditorPage() {
                   <div className="grid grid-cols-6 gap-3 p-4 bg-gray-50 rounded-lg">
                     <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                       <input type="checkbox" checked={day.services.guide} onChange={(e) => updateDayService(day.id, 'guide', e.target.checked)} className="w-4 h-4 accent-[#647C47]" />
-                      <User size={14} /> Guide
+                      <User size={14} /> {t('guide')}
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                       <input type="checkbox" checked={day.services.lunch} onChange={(e) => updateDayService(day.id, 'lunch', e.target.checked)} className="w-4 h-4 accent-[#647C47]" />
-                      <Utensils size={14} /> Lunch
+                      <Utensils size={14} /> {t('lunch')}
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                       <input type="checkbox" checked={day.services.dinner} onChange={(e) => updateDayService(day.id, 'dinner', e.target.checked)} className="w-4 h-4 accent-[#647C47]" />
-                      <Wine size={14} /> Dinner
+                      <Wine size={14} /> {t('dinner')}
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                       <input type="checkbox" checked={day.services.hotel} onChange={(e) => updateDayService(day.id, 'hotel', e.target.checked)} className="w-4 h-4 accent-[#647C47]" disabled={day.day_number === days.length} />
-                      <Hotel size={14} /> Hotel
+                      <Hotel size={14} /> {t('hotel')}
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-400 cursor-not-allowed">
                       <input type="checkbox" checked disabled className="w-4 h-4" />
-                      <Droplets size={14} /> Water
+                      <Droplets size={14} /> {t('water')}
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-400 cursor-not-allowed">
                       <input type="checkbox" checked disabled className="w-4 h-4" />
-                      <Banknote size={14} /> Tips
+                      <Banknote size={14} /> {t('tips')}
                     </label>
                   </div>
 
                   {days.length > 1 && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
                       <button onClick={() => removeDay(day.id)} className="text-sm text-red-500 hover:text-red-700">
-                        Remove this day
+                        {t('removeThisDay')}
                       </button>
                     </div>
                   )}
@@ -1192,7 +1195,7 @@ export default function ItineraryEditorPage() {
             className="w-full p-4 bg-white border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-500 hover:border-[#647C47] hover:text-[#647C47] flex items-center justify-center gap-2 mb-5"
           >
             <Plus size={18} />
-            Add Another Day
+            {t('addAnotherDay')}
           </button>
 
           {/* ============================================ */}
@@ -1208,16 +1211,16 @@ export default function ItineraryEditorPage() {
                   <DollarSign className="text-white" size={20} />
                 </div>
                 <div className="text-left">
-                  <h3 className="text-base font-semibold text-gray-900">Services & Pricing</h3>
+                  <h3 className="text-base font-semibold text-gray-900">{t('servicesPricing')}</h3>
                   <p className="text-xs text-gray-500">
-                    {services.filter(s => !s.isDeleted).length} services • Total: {itinerary.currency} {totalServicesCost.toFixed(2)}
+                    {t('servicesCountTotal', { count: services.filter(s => !s.isDeleted).length, currency: itinerary.currency, total: totalServicesCost.toFixed(2) })}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {servicesChanged && (
                   <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded">
-                    Unsaved changes
+                    {t('unsavedChanges')}
                   </span>
                 )}
                 {showServicesSection ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
@@ -1228,8 +1231,8 @@ export default function ItineraryEditorPage() {
               <div className="p-5">
                 {services.filter(s => !s.isDeleted).length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    <p className="text-sm mb-2">No services added yet</p>
-                    <p className="text-xs">Click "Calculate Pricing" to auto-generate services from your itinerary</p>
+                    <p className="text-sm mb-2">{t('noServicesAddedYet')}</p>
+                    <p className="text-xs">{t('clickCalculatePricingHint')}</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1249,7 +1252,7 @@ export default function ItineraryEditorPage() {
                             onClick={() => addNewService(day.id, day.day_number)}
                             className="text-xs text-[#647C47] hover:text-[#4a5c35] font-medium flex items-center gap-1"
                           >
-                            <Plus size={14} /> Add Service
+                            <Plus size={14} /> {t('addService')}
                           </button>
                         </div>
 
@@ -1274,7 +1277,7 @@ export default function ItineraryEditorPage() {
                                         className="w-36 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47]"
                                       >
                                         {SERVICE_TYPES.map(t => (
-                                          <option key={t.value} value={t.value}>{t.label}</option>
+                                          <option key={t.value} value={t.value}>{t(`serviceTypes.${t.value}`)}</option>
                                         ))}
                                       </select>
                                       <input
@@ -1282,14 +1285,14 @@ export default function ItineraryEditorPage() {
                                         value={service.service_name}
                                         onChange={(e) => updateService(service.id, { service_name: e.target.value })}
                                         className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47]"
-                                        placeholder="Service name"
+                                        placeholder={t('serviceNamePlaceholder')}
                                       />
                                     </div>
                                     
                                     {/* Row 2: Supplier Selection - Full Width */}
                                     <div className="flex items-center gap-2 pl-10">
                                       <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
-                                        📦 Supplier:
+                                        📦 {t('supplier')}:
                                       </label>
                                       <select
                                         value={service.supplier_id || ''}
@@ -1303,9 +1306,9 @@ export default function ItineraryEditorPage() {
                                         }}
                                         className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47] bg-white"
                                       >
-                                        <option value="">-- No Supplier (Optional) --</option>
+                                        <option value="">{t('noSupplierOptional')}</option>
                                         {getSuppliersForServiceType(service.service_type).length > 0 && (
-                                          <optgroup label={`Recommended for ${service.service_type}`}>
+                                          <optgroup label={t('recommendedFor', { type: service.service_type })}>
                                             {getSuppliersForServiceType(service.service_type).map(s => (
                                               <option key={s.id} value={s.id}>
                                                 {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
@@ -1314,7 +1317,7 @@ export default function ItineraryEditorPage() {
                                           </optgroup>
                                         )}
                                         {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).length > 0 && (
-                                          <optgroup label="All Other Suppliers">
+                                          <optgroup label={t('allOtherSuppliers')}>
                                             {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).map(s => (
                                               <option key={s.id} value={s.id}>
                                                 {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
@@ -1328,7 +1331,7 @@ export default function ItineraryEditorPage() {
                                     {/* Row 3: Qty, Rate, Total, Actions */}
                                     <div className="flex items-center gap-3 pl-10">
                                       <div className="flex items-center gap-1">
-                                        <label className="text-xs text-gray-500">Qty:</label>
+                                        <label className="text-xs text-gray-500">{t('qty')}:</label>
                                         <input
                                           type="number"
                                           value={service.quantity}
@@ -1342,7 +1345,7 @@ export default function ItineraryEditorPage() {
                                         />
                                       </div>
                                       <div className="flex items-center gap-1">
-                                        <label className="text-xs text-gray-500">Rate:</label>
+                                        <label className="text-xs text-gray-500">{t('rate')}:</label>
                                         <input
                                           type="number"
                                           value={service.rate_non_eur || service.rate_eur || 0}
@@ -1366,9 +1369,9 @@ export default function ItineraryEditorPage() {
                                       <button
                                         onClick={() => setEditingServiceId(null)}
                                         className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 flex items-center gap-1"
-                                        title="Done editing"
+                                        title={t('doneEditing')}
                                       >
-                                        <Check size={14} /> Done
+                                        <Check size={14} /> {t('done')}
                                       </button>
                                     </div>
                                   </div>
@@ -1380,7 +1383,7 @@ export default function ItineraryEditorPage() {
                                       <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
                                       <p className="text-xs text-gray-500">
                                         <span className="capitalize">{service.service_type.replace('_', ' ')}</span>
-                                        {service.quantity > 1 && ` • Qty: ${service.quantity}`}
+                                        {service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}
                                         {service.supplier_name && (
                                           <span className="ml-2 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-medium">
                                             📦 {service.supplier_name}
@@ -1395,14 +1398,14 @@ export default function ItineraryEditorPage() {
                                       <button
                                         onClick={() => setEditingServiceId(service.id)}
                                         className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded"
-                                        title="Edit"
+                                        title={tCommon('edit')}
                                       >
                                         <Edit3 size={14} />
                                       </button>
                                       <button
                                         onClick={() => deleteService(service.id)}
                                         className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
-                                        title="Delete"
+                                        title={tCommon('delete')}
                                       >
                                         <Trash2 size={14} />
                                       </button>
@@ -1414,7 +1417,7 @@ export default function ItineraryEditorPage() {
                           </div>
                         ) : (
                           <div className="px-4 py-6 text-center text-gray-400 text-sm">
-                            No services for this day
+                            {t('noServicesForThisDay')}
                           </div>
                         )}
                       </div>
@@ -1424,7 +1427,7 @@ export default function ItineraryEditorPage() {
 
                 {/* Total Cost Bar */}
                 <div className="mt-5 p-4 bg-[#e8ede3] rounded-lg flex items-center justify-between">
-                  <span className="font-semibold text-[#4a5c35]">Total Cost</span>
+                  <span className="font-semibold text-[#4a5c35]">{t('totalCost')}</span>
                   <span className="text-xl font-bold text-[#4a5c35]">
                     {itinerary.currency} {totalServicesCost.toFixed(2)}
                   </span>
@@ -1438,21 +1441,21 @@ export default function ItineraryEditorPage() {
         <div>
           {/* Trip Summary */}
           <div className="bg-white rounded-xl p-5 mb-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Trip Summary</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('tripSummary')}</h3>
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Duration</span>
-                <span className="font-semibold text-gray-900">{days.length} days</span>
+                <span className="text-gray-500">{t('duration')}</span>
+                <span className="font-semibold text-gray-900">{t('daysCount', { count: days.length })}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Travelers</span>
+                <span className="text-gray-500">{t('travelers')}</span>
                 <span className="font-semibold text-gray-900">
-                  {itinerary.num_adults} adults
-                  {itinerary.num_children > 0 && `, ${itinerary.num_children} children`}
+                  {t('adultsCount', { count: itinerary.num_adults })}
+                  {itinerary.num_children > 0 && `, ${t('childrenCount', { count: itinerary.num_children })}`}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Tier</span>
+                <span className="text-gray-500">{t('tier')}</span>
                 <select
                   value={itinerary.tier}
                   onChange={(e) => setItinerary({ ...itinerary, tier: e.target.value })}
@@ -1464,13 +1467,13 @@ export default function ItineraryEditorPage() {
                 </select>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Package</span>
+                <span className="text-gray-500">{t('package')}</span>
                 <span className="font-semibold text-gray-900">
-                  {PACKAGE_TYPES.find(p => p.id === itinerary.package_type)?.name || 'Land Package'}
+                  {PACKAGE_TYPES.find(p => p.id === itinerary.package_type) ? t(`packageTypes.${itinerary.package_type}.name`) : t('packageTypes.land-package.name')}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Start Date</span>
+                <span className="text-gray-500">{t('startDate')}</span>
                 <span className="font-semibold text-gray-900">{itinerary.start_date}</span>
               </div>
             </div>
@@ -1478,7 +1481,7 @@ export default function ItineraryEditorPage() {
             {/* Cities Breakdown */}
             <div className="mt-4 pt-4 border-t border-gray-200">
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-3">
-                Cities Involved
+                {t('citiesInvolved')}
               </label>
               {Object.entries(citiesBreakdown).map(([city, count]) => (
                 <div key={city} className="flex items-center justify-between py-2 text-sm">
@@ -1486,7 +1489,7 @@ export default function ItineraryEditorPage() {
                     <span className={`w-2.5 h-2.5 rounded-full ${getCityColor(city).dot}`}></span>
                     {city}
                   </span>
-                  <span className="text-gray-500">{count} day{count > 1 ? 's' : ''}</span>
+                  <span className="text-gray-500">{t('daysCount', { count })}</span>
                 </div>
               ))}
             </div>
@@ -1495,7 +1498,7 @@ export default function ItineraryEditorPage() {
           {/* Action Box */}
           <div className="bg-[#f4f7f1] rounded-xl p-5 border border-[#b8c9a8]">
             <p className="text-sm text-[#4a5c35] mb-4">
-              ✨ Edit content and pricing, then save or recalculate from rate tables.
+              ✨ {t('editContentHint')}
             </p>
             <button
               onClick={saveDraft}
@@ -1503,7 +1506,7 @@ export default function ItineraryEditorPage() {
               className="w-full py-3 bg-[#647C47] text-white rounded-lg text-sm font-semibold hover:bg-[#4a5c35] mb-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Save size={18} />
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? t('saving') : t('saveChanges')}
             </button>
             <button
               onClick={calculatePricing}
@@ -1511,21 +1514,21 @@ export default function ItineraryEditorPage() {
               className="w-full py-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Calculator size={16} />
-              {calculating ? 'Calculating...' : 'Recalculate from Rates'}
+              {calculating ? t('calculating') : t('recalculateFromRates')}
             </button>
             <p className="text-xs text-gray-500 mt-3 text-center">
-              Recalculating will regenerate services from your rate tables
+              {t('recalculatingHint')}
             </p>
           </div>
 
           {/* Tips */}
           <div className="mt-4 p-4 bg-[#e8ede3] rounded-lg border border-[#b8c9a8]">
-            <h4 className="text-sm font-semibold text-[#4a5c35] mb-2">💡 Tips</h4>
+            <h4 className="text-sm font-semibold text-[#4a5c35] mb-2">💡 {t('tips')}</h4>
             <ul className="text-xs text-[#647C47] space-y-1.5 list-disc pl-4">
-              <li>Edit services directly in the pricing section</li>
-              <li>Add/remove services for each day</li>
-              <li>Changes are saved when you click Save Draft</li>
-              <li>Calculate Pricing regenerates from rate tables</li>
+              <li>{t('tip1')}</li>
+              <li>{t('tip2')}</li>
+              <li>{t('tip3')}</li>
+              <li>{t('tip4')}</li>
             </ul>
           </div>
         </div>
@@ -1536,7 +1539,7 @@ export default function ItineraryEditorPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAttractionModal(false)}>
           <div className="bg-white rounded-2xl w-[550px] max-h-[80vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-200 flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Add Attraction</h3>
+              <h3 className="text-lg font-semibold">{t('addAttraction')}</h3>
               <button onClick={() => setShowAttractionModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={24} />
               </button>
@@ -1546,7 +1549,7 @@ export default function ItineraryEditorPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
-                  placeholder="Search attractions..."
+                  placeholder={t('searchAttractionsPlaceholder')}
                   value={attractionSearch}
                   onChange={(e) => setAttractionSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#647C47]"
@@ -1560,7 +1563,7 @@ export default function ItineraryEditorPage() {
                     !attractionCityFilter ? 'bg-[#647C47] text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-[#647C47]'
                   }`}
                 >
-                  All Cities
+                  {t('allCities')}
                 </button>
                 {[...new Set(attractions.map(a => a.city))].map(city => (
                   <button
@@ -1601,12 +1604,12 @@ export default function ItineraryEditorPage() {
                       </div>
                       <div className="text-right">
                         <div className="text-sm font-semibold text-[#647C47]">€{attr.base_rate_eur} / €{attr.base_rate_non_eur}</div>
-                        <div className="text-[11px] text-gray-500">EUR / non-EUR</div>
+                        <div className="text-[11px] text-gray-500">{t('eurNonEur')}</div>
                       </div>
                     </div>
                   )
                 })}
-                {filteredAttractions.length === 0 && <p className="text-center text-gray-500 py-8">No attractions found</p>}
+                {filteredAttractions.length === 0 && <p className="text-center text-gray-500 py-8">{t('noAttractionsFound')}</p>}
               </div>
             </div>
           </div>

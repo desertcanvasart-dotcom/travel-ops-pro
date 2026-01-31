@@ -91,7 +91,7 @@ export default function NewClientPage() {
       router.push(`/clients/${data.id}`)
     } catch (err: any) {
       console.error('Error creating client:', err)
-      setError(err.message || 'Failed to create client')
+      setError(err.message || t('failedToCreateClient'))
     } finally {
       setLoading(false)
     }
@@ -300,15 +300,15 @@ export default function NewClientPage() {
                   onChange={(e) => handleInputChange('preferred_language', e.target.value)}
                   className={selectClass}
                 >
-                  <option value="English">English</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="French">French</option>
-                  <option value="German">German</option>
-                  <option value="Italian">Italian</option>
-                  <option value="Arabic">Arabic</option>
-                  <option value="Russian">Russian</option>
-                  <option value="Chinese">Chinese</option>
-                  <option value="Japanese">Japanese</option>
+                  <option value="English">{t('langEnglish')}</option>
+                  <option value="Spanish">{t('langSpanish')}</option>
+                  <option value="French">{t('langFrench')}</option>
+                  <option value="German">{t('langGerman')}</option>
+                  <option value="Italian">{t('langItalian')}</option>
+                  <option value="Arabic">{t('langArabic')}</option>
+                  <option value="Russian">{t('langRussian')}</option>
+                  <option value="Chinese">{t('langChinese')}</option>
+                  <option value="Japanese">{t('langJapanese')}</option>
                 </select>
               </div>
             </div>
@@ -636,11 +636,14 @@ export default function NewClientPage() {
                     required
                   >
                     <option value="">{t('selectSource')}</option>
-                    {LEAD_SOURCES.map(source => (
-                      <option key={source.value} value={source.value}>
-                        {source.icon} {source.label}
-                      </option>
-                    ))}
+                    <option value="whatsapp">💬 {t('leadSourceWhatsApp')}</option>
+                    <option value="email">✉️ {t('leadSourceEmail')}</option>
+                    <option value="website">🌐 {t('leadSourceWebsite')}</option>
+                    <option value="referral">👥 {t('leadSourceReferral')}</option>
+                    <option value="phone">📞 {t('leadSourcePhone')}</option>
+                    <option value="social_media">📱 {t('leadSourceSocialMedia')}</option>
+                    <option value="trade_show">🎪 {t('leadSourceTradeShow')}</option>
+                    <option value="other">➕ {t('leadSourceOther')}</option>
                   </select>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { 
   TrendingUp,
@@ -134,6 +135,7 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: string }> = {
 }
 
 export default function FinancialReportsPage() {
+  const t = useTranslations('financialReports')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [monthly, setMonthly] = useState<MonthlyData[]>([])
   const [quarterly, setQuarterly] = useState<QuarterlyData[]>([])
@@ -217,8 +219,8 @@ export default function FinancialReportsPage() {
             📊
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Financial Reports</h1>
-            <p className="text-sm text-gray-500">Revenue, cash flow, tax & commission analysis</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('financialReports')}</h1>
+            <p className="text-sm text-gray-500">{t('reportsSubtitle')}</p>
           </div>
         </div>
 
@@ -242,11 +244,11 @@ export default function FinancialReportsPage() {
       {/* Tabs */}
       <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg w-fit">
         {[
-          { id: 'overview', label: 'Overview', icon: BarChart3 },
-          { id: 'revenue', label: 'Revenue', icon: DollarSign },
-          { id: 'cashflow', label: 'Cash Flow', icon: Wallet },
-          { id: 'tax', label: 'Tax Summary', icon: FileText },
-          { id: 'commission', label: 'Commissions', icon: Users }
+          { id: 'overview', label: t('overview'), icon: BarChart3 },
+          { id: 'revenue', label: t('revenue'), icon: DollarSign },
+          { id: 'cashflow', label: t('cashFlow'), icon: Wallet },
+          { id: 'tax', label: t('taxSummary'), icon: FileText },
+          { id: 'commission', label: t('commissions'), icon: Users }
         ].map(tab => (
           <button
             key={tab.id}
@@ -271,12 +273,12 @@ export default function FinancialReportsPage() {
                 <span className="text-lg">💰</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
+              <p className="text-xs text-gray-500 mb-1">{t('totalRevenue')}</p>
               <p className="text-2xl font-semibold text-blue-600">€{summary.total_revenue.toLocaleString()}</p>
               {yearOverYear && (
                 <p className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(yearOverYear.revenue_change_percent)}`}>
                   {getChangeIcon(yearOverYear.revenue_change_percent)}
-                  {yearOverYear.revenue_change_percent >= 0 ? '+' : ''}{yearOverYear.revenue_change_percent.toFixed(1)}% YoY
+                  {yearOverYear.revenue_change_percent >= 0 ? '+' : ''}{yearOverYear.revenue_change_percent.toFixed(1)}% {t('yoy')}
                 </p>
               )}
             </div>
@@ -286,12 +288,12 @@ export default function FinancialReportsPage() {
                 <span className="text-lg">💸</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Total Expenses</p>
+              <p className="text-xs text-gray-500 mb-1">{t('totalExpenses')}</p>
               <p className="text-2xl font-semibold text-red-600">€{summary.total_expenses.toLocaleString()}</p>
               {yearOverYear && (
                 <p className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(-yearOverYear.expense_change_percent)}`}>
                   {getChangeIcon(yearOverYear.expense_change_percent)}
-                  {yearOverYear.expense_change_percent >= 0 ? '+' : ''}{yearOverYear.expense_change_percent.toFixed(1)}% YoY
+                  {yearOverYear.expense_change_percent >= 0 ? '+' : ''}{yearOverYear.expense_change_percent.toFixed(1)}% {t('yoy')}
                 </p>
               )}
             </div>
@@ -301,11 +303,11 @@ export default function FinancialReportsPage() {
                 <span className="text-lg">📈</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Gross Profit</p>
+              <p className="text-xs text-gray-500 mb-1">{t('grossProfit')}</p>
               <p className={`text-2xl font-semibold ${summary.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 €{summary.gross_profit.toLocaleString()}
               </p>
-              <p className="text-xs text-gray-400 mt-1">{summary.profit_margin.toFixed(1)}% margin</p>
+              <p className="text-xs text-gray-400 mt-1">{summary.profit_margin.toFixed(1)}% {t('margin')}</p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -313,9 +315,9 @@ export default function FinancialReportsPage() {
                 <span className="text-lg">✅</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Collected</p>
+              <p className="text-xs text-gray-500 mb-1">{t('collected')}</p>
               <p className="text-2xl font-semibold text-emerald-600">€{summary.total_collected.toLocaleString()}</p>
-              <p className="text-xs text-gray-400 mt-1">{summary.collection_rate.toFixed(1)}% collected</p>
+              <p className="text-xs text-gray-400 mt-1">{summary.collection_rate.toFixed(1)}% {t('collectedRate')}</p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -323,9 +325,9 @@ export default function FinancialReportsPage() {
                 <span className="text-lg">🎯</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Trips</p>
+              <p className="text-xs text-gray-500 mb-1">{t('trips')}</p>
               <p className="text-2xl font-semibold text-purple-600">{summary.trip_count}</p>
-              <p className="text-xs text-gray-400 mt-1">€{summary.average_trip_value.toLocaleString()} avg</p>
+              <p className="text-xs text-gray-400 mt-1">€{summary.average_trip_value.toLocaleString()} {t('avg')}</p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -333,22 +335,22 @@ export default function FinancialReportsPage() {
                 <span className="text-lg">📄</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Invoices</p>
+              <p className="text-xs text-gray-500 mb-1">{t('invoices')}</p>
               <p className="text-2xl font-semibold text-amber-600">{summary.invoice_count}</p>
-              <p className="text-xs text-gray-400 mt-1">{summary.expense_count} expenses</p>
+              <p className="text-xs text-gray-400 mt-1">{summary.expense_count} {t('expenses')}</p>
             </div>
           </div>
 
           {/* Quarterly Overview */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Quarterly Performance</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('quarterlyPerformance')}</h3>
               <button
                 onClick={() => exportToCSV(quarterly, 'quarterly_report')}
                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
               >
                 <Download className="h-3 w-3" />
-                Export
+                {t('export')}
               </button>
             </div>
             <div className="grid grid-cols-4 gap-4">
@@ -357,21 +359,21 @@ export default function FinancialReportsPage() {
                   <p className="text-sm font-semibold text-gray-900 mb-3">{q.quarter} {q.year}</p>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Revenue</span>
+                      <span className="text-gray-500">{t('revenue')}</span>
                       <span className="font-medium text-blue-600">€{q.revenue.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Expenses</span>
+                      <span className="text-gray-500">{t('expenses')}</span>
                       <span className="font-medium text-red-600">€{q.expenses.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm border-t border-gray-200 pt-2">
-                      <span className="text-gray-500">Profit</span>
+                      <span className="text-gray-500">{t('profit')}</span>
                       <span className={`font-semibold ${q.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         €{q.net_profit.toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Margin</span>
+                      <span className="text-gray-500">{t('margin')}</span>
                       <span className={`font-medium ${q.margin >= 20 ? 'text-green-600' : q.margin >= 0 ? 'text-yellow-600' : 'text-red-600'}`}>
                         {q.margin.toFixed(1)}%
                       </span>
@@ -385,15 +387,15 @@ export default function FinancialReportsPage() {
           {/* Monthly Chart */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Monthly Revenue vs Expenses</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('monthlyRevenueVsExpenses')}</h3>
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1">
                   <div className="w-3 h-3 rounded bg-blue-500"></div>
-                  <span className="text-gray-600">Revenue</span>
+                  <span className="text-gray-600">{t('revenue')}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <div className="w-3 h-3 rounded bg-red-400"></div>
-                  <span className="text-gray-600">Expenses</span>
+                  <span className="text-gray-600">{t('expenses')}</span>
                 </div>
               </div>
             </div>
@@ -425,25 +427,25 @@ export default function FinancialReportsPage() {
         <div className="space-y-5">
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900">Monthly Revenue Report</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('monthlyRevenueReport')}</h3>
               <button
                 onClick={() => exportToCSV(monthly, 'monthly_revenue')}
                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
               >
                 <Download className="h-3 w-3" />
-                Export CSV
+                {t('exportCSV')}
               </button>
             </div>
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Month</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Invoiced</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Collected</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Expenses</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Net Profit</th>
-                  <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">Trips</th>
-                  <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">Invoices</th>
+                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('month')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('invoiced')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('collected')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('expenses')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('netProfit')}</th>
+                  <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('trips')}</th>
+                  <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('invoices')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -461,7 +463,7 @@ export default function FinancialReportsPage() {
                   </tr>
                 ))}
                 <tr className="bg-gray-50 font-semibold">
-                  <td className="px-4 py-3 text-sm text-gray-900">Total</td>
+                  <td className="px-4 py-3 text-sm text-gray-900">{t('total')}</td>
                   <td className="px-4 py-3 text-sm text-right text-blue-600">
                     €{monthly.reduce((sum, m) => sum + m.invoiced, 0).toLocaleString()}
                   </td>
@@ -493,29 +495,29 @@ export default function FinancialReportsPage() {
           {/* Cash Flow Summary */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Cash Inflows</p>
+              <p className="text-xs text-gray-500 mb-1">{t('cashInflows')}</p>
               <p className="text-xl font-semibold text-green-600">€{cashFlow.inflows.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Cash Outflows</p>
+              <p className="text-xs text-gray-500 mb-1">{t('cashOutflows')}</p>
               <p className="text-xl font-semibold text-red-600">€{cashFlow.outflows.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Net Cash Flow</p>
+              <p className="text-xs text-gray-500 mb-1">{t('netCashFlow')}</p>
               <p className={`text-xl font-semibold ${cashFlow.net_cash_flow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 €{cashFlow.net_cash_flow.toLocaleString()}
               </p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Pending Receivables</p>
+              <p className="text-xs text-gray-500 mb-1">{t('pendingReceivables')}</p>
               <p className="text-xl font-semibold text-blue-600">€{cashFlow.pending_receivables.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Pending Payables</p>
+              <p className="text-xs text-gray-500 mb-1">{t('pendingPayables')}</p>
               <p className="text-xl font-semibold text-orange-600">€{cashFlow.pending_payables.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Projected Cash</p>
+              <p className="text-xs text-gray-500 mb-1">{t('projectedCash')}</p>
               <p className={`text-xl font-semibold ${cashFlow.projected_cash >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
                 €{cashFlow.projected_cash.toLocaleString()}
               </p>
@@ -525,22 +527,22 @@ export default function FinancialReportsPage() {
           {/* Monthly Cash Flow */}
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900">Monthly Cash Flow</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('monthlyCashFlow')}</h3>
               <button
                 onClick={() => exportToCSV(cashFlow.monthly_cash_flow, 'cash_flow')}
                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
               >
                 <Download className="h-3 w-3" />
-                Export
+                {t('export')}
               </button>
             </div>
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Month</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Inflow</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Outflow</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Net</th>
+                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('month')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('inflow')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('outflow')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('net')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -566,38 +568,38 @@ export default function FinancialReportsPage() {
           {/* Tax Overview */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Gross Revenue</p>
+              <p className="text-xs text-gray-500 mb-1">{t('grossRevenue')}</p>
               <p className="text-xl font-semibold text-blue-600">€{taxSummary.gross_revenue.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Total Expenses</p>
+              <p className="text-xs text-gray-500 mb-1">{t('totalExpenses')}</p>
               <p className="text-xl font-semibold text-red-600">€{taxSummary.total_expenses.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Deductible Expenses</p>
+              <p className="text-xs text-gray-500 mb-1">{t('deductibleExpenses')}</p>
               <p className="text-xl font-semibold text-green-600">€{taxSummary.deductible_expenses.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Taxable Income</p>
+              <p className="text-xs text-gray-500 mb-1">{t('taxableIncome')}</p>
               <p className="text-xl font-semibold text-purple-600">€{taxSummary.taxable_income.toLocaleString()}</p>
             </div>
           </div>
 
           {/* VAT Summary */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">VAT Summary (Estimated 14%)</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('vatSummary')}</h3>
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 bg-blue-50 rounded-lg">
-                <p className="text-xs text-blue-600 mb-1">VAT Collected</p>
+                <p className="text-xs text-blue-600 mb-1">{t('vatCollected')}</p>
                 <p className="text-lg font-semibold text-blue-700">€{taxSummary.estimated_vat_collected.toLocaleString()}</p>
               </div>
               <div className="p-4 bg-red-50 rounded-lg">
-                <p className="text-xs text-red-600 mb-1">VAT Paid</p>
+                <p className="text-xs text-red-600 mb-1">{t('vatPaid')}</p>
                 <p className="text-lg font-semibold text-red-700">€{taxSummary.estimated_vat_paid.toLocaleString()}</p>
               </div>
               <div className={`p-4 rounded-lg ${taxSummary.net_vat >= 0 ? 'bg-green-50' : 'bg-orange-50'}`}>
                 <p className={`text-xs mb-1 ${taxSummary.net_vat >= 0 ? 'text-green-600' : 'text-orange-600'}`}>
-                  Net VAT {taxSummary.net_vat >= 0 ? 'Payable' : 'Receivable'}
+                  {t('netVat')} {taxSummary.net_vat >= 0 ? t('payable') : t('receivable')}
                 </p>
                 <p className={`text-lg font-semibold ${taxSummary.net_vat >= 0 ? 'text-green-700' : 'text-orange-700'}`}>
                   €{Math.abs(taxSummary.net_vat).toLocaleString()}
@@ -609,13 +611,13 @@ export default function FinancialReportsPage() {
           {/* Expense Breakdown */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Expense Breakdown by Category</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('expenseBreakdownByCategory')}</h3>
               <button
                 onClick={() => exportToCSV(taxSummary.expense_breakdown, 'expense_breakdown')}
                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
               >
                 <Download className="h-3 w-3" />
-                Export
+                {t('export')}
               </button>
             </div>
             <div className="space-y-3">
@@ -653,26 +655,26 @@ export default function FinancialReportsPage() {
           {/* Commission Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Total Commissions</p>
+              <p className="text-xs text-gray-500 mb-1">{t('totalCommissions')}</p>
               <p className="text-xl font-semibold text-blue-600">€{commissionSummary.total_commissions.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Paid</p>
+              <p className="text-xs text-gray-500 mb-1">{t('paid')}</p>
               <p className="text-xl font-semibold text-green-600">€{commissionSummary.total_paid.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Pending</p>
+              <p className="text-xs text-gray-500 mb-1">{t('pending')}</p>
               <p className="text-xl font-semibold text-orange-600">€{commissionSummary.total_pending.toLocaleString()}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">Recipients</p>
+              <p className="text-xs text-gray-500 mb-1">{t('recipients')}</p>
               <p className="text-xl font-semibold text-purple-600">{commissionSummary.recipients.length}</p>
             </div>
           </div>
 
           {/* By Type */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Commissions by Type</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('commissionsByType')}</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               {commissionSummary.by_type.map(type => {
                 const config = CATEGORY_LABELS[type.type] || CATEGORY_LABELS.other
@@ -681,7 +683,7 @@ export default function FinancialReportsPage() {
                     <span className="text-2xl">{config.icon}</span>
                     <p className="text-xs text-gray-500 mt-2">{config.label}</p>
                     <p className="text-lg font-semibold text-gray-900 mt-1">€{type.amount.toLocaleString()}</p>
-                    <p className="text-xs text-gray-400">{type.count} payments</p>
+                    <p className="text-xs text-gray-400">{type.count} {t('payments')}</p>
                   </div>
                 )
               })}
@@ -691,7 +693,7 @@ export default function FinancialReportsPage() {
           {/* Commission Recipients */}
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900">Commission Recipients</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{t('commissionRecipients')}</h3>
               <button
                 onClick={() => exportToCSV(commissionSummary.recipients.map(r => ({
                   name: r.name,
@@ -704,25 +706,25 @@ export default function FinancialReportsPage() {
                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50"
               >
                 <Download className="h-3 w-3" />
-                Export
+                {t('export')}
               </button>
             </div>
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Name</th>
-                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">Type</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Total Earned</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Paid</th>
-                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">Pending</th>
-                  <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">Trips</th>
+                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('name')}</th>
+                  <th className="text-left text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('type')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('totalEarned')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('paid')}</th>
+                  <th className="text-right text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('pending')}</th>
+                  <th className="text-center text-xs font-semibold text-gray-600 uppercase px-4 py-3">{t('trips')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {commissionSummary.recipients.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
-                      No commission data
+                      {t('noCommissionData')}
                     </td>
                   </tr>
                 ) : (

@@ -7,11 +7,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
-import { 
-  Search, 
-  Plus, 
+import {
+  Search,
+  Plus,
   Landmark,
   Hotel,
   Sparkles,
@@ -81,6 +82,7 @@ interface ContentItem {
 }
 
 export default function ContentLibraryPage() {
+  const t = useTranslations('contentLibrary')
   const [categories, setCategories] = useState<Category[]>([])
   const [content, setContent] = useState<ContentItem[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -163,9 +165,9 @@ export default function ContentLibraryPage() {
                 <Library className="w-6 h-6 text-[#647C47]" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Content Library</h1>
+                <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {totalContent} items across {categories.length} categories
+                  {t('itemsAcrossCategories', { totalContent, categoriesCount: categories.length })}
                 </p>
               </div>
             </div>
@@ -175,21 +177,21 @@ export default function ContentLibraryPage() {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <BookOpen className="w-4 h-4" />
-                Writing Rules
+                {t('writingRules')}
               </Link>
               <Link
                 href="/content-library/prompts"
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Wand2 className="w-4 h-4" />
-                AI Prompts
+                {t('aiPrompts')}
               </Link>
               <Link
                 href="/content-library/new"
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Add Content
+                {t('addContent')}
               </Link>
             </div>
           </div>
@@ -221,7 +223,7 @@ export default function ContentLibraryPage() {
                   : 'bg-white text-gray-700 border border-gray-200 hover:border-[#647C47]'
               }`}
             >
-              All
+              {t('all')}
               <span className={`text-xs px-1.5 py-0.5 rounded-full ${
                 selectedCategory === null ? 'bg-white/20' : 'bg-gray-100'
               }`}>
@@ -259,7 +261,7 @@ export default function ContentLibraryPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search content by name, description, or location..."
+              placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
@@ -293,13 +295,13 @@ export default function ContentLibraryPage() {
         ) : content.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
             <Library className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No content found</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('noContentFound')}</h3>
             <p className="text-gray-500 mb-6">
-              {searchQuery 
-                ? `No results for "${searchQuery}"`
-                : selectedCategory 
-                  ? 'No content in this category yet'
-                  : 'Start building your content library'
+              {searchQuery
+                ? t('noResultsFor', { query: searchQuery })
+                : selectedCategory
+                  ? t('noContentInCategory')
+                  : t('startBuildingLibrary')
               }
             </p>
             <Link
@@ -307,7 +309,7 @@ export default function ContentLibraryPage() {
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Add First Content
+              {t('addFirstContent')}
             </Link>
           </div>
         ) : (
@@ -372,12 +374,12 @@ export default function ContentLibraryPage() {
                         {hasAllTiers ? (
                           <div className="flex items-center gap-1 text-xs text-emerald-600">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>All tiers</span>
+                            <span>{t('allTiers')}</span>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 text-xs text-amber-600">
                             <AlertCircle className="w-3.5 h-3.5" />
-                            <span>{item.variation_count}/4 tiers</span>
+                            <span>{t('tierCount', { count: item.variation_count })}</span>
                           </div>
                         )}
                       </div>
@@ -429,9 +431,9 @@ export default function ContentLibraryPage() {
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Content?</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteContentTitle')}</h3>
             <p className="text-gray-600 mb-6">
-              This will permanently delete this content and all its tier variations. This action cannot be undone.
+              {t('deleteContentConfirmation')}
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -441,13 +443,13 @@ export default function ContentLibraryPage() {
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={() => deleteId && handleDelete(deleteId)}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
               >
-                Delete
+                {t('delete')}
               </button>
             </div>
           </div>

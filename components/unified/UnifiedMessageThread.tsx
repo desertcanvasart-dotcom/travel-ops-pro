@@ -70,14 +70,18 @@ function DeleteConfirmationModal({
   conversation,
   onConfirm,
   onCancel,
-  isDeleting
+  isDeleting,
+  t,
+  tCommon
 }: {
   conversation: UnifiedConversation
   onConfirm: () => void
   onCancel: () => void
   isDeleting: boolean
+  t: (key: string, values?: Record<string, any>) => string
+  tCommon: (key: string) => string
 }) {
-  const displayName = conversation.client_name || conversation.contact_info?.split('@')[0] || 'Unknown'
+  const displayName = conversation.client_name || conversation.contact_info?.split('@')[0] || t('unknown')
   const isEmail = conversation.channel === 'email'
 
   return (
@@ -89,15 +93,15 @@ function DeleteConfirmationModal({
               <Trash2 className="w-5 h-5 text-red-600" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Delete Conversation</h3>
+              <h3 className="text-lg font-bold text-gray-900">{t('deleteConversationTitle')}</h3>
               <p className="text-sm text-gray-600">
-                {isEmail ? 'Move to trash' : 'Hide from inbox'}
+                {isEmail ? t('moveToTrash') : t('hideFromInbox')}
               </p>
             </div>
           </div>
         </div>
         <div className="p-6">
-          <p className="text-sm text-gray-700 mb-4">Are you sure you want to delete the conversation with:</p>
+          <p className="text-sm text-gray-700 mb-4">{t('deleteConfirmMessage')}</p>
           <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -117,21 +121,23 @@ function DeleteConfirmationModal({
           </div>
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-xs text-amber-800">
-              <strong>Note:</strong> {isEmail
-                ? 'The email thread will be moved to trash in Gmail.'
-                : 'The conversation will be hidden from your inbox. Messages will reappear if the customer sends a new message.'}
+              <strong>{t('note')}</strong> {isEmail
+                ? t('deleteNoteEmail')
+                : t('deleteNoteWhatsApp')}
             </p>
           </div>
         </div>
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3">
           <button
+            type="button"
             onClick={onCancel}
             disabled={isDeleting}
             className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-100 disabled:opacity-50"
           >
-            Cancel
+            {tCommon('cancel')}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={isDeleting}
             className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:bg-red-300 flex items-center justify-center gap-2"
@@ -139,12 +145,12 @@ function DeleteConfirmationModal({
             {isDeleting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Deleting...
+                {t('deleting')}
               </>
             ) : (
               <>
                 <Trash2 className="w-4 h-4" />
-                Delete
+                {tCommon('delete')}
               </>
             )}
           </button>
@@ -611,8 +617,8 @@ export function UnifiedMessageThread({
     const date = new Date(dateString)
     const now = new Date()
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Yesterday'
+    if (diffDays === 0) return t('today')
+    if (diffDays === 1) return t('yesterday')
     return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   }
 
@@ -761,7 +767,7 @@ export function UnifiedMessageThread({
                 ) : (
                   <>
                     <UserX className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-gray-500">Unassigned</span>
+                    <span className="text-gray-500">{t('unassigned')}</span>
                   </>
                 )}
                 <ChevronDown className="w-3 h-3 text-gray-400" />
@@ -777,10 +783,10 @@ export function UnifiedMessageThread({
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100"
                     >
                       <UserX className="w-4 h-4 text-gray-400" />
-                      <span>Unassign</span>
+                      <span>{t('unassign')}</span>
                     </button>
                     <div className="py-1">
-                      <p className="px-3 py-1 text-xs font-medium text-gray-400 uppercase">Assign to</p>
+                      <p className="px-3 py-1 text-xs font-medium text-gray-400 uppercase">{t('assignTo')}</p>
                       {agents.filter(a => a.is_available).map(agent => (
                         <button
                           type="button"
@@ -794,7 +800,7 @@ export function UnifiedMessageThread({
                           <div className="flex-1 text-left">
                             <p className="font-medium">{agent.name}</p>
                             <p className="text-xs text-gray-500">
-                              {agent.current_conversations}/{agent.max_conversations} chats
+                              {agent.current_conversations}/{agent.max_conversations} {t('chats')}
                             </p>
                           </div>
                           {conversation.assigned_agent?.id === agent.id && (
@@ -947,7 +953,7 @@ export function UnifiedMessageThread({
                             <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-200/60">
                               {isTranslatingThis ? (
                                 <span className="flex items-center gap-1 text-xs text-blue-500">
-                                  <Loader2 className="w-3 h-3 animate-spin" />Translating...
+                                  <Loader2 className="w-3 h-3 animate-spin" />{t('translating')}
                                 </span>
                               ) : hasTranslation ? (
                                 <button
@@ -955,7 +961,7 @@ export function UnifiedMessageThread({
                                   onClick={() => setShowOriginalMap(p => ({ ...p, [msg.id]: !p[msg.id] }))}
                                   className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                                 >
-                                  {showOriginal ? '🇬🇧 Show English' : '🌐 Show Original'}
+                                  {showOriginal ? `🇬🇧 ${t('showEnglish')}` : `🌐 ${t('showOriginal')}`}
                                 </button>
                               ) : (
                                 <button
@@ -963,7 +969,7 @@ export function UnifiedMessageThread({
                                   onClick={() => handleTranslateMessage(msg.id, msg.content)}
                                   className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                                 >
-                                  🌐 Translate
+                                  🌐 {t('translate')}
                                 </button>
                               )}
                             </div>
@@ -1003,7 +1009,7 @@ export function UnifiedMessageThread({
                                 className="text-[11px] text-gray-400 hover:text-gray-600 font-medium flex items-center gap-1"
                               >
                                 <ChevronDown className={`w-3 h-3 transition-transform ${isQuoteExpanded ? 'rotate-180' : ''}`} />
-                                {isQuoteExpanded ? 'Hide quoted' : 'Show quoted'} ({quotedContent.split('\n').length} lines)
+                                {isQuoteExpanded ? t('hideQuoted') : t('showQuoted')} ({quotedContent.split('\n').length} {t('lines')})
                               </button>
                               {isQuoteExpanded && (
                                 <div className="mt-2 pl-3 border-l-2 border-gray-200 text-[12px] text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto break-words [overflow-wrap:anywhere] [word-break:break-word]">
@@ -1060,7 +1066,7 @@ export function UnifiedMessageThread({
               }`}
             >
               <Languages className="w-4 h-4" />
-              {translationEnabled ? 'Translation ON' : 'Translate'}
+              {translationEnabled ? t('translationOn') : t('translate')}
             </button>
             {translationEnabled && (
               <div className="relative">
@@ -1101,21 +1107,21 @@ export function UnifiedMessageThread({
             <div className="text-xs">
               {isTranslating ? (
                 <span className="flex items-center gap-1 text-blue-600">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />Translating...
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />{t('translating')}
                 </span>
               ) : translatedMessage ? (
                 <span className="flex items-center gap-1 text-green-600">
-                  <Check className="w-3.5 h-3.5" />Ready in {getLanguageInfo(customerLanguage).name}
+                  <Check className="w-3.5 h-3.5" />{t('readyIn', { language: getLanguageInfo(customerLanguage).name })}
                 </span>
               ) : (
-                <span className="text-gray-400">Type to translate</span>
+                <span className="text-gray-400">{t('typeToTranslate')}</span>
               )}
             </div>
           )}
         </div>
         {translationEnabled && translatedMessage && !isTranslating && (
           <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs text-blue-600 font-medium mb-1">{getLanguageInfo(customerLanguage).flag} Will send:</p>
+            <p className="text-xs text-blue-600 font-medium mb-1">{getLanguageInfo(customerLanguage).flag} {t('willSend')}</p>
             <p className="text-sm text-gray-700">{translatedMessage}</p>
           </div>
         )}
@@ -1130,8 +1136,8 @@ export function UnifiedMessageThread({
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder={
               translationEnabled
-                ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}`
-                : `Type a message via ${conversation.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}...`
+                ? t('typeInEnglish', { language: getLanguageInfo(customerLanguage).name })
+                : conversation.channel === 'whatsapp' ? t('typeMessageViaWhatsApp') : t('typeMessageViaEmail')
             }
             className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2"
             style={{ '--tw-ring-color': colors.accent } as any}
@@ -1158,6 +1164,8 @@ export function UnifiedMessageThread({
           onConfirm={handleDeleteConversation}
           onCancel={() => setShowDeleteModal(false)}
           isDeleting={actionLoading}
+          t={t}
+          tCommon={tCommon}
         />
       )}
     </div>

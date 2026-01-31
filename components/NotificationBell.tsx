@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Bell, Check, X, ExternalLink, Loader2, Trash2 } from 'lucide-react'
+import { Bell, Check, X, ExternalLink, Loader2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 interface Notification {
   id: string
@@ -16,6 +17,7 @@ interface Notification {
 }
 
 export default function NotificationBell() {
+  const t = useTranslations('notificationBell')
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
@@ -159,11 +161,11 @@ export default function NotificationBell() {
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
 
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m`
-    if (diffHours < 24) return `${diffHours}h`
-    if (diffDays === 1) return 'Yesterday'
-    return `${diffDays}d`
+    if (diffMins < 1) return t('time.justNow')
+    if (diffMins < 60) return t('time.minutesAgo', { count: diffMins })
+    if (diffHours < 24) return t('time.hoursAgo', { count: diffHours })
+    if (diffDays === 1) return t('time.yesterday')
+    return t('time.daysAgo', { count: diffDays })
   }
 
   // Get icon based on notification type
@@ -186,10 +188,11 @@ export default function NotificationBell() {
     <div className="relative">
       {/* Bell Button */}
       <button
+        type="button"
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-        title="Notifications"
+        title={t('notifications')}
       >
         <Bell className="w-5 h-5 text-gray-500" />
         
@@ -214,28 +217,31 @@ export default function NotificationBell() {
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <h3 className="font-semibold text-gray-900 text-sm">Notifications</h3>
+            <h3 className="font-semibold text-gray-900 text-sm">{t('notifications')}</h3>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
+                  type="button"
                   onClick={markAllAsRead}
                   className="text-xs text-primary-600 hover:text-primary-700 font-medium"
                 >
-                  Mark all read
+                  {t('markAllRead')}
                 </button>
               )}
               {notifications.length > 0 && (
                 <>
                   <span className="text-gray-300">•</span>
                   <button
+                    type="button"
                     onClick={clearAllNotifications}
                     className="text-xs text-red-500 hover:text-red-600 font-medium"
                   >
-                    Clear all
+                    {t('clearAll')}
                   </button>
                 </>
               )}
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
                 className="p-1 hover:bg-gray-200 rounded transition-colors ml-1"
               >
@@ -253,7 +259,7 @@ export default function NotificationBell() {
             ) : notifications.length === 0 ? (
               <div className="py-8 text-center">
                 <Bell className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No notifications yet</p>
+                <p className="text-sm text-gray-500">{t('noNotificationsYet')}</p>
               </div>
             ) : (
               notifications.map(notification => (
@@ -265,9 +271,10 @@ export default function NotificationBell() {
                 >
                   {/* Delete button - appears on hover */}
                   <button
+                    type="button"
                     onClick={(e) => deleteNotification(notification.id, e)}
                     className="absolute top-2 right-2 p-1 rounded hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Delete notification"
+                    title={t('deleteNotification')}
                   >
                     <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
                   </button>
@@ -303,16 +310,17 @@ export default function NotificationBell() {
                             }}
                             className="text-[10px] text-primary-600 hover:text-primary-700 font-medium flex items-center gap-0.5"
                           >
-                            View <ExternalLink className="w-2.5 h-2.5" />
+                            {t('view')} <ExternalLink className="w-2.5 h-2.5" />
                           </Link>
                         )}
-                        
+
                         {!notification.is_read && (
                           <button
+                            type="button"
                             onClick={() => markAsRead(notification.id)}
                             className="text-[10px] text-gray-400 hover:text-gray-600 flex items-center gap-0.5"
                           >
-                            <Check className="w-2.5 h-2.5" /> Read
+                            <Check className="w-2.5 h-2.5" /> {t('read')}
                           </button>
                         )}
                       </div>
@@ -335,7 +343,7 @@ export default function NotificationBell() {
               onClick={() => setIsOpen(false)}
               className="block text-center text-xs text-primary-600 hover:text-primary-700 font-medium py-1"
             >
-              View all notifications
+              {t('viewAllNotifications')}
             </Link>
           </div>
         </div>

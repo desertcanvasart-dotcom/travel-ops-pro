@@ -7,11 +7,10 @@ import {
   Unlink,
   Search,
   Loader2,
-  Check,
-  X,
   ExternalLink
 } from 'lucide-react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 
 interface Client {
   id: string
@@ -46,6 +45,7 @@ export default function ClientLinkButton({
   onLinkChange,
   className = ''
 }: ClientLinkButtonProps) {
+  const t = useTranslations('clientLinkButton')
   const [linkedClient, setLinkedClient] = useState<Client | null>(null)
   const [linkId, setLinkId] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -134,7 +134,7 @@ export default function ClientLinkButton({
   }
 
   const handleUnlink = async () => {
-    if (!confirm('Remove link to this client?')) return
+    if (!confirm(t('removeLinkConfirm'))) return
 
     setLinking(true)
     try {
@@ -175,10 +175,11 @@ export default function ClientLinkButton({
           <ExternalLink className="w-3 h-3" />
         </Link>
         <button
+          type="button"
           onClick={handleUnlink}
           disabled={linking}
           className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
-          title="Remove link"
+          title={t('removeLink')}
         >
           {linking ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -194,11 +195,12 @@ export default function ClientLinkButton({
   return (
     <div className={`relative ${className}`}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
       >
         <LinkIcon className="w-3.5 h-3.5" />
-        <span>Link to Client</span>
+        <span>{t('linkToClient')}</span>
       </button>
 
       {/* Dropdown */}
@@ -213,7 +215,7 @@ export default function ClientLinkButton({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search clients..."
+                  placeholder={t('searchPlaceholder')}
                   className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500"
                   autoFocus
                 />
@@ -253,11 +255,11 @@ export default function ClientLinkButton({
                 </div>
               ) : searchQuery ? (
                 <div className="py-6 text-center text-sm text-gray-500">
-                  No clients found
+                  {t('noClientsFound')}
                 </div>
               ) : (
                 <div className="py-6 text-center text-sm text-gray-500">
-                  Type to search clients
+                  {t('typeToSearch')}
                 </div>
               )}
             </div>
@@ -287,7 +289,7 @@ export default function ClientLinkButton({
                   }}
                   className="w-full text-left px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
                 >
-                  <div className="font-medium">Auto-match by email</div>
+                  <div className="font-medium">{t('autoMatchByEmail')}</div>
                   <div className="text-gray-400 truncate">{fromEmail}</div>
                 </button>
               </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Send, Mail, MessageSquare, Printer, CheckCircle } from 'lucide-react'
@@ -41,16 +42,8 @@ interface SupplierDocument {
   }
 }
 
-const DOCUMENT_TITLES: Record<string, string> = {
-  hotel_voucher: 'Hotel Voucher',
-  service_order: 'Service Order',
-  transport_voucher: 'Transport Voucher',
-  activity_voucher: 'Activity Voucher',
-  guide_assignment: 'Guide Assignment',
-  cruise_voucher: 'Cruise Voucher'
-}
-
 export default function SupplierDocumentViewPage() {
+  const t = useTranslations('supplierDocumentDetail')
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<SupplierDocument | null>(null)
@@ -58,6 +51,15 @@ export default function SupplierDocumentViewPage() {
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
+
+  const DOCUMENT_TITLES: Record<string, string> = {
+    hotel_voucher: t('documentTypes.hotelVoucher'),
+    service_order: t('documentTypes.serviceOrder'),
+    transport_voucher: t('documentTypes.transportVoucher'),
+    activity_voucher: t('documentTypes.activityVoucher'),
+    guide_assignment: t('documentTypes.guideAssignment'),
+    cruise_voucher: t('documentTypes.cruiseVoucher')
+  }
 
   useEffect(() => {
     if (params.id) {
@@ -73,10 +75,10 @@ export default function SupplierDocumentViewPage() {
       if (result.success) {
         setDocument(result.data)
       } else {
-        setError('Document not found')
+        setError(t('documentNotFound'))
       }
     } catch (err) {
-      setError('Error loading document')
+      setError(t('errorLoadingDocument'))
     } finally {
       setLoading(false)
     }
@@ -107,7 +109,7 @@ export default function SupplierDocumentViewPage() {
 
   const handleSendEmail = async () => {
     if (!document || !document.supplier_contact_email) {
-      alert('Supplier email not available')
+      alert(t('supplierEmailNotAvailable'))
       return
     }
     
@@ -137,16 +139,16 @@ export default function SupplierDocumentViewPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'sent', sent_via: 'email' })
         })
-        
-        setActionSuccess('Email sent successfully!')
+
+        setActionSuccess(t('emailSentSuccessfully'))
         fetchDocument()
         setTimeout(() => setActionSuccess(null), 5000)
       } else {
-        alert('Failed to send email')
+        alert(t('failedToSendEmail'))
       }
     } catch (error) {
       console.error('Error sending email:', error)
-      alert('Failed to send email')
+      alert(t('failedToSendEmail'))
     } finally {
       setActionLoading(null)
     }
@@ -154,18 +156,19 @@ export default function SupplierDocumentViewPage() {
 
   const handleSendWhatsApp = () => {
     if (!document || !document.supplier_contact_phone) {
-      alert('Supplier phone not available')
+      alert(t('supplierPhoneNotAvailable'))
       return
     }
-    
+
     const phone = document.supplier_contact_phone.replace(/\D/g, '')
     const message = encodeURIComponent(
-      `Dear ${document.supplier_contact_name || document.supplier_name},\n\n` +
-      `Please find attached ${DOCUMENT_TITLES[document.document_type]} #${document.document_number}\n\n` +
-      `Guest: ${document.client_name}\n` +
-      `Date: ${document.check_in || document.service_date || 'As specified'}\n\n` +
-      `Please confirm receipt.\n\n` +
-      `Best regards,\nTravel2Egypt`
+      t('whatsappMessage', {
+        supplierName: document.supplier_contact_name || document.supplier_name,
+        documentType: DOCUMENT_TITLES[document.document_type],
+        documentNumber: document.document_number,
+        clientName: document.client_name,
+        date: document.check_in || document.service_date || t('asSpecified')
+      })
     )
     
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
@@ -188,12 +191,12 @@ export default function SupplierDocumentViewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'confirmed' })
       })
-      
-      setActionSuccess('Marked as confirmed!')
+
+      setActionSuccess(t('markedAsConfirmed'))
       fetchDocument()
       setTimeout(() => setActionSuccess(null), 5000)
     } catch (error) {
-      alert('Failed to update status')
+      alert(t('failedToUpdateStatus'))
     } finally {
       setActionLoading(null)
     }
@@ -204,7 +207,7 @@ export default function SupplierDocumentViewPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-10 h-10 border-3 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-500">Loading document...</p>
+          <p className="text-sm text-gray-500">{t('loadingDocument')}</p>
         </div>
       </div>
     )
@@ -216,7 +219,7 @@ export default function SupplierDocumentViewPage() {
         <div className="text-center bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
           <p className="text-sm text-red-600 mb-4">{error}</p>
           <Link href="/documents/supplier" className="text-primary-600 hover:text-primary-700 text-sm font-medium">
-            ← Back to Documents
+            ← {t('backToDocuments')}
           </Link>
         </div>
       </div>
@@ -248,14 +251,14 @@ export default function SupplierDocumentViewPage() {
                 className="px-3 py-1.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm font-medium flex items-center gap-1.5"
               >
                 <Download className="w-4 h-4" />
-                Download PDF
+                {t('downloadPDF')}
               </button>
               <button
                 onClick={handlePrint}
                 className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-1.5"
               >
                 <Printer className="w-4 h-4" />
-                Print
+                {t('print')}
               </button>
               {document.supplier_contact_email && (
                 <button
@@ -264,7 +267,7 @@ export default function SupplierDocumentViewPage() {
                   className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Mail className="w-4 h-4" />
-                  {actionLoading === 'email' ? 'Sending...' : 'Email'}
+                  {actionLoading === 'email' ? t('sending') : t('email')}
                 </button>
               )}
               {document.supplier_contact_phone && (
@@ -273,7 +276,7 @@ export default function SupplierDocumentViewPage() {
                   className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium flex items-center gap-1.5"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  WhatsApp
+                  {t('whatsapp')}
                 </button>
               )}
               {document.status === 'sent' && (
@@ -283,7 +286,7 @@ export default function SupplierDocumentViewPage() {
                   className="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <CheckCircle className="w-4 h-4" />
-                  Mark Confirmed
+                  {t('markConfirmed')}
                 </button>
               )}
             </div>
@@ -330,7 +333,7 @@ export default function SupplierDocumentViewPage() {
 
             {/* Supplier Info */}
             <div className="p-6 bg-gray-50 border-b border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">TO:</p>
+              <p className="text-xs text-gray-500 mb-1">{t('to')}:</p>
               <p className="text-lg font-semibold text-gray-900">{document.supplier_name}</p>
               {document.supplier_address && (
                 <p className="text-sm text-gray-600">{document.supplier_address}</p>
@@ -349,20 +352,20 @@ export default function SupplierDocumentViewPage() {
             <div className="p-6 border-b border-gray-200">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">GUEST NAME</p>
+                  <p className="text-xs text-gray-500 mb-1">{t('guestName')}</p>
                   <p className="text-lg font-semibold text-gray-900">{document.client_name}</p>
                   {document.client_nationality && (
-                    <p className="text-sm text-gray-600">Nationality: {document.client_nationality}</p>
+                    <p className="text-sm text-gray-600">{t('nationality')}: {document.client_nationality}</p>
                   )}
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-500 mb-1">PAX</p>
+                  <p className="text-xs text-gray-500 mb-1">{t('pax')}</p>
                   <p className="text-2xl font-bold text-primary-600">
                     {document.num_adults + (document.num_children || 0)}
                   </p>
                   <p className="text-sm text-gray-600">
-                    {document.num_adults} Adult{document.num_adults !== 1 ? 's' : ''}
-                    {document.num_children > 0 && `, ${document.num_children} Child${document.num_children !== 1 ? 'ren' : ''}`}
+                    {document.num_adults} {document.num_adults !== 1 ? t('adults') : t('adult')}
+                    {document.num_children > 0 && `, ${document.num_children} ${document.num_children !== 1 ? t('children') : t('child')}`}
                   </p>
                 </div>
               </div>
@@ -373,13 +376,13 @@ export default function SupplierDocumentViewPage() {
               {document.check_in ? (
                 <div className="grid grid-cols-2 gap-6">
                   <div className="bg-primary-50 p-4 rounded-lg">
-                    <p className="text-xs text-primary-600 font-medium mb-1">CHECK-IN</p>
+                    <p className="text-xs text-primary-600 font-medium mb-1">{t('checkIn')}</p>
                     <p className="text-lg font-semibold text-gray-900">
                       {new Date(document.check_in).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>
                   </div>
                   <div className="bg-primary-50 p-4 rounded-lg">
-                    <p className="text-xs text-primary-600 font-medium mb-1">CHECK-OUT</p>
+                    <p className="text-xs text-primary-600 font-medium mb-1">{t('checkOut')}</p>
                     <p className="text-lg font-semibold text-gray-900">
                       {document.check_out && new Date(document.check_out).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>
@@ -387,12 +390,12 @@ export default function SupplierDocumentViewPage() {
                 </div>
               ) : (
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-xs text-gray-500 font-medium mb-1">SERVICE DATE</p>
+                  <p className="text-xs text-gray-500 font-medium mb-1">{t('serviceDate')}</p>
                   <p className="text-lg font-semibold text-gray-900">
                     {document.service_date && new Date(document.service_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                   </p>
                   {document.pickup_time && (
-                    <p className="text-sm text-gray-600 mt-1">Pickup: {document.pickup_time}</p>
+                    <p className="text-sm text-gray-600 mt-1">{t('pickup')}: {document.pickup_time}</p>
                   )}
                 </div>
               )}
@@ -401,7 +404,7 @@ export default function SupplierDocumentViewPage() {
             {/* Services */}
             {document.services && document.services.length > 0 && (
               <div className="p-6 border-b border-gray-200">
-                <p className="text-xs text-gray-500 font-medium mb-3">SERVICES INCLUDED</p>
+                <p className="text-xs text-gray-500 font-medium mb-3">{t('servicesIncluded')}</p>
                 <div className="space-y-2">
                   {document.services.map((service, idx) => (
                     <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
@@ -422,7 +425,7 @@ export default function SupplierDocumentViewPage() {
             {/* Special Requests */}
             {document.special_requests && (
               <div className="p-6 border-b border-gray-200 bg-amber-50">
-                <p className="text-xs text-amber-700 font-medium mb-1">SPECIAL REQUESTS</p>
+                <p className="text-xs text-amber-700 font-medium mb-1">{t('specialRequests')}</p>
                 <p className="text-sm text-gray-700">{document.special_requests}</p>
               </div>
             )}
@@ -431,13 +434,13 @@ export default function SupplierDocumentViewPage() {
             <div className="p-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">PAYMENT TERMS</p>
+                  <p className="text-xs text-gray-500 mb-1">{t('paymentTerms')}</p>
                   <p className="text-sm font-medium text-gray-900">
-                    {document.payment_terms?.replace('_', ' ').toUpperCase() || 'AS AGREED'}
+                    {document.payment_terms?.replace('_', ' ').toUpperCase() || t('asAgreed')}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-500 mb-1">TOTAL</p>
+                  <p className="text-xs text-gray-500 mb-1">{t('total')}</p>
                   <p className="text-2xl font-bold text-primary-600">
                     {document.currency} {document.total_cost.toFixed(2)}
                   </p>
@@ -449,7 +452,7 @@ export default function SupplierDocumentViewPage() {
           {/* Itinerary Link */}
           {document.itinerary && (
             <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">LINKED ITINERARY</p>
+              <p className="text-xs text-gray-500 mb-1">{t('linkedItinerary')}</p>
               <Link
                 href={`/itineraries/${document.itinerary.id}`}
                 className="text-primary-600 hover:text-primary-700 font-medium"

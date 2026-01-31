@@ -9,6 +9,7 @@ import AddNoteModal from '@/components/AddNoteModal'
 import LogCommunicationModal from '@/components/LogCommunicationModal'
 
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   User, Mail, Phone, MapPin, Calendar, Star, TrendingUp, MessageSquare,
   FileText, Clock, AlertCircle, CheckCircle, Edit, Trash2, Plus, ArrowLeft,
@@ -76,6 +77,7 @@ export default function ClientProfilePage() {
   const params = useParams()
   const router = useRouter()
   const clientId = params?.id as string
+  const t = useTranslations('clients')
 
   const [client, setClient] = useState<Client | null>(null)
   const [communications, setCommunications] = useState<Communication[]>([])
@@ -188,7 +190,7 @@ export default function ClientProfilePage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-3 text-sm text-gray-600">Loading client profile...</p>
+          <p className="mt-3 text-sm text-gray-600">{t('loadingProfile')}</p>
         </div>
       </div>
     )
@@ -199,14 +201,14 @@ export default function ClientProfilePage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Client Not Found</h2>
-          <p className="text-sm text-gray-600 mb-4">The client you're looking for doesn't exist.</p>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">{t('clientNotFound')}</h2>
+          <p className="text-sm text-gray-600 mb-4">{t('clientNotFoundDesc')}</p>
           <Link
             href="/clients"
             className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Clients
+            {t('backToClients')}
           </Link>
         </div>
       </div>
@@ -237,7 +239,7 @@ export default function ClientProfilePage() {
               className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to Clients
+              {t('backToClients')}
             </Link>
             <div className="flex items-center gap-2">
               <Link
@@ -245,11 +247,11 @@ export default function ClientProfilePage() {
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200"
               >
                 <Edit className="w-4 h-4" />
-                Edit Client
+                {t('editClient')}
               </Link>
               <button className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200">
                 <Trash2 className="w-4 h-4" />
-                Delete
+                {t('delete')}
               </button>
             </div>
           </div>
@@ -324,19 +326,19 @@ export default function ClientProfilePage() {
                 <div className="text-xl font-bold text-blue-600">
                   {client.total_bookings_count}
                 </div>
-                <div className="text-xs text-gray-600 mt-0.5">Bookings</div>
+                <div className="text-xs text-gray-600 mt-0.5">{t('statsBookings')}</div>
               </div>
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 text-center">
                 <div className="text-xl font-bold text-green-600">
                   €{client.total_revenue_generated.toLocaleString()}
                 </div>
-                <div className="text-xs text-gray-600 mt-0.5">Revenue</div>
+                <div className="text-xs text-gray-600 mt-0.5">{t('statsRevenue')}</div>
               </div>
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 text-center">
                 <div className="text-xl font-bold text-purple-600">
                   €{client.average_booking_value.toLocaleString()}
                 </div>
-                <div className="text-xs text-gray-600 mt-0.5">Avg Value</div>
+                <div className="text-xs text-gray-600 mt-0.5">{t('statsAvgValue')}</div>
               </div>
             </div>
           </div>
@@ -347,7 +349,9 @@ export default function ClientProfilePage() {
               <div className="flex items-center gap-2 text-red-800 text-sm">
                 <AlertCircle className="w-4 h-4" />
                 <span className="font-semibold">
-                  {overdueFollowups.length} overdue follow-up{overdueFollowups.length > 1 ? 's' : ''}
+                  {overdueFollowups.length > 1
+                    ? t('overdueFollowupsPlural', { count: overdueFollowups.length })
+                    : t('overdueFollowups', { count: overdueFollowups.length })}
                 </span>
               </div>
             </div>
@@ -360,11 +364,11 @@ export default function ClientProfilePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex gap-6">
             {[
-              { id: 'overview', label: 'Overview', icon: User },
-              { id: 'communications', label: 'Communications', icon: MessageSquare, count: communications.length },
-              { id: 'bookings', label: 'Bookings', icon: Calendar, count: bookings.length },
-              { id: 'notes', label: 'Notes', icon: FileText, count: notes.length },
-              { id: 'followups', label: 'Follow-ups', icon: Clock, count: pendingFollowups.length }
+              { id: 'overview', label: t('tabOverview'), icon: User },
+              { id: 'communications', label: t('tabCommunications'), icon: MessageSquare, count: communications.length },
+              { id: 'bookings', label: t('tabBookings'), icon: Calendar, count: bookings.length },
+              { id: 'notes', label: t('tabNotes'), icon: FileText, count: notes.length },
+              { id: 'followups', label: t('tabFollowups'), icon: Clock, count: pendingFollowups.length }
             ].map((tab) => {
               const Icon = tab.icon
               return (
@@ -404,22 +408,22 @@ export default function ClientProfilePage() {
             <div className="col-span-2 space-y-4">
               {/* Personal Information */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <h3 className="text-base font-semibold mb-3">Personal Information</h3>
+                <h3 className="text-base font-semibold mb-3">{t('personalInformation')}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-gray-600">Preferred Language</label>
-                    <p className="text-sm font-medium">{client.preferred_language || 'Not specified'}</p>
+                    <label className="text-xs text-gray-600">{t('preferredLanguage')}</label>
+                    <p className="text-sm font-medium">{client.preferred_language || t('notSpecified')}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-600">Passport Type</label>
-                    <p className="text-sm font-medium">{client.passport_type || 'Not specified'}</p>
+                    <label className="text-xs text-gray-600">{t('passportType')}</label>
+                    <p className="text-sm font-medium">{client.passport_type || t('notSpecified')}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-600">Preferred Contact</label>
-                    <p className="text-sm font-medium">{client.preferred_contact_method || 'Not specified'}</p>
+                    <label className="text-xs text-gray-600">{t('preferredContact')}</label>
+                    <p className="text-sm font-medium">{client.preferred_contact_method || t('notSpecified')}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-600">Member Since</label>
+                    <label className="text-xs text-gray-600">{t('memberSince')}</label>
                     <p className="text-sm font-medium">{new Date(client.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
@@ -428,7 +432,7 @@ export default function ClientProfilePage() {
               {/* Interests & Preferences */}
               {client.special_interests && client.special_interests.length > 0 && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <h3 className="text-base font-semibold mb-3">Special Interests</h3>
+                  <h3 className="text-base font-semibold mb-3">{t('specialInterests')}</h3>
                   <div className="flex flex-wrap gap-2">
                     {client.special_interests.map((interest, index) => (
                       <span
@@ -447,7 +451,7 @@ export default function ClientProfilePage() {
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-yellow-600" />
-                    Internal Notes
+                    {t('internalNotes')}
                   </h3>
                   <p className="text-sm text-gray-700">{client.internal_notes}</p>
                 </div>
@@ -458,46 +462,46 @@ export default function ClientProfilePage() {
             <div className="space-y-4">
               {/* Quick Actions */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <h3 className="text-base font-semibold mb-3">Quick Actions</h3>
+                <h3 className="text-base font-semibold mb-3">{t('quickActions')}</h3>
                 <div className="space-y-2">
                 <Link
                href={`/whatsapp-parser?clientId=${clientId}`}
                className="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-sm rounded-lg hover:bg-blue-100"
                  >
                 <Plus className="w-4 h-4" />
-                New Booking
+                {t('newBooking')}
                 </Link>
-                <button 
+                <button
                    onClick={() => setIsCommunicationModalOpen(true)}
                    className="w-full flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 text-sm rounded-lg hover:bg-green-100"
                    >
                    <MessageSquare className="w-4 h-4" />
-                   Log Communication
+                   {t('logCommunication')}
                     </button>
-                  <button 
+                  <button
                    onClick={() => setIsFollowupModalOpen(true)}
                    className="w-full flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 text-sm rounded-lg hover:bg-purple-200"
                     >
                   <Clock className="w-4 h-4" />
-                  Add Follow-up
+                  {t('addFollowup')}
                    </button>
-                   <button 
+                   <button
                    onClick={() => setIsNoteModalOpen(true)}
                    className="w-full flex items-center gap-2 px-3 py-2 bg-orange-50 text-orange-700 text-sm rounded-lg hover:bg-orange-100"
                      >
                    <FileText className="w-4 h-4" />
-                  Add Note
+                  {t('addNote')}
                    </button>
                 </div>
               </div>
 
               {/* Recent Activity */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <h3 className="text-base font-semibold mb-3">Recent Activity</h3>
+                <h3 className="text-base font-semibold mb-3">{t('recentActivity')}</h3>
                 <div className="space-y-2">
                   {client.last_contacted_at && (
                     <div className="text-sm">
-                      <p className="text-xs text-gray-600">Last Contact</p>
+                      <p className="text-xs text-gray-600">{t('lastContact')}</p>
                       <p className="font-medium">
                         {new Date(client.last_contacted_at).toLocaleDateString()}
                       </p>
@@ -505,7 +509,7 @@ export default function ClientProfilePage() {
                   )}
                   {communications.length > 0 && (
                     <div className="text-sm">
-                      <p className="text-xs text-gray-600">Last Communication</p>
+                      <p className="text-xs text-gray-600">{t('lastCommunication')}</p>
                       <p className="font-medium">{communications[0].communication_type}</p>
                       <p className="text-xs text-gray-500">
                         {new Date(communications[0].communication_date).toLocaleDateString()}
@@ -520,7 +524,7 @@ export default function ClientProfilePage() {
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                   <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
                     <Tag className="w-4 h-4" />
-                    Tags
+                    {t('tags')}
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {client.tags.map((tag, index) => (
@@ -542,8 +546,8 @@ export default function ClientProfilePage() {
         {activeTab === 'communications' && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Communication History</h2>
-              <button 
+              <h2 className="text-xl font-bold">{t('communicationHistory')}</h2>
+              <button
               onClick={() => {
             setEditingCommunication(null)
             setIsCommunicationModalOpen(true)
@@ -551,14 +555,14 @@ export default function ClientProfilePage() {
            className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
             >
             <Plus className="w-4 h-4" />
-              Log Communication
+              {t('logCommunication')}
               </button>
             </div>
 
             {communications.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
                 <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-600">No communications logged yet</p>
+                <p className="text-sm text-gray-600">{t('noCommunications')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -625,26 +629,26 @@ export default function ClientProfilePage() {
         {activeTab === 'bookings' && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Booking History</h2>
+              <h2 className="text-xl font-bold">{t('bookingHistory')}</h2>
               <Link
                href={`/whatsapp-parser?clientId=${clientId}`}
                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                >
               <Plus className="w-4 h-4" />
-              New Booking
+              {t('newBooking')}
                </Link>
             </div>
 
             {bookings.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
                 <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-600 mb-3">No bookings yet</p>
+                <p className="text-sm text-gray-600 mb-3">{t('noBookings')}</p>
                 <Link
                 href={`/whatsapp-parser?clientId=${clientId}`}
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                  >
                 <Plus className="w-4 h-4" />
-               Create First Booking
+               {t('createFirstBooking')}
                  </Link>  
               </div>
             ) : (
@@ -661,7 +665,7 @@ export default function ClientProfilePage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <User className="w-3 h-3" />
-                            {booking.number_of_people} people
+                            {booking.number_of_people} {t('people')}
                           </div>
                         </div>
                       </div>
@@ -673,7 +677,7 @@ export default function ClientProfilePage() {
                           href={`/view-itinerary/${booking.id}`}
                           className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
                         >
-                          View Details →
+                          {t('viewDetails')}
                         </Link>
                       </div>
                     </div>
@@ -688,8 +692,8 @@ export default function ClientProfilePage() {
         {activeTab === 'notes' && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Client Notes</h2>
-              <button 
+              <h2 className="text-xl font-bold">{t('clientNotes')}</h2>
+              <button
                 onClick={() => {
                   setEditingNote(null)
                   setIsNoteModalOpen(true)
@@ -697,14 +701,14 @@ export default function ClientProfilePage() {
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
               >
                 <Plus className="w-4 h-4" />
-                Add Note
+                {t('addNote')}
               </button>
             </div>
 
             {notes.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
                 <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-600">No notes added yet</p>
+                <p className="text-sm text-gray-600">{t('noNotes')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -748,7 +752,7 @@ export default function ClientProfilePage() {
                     )}
                     <p className="text-sm text-gray-700">{note.content}</p>
                     {note.created_by && (
-                      <p className="text-xs text-gray-500 mt-2">By: {note.created_by}</p>
+                      <p className="text-xs text-gray-500 mt-2">{t('byUser', { name: note.created_by })}</p>
                     )}
                   </div>
                 ))}
@@ -761,8 +765,8 @@ export default function ClientProfilePage() {
         {activeTab === 'followups' && (
           <div>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Follow-ups & Reminders</h2>
-              <button 
+              <h2 className="text-xl font-bold">{t('followupsReminders')}</h2>
+              <button
                 onClick={() => {
                   setEditingFollowup(null)
                   setIsFollowupModalOpen(true)
@@ -770,14 +774,14 @@ export default function ClientProfilePage() {
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
               >
                 <Plus className="w-4 h-4" />
-                Add Follow-up
+                {t('addFollowup')}
               </button>
             </div>
 
             {followups.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
                 <Clock className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-600">No follow-ups scheduled</p>
+                <p className="text-sm text-gray-600">{t('noFollowups')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -815,7 +819,7 @@ export default function ClientProfilePage() {
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
                               <span className={isOverdue ? 'text-red-600 font-semibold' : ''}>
-                                Due: {new Date(followup.due_date).toLocaleDateString()}
+                                {t('dueDate')} {new Date(followup.due_date).toLocaleDateString()}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 capitalize">
@@ -832,11 +836,11 @@ export default function ClientProfilePage() {
                         <div className="flex items-center gap-2 ml-4">
                           {followup.status === 'pending' && (
                             <>
-                              <button 
+                              <button
                                 onClick={() => markFollowupComplete(followup.id)}
                                 className="px-2 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-xs font-medium"
                               >
-                                Mark Complete
+                                {t('markComplete')}
                               </button>
                               <button
                                 onClick={() => {

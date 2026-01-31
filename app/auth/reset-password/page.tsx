@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
+import { useTranslations } from 'next-intl'
 import { Eye, EyeOff, Lock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
+  const t = useTranslations('auth')
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -39,7 +41,7 @@ export default function ResetPasswordPage() {
         })
 
         if (error) {
-          setError('Invalid or expired reset link. Please request a new one.')
+          setError(t('invalidOrExpiredLink'))
           setHasValidSession(false)
         } else if (data.session) {
           setHasValidSession(true)
@@ -50,7 +52,7 @@ export default function ResetPasswordPage() {
         if (session) {
           setHasValidSession(true)
         } else {
-          setError('Invalid or expired reset link. Please request a new one.')
+          setError(t('invalidOrExpiredLink'))
           setHasValidSession(false)
         }
       }
@@ -66,12 +68,12 @@ export default function ResetPasswordPage() {
     setError(null)
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long')
+      setError(t('passwordTooShort'))
       return
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
+      setError(t('passwordsNoMatch'))
       return
     }
 
@@ -92,7 +94,7 @@ export default function ResetPasswordPage() {
         }, 3000)
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred')
+      setError(err.message || t('anErrorOccurred'))
     } finally {
       setLoading(false)
     }
@@ -104,7 +106,7 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-4" />
-          <p className="text-gray-600">Verifying reset link...</p>
+          <p className="text-gray-600">{t('verifyingLink')}</p>
         </div>
       </div>
     )
@@ -119,15 +121,15 @@ export default function ResetPasswordPage() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Password Updated!</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('passwordUpdated')}</h1>
             <p className="text-gray-600 mb-4">
-              Your password has been successfully reset. Redirecting to login...
+              {t('passwordResetSuccess')}
             </p>
             <button
               onClick={() => router.push('/login')}
               className="text-primary-600 hover:text-primary-700 font-medium"
             >
-              Go to Login Now →
+              {t('goToLoginNow')}
             </button>
           </div>
         </div>
@@ -144,15 +146,15 @@ export default function ResetPasswordPage() {
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-8 h-8 text-red-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Invalid Reset Link</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('invalidResetLink')}</h1>
             <p className="text-gray-600 mb-6">
-              This password reset link is invalid or has expired. Please request a new one.
+              {t('invalidResetLinkDesc')}
             </p>
             <button
               onClick={() => router.push('/login')}
               className="w-full px-4 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
             >
-              Back to Login
+              {t('backToLogin')}
             </button>
           </div>
         </div>
@@ -169,8 +171,8 @@ export default function ResetPasswordPage() {
             <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Lock className="w-8 h-8 text-primary-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Set New Password</h1>
-            <p className="text-gray-600 mt-2">Enter your new password below</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('setNewPassword')}</h1>
+            <p className="text-gray-600 mt-2">{t('enterNewPasswordBelow')}</p>
           </div>
 
           {error && (
@@ -182,13 +184,13 @@ export default function ResetPasswordPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">New Password</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('newPassword')}</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter new password"
+                  placeholder={t('enterNewPassword')}
                   required
                   minLength={8}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 pr-10"
@@ -201,17 +203,17 @@ export default function ResetPasswordPage() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters</p>
+              <p className="text-xs text-gray-500 mt-1">{t('minCharacters')}</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('confirmPassword')}</label>
               <div className="relative">
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
+                  placeholder={t('confirmNewPassword')}
                   required
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 pr-10"
                 />
@@ -233,10 +235,10 @@ export default function ResetPasswordPage() {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Updating Password...
+                  {t('updatingPassword')}
                 </>
               ) : (
-                'Update Password'
+                t('updatePassword')
               )}
             </button>
           </form>
@@ -246,7 +248,7 @@ export default function ResetPasswordPage() {
               onClick={() => router.push('/login')}
               className="text-sm text-gray-600 hover:text-primary-600"
             >
-              ← Back to Login
+              {t('backToLoginArrow')}
             </button>
           </div>
         </div>

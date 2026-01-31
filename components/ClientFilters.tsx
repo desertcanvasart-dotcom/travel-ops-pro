@@ -1,17 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import Link from 'next/link'
-import {
-  Search, Filter, X, Star, TrendingUp, Calendar,
-  User, Building, Users, ChevronDown, SlidersHorizontal
-} from 'lucide-react'
+import { Search, X, Star, SlidersHorizontal } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 const supabase = createClient()
 
 // Add this filter component at the top of your clients page
 export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: any) => void }) {
+  const t = useTranslations('clientFilters')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({
     search: '',
@@ -60,7 +58,7 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Search by name, email, or phone..."
+              placeholder={t('searchPlaceholder')}
               value={filters.search}
               onChange={(e) => handleFilterChange('search', e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -75,7 +73,7 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
             }`}
           >
             <SlidersHorizontal className="w-4 h-4" />
-            Filters
+            {t('filters')}
             {hasActiveFilters && (
               <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                 {[filters.status !== 'all', filters.clientType !== 'all', filters.vipOnly, filters.dateFrom, filters.dateTo].filter(Boolean).length}
@@ -88,7 +86,7 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
               className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-4 h-4" />
-              Clear
+              {t('clear')}
             </button>
           )}
         </div>
@@ -101,64 +99,67 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
             {/* Status Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status
+                {t('status')}
               </label>
               <select
                 value={filters.status}
                 onChange={(e) => handleFilterChange('status', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                title={t('status')}
               >
-                <option value="all">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="prospect">Prospect</option>
-                <option value="blacklisted">Blacklisted</option>
+                <option value="all">{t('statuses.all')}</option>
+                <option value="active">{t('statuses.active')}</option>
+                <option value="inactive">{t('statuses.inactive')}</option>
+                <option value="prospect">{t('statuses.prospect')}</option>
+                <option value="blacklisted">{t('statuses.blacklisted')}</option>
               </select>
             </div>
 
             {/* Client Type Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Client Type
+                {t('clientType')}
               </label>
               <select
                 value={filters.clientType}
                 onChange={(e) => handleFilterChange('clientType', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                title={t('clientType')}
               >
-                <option value="all">All Types</option>
-                <option value="individual">Individual</option>
-                <option value="family">Family</option>
-                <option value="corporate">Corporate</option>
-                <option value="travel_agent">Travel Agent</option>
-                <option value="group">Group</option>
+                <option value="all">{t('types.all')}</option>
+                <option value="individual">{t('types.individual')}</option>
+                <option value="family">{t('types.family')}</option>
+                <option value="corporate">{t('types.corporate')}</option>
+                <option value="travel_agent">{t('types.travel_agent')}</option>
+                <option value="group">{t('types.group')}</option>
               </select>
             </div>
 
             {/* Sort By */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Sort By
+                {t('sortBy')}
               </label>
               <select
                 value={filters.sortBy}
                 onChange={(e) => handleFilterChange('sortBy', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                title={t('sortBy')}
               >
-                <option value="name">Name (A-Z)</option>
-                <option value="name_desc">Name (Z-A)</option>
-                <option value="revenue">Revenue (High to Low)</option>
-                <option value="revenue_asc">Revenue (Low to High)</option>
-                <option value="bookings">Bookings (Most)</option>
-                <option value="recent">Most Recent</option>
-                <option value="oldest">Oldest First</option>
+                <option value="name">{t('sortOptions.name')}</option>
+                <option value="name_desc">{t('sortOptions.name_desc')}</option>
+                <option value="revenue">{t('sortOptions.revenue')}</option>
+                <option value="revenue_asc">{t('sortOptions.revenue_asc')}</option>
+                <option value="bookings">{t('sortOptions.bookings')}</option>
+                <option value="recent">{t('sortOptions.recent')}</option>
+                <option value="oldest">{t('sortOptions.oldest')}</option>
               </select>
             </div>
 
             {/* VIP Toggle */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                VIP Clients
+                {t('vipClients')}
               </label>
               <label className="flex items-center gap-3 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
                 <input
@@ -168,7 +169,7 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <Star className="w-4 h-4 text-yellow-500" />
-                <span className="text-sm text-gray-700">VIP Only</span>
+                <span className="text-sm text-gray-700">{t('vipOnly')}</span>
               </label>
             </div>
           </div>
@@ -177,18 +178,19 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Member Since (From)
+                {t('memberSinceFrom')}
               </label>
               <input
                 type="date"
                 value={filters.dateFrom}
                 onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                title={t('memberSinceFrom')}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Member Since (To)
+                {t('memberSinceTo')}
               </label>
               <input
                 type="date"
@@ -196,6 +198,7 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
                 onChange={(e) => handleFilterChange('dateTo', e.target.value)}
                 max={new Date().toISOString().split('T')[0]}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                title={t('memberSinceTo')}
               />
             </div>
           </div>

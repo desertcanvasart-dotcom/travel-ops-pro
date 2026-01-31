@@ -3,10 +3,13 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '../contexts/AuthContext'
+import { useTranslations } from 'next-intl'
 
 export default function Navigation() {
   const pathname = usePathname()
   const { user, profile, signOut } = useAuth()
+  const t = useTranslations('navigation')
+  const tRoles = useTranslations('roles')
 
   const isActive = (path: string) => {
     return pathname === path ? 'bg-blue-700' : 'hover:bg-blue-700'
@@ -29,43 +32,43 @@ export default function Navigation() {
                 href="/dashboard"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/dashboard')}`}
               >
-                📊 Dashboard
+                📊 {t('dashboard')}
               </Link>
               <Link
                 href="/whatsapp-parser"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/whatsapp-parser')}`}
               >
-                💬 Parse WhatsApp
+                💬 {t('parseWhatsApp')}
               </Link>
               <Link
                 href="/tour-builder"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/tour-builder')}`}
               >
-                🏗️ Tour Builder
+                🏗️ {t('tourBuilder')}
               </Link>
               <Link
                 href="/itineraries"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/itineraries')}`}
               >
-                📋 All Quotes
+                📋 {t('allQuotes')}
               </Link>
               <Link
                 href="/tours"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/tours')}`}
               >
-                🗺️ Tours
+                🗺️ {t('tours')}
               </Link>
               <Link
                 href="/rates"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/rates')}`}
               >
-                💰 Rates
+                💰 {t('rates')}
               </Link>
               <Link
                 href="/analytics"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/analytics')}`}
               >
-                📈 Analytics
+                📈 {t('analytics')}
               </Link>
             </div>
           </div>
@@ -74,15 +77,16 @@ export default function Navigation() {
           <div className="flex items-center space-x-4">
             <div className="hidden lg:block text-right">
               <div className="font-medium">{profile?.full_name || user?.email}</div>
-              <div className="text-xs text-blue-200 capitalize">{profile?.role || 'agent'}</div>
+              <div className="text-xs text-blue-200 capitalize">{tRoles(profile?.role || 'agent')}</div>
             </div>
-            
+
             <button
+              type="button"
               onClick={() => signOut()}
               className="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
             >
               <span>🚪</span>
-              <span className="hidden lg:block">Logout</span>
+              <span className="hidden lg:block">{t('logout')}</span>
             </button>
           </div>
         </div>

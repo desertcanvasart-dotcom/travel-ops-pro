@@ -2,11 +2,12 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { 
+import {
   Users, Truck, Hotel, UtensilsCrossed, Ship, Plane, UserCheck,
   Check, AlertCircle, Loader2, MapPin, Clock, Plus, Trash2, Calendar,
   ChevronDown, ChevronUp, X, MessageCircle, Send, Filter, Anchor
 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 // Types
 interface Resource {
@@ -95,10 +96,10 @@ const CRUISE_ROUTE_OPTIONS = [
 
 // Resource type configurations - using existing API endpoints
 const RESOURCE_TYPES = [
-  { 
-    key: 'guide', 
-    label: 'Guides', 
-    icon: Users, 
+  {
+    key: 'guide',
+    labelKey: 'guides',
+    icon: Users,
     color: 'blue',
     apiEndpoint: '/api/guides',
     nameField: 'name',
@@ -108,10 +109,10 @@ const RESOURCE_TYPES = [
     filterType: 'city',
     cityField: 'city'
   },
-  { 
-    key: 'vehicle', 
-    label: 'Vehicles', 
-    icon: Truck, 
+  {
+    key: 'vehicle',
+    labelKey: 'vehicles',
+    icon: Truck,
     color: 'green',
     apiEndpoint: '/api/vehicles',
     nameField: 'name',
@@ -121,10 +122,10 @@ const RESOURCE_TYPES = [
     filterType: 'city',
     cityField: 'city'
   },
-  { 
-    key: 'hotel', 
-    label: 'Hotels', 
-    icon: Hotel, 
+  {
+    key: 'hotel',
+    labelKey: 'hotels',
+    icon: Hotel,
     color: 'purple',
     apiEndpoint: '/api/resources/hotels',
     nameField: 'name',
@@ -134,10 +135,10 @@ const RESOURCE_TYPES = [
     filterType: 'city',
     cityField: 'city'
   },
-  { 
-    key: 'restaurant', 
-    label: 'Restaurants', 
-    icon: UtensilsCrossed, 
+  {
+    key: 'restaurant',
+    labelKey: 'restaurants',
+    icon: UtensilsCrossed,
     color: 'orange',
     apiEndpoint: '/api/resources/restaurants',
     nameField: 'name',
@@ -147,10 +148,10 @@ const RESOURCE_TYPES = [
     filterType: 'city',
     cityField: 'city'
   },
-  { 
-    key: 'cruise', 
-    label: 'Nile Cruises', 
-    icon: Ship, 
+  {
+    key: 'cruise',
+    labelKey: 'nileCruises',
+    icon: Ship,
     color: 'indigo',
     apiEndpoint: '/api/cruises',
     nameField: 'name',
@@ -168,10 +169,10 @@ const RESOURCE_TYPES = [
     filterType: 'route',
     routeField: 'route'
   },
-  { 
-    key: 'airport_staff', 
-    label: 'Airport Staff', 
-    icon: Plane, 
+  {
+    key: 'airport_staff',
+    labelKey: 'airportStaff',
+    icon: Plane,
     color: 'cyan',
     apiEndpoint: '/api/resources/airport-staff',
     nameField: 'name',
@@ -181,10 +182,10 @@ const RESOURCE_TYPES = [
     filterType: 'airport',
     cityField: 'airport_location'
   },
-  { 
-    key: 'hotel_staff', 
-    label: 'Hotel Staff', 
-    icon: UserCheck, 
+  {
+    key: 'hotel_staff',
+    labelKey: 'hotelStaff',
+    icon: UserCheck,
     color: 'pink',
     apiEndpoint: '/api/resources/hotel-staff',
     nameField: 'name',
@@ -215,6 +216,7 @@ export default function ResourceAssignmentV2({
   tripName,
   onUpdate
 }: ResourceAssignmentV2Props) {
+  const t = useTranslations('resourceAssignment')
   const [activeTab, setActiveTab] = useState('guide')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -591,7 +593,7 @@ export default function ResourceAssignmentV2({
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
-          <span className="ml-3 text-gray-600">Loading resources...</span>
+          <span className="ml-3 text-gray-600">{t('loadingResources')}</span>
         </div>
       </div>
     )
@@ -609,15 +611,15 @@ export default function ResourceAssignmentV2({
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-gray-900">Resource Assignment</h3>
+          <h3 className="text-lg font-bold text-gray-900">{t('resourceAssignment')}</h3>
           <p className="text-sm text-gray-500 mt-0.5">
-            {formatDate(startDate)} - {formatDate(endDate)} • {numTravelers} travelers
+            {formatDate(startDate)} - {formatDate(endDate)} • {numTravelers} {t('travelers')}
           </p>
         </div>
         {conflicts.length > 0 && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm">
             <AlertCircle className="w-4 h-4" />
-            <span className="font-medium">{conflicts.length} Conflict{conflicts.length > 1 ? 's' : ''}</span>
+            <span className="font-medium">{conflicts.length} {t('conflict', { count: conflicts.length })}</span>
           </div>
         )}
       </div>
@@ -631,19 +633,20 @@ export default function ResourceAssignmentV2({
             const hasConflict = getConflictsForType(type.key).length > 0
             const isActive = activeTab === type.key
             const colorClass = COLOR_CLASSES[type.color]
-            
+
             return (
               <button
+                type="button"
                 key={type.key}
                 onClick={() => setActiveTab(type.key)}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  isActive 
-                    ? `${colorClass.text} border-current` 
+                  isActive
+                    ? `${colorClass.text} border-current`
                     : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
                 <Icon className="w-4 h-4" />
-                <span>{type.label}</span>
+                <span>{t(type.labelKey)}</span>
                 {count > 0 && (
                   <span className={`px-1.5 py-0.5 text-xs rounded-full ${
                     isActive ? colorClass.light + ' ' + colorClass.text : 'bg-gray-100 text-gray-600'
@@ -668,11 +671,11 @@ export default function ResourceAssignmentV2({
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium text-orange-800">Scheduling Conflicts Detected</p>
+                <p className="font-medium text-orange-800">{t('schedulingConflictsDetected')}</p>
                 <ul className="mt-2 text-sm text-orange-700 space-y-1">
                   {activeConflicts.map((conflict, idx) => (
                     <li key={idx}>
-                      <strong>{conflict.resource_name}</strong> is also booked for {conflict.conflicting_itinerary} ({conflict.dates})
+                      <strong>{conflict.resource_name}</strong> {t('isAlsoBookedFor', { itinerary: conflict.conflicting_itinerary, dates: conflict.dates })}
                     </li>
                   ))}
                 </ul>
@@ -731,14 +734,15 @@ export default function ResourceAssignmentV2({
                       {/* WhatsApp Button */}
                       {canNotify && (
                         <button
+                          type="button"
                           onClick={() => handleSendWhatsApp(resource)}
                           disabled={isSending}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            wasSent 
+                            wasSent
                               ? 'bg-green-100 text-green-700'
                               : 'bg-[#25D366] text-white hover:bg-[#20BD5A]'
                           } disabled:opacity-50`}
-                          title="Send WhatsApp notification"
+                          title={t('sendWhatsAppNotification')}
                         >
                           {isSending ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -748,16 +752,17 @@ export default function ResourceAssignmentV2({
                             <MessageCircle className="w-4 h-4" />
                           )}
                           <span className="hidden sm:inline">
-                            {isSending ? 'Sending...' : wasSent ? 'Sent!' : 'Notify'}
+                            {isSending ? t('sending') : wasSent ? t('sent') : t('notify')}
                           </span>
                         </button>
                       )}
-                      
+
                       {/* Remove Button */}
                       <button
+                        type="button"
                         onClick={() => handleRemoveResource(resource.id)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Remove"
+                        title={t('remove')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -770,12 +775,13 @@ export default function ResourceAssignmentV2({
         ) : (
           <div className="text-center py-8 text-gray-500 mb-4">
             <activeTypeConfig.icon className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p>No {activeTypeConfig.label.toLowerCase()} assigned yet</p>
+            <p>{t('noResourcesAssignedYet', { type: t(activeTypeConfig.labelKey).toLowerCase() })}</p>
           </div>
         )}
 
         {/* Add Button */}
         <button
+          type="button"
           onClick={() => {
             resetAddForm()
             setShowAddModal(true)
@@ -783,12 +789,12 @@ export default function ResourceAssignmentV2({
           className={`w-full py-3 border-2 border-dashed rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-colors ${activeColor.border} ${activeColor.text} hover:${activeColor.light}`}
         >
           <Plus className="w-4 h-4" />
-          Add {activeTypeConfig.label.slice(0, -1)}
+          {t('addResource', { type: t(activeTypeConfig.labelKey).slice(0, -1) })}
         </button>
 
         {/* Available count */}
         <p className="text-xs text-gray-500 mt-2 text-center">
-          {allAvailableForType.length} {activeTypeConfig.label.toLowerCase()} available
+          {t('resourcesAvailable', { count: allAvailableForType.length, type: t(activeTypeConfig.labelKey).toLowerCase() })}
         </p>
       </div>
 
@@ -798,11 +804,13 @@ export default function ResourceAssignmentV2({
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
-                Add {activeTypeConfig.label.slice(0, -1)}
+                {t('addResource', { type: t(activeTypeConfig.labelKey).slice(0, -1) })}
               </h3>
               <button
+                type="button"
                 onClick={() => setShowAddModal(false)}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+                title={t('close')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -811,13 +819,13 @@ export default function ResourceAssignmentV2({
             <div className="p-6 space-y-4">
               
               {/* ===== FILTER SECTION ===== */}
-              
+
               {/* City Filter - for guides, vehicles, hotels, restaurants */}
               {activeTypeConfig.filterType === 'city' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <MapPin className="w-4 h-4 inline mr-1.5 text-gray-400" />
-                    Filter by City
+                    {t('filterByCity')}
                   </label>
                   <select
                     value={modalCityFilter}
@@ -825,10 +833,11 @@ export default function ResourceAssignmentV2({
                       setModalCityFilter(e.target.value)
                       setAddFormData({ ...addFormData, resource_id: '' })
                     }}
+                    title={t('filterByCity')}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   >
-                    <option value="all">All Cities ({allAvailableForType.length})</option>
-                    <option value="none">No City Assigned ({allAvailableForType.filter(r => !r[activeTypeConfig.cityField || 'city']).length})</option>
+                    <option value="all">{t('allCities')} ({allAvailableForType.length})</option>
+                    <option value="none">{t('noCityAssigned')} ({allAvailableForType.filter(r => !r[activeTypeConfig.cityField || 'city']).length})</option>
                      {getUniqueCities(activeTab).map((city) => {
                       const count = allAvailableForType.filter(r => r[activeTypeConfig.cityField || 'city'] === city).length
                       return (
@@ -846,7 +855,7 @@ export default function ResourceAssignmentV2({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Plane className="w-4 h-4 inline mr-1.5 text-gray-400" />
-                    Filter by Airport
+                    {t('filterByAirport')}
                   </label>
                   <select
                     value={modalAirportFilter}
@@ -854,9 +863,10 @@ export default function ResourceAssignmentV2({
                       setModalAirportFilter(e.target.value)
                       setAddFormData({ ...addFormData, resource_id: '' })
                     }}
+                    title={t('filterByAirport')}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   >
-                    <option value="all">All Airports ({allAvailableForType.length})</option>
+                    <option value="all">{t('allAirports')} ({allAvailableForType.length})</option>
                     {getUniqueAirportLocations().map((location) => {
                       const count = allAvailableForType.filter(r => r.airport_location === location).length
                       return (
@@ -874,7 +884,7 @@ export default function ResourceAssignmentV2({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Hotel className="w-4 h-4 inline mr-1.5 text-gray-400" />
-                    Filter by Hotel City
+                    {t('filterByHotelCity')}
                   </label>
                   <select
                     value={modalCityFilter}
@@ -882,9 +892,10 @@ export default function ResourceAssignmentV2({
                       setModalCityFilter(e.target.value)
                       setAddFormData({ ...addFormData, resource_id: '' })
                     }}
+                    title={t('filterByHotelCity')}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   >
-                    <option value="all">All Cities ({allAvailableForType.length})</option>
+                    <option value="all">{t('allCities')} ({allAvailableForType.length})</option>
                     {getUniqueHotelCities().map((city) => {
                       const count = allAvailableForType.filter(r => r.hotel?.city === city).length
                       return (
@@ -902,7 +913,7 @@ export default function ResourceAssignmentV2({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Anchor className="w-4 h-4 inline mr-1.5 text-gray-400" />
-                    Filter by Route
+                    {t('filterByRoute')}
                   </label>
                   <select
                     value={modalRouteFilter}
@@ -910,9 +921,10 @@ export default function ResourceAssignmentV2({
                       setModalRouteFilter(e.target.value)
                       setAddFormData({ ...addFormData, resource_id: '' })
                     }}
+                    title={t('filterByRoute')}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   >
-                    <option value="all">All Routes ({allAvailableForType.length})</option>
+                    <option value="all">{t('allRoutes')} ({allAvailableForType.length})</option>
                     {CRUISE_ROUTE_OPTIONS.filter(r => r.value !== 'all' && getUniqueCruiseRoutes().includes(r.value)).map((route) => {
                       const count = allAvailableForType.filter(r => r.route === route.value).length
                       return (
@@ -928,14 +940,15 @@ export default function ResourceAssignmentV2({
               {/* ===== RESOURCE SELECTION ===== */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select {activeTypeConfig.label.slice(0, -1)} *
+                  {t('selectResource', { type: t(activeTypeConfig.labelKey).slice(0, -1) })} *
                 </label>
                 <select
                   value={addFormData.resource_id}
                   onChange={(e) => setAddFormData({ ...addFormData, resource_id: e.target.value })}
+                  title={t('selectResource', { type: t(activeTypeConfig.labelKey).slice(0, -1) })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
-                  <option value="">Choose...</option>
+                  <option value="">{t('choose')}</option>
                   {filteredAvailableResources.map((resource) => (
                     <option key={resource.id} value={resource.id}>
                       {activeTypeConfig.displayField(resource)}
@@ -944,12 +957,12 @@ export default function ResourceAssignmentV2({
                 </select>
                 {filteredAvailableResources.length === 0 && (
                   <p className="text-sm text-orange-600 mt-2">
-                    No {activeTypeConfig.label.toLowerCase()} found for this filter. Try selecting a different option.
+                    {t('noResourcesFoundForFilter', { type: t(activeTypeConfig.labelKey).toLowerCase() })}
                   </p>
                 )}
                 {(modalCityFilter !== 'all' || modalAirportFilter !== 'all' || modalRouteFilter !== 'all') && filteredAvailableResources.length > 0 && (
                   <p className="text-xs text-gray-500 mt-1">
-                    Showing {filteredAvailableResources.length} of {allAvailableForType.length}
+                    {t('showingOfTotal', { showing: filteredAvailableResources.length, total: allAvailableForType.length })}
                   </p>
                 )}
               </div>
@@ -958,7 +971,7 @@ export default function ResourceAssignmentV2({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Date
+                    {t('startDate')}
                   </label>
                   <input
                     type="date"
@@ -966,12 +979,13 @@ export default function ResourceAssignmentV2({
                     onChange={(e) => setAddFormData({ ...addFormData, start_date: e.target.value })}
                     min={startDate}
                     max={endDate}
+                    title={t('startDate')}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Date
+                    {t('endDate')}
                   </label>
                   <input
                     type="date"
@@ -979,6 +993,7 @@ export default function ResourceAssignmentV2({
                     onChange={(e) => setAddFormData({ ...addFormData, end_date: e.target.value })}
                     min={addFormData.start_date}
                     max={endDate}
+                    title={t('endDate')}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   />
                 </div>
@@ -988,13 +1003,14 @@ export default function ResourceAssignmentV2({
               {['hotel', 'vehicle'].includes(activeTab) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantity {activeTab === 'hotel' ? '(rooms)' : '(vehicles)'}
+                    {t('quantity')} {activeTab === 'hotel' ? t('rooms') : t('vehiclesCount')}
                   </label>
                   <input
                     type="number"
                     min="1"
                     value={addFormData.quantity}
                     onChange={(e) => setAddFormData({ ...addFormData, quantity: parseInt(e.target.value) || 1 })}
+                    title={t('quantity')}
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   />
                 </div>
@@ -1003,13 +1019,13 @@ export default function ResourceAssignmentV2({
               {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes
+                  {t('notes')}
                 </label>
                 <textarea
                   rows={2}
                   value={addFormData.notes}
                   onChange={(e) => setAddFormData({ ...addFormData, notes: e.target.value })}
-                  placeholder="Special requirements, room type, meal preferences..."
+                  placeholder={t('notesPlaceholder')}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 />
               </div>
@@ -1017,12 +1033,14 @@ export default function ResourceAssignmentV2({
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
+                type="button"
                 onClick={() => setShowAddModal(false)}
                 className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
+                type="button"
                 onClick={handleAddResource}
                 disabled={saving || !addFormData.resource_id}
                 className={`px-6 py-2 text-white rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeColor.bg} hover:opacity-90`}
@@ -1030,12 +1048,12 @@ export default function ResourceAssignmentV2({
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Adding...
+                    {t('adding')}
                   </>
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    Add {activeTypeConfig.label.slice(0, -1)}
+                    {t('addResource', { type: t(activeTypeConfig.labelKey).slice(0, -1) })}
                   </>
                 )}
               </button>

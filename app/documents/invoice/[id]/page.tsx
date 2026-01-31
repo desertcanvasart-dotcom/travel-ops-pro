@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Loader2, FileText, Calendar, CreditCard } from 'lucide-react'
@@ -25,6 +26,7 @@ interface Payment {
 }
 
 export default function InvoicePage() {
+  const t = useTranslations('invoice')
   const params = useParams()
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
@@ -95,7 +97,7 @@ export default function InvoicePage() {
       downloadInvoicePDF(invoiceData)
     } catch (error) {
       console.error('Error downloading PDF:', error)
-      alert('Failed to download invoice')
+      alert(t('failedToDownloadInvoice'))
     } finally {
       setDownloading(false)
     }
@@ -118,7 +120,7 @@ export default function InvoicePage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading invoice...</p>
+          <p className="text-sm text-gray-600">{t('loadingInvoice')}</p>
         </div>
       </div>
     )
@@ -128,9 +130,9 @@ export default function InvoicePage() {
     return (
       <div className="p-4 lg:p-6">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-xl font-bold text-gray-900 mb-3">Invoice Not Found</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-3">{t('invoiceNotFound')}</h1>
           <Link href="/payments" className="text-sm text-primary-600 hover:text-primary-700">
-            ← Back to Payments
+            ← {t('backToPayments')}
           </Link>
         </div>
       </div>
@@ -150,7 +152,7 @@ export default function InvoicePage() {
             className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Payments
+            {t('backToPayments')}
           </Link>
           <button
             onClick={handleDownloadPDF}
@@ -162,7 +164,7 @@ export default function InvoicePage() {
             ) : (
               <Download className="w-4 h-4" />
             )}
-            {downloading ? 'Generating...' : 'Download PDF'}
+            {downloading ? t('generating') : t('downloadPDF')}
           </button>
         </div>
 
@@ -171,7 +173,7 @@ export default function InvoicePage() {
           {/* Header */}
           <div className="flex justify-between items-start mb-8 pb-6 border-b-2 border-gray-200">
             <div>
-              <h1 className="text-3xl font-bold text-primary-600 mb-1">INVOICE</h1>
+              <h1 className="text-3xl font-bold text-primary-600 mb-1">{t('invoice')}</h1>
               <p className="text-sm text-gray-600 font-mono">{invoiceNumber}</p>
             </div>
             <div className="text-right">
@@ -184,7 +186,7 @@ export default function InvoicePage() {
           {/* Bill To & Invoice Info */}
           <div className="grid grid-cols-2 gap-8 mb-8">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Bill To</p>
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">{t('billTo')}</p>
               <p className="text-base font-semibold text-gray-900">{payment.client_name}</p>
               {payment.client_email && (
                 <p className="text-sm text-gray-600">{payment.client_email}</p>
@@ -193,7 +195,7 @@ export default function InvoicePage() {
             <div className="text-right">
               <div className="space-y-2">
                 <div>
-                  <p className="text-xs text-gray-500">Invoice Date</p>
+                  <p className="text-xs text-gray-500">{t('invoiceDate')}</p>
                   <p className="text-sm font-medium text-gray-900">
                     {new Date(payment.created_at).toLocaleDateString('en-GB', {
                       day: 'numeric',
@@ -203,13 +205,13 @@ export default function InvoicePage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Itinerary</p>
+                  <p className="text-xs text-gray-500">{t('itinerary')}</p>
                   <p className="text-sm font-mono text-gray-900">{payment.itinerary_code}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Status</p>
+                  <p className="text-xs text-gray-500">{t('status')}</p>
                   <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${getStatusColor(payment.payment_status)}`}>
-                    {isPaid ? 'Paid' : payment.payment_status.replace('_', ' ')}
+                    {isPaid ? t('paid') : payment.payment_status.replace('_', ' ')}
                   </span>
                 </div>
               </div>
@@ -220,16 +222,16 @@ export default function InvoicePage() {
           <div className="mb-8">
             <div className="bg-primary-600 text-white rounded-t-lg px-4 py-3">
               <div className="grid grid-cols-12 gap-4 text-xs font-semibold uppercase">
-                <div className="col-span-6">Description</div>
-                <div className="col-span-2 text-center">Type</div>
-                <div className="col-span-2 text-center">Method</div>
-                <div className="col-span-2 text-right">Amount</div>
+                <div className="col-span-6">{t('description')}</div>
+                <div className="col-span-2 text-center">{t('type')}</div>
+                <div className="col-span-2 text-center">{t('method')}</div>
+                <div className="col-span-2 text-right">{t('amount')}</div>
               </div>
             </div>
             <div className="border-x border-b border-gray-200 rounded-b-lg">
               <div className="grid grid-cols-12 gap-4 px-4 py-4 text-sm">
                 <div className="col-span-6">
-                  <p className="font-medium text-gray-900">Payment for {payment.itinerary_code}</p>
+                  <p className="font-medium text-gray-900">{t('paymentFor')} {payment.itinerary_code}</p>
                   {payment.notes && (
                     <p className="text-xs text-gray-500 mt-1">{payment.notes}</p>
                   )}
@@ -251,13 +253,13 @@ export default function InvoicePage() {
           <div className="flex justify-end mb-8">
             <div className="w-64">
               <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-sm text-gray-600">Subtotal</span>
+                <span className="text-sm text-gray-600">{t('subtotal')}</span>
                 <span className="text-sm font-medium text-gray-900">
                   {payment.currency} {payment.amount.toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between py-3 bg-gray-50 px-3 rounded-lg mt-2">
-                <span className="text-base font-bold text-gray-900">Total</span>
+                <span className="text-base font-bold text-gray-900">{t('total')}</span>
                 <span className="text-xl font-bold text-primary-600">
                   {payment.currency} {payment.amount.toFixed(2)}
                 </span>
@@ -265,7 +267,7 @@ export default function InvoicePage() {
               {isPaid && (
                 <div className="mt-3 text-center">
                   <span className="inline-block bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm font-bold">
-                    ✓ PAID IN FULL
+                    ✓ {t('paidInFull')}
                   </span>
                 </div>
               )}
@@ -274,20 +276,19 @@ export default function InvoicePage() {
 
           {/* Payment Terms */}
           <div className="border-t border-gray-200 pt-6">
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Payment Terms</h4>
+            <h4 className="text-sm font-semibold text-gray-900 mb-2">{t('paymentTerms')}</h4>
             <p className="text-xs text-gray-600">
-              30% deposit required to confirm booking. Remaining balance due upon arrival.
-              Payment accepted via bank transfer or credit card.
+              {t('paymentTermsText')}
             </p>
           </div>
 
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200 text-center">
             <p className="text-base font-semibold text-gray-900 mb-1">
-              Thank you for your business!
+              {t('thankYou')}
             </p>
             <p className="text-xs text-gray-500">
-              For questions, contact us at info@travel2egypt.com
+              {t('forQuestions')}
             </p>
           </div>
         </div>

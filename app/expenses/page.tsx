@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { 
   Search, 
   Plus, 
@@ -146,6 +147,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 const ITEMS_PER_PAGE = 15
 
 export default function ExpensesPage() {
+  const t = useTranslations('expenses')
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [loading, setLoading] = useState(true)
@@ -255,29 +257,29 @@ export default function ExpensesPage() {
         fetchExpenses()
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to save expense')
+        alert(error.error || t('failedToSaveExpense'))
       }
     } catch (error) {
       console.error('Error saving expense:', error)
-      alert('Failed to save expense')
+      alert(t('failedToSaveExpense'))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return
+    if (!confirm(t('confirmDeleteExpense'))) return
 
     try {
       const response = await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
       if (response.ok) {
         fetchExpenses()
       } else {
-        alert('Failed to delete expense')
+        alert(t('failedToDeleteExpense'))
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
-      alert('Failed to delete expense')
+      alert(t('failedToDeleteExpense'))
     }
   }
 
@@ -416,8 +418,8 @@ export default function ExpensesPage() {
             💰
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Expenses</h1>
-            <p className="text-sm text-gray-500">Track operational costs and supplier payments</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('expenses')}</h1>
+            <p className="text-sm text-gray-500">{t('expensesSubtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -426,14 +428,14 @@ export default function ExpensesPage() {
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Download className="h-4 w-4" />
-            Export CSV
+            {t('exportCSV')}
           </button>
           <button
             onClick={openAddModal}
             className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Add Expense
+            {t('addExpense')}
           </button>
         </div>
       </div>
@@ -445,7 +447,7 @@ export default function ExpensesPage() {
             <span className="text-lg">📊</span>
             <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Total Expenses</p>
+          <p className="text-xs text-gray-500 mb-1">{t('totalExpenses')}</p>
           <p className="text-2xl font-semibold text-gray-900">€{totalExpenses.toLocaleString()}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -453,7 +455,7 @@ export default function ExpensesPage() {
             <span className="text-lg">⏳</span>
             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Pending</p>
+          <p className="text-xs text-gray-500 mb-1">{t('pending')}</p>
           <p className="text-2xl font-semibold text-yellow-600">€{pendingExpenses.toLocaleString()}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -461,7 +463,7 @@ export default function ExpensesPage() {
             <span className="text-lg">✅</span>
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Approved</p>
+          <p className="text-xs text-gray-500 mb-1">{t('approved')}</p>
           <p className="text-2xl font-semibold text-blue-600">€{approvedExpenses.toLocaleString()}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -469,7 +471,7 @@ export default function ExpensesPage() {
             <span className="text-lg">💸</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Paid</p>
+          <p className="text-xs text-gray-500 mb-1">{t('paid')}</p>
           <p className="text-2xl font-semibold text-green-600">€{paidExpenses.toLocaleString()}</p>
         </div>
       </div>
@@ -506,7 +508,7 @@ export default function ExpensesPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search expenses..."
+            placeholder={t('searchExpenses')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
@@ -517,13 +519,13 @@ export default function ExpensesPage() {
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border rounded-lg transition-colors ${
-            hasActiveFilters 
-              ? 'border-[#647C47] text-[#647C47] bg-[#647C47]/5' 
+            hasActiveFilters
+              ? 'border-[#647C47] text-[#647C47] bg-[#647C47]/5'
               : 'border-gray-200 text-gray-600 hover:bg-gray-50'
           }`}
         >
           <Filter className="h-4 w-4" />
-          Filters
+          {t('filters')}
           {hasActiveFilters && (
             <span className="w-2 h-2 rounded-full bg-[#647C47]"></span>
           )}
@@ -534,7 +536,7 @@ export default function ExpensesPage() {
             onClick={clearFilters}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
-            Clear all
+            {t('clearAll')}
           </button>
         )}
       </div>

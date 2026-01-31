@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator } from 'lucide-react'
@@ -25,6 +26,7 @@ interface SelectedAttraction {
 }
 
 export default function EditSupplierDocumentPage() {
+  const t = useTranslations('supplierDocumentEdit')
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<any>(null)
@@ -56,10 +58,10 @@ export default function EditSupplierDocumentPage() {
           setSelectedAttractions(result.data.selected_attractions)
         }
       } else {
-        setError('Document not found')
+        setError(t('documentNotFound'))
       }
     } catch (err) {
-      setError('Error loading document')
+      setError(t('errorLoadingDocument'))
     } finally {
       setLoading(false)
     }
@@ -106,10 +108,10 @@ export default function EditSupplierDocumentPage() {
       if (response.ok) {
         router.push(`/documents/supplier/${params.id}`)
       } else {
-        setError('Failed to save')
+        setError(t('failedToSave'))
       }
     } catch (err) {
-      setError('Error saving document')
+      setError(t('errorSavingDocument'))
     } finally {
       setSaving(false)
     }
@@ -188,7 +190,7 @@ export default function EditSupplierDocumentPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 mb-4">{error}</p>
-          <Link href="/documents/supplier" className="text-primary-600">← Back</Link>
+          <Link href="/documents/supplier" className="text-primary-600">← {t('back')}</Link>
         </div>
       </div>
     )
@@ -206,7 +208,7 @@ export default function EditSupplierDocumentPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
               <div>
-                <h1 className="text-lg font-semibold text-gray-900">Edit {document.document_number}</h1>
+                <h1 className="text-lg font-semibold text-gray-900">{t('edit')} {document.document_number}</h1>
                 <p className="text-xs text-gray-500">{document.document_type?.replace('_', ' ').toUpperCase()}</p>
               </div>
             </div>
@@ -216,7 +218,7 @@ export default function EditSupplierDocumentPage() {
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save Changes'}
+              {saving ? t('saving') : t('saveChanges')}
             </button>
           </div>
         </div>
@@ -231,21 +233,21 @@ export default function EditSupplierDocumentPage() {
             {/* Status - IMPORTANT */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Document Status</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('documentStatus')}</label>
                 <select
                   value={document.status || 'draft'}
                   onChange={(e) => setDocument({ ...document, status: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="draft">Draft</option>
-                  <option value="sent">Sent</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="draft">{t('status.draft')}</option>
+                  <option value="sent">{t('status.sent')}</option>
+                  <option value="confirmed">{t('status.confirmed')}</option>
+                  <option value="completed">{t('status.completed')}</option>
+                  <option value="cancelled">{t('status.cancelled')}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Document Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('documentType')}</label>
                 <input
                   type="text"
                   value={document.document_type?.replace('_', ' ').toUpperCase() || ''}
@@ -258,7 +260,7 @@ export default function EditSupplierDocumentPage() {
             {/* Supplier Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierName')}</label>
                 <input
                   type="text"
                   value={document.supplier_name || ''}
@@ -267,7 +269,7 @@ export default function EditSupplierDocumentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('contactEmail')}</label>
                 <input
                   type="email"
                   value={document.supplier_contact_email || ''}
@@ -279,7 +281,7 @@ export default function EditSupplierDocumentPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('contactPhone')}</label>
                 <input
                   type="text"
                   value={document.supplier_contact_phone || ''}
@@ -288,7 +290,7 @@ export default function EditSupplierDocumentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('address')}</label>
                 <input
                   type="text"
                   value={document.supplier_address || ''}
@@ -303,7 +305,7 @@ export default function EditSupplierDocumentPage() {
             {/* Guest Info */}
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Guest Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('guestName')}</label>
                 <input
                   type="text"
                   value={document.client_name || ''}
@@ -312,7 +314,7 @@ export default function EditSupplierDocumentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Adults</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('adults')}</label>
                 <input
                   type="number"
                   value={document.num_adults || 1}
@@ -321,7 +323,7 @@ export default function EditSupplierDocumentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Children</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('children')}</label>
                 <input
                   type="number"
                   value={document.num_children || 0}
@@ -333,7 +335,7 @@ export default function EditSupplierDocumentPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nationality</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('nationality')}</label>
                 <input
                   type="text"
                   value={document.client_nationality || ''}
@@ -342,7 +344,7 @@ export default function EditSupplierDocumentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('city')}</label>
                 <input
                   type="text"
                   value={document.city || ''}
@@ -359,7 +361,7 @@ export default function EditSupplierDocumentPage() {
               {document.document_type === 'hotel_voucher' || document.document_type === 'cruise_voucher' ? (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Check-in</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('checkIn')}</label>
                     <input
                       type="date"
                       value={document.check_in?.split('T')[0] || ''}
@@ -368,7 +370,7 @@ export default function EditSupplierDocumentPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('checkOut')}</label>
                     <input
                       type="date"
                       value={document.check_out?.split('T')[0] || ''}
@@ -380,7 +382,7 @@ export default function EditSupplierDocumentPage() {
               ) : (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Service Date</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('serviceDate')}</label>
                     <input
                       type="date"
                       value={document.service_date?.split('T')[0] || ''}
@@ -389,7 +391,7 @@ export default function EditSupplierDocumentPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Pickup Time</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('pickupTime')}</label>
                     <input
                       type="time"
                       value={document.pickup_time || ''}
@@ -404,7 +406,7 @@ export default function EditSupplierDocumentPage() {
             {document.document_type === 'transport_voucher' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pickup Location</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('pickupLocation')}</label>
                   <input
                     type="text"
                     value={document.pickup_location || ''}
@@ -413,7 +415,7 @@ export default function EditSupplierDocumentPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Dropoff Location</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('dropoffLocation')}</label>
                   <input
                     type="text"
                     value={document.dropoff_location || ''}
@@ -428,25 +430,25 @@ export default function EditSupplierDocumentPage() {
 
             {/* Special Requests */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Special Requests</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('specialRequests')}</label>
               <textarea
                 value={document.special_requests || ''}
                 onChange={(e) => setDocument({ ...document, special_requests: e.target.value })}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Any special requests for the supplier..."
+                placeholder={t('specialRequestsPlaceholder')}
               />
             </div>
 
             {/* Internal Notes */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Internal Notes</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('internalNotes')}</label>
               <textarea
                 value={document.internal_notes || ''}
                 onChange={(e) => setDocument({ ...document, internal_notes: e.target.value })}
                 rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Notes for internal use only..."
+                placeholder={t('internalNotesPlaceholder')}
               />
             </div>
 
@@ -455,7 +457,7 @@ export default function EditSupplierDocumentPage() {
             {/* Payment */}
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('currency')}</label>
                 <select
                   value={document.currency || 'EUR'}
                   onChange={(e) => setDocument({ ...document, currency: e.target.value })}
@@ -468,7 +470,7 @@ export default function EditSupplierDocumentPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Total Cost</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('totalCost')}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -478,16 +480,16 @@ export default function EditSupplierDocumentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('paymentTerms')}</label>
                 <select
                   value={document.payment_terms || 'commission'}
                   onChange={(e) => setDocument({ ...document, payment_terms: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
-                  <option value="commission">Commission</option>
-                  <option value="prepaid">Prepaid</option>
-                  <option value="pay_direct">Pay Direct</option>
-                  <option value="invoice">Invoice</option>
+                  <option value="commission">{t('paymentTermsOptions.commission')}</option>
+                  <option value="prepaid">{t('paymentTermsOptions.prepaid')}</option>
+                  <option value="pay_direct">{t('paymentTermsOptions.payDirect')}</option>
+                  <option value="invoice">{t('paymentTermsOptions.invoice')}</option>
                 </select>
               </div>
             </div>
@@ -499,14 +501,14 @@ export default function EditSupplierDocumentPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Ticket className="w-5 h-5 text-primary-600" />
-                  <h2 className="text-lg font-semibold text-gray-900">Entrance Fees</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">{t('entranceFees')}</h2>
                 </div>
                 <button
                   onClick={() => setShowAttractionPicker(true)}
                   className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 flex items-center gap-1.5"
                 >
                   <Plus className="w-4 h-4" />
-                  Add Attraction
+                  {t('addAttraction')}
                 </button>
               </div>
 
@@ -516,11 +518,11 @@ export default function EditSupplierDocumentPage() {
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Attraction</th>
-                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Rate (EUR)</th>
-                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Qty</th>
-                        <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Total</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('attraction')}</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('city')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('rate')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('qty')}</th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('total')}</th>
                         <th className="px-4 py-2 w-10"></th>
                       </tr>
                     </thead>
@@ -569,7 +571,7 @@ export default function EditSupplierDocumentPage() {
                         <td colSpan={4} className="px-4 py-3 text-right">
                           <span className="text-sm font-semibold text-gray-700 flex items-center justify-end gap-2">
                             <Calculator className="w-4 h-4" />
-                            Total Entrance Fees:
+                            {t('totalEntranceFees')}:
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -585,8 +587,8 @@ export default function EditSupplierDocumentPage() {
               ) : (
                 <div className="text-center py-8 border border-dashed border-gray-300 rounded-lg">
                   <Ticket className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No attractions selected</p>
-                  <p className="text-xs text-gray-400 mt-1">Click "Add Attraction" to select entrance fees</p>
+                  <p className="text-sm text-gray-500">{t('noAttractionsSelected')}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('noAttractionsHint')}</p>
                 </div>
               )}
 
@@ -596,7 +598,7 @@ export default function EditSupplierDocumentPage() {
                   <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
                     <div className="p-4 border-b border-gray-200">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-semibold text-gray-900">Select Attractions</h3>
+                        <h3 className="text-lg font-semibold text-gray-900">{t('selectAttractions')}</h3>
                         <button
                           onClick={() => {
                             setShowAttractionPicker(false)
@@ -608,11 +610,11 @@ export default function EditSupplierDocumentPage() {
                           <X className="w-5 h-5" />
                         </button>
                       </div>
-                      
+
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          placeholder="Search attractions..."
+                          placeholder={t('searchAttractionsPlaceholder')}
                           value={attractionSearch}
                           onChange={(e) => setAttractionSearch(e.target.value)}
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -623,7 +625,7 @@ export default function EditSupplierDocumentPage() {
                           onChange={(e) => setSelectedCity(e.target.value)}
                           className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
                         >
-                          <option value="">All Cities</option>
+                          <option value="">{t('allCities')}</option>
                           {cities.map(city => (
                             <option key={city} value={city}>{city}</option>
                           ))}
@@ -638,7 +640,7 @@ export default function EditSupplierDocumentPage() {
                         </div>
                       ) : filteredAttractions.length === 0 ? (
                         <div className="p-8 text-center text-gray-500">
-                          <p className="text-sm">No attractions found</p>
+                          <p className="text-sm">{t('noAttractionsFound')}</p>
                         </div>
                       ) : (
                         <div className="divide-y divide-gray-100">
@@ -655,7 +657,7 @@ export default function EditSupplierDocumentPage() {
                                   {fee.city}
                                   {fee.is_addon && (
                                     <span className="ml-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-xs">
-                                      Add-on
+                                      {t('addon')}
                                     </span>
                                   )}
                                 </p>
@@ -663,7 +665,7 @@ export default function EditSupplierDocumentPage() {
                               <div className="text-right">
                                 <p className="text-sm font-semibold text-primary-600">€{fee.eur_rate.toFixed(2)}</p>
                                 {fee.non_eur_rate > 0 && fee.non_eur_rate !== fee.eur_rate && (
-                                  <p className="text-xs text-gray-400">Non-EU: €{fee.non_eur_rate.toFixed(2)}</p>
+                                  <p className="text-xs text-gray-400">{t('nonEU')}: €{fee.non_eur_rate.toFixed(2)}</p>
                                 )}
                               </div>
                             </button>
@@ -674,7 +676,7 @@ export default function EditSupplierDocumentPage() {
                     
                     <div className="p-4 border-t border-gray-200 bg-gray-50">
                       <p className="text-xs text-gray-500 text-center">
-                        {entranceFees.length} attractions available • {selectedAttractions.length} selected
+                        {t('attractionsAvailable', { count: entranceFees.length })} • {t('attractionsSelected', { count: selectedAttractions.length })}
                       </p>
                     </div>
                   </div>

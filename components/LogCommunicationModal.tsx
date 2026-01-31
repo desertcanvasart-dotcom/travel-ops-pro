@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { X, MessageSquare, AlertCircle, Trash2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 const supabase = createClient()
 
@@ -15,16 +16,18 @@ interface LogCommunicationModalProps {
   editCommunication?: any // Pass existing communication to edit
 }
 
-export default function LogCommunicationModal({ 
-  isOpen, 
-  onClose, 
-  clientId, 
+export default function LogCommunicationModal({
+  isOpen,
+  onClose,
+  clientId,
   clientName,
   onSuccess,
-  editCommunication 
+  editCommunication
 }: LogCommunicationModalProps) {
+  const t = useTranslations('communicationLog')
+  const tCommon = useTranslations('common')
   const isEditMode = !!editCommunication
-  
+
   const [formData, setFormData] = useState({
     communication_type: 'whatsapp',
     direction: 'outbound',
@@ -74,7 +77,7 @@ export default function LogCommunicationModal({
     try {
       // Validate required fields
       if (!formData.content.trim()) {
-        throw new Error('Please enter communication details')
+        throw new Error(t('enterDetails'))
       }
 
       // Combine date and time
@@ -129,7 +132,7 @@ export default function LogCommunicationModal({
       
     } catch (err: any) {
       console.error('Error saving communication:', err)
-      setError(err.message || 'Failed to save communication')
+      setError(err.message || t('failedToSave'))
     } finally {
       setIsSaving(false)
     }
@@ -153,7 +156,7 @@ export default function LogCommunicationModal({
       
     } catch (err: any) {
       console.error('Error deleting communication:', err)
-      setError(err.message || 'Failed to delete communication')
+      setError(err.message || t('failedToDelete'))
     } finally {
       setIsDeleting(false)
       setShowDeleteConfirm(false)
@@ -176,15 +179,17 @@ export default function LogCommunicationModal({
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">
-              {isEditMode ? 'Edit Communication' : 'Log Communication'}
+              {isEditMode ? t('editCommunication') : t('logCommunication')}
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              {isEditMode ? 'Update communication details' : `Record communication with ${clientName}`}
+              {isEditMode ? t('updateCommunicationDetails') : t('recordCommunicationWith', { clientName })}
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title={tCommon('close')}
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
@@ -197,7 +202,7 @@ export default function LogCommunicationModal({
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-red-800">Error</p>
+                <p className="text-sm font-medium text-red-800">{tCommon('error')}</p>
                 <p className="text-sm text-red-600">{error}</p>
               </div>
             </div>
@@ -207,36 +212,38 @@ export default function LogCommunicationModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Communication Type *
+                {t('communicationType')} *
               </label>
               <select
                 value={formData.communication_type}
                 onChange={(e) => handleChange('communication_type', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
+                title={t('communicationType')}
               >
-                <option value="whatsapp">WhatsApp</option>
-                <option value="email">Email</option>
-                <option value="phone">Phone Call</option>
-                <option value="meeting">Meeting</option>
-                <option value="video_call">Video Call</option>
-                <option value="sms">SMS</option>
-                <option value="other">Other</option>
+                <option value="whatsapp">{t('types.whatsapp')}</option>
+                <option value="email">{t('types.email')}</option>
+                <option value="phone">{t('types.phone')}</option>
+                <option value="meeting">{t('types.meeting')}</option>
+                <option value="video_call">{t('types.video_call')}</option>
+                <option value="sms">{t('types.sms')}</option>
+                <option value="other">{t('types.other')}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Direction *
+                {t('direction')} *
               </label>
               <select
                 value={formData.direction}
                 onChange={(e) => handleChange('direction', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
+                title={t('direction')}
               >
-                <option value="outbound">Outbound (We contacted them)</option>
-                <option value="inbound">Inbound (They contacted us)</option>
+                <option value="outbound">{t('directions.outbound')}</option>
+                <option value="inbound">{t('directions.inbound')}</option>
               </select>
             </div>
           </div>
@@ -245,7 +252,7 @@ export default function LogCommunicationModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date *
+                {t('date')} *
               </label>
               <input
                 type="date"
@@ -254,12 +261,13 @@ export default function LogCommunicationModal({
                 max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
+                title={t('date')}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Time *
+                {t('time')} *
               </label>
               <input
                 type="time"
@@ -267,6 +275,7 @@ export default function LogCommunicationModal({
                 onChange={(e) => handleChange('communication_time', e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
+                title={t('time')}
               />
             </div>
           </div>
@@ -274,13 +283,13 @@ export default function LogCommunicationModal({
           {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Subject (Optional)
+              {t('subjectOptional')}
             </label>
             <input
               type="text"
               value={formData.subject}
               onChange={(e) => handleChange('subject', e.target.value)}
-              placeholder="e.g., Quote follow-up, Payment confirmation, Itinerary changes"
+              placeholder={t('subjectPlaceholder')}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -288,70 +297,71 @@ export default function LogCommunicationModal({
           {/* Content */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Details *
+              {t('details')} *
             </label>
             <textarea
               value={formData.content}
               onChange={(e) => handleChange('content', e.target.value)}
               rows={6}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-              placeholder="Describe what was discussed, decisions made, next steps, etc."
+              placeholder={t('detailsPlaceholder')}
               required
             />
             <p className="text-xs text-gray-500 mt-1">
-              {formData.content.length}/1000 characters
+              {formData.content.length}/1000 {t('characters')}
             </p>
           </div>
 
           {/* Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Status *
+              {t('status')} *
             </label>
             <select
               value={formData.status}
               onChange={(e) => handleChange('status', e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
+              title={t('status')}
             >
-              <option value="completed">Completed</option>
-              <option value="pending">Pending Response</option>
-              <option value="scheduled">Scheduled</option>
+              <option value="completed">{t('statuses.completed')}</option>
+              <option value="pending">{t('statuses.pending')}</option>
+              <option value="scheduled">{t('statuses.scheduled')}</option>
             </select>
           </div>
 
           {/* Quick Templates - Only show when adding new */}
           {!isEditMode && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Quick Templates:</p>
+              <p className="text-sm font-medium text-gray-700 mb-2">{t('quickTemplates')}</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => handleChange('content', 'Called client to follow up on quote. Client is interested and will confirm by end of week.')}
+                  onClick={() => handleChange('content', t('templates.quoteFollowupText'))}
                   className="px-3 py-2 text-sm text-left bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                 >
-                  Quote Follow-up Call
+                  {t('templates.quoteFollowup')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleChange('content', 'Sent detailed itinerary via WhatsApp. Client confirmed receipt and is reviewing with family.')}
+                  onClick={() => handleChange('content', t('templates.itinerarySentText'))}
                   className="px-3 py-2 text-sm text-left bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                 >
-                  Itinerary Sent
+                  {t('templates.itinerarySent')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleChange('content', 'Payment received and confirmed. Sent booking confirmation email with all details.')}
+                  onClick={() => handleChange('content', t('templates.paymentReceivedText'))}
                   className="px-3 py-2 text-sm text-left bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                 >
-                  Payment Received
+                  {t('templates.paymentReceived')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleChange('content', 'Client requested changes to accommodation. Updated itinerary and sent revised quote.')}
+                  onClick={() => handleChange('content', t('templates.itineraryChangesText'))}
                   className="px-3 py-2 text-sm text-left bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                 >
-                  Itinerary Changes
+                  {t('templates.itineraryChanges')}
                 </button>
               </div>
             </div>
@@ -367,7 +377,7 @@ export default function LogCommunicationModal({
                 disabled={isSaving || isDeleting}
               >
                 <Trash2 className="w-4 h-4" />
-                Delete
+                {tCommon('delete')}
               </button>
             )}
             <button
@@ -376,7 +386,7 @@ export default function LogCommunicationModal({
               className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
               disabled={isSaving || isDeleting}
             >
-              Cancel
+              {tCommon('cancel')}
             </button>
             <button
               type="submit"
@@ -386,12 +396,12 @@ export default function LogCommunicationModal({
               {isSaving ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Saving...
+                  {t('saving')}
                 </>
               ) : (
                 <>
                   <MessageSquare className="w-4 h-4" />
-                  {isEditMode ? 'Update Communication' : 'Log Communication'}
+                  {isEditMode ? t('updateCommunication') : t('logCommunication')}
                 </>
               )}
             </button>
@@ -402,24 +412,26 @@ export default function LogCommunicationModal({
         {showDeleteConfirm && (
           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-xl">
             <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Communication?</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{t('deleteCommunication')}</h3>
               <p className="text-gray-600 mb-6">
-                Are you sure you want to delete this communication record? This action cannot be undone.
+                {t('deleteConfirmMessage')}
               </p>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setShowDeleteConfirm(false)}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                   disabled={isDeleting}
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
                 <button
+                  type="button"
                   onClick={handleDelete}
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-red-300"
                   disabled={isDeleting}
                 >
-                  {isDeleting ? 'Deleting...' : 'Delete'}
+                  {isDeleting ? t('deleting') : tCommon('delete')}
                 </button>
               </div>
             </div>

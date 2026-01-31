@@ -8,17 +8,6 @@ import { ArrowLeft, Save, Loader2, User, Mail, Phone, Globe, Building, Star, Tag
 import { useTranslations } from 'next-intl'
 import { useLocalizedValidation, validationRules } from '@/hooks/useLocalizedValidation'
 
-const LEAD_SOURCES = [
-  { value: 'whatsapp', label: 'WhatsApp', icon: '💬' },
-  { value: 'email', label: 'Email', icon: '✉️' },
-  { value: 'website', label: 'Website', icon: '🌐' },
-  { value: 'referral', label: 'Referral', icon: '👥' },
-  { value: 'phone', label: 'Phone', icon: '📞' },
-  { value: 'social_media', label: 'Social Media', icon: '📱' },
-  { value: 'trade_show', label: 'Trade Show', icon: '🎪' },
-  { value: 'other', label: 'Other', icon: '➕' }
-]
-
 interface ClientFormData {
   first_name: string
   last_name: string
@@ -458,11 +447,14 @@ export default function EditClientPage() {
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
                   <option value="">{t('selectSource')}</option>
-                  {LEAD_SOURCES.map(source => (
-                    <option key={source.value} value={source.value}>
-                      {source.icon} {source.label}
-                    </option>
-                  ))}
+                  <option value="whatsapp">💬 {t('leadSourceWhatsApp')}</option>
+                  <option value="email">✉️ {t('leadSourceEmail')}</option>
+                  <option value="website">🌐 {t('leadSourceWebsite')}</option>
+                  <option value="referral">👥 {t('leadSourceReferral')}</option>
+                  <option value="phone">📞 {t('leadSourcePhone')}</option>
+                  <option value="social_media">📱 {t('leadSourceSocialMedia')}</option>
+                  <option value="trade_show">🎪 {t('leadSourceTradeShow')}</option>
+                  <option value="other">➕ {t('leadSourceOther')}</option>
                 </select>
               </div>
               <div>
@@ -515,16 +507,16 @@ export default function EditClientPage() {
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
                   <option value="">{t('selectOption')}</option>
-                  <option value="English">English</option>
-                  <option value="Arabic">Arabic</option>
-                  <option value="French">French</option>
-                  <option value="German">German</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="Italian">Italian</option>
-                  <option value="Russian">Russian</option>
-                  <option value="Chinese">Chinese</option>
-                  <option value="Japanese">Japanese</option>
-                  <option value="Korean">Korean</option>
+                  <option value="English">{t('langEnglish')}</option>
+                  <option value="Arabic">{t('langArabic')}</option>
+                  <option value="French">{t('langFrench')}</option>
+                  <option value="German">{t('langGerman')}</option>
+                  <option value="Spanish">{t('langSpanish')}</option>
+                  <option value="Italian">{t('langItalian')}</option>
+                  <option value="Russian">{t('langRussian')}</option>
+                  <option value="Chinese">{t('langChinese')}</option>
+                  <option value="Japanese">{t('langJapanese')}</option>
+                  <option value="Korean">{t('langKorean')}</option>
                 </select>
               </div>
               <div>
@@ -540,8 +532,8 @@ export default function EditClientPage() {
                   <option value="">{t('selectOption')}</option>
                   <option value="email">{t('email')}</option>
                   <option value="phone">{t('phone')}</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="sms">SMS</option>
+                  <option value="whatsapp">{t('contactWhatsApp')}</option>
+                  <option value="sms">{t('contactSMS')}</option>
                 </select>
               </div>
             </div>
