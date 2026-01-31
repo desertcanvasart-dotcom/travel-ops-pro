@@ -49,7 +49,7 @@ export default function ForgotPasswordPage() {
           </div>
           <h1 className="text-xl font-semibold text-gray-900 mb-2">{t('checkYourEmail')}</h1>
           <p className="text-gray-600 mb-6">
-            {t('resetLinkSent', { email: <strong>{email}</strong> })}
+            {t('resetLinkSent', { email })}
           </p>
           <Link
             href="/login"
