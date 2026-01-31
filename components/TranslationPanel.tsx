@@ -400,7 +400,7 @@ export default function TranslationPanel({
                         <div className="flex items-center gap-2">
                           <Sparkles className="w-3.5 h-3.5 text-blue-500" />
                           <span className="text-xs text-gray-500">
-                            {t('willBeSentIn', { language: selectedLanguage?.name })}
+                            {t('willBeSentIn', { language: selectedLanguage?.name || '' })}
                           </span>
                         </div>
                         <button
@@ -429,7 +429,7 @@ export default function TranslationPanel({
           <div className="flex items-start gap-2 p-3 bg-blue-100/50 rounded-lg">
             <Globe className="w-4 h-4 text-blue-600 mt-0.5" />
             <p className="text-xs text-blue-700">
-              {t('autoTranslateInfo', { language: selectedLanguage?.name })}
+              {t('autoTranslateInfo', { language: selectedLanguage?.name || '' })}
             </p>
           </div>
         </div>
