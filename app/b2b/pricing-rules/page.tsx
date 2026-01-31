@@ -505,7 +505,7 @@ export default function B2BPricingRulesPage() {
                               rule.pricing_model === 'tiered' ? 'bg-purple-100 text-purple-700' :
                               'bg-gray-100 text-gray-700'
                             }`}>
-                              {rule.pricing_model === 'per_unit' ? t('perUnit', { unit: rule.unit_type }) :
+                              {rule.pricing_model === 'per_unit' ? t('perUnit', { unit: rule.unit_type || 'unit' }) :
                                rule.pricing_model === 'tiered' ? t('tiered') : t('perPerson')}
                             </span>
                             {!rule.is_active && (
