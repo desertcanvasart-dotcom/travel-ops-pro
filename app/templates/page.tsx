@@ -1,18 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  FileText, 
-  Plus, 
-  Search, 
-  Mail, 
-  MessageSquare, 
-  Users, 
-  Building2, 
+import {
+  FileText,
+  Plus,
+  Search,
+  Mail,
+  MessageSquare,
+  Users,
+  Building2,
   Briefcase,
-  Edit2, 
-  Trash2, 
-  Copy, 
+  Edit2,
+  Trash2,
+  Copy,
   Send,
   ChevronDown,
   Loader2,
@@ -26,6 +26,7 @@ import {
   Hotel,
   User
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // ============================================
 // TYPES
@@ -114,6 +115,7 @@ const SUBCATEGORY_TO_PARTNER_TYPE: Record<string, string> = {
 // ============================================
 
 export default function TemplatesPage() {
+  const dialog = useConfirmDialog()
   const [templates, setTemplates] = useState<Template[]>([])
   const [placeholders, setPlaceholders] = useState<Placeholder[]>([])
   const [loading, setLoading] = useState(true)
@@ -254,13 +256,14 @@ export default function TemplatesPage() {
   }
 
   const handleDelete = async (template: Template) => {
-    if (!confirm(`Delete template "${template.name}"?`)) return
-    
+    const confirmed = await dialog.confirmDelete(template.name)
+    if (!confirmed) return
+
     try {
       const response = await fetch(`/api/templates/${template.id}`, {
         method: 'DELETE',
       })
-      
+
       if (response.ok) {
         setTemplates(templates.filter(t => t.id !== template.id))
       }
@@ -752,6 +755,7 @@ interface SendTemplateModalProps {
 }
 
 function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModalProps) {
+  const dialog = useConfirmDialog()
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null)
   const [filledValues, setFilledValues] = useState<Record<string, string>>({})
@@ -888,13 +892,13 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
 
   const handleSend = async () => {
     if (!selectedRecipient) {
-      alert('Please select a recipient')
+      await dialog.alert('Missing Recipient', 'Please select a recipient', 'warning')
       return
     }
 
     const recipientContact = channel === 'email' ? selectedRecipient.email : selectedRecipient.phone
     if (!recipientContact) {
-      alert(`No ${channel === 'email' ? 'email' : 'phone number'} available for this recipient`)
+      await dialog.alert('Contact Missing', `No ${channel === 'email' ? 'email' : 'phone number'} available for this recipient`, 'warning')
       return
     }
 
@@ -910,7 +914,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
           recipientType: selectedRecipient.type,
           recipient: recipientContact,
           subject: template.subject ? Object.entries(filledValues).reduce(
-            (s, [k, v]) => s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v), 
+            (s, [k, v]) => s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v),
             template.subject
           ) : undefined,
           body: preview,
@@ -918,15 +922,15 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
       })
 
       if (response.ok) {
-        alert('Message sent successfully!')
+        await dialog.alert('Success', 'Message sent successfully!', 'success')
         onClose()
       } else {
         const data = await response.json()
-        alert(data.error || 'Failed to send message')
+        await dialog.alert('Error', data.error || 'Failed to send message', 'warning')
       }
     } catch (error) {
       console.error('Error sending:', error)
-      alert('Failed to send message')
+      await dialog.alert('Error', 'Failed to send message', 'warning')
     } finally {
       setSending(false)
     }

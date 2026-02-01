@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // ============================================
 // INTERFACES
@@ -125,6 +126,7 @@ type TabType = 'guides' | 'vehicles' | 'hotels' | 'restaurants' | 'airportStaff'
 // ============================================
 
 export default function ResourcesPage() {
+  const dialog = useConfirmDialog()
   const [resources, setResources] = useState<ResourcesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -237,14 +239,14 @@ export default function ResourcesPage() {
       const data = await response.json()
 
       if (data.success) {
-        alert(`${deleteModal.name} deleted successfully!`)
+        await dialog.alert('Deleted', `${deleteModal.name} deleted successfully!`, 'success')
         fetchAllResources() // Refresh data
       } else {
-        alert(`Error: ${data.error}`)
+        await dialog.alert('Error', data.error, 'warning')
       }
     } catch (error) {
       console.error('Delete error:', error)
-      alert('Failed to delete resource')
+      await dialog.alert('Error', 'Failed to delete resource', 'warning')
     }
 
     setDeleteModal({ show: false, type: null, id: null, name: '' })
@@ -735,19 +737,18 @@ export default function ResourcesPage() {
                           >
                             Edit
                           </Link>
-                          <button 
-                            onClick={() => {
-                              if (confirm(`Delete ${guide.name}?`)) {
-                                fetch(`/api/resources/guides/${guide.id}`, { method: 'DELETE' })
-                                  .then(res => res.json())
-                                  .then(data => {
-                                    if (data.success) {
-                                      alert('Guide deleted!')
-                                      fetchAllResources()
-                                    } else {
-                                      alert('Error: ' + data.error)
-                                    }
-                                  })
+                          <button
+                            onClick={async () => {
+                              const confirmed = await dialog.confirmDelete(guide.name)
+                              if (confirmed) {
+                                const res = await fetch(`/api/resources/guides/${guide.id}`, { method: 'DELETE' })
+                                const data = await res.json()
+                                if (data.success) {
+                                  await dialog.alert('Deleted', 'Guide deleted!', 'success')
+                                  fetchAllResources()
+                                } else {
+                                  await dialog.alert('Error', data.error, 'warning')
+                                }
                               }
                             }}
                             className="text-xs text-red-600 hover:text-red-800 font-medium"
@@ -829,19 +830,18 @@ export default function ResourcesPage() {
                           >
                             Edit
                           </Link>
-                          <button 
-                            onClick={() => {
-                              if (confirm(`Delete ${vehicle.name}?`)) {
-                                fetch(`/api/resources/vehicles/${vehicle.id}`, { method: 'DELETE' })
-                                  .then(res => res.json())
-                                  .then(data => {
-                                    if (data.success) {
-                                      alert('Vehicle deleted!')
-                                      fetchAllResources()
-                                    } else {
-                                      alert('Error: ' + data.error)
-                                    }
-                                  })
+                          <button
+                            onClick={async () => {
+                              const confirmed = await dialog.confirmDelete(vehicle.name)
+                              if (confirmed) {
+                                const res = await fetch(`/api/resources/vehicles/${vehicle.id}`, { method: 'DELETE' })
+                                const data = await res.json()
+                                if (data.success) {
+                                  await dialog.alert('Deleted', 'Vehicle deleted!', 'success')
+                                  fetchAllResources()
+                                } else {
+                                  await dialog.alert('Error', data.error, 'warning')
+                                }
                               }
                             }}
                             className="text-xs text-red-600 hover:text-red-800 font-medium"

@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Send, Mail, MessageSquare, Printer, CheckCircle } from 'lucide-react'
 import { generateSupplierDocumentPDF } from '@/lib/supplier-document-pdf'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface SupplierDocument {
   id: string
@@ -44,6 +45,7 @@ interface SupplierDocument {
 
 export default function SupplierDocumentViewPage() {
   const t = useTranslations('supplierDocumentDetail')
+  const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<SupplierDocument | null>(null)
@@ -109,15 +111,15 @@ export default function SupplierDocumentViewPage() {
 
   const handleSendEmail = async () => {
     if (!document || !document.supplier_contact_email) {
-      alert(t('supplierEmailNotAvailable'))
+      await dialog.alert(t('error'), t('supplierEmailNotAvailable'), 'warning')
       return
     }
-    
+
     setActionLoading('email')
     try {
       const pdf = generateSupplierDocumentPDF(document)
       const pdfBase64 = pdf.output('datauristring').split(',')[1]
-      
+
       const response = await fetch('/api/send-supplier-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,7 +133,7 @@ export default function SupplierDocumentViewPage() {
           pdfBase64
         })
       })
-      
+
       if (response.ok) {
         // Update status to sent
         await fetch(`/api/supplier-documents/${document.id}`, {
@@ -144,19 +146,19 @@ export default function SupplierDocumentViewPage() {
         fetchDocument()
         setTimeout(() => setActionSuccess(null), 5000)
       } else {
-        alert(t('failedToSendEmail'))
+        await dialog.alert(t('error'), t('failedToSendEmail'), 'warning')
       }
     } catch (error) {
       console.error('Error sending email:', error)
-      alert(t('failedToSendEmail'))
+      await dialog.alert(t('error'), t('failedToSendEmail'), 'warning')
     } finally {
       setActionLoading(null)
     }
   }
 
-  const handleSendWhatsApp = () => {
+  const handleSendWhatsApp = async () => {
     if (!document || !document.supplier_contact_phone) {
-      alert(t('supplierPhoneNotAvailable'))
+      await dialog.alert(t('error'), t('supplierPhoneNotAvailable'), 'warning')
       return
     }
 
@@ -183,7 +185,7 @@ export default function SupplierDocumentViewPage() {
 
   const handleMarkConfirmed = async () => {
     if (!document) return
-    
+
     setActionLoading('confirm')
     try {
       await fetch(`/api/supplier-documents/${document.id}`, {
@@ -196,7 +198,7 @@ export default function SupplierDocumentViewPage() {
       fetchDocument()
       setTimeout(() => setActionSuccess(null), 5000)
     } catch (error) {
-      alert(t('failedToUpdateStatus'))
+      await dialog.alert(t('error'), t('failedToUpdateStatus'), 'warning')
     } finally {
       setActionLoading(null)
     }

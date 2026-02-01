@@ -38,6 +38,7 @@ import {
 } from 'lucide-react'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // ============================================
 // TYPES
@@ -190,6 +191,7 @@ const getServiceIcon = (type: string) => {
 export default function ItineraryEditorPage() {
   const t = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
+  const dialog = useConfirmDialog()
   const router = useRouter()
   const params = useParams()
   const itineraryId = params?.id as string
@@ -398,7 +400,7 @@ export default function ItineraryEditorPage() {
       setItinerary({ ...itinerary, status: newStatus })
     } catch (error) {
       console.error('Error updating status:', error)
-      alert(t('failedToUpdateStatus'))
+      await dialog.alert(tCommon('error'), t('failedToUpdateStatus'), 'warning')
     } finally {
       setUpdatingStatus(false)
     }
@@ -685,7 +687,7 @@ export default function ItineraryEditorPage() {
 
     } catch (error: any) {
       console.error('❌ Error saving draft:', error)
-      alert(t('failedToSave', { error: error.message || tCommon('unknownError') }))
+      await dialog.alert(tCommon('error'), t('failedToSave', { error: error.message || tCommon('unknownError') }), 'warning')
       return false
     } finally {
       setSaving(false)
@@ -701,7 +703,7 @@ export default function ItineraryEditorPage() {
       const saveSuccess = await saveDraft()
       
       if (!saveSuccess) {
-        alert(t('failedToSaveDraft'))
+        await dialog.alert(tCommon('error'), t('failedToSaveDraft'), 'warning')
         setCalculating(false)
         return
       }
@@ -739,7 +741,7 @@ export default function ItineraryEditorPage() {
 
     } catch (error: any) {
       console.error('❌ Error calculating pricing:', error)
-      alert(t('failedToCalculatePricing', { error: error.message || tCommon('unknownError') }))
+      await dialog.alert(tCommon('error'), t('failedToCalculatePricing', { error: error.message || tCommon('unknownError') }), 'warning')
     } finally {
       setCalculating(false)
     }

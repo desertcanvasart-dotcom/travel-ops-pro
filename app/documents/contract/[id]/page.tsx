@@ -7,6 +7,7 @@ import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import Link from 'next/link'
 import { ArrowLeft, Download, Eye, Edit2, Plus, X, Loader2 } from 'lucide-react'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Itinerary {
   id: string
@@ -54,6 +55,7 @@ interface ContractData {
 
 export default function ContractPage() {
   const t = useTranslations('contract')
+  const dialog = useConfirmDialog()
   const params = useParams()
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -197,7 +199,7 @@ export default function ContractPage() {
       document.body.removeChild(a)
     } catch (error) {
       console.error('Error downloading PDF:', error)
-      alert(t('failedToDownloadContract'))
+      dialog.alert(t('error'), t('failedToDownloadContract'), 'warning')
     } finally {
       setSaving(false)
     }
@@ -275,7 +277,7 @@ export default function ContractPage() {
                 clientPhone={itinerary.client_phone}
                 clientName={itinerary.client_name}
                 onSuccess={() => {
-                  alert(t('contractSentViaWhatsApp'))
+                  dialog.alert(t('success'), t('contractSentViaWhatsApp'), 'success')
                 }}
               />
             )}

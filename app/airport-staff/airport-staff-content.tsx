@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Crown, Star } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // ============================================
 // CONSTANTS
@@ -59,6 +60,7 @@ function TierBadge({ tier }: { tier: string | null }) {
 
 export default function AirportStaffContent() {
   const searchParams = useSearchParams()
+  const dialog = useConfirmDialog()
   const [staff, setStaff] = useState<AirportStaff[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -199,38 +201,39 @@ export default function AirportStaffContent() {
       const data = await response.json()
       
       if (data.success) {
-        alert(editingStaff ? 'Staff updated!' : 'Staff created!')
+        await dialog.alert('Success', editingStaff ? 'Staff updated!' : 'Staff created!', 'success')
         setShowModal(false)
         fetchStaff()
       } else {
-        alert('Error: ' + data.error)
+        await dialog.alert('Error', data.error, 'warning')
       }
     } catch (error) {
       console.error('Error saving staff:', error)
-      alert('Failed to save staff')
+      await dialog.alert('Error', 'Failed to save staff', 'warning')
     }
   }
 
   // Delete staff
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete ${name}?`)) return
-    
+    const confirmed = await dialog.confirmDelete(name)
+    if (!confirmed) return
+
     try {
       const response = await fetch(`/api/resources/airport-staff/${id}`, {
         method: 'DELETE'
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
-        alert('Staff deleted!')
+        await dialog.alert('Deleted', 'Staff deleted!', 'success')
         fetchStaff()
       } else {
-        alert('Error: ' + data.error)
+        await dialog.alert('Error', data.error, 'warning')
       }
     } catch (error) {
       console.error('Error deleting staff:', error)
-      alert('Failed to delete staff')
+      await dialog.alert('Error', 'Failed to delete staff', 'warning')
     }
   }
   

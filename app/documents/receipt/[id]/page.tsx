@@ -19,6 +19,7 @@ import {
   Phone
 } from 'lucide-react'
 import { downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Payment {
   id: string
@@ -39,6 +40,7 @@ interface Payment {
 
 export default function ReceiptPage() {
   const t = useTranslations('receipt')
+  const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
   const [payment, setPayment] = useState<Payment | null>(null)
@@ -93,7 +95,7 @@ export default function ReceiptPage() {
       })
     } catch (error) {
       console.error('Error downloading PDF:', error)
-      alert(t('failedToDownloadReceipt'))
+      dialog.alert(t('error'), t('failedToDownloadReceipt'), 'warning')
     } finally {
       setDownloading(false)
     }
@@ -101,12 +103,12 @@ export default function ReceiptPage() {
 
   const handleSendWhatsApp = async () => {
     if (!payment?.client_phone) {
-      alert(t('noPhoneAvailable'))
+      await dialog.alert(t('error'), t('noPhoneAvailable'), 'warning')
       return
     }
 
     setSending(true)
-    
+
     try {
       const response = await fetch('/api/whatsapp/send-receipt', {
         method: 'POST',
@@ -120,11 +122,11 @@ export default function ReceiptPage() {
         setSent(true)
         setTimeout(() => setSent(false), 3000)
       } else {
-        alert(data.error || t('failedToSendReceipt'))
+        await dialog.alert(t('error'), data.error || t('failedToSendReceipt'), 'warning')
       }
     } catch (error) {
       console.error('Error sending receipt:', error)
-      alert(t('failedToSendReceiptWhatsApp'))
+      await dialog.alert(t('error'), t('failedToSendReceiptWhatsApp'), 'warning')
     } finally {
       setSending(false)
     }

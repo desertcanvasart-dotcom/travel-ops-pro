@@ -10,9 +10,10 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { 
-  ArrowLeft, 
-  Save, 
+import { useConfirmDialog } from '@/components/ConfirmDialog'
+import {
+  ArrowLeft,
+  Save,
   Loader2,
   Wallet,
   Star,
@@ -512,6 +513,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
   const { id } = use(params)
   const router = useRouter()
   const t = useTranslations('contentEditor')
+  const dialog = useConfirmDialog()
   const isNew = id === 'new'
 
   const [mounted, setMounted] = useState(false)
@@ -681,7 +683,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
   // Save content
   const handleSave = async () => {
     if (!formData.name || !formData.category_id) {
-      alert(t('fillRequiredFields'))
+      await dialog.alert(t('error'), t('fillRequiredFields'), 'warning')
       return
     }
 
@@ -700,11 +702,11 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
         router.push('/content-library')
       } else {
         const error = await res.json()
-        alert(error.message || t('errorSaving'))
+        await dialog.alert(t('error'), error.message || t('errorSaving'), 'warning')
       }
     } catch (error) {
       console.error('Error saving:', error)
-      alert(t('errorSaving'))
+      await dialog.alert(t('error'), t('errorSaving'), 'warning')
     } finally {
       setSaving(false)
     }

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Loader2, FileText, Calendar, CreditCard } from 'lucide-react'
 import { downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Payment {
   id: string
@@ -27,6 +28,7 @@ interface Payment {
 
 export default function InvoicePage() {
   const t = useTranslations('invoice')
+  const dialog = useConfirmDialog()
   const params = useParams()
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
@@ -97,7 +99,7 @@ export default function InvoicePage() {
       downloadInvoicePDF(invoiceData)
     } catch (error) {
       console.error('Error downloading PDF:', error)
-      alert(t('failedToDownloadInvoice'))
+      dialog.alert(t('error'), t('failedToDownloadInvoice'), 'warning')
     } finally {
       setDownloading(false)
     }

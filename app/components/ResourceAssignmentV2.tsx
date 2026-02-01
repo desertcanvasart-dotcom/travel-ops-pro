@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronUp, X, MessageCircle, Send, Filter, Anchor
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // Types
 interface Resource {
@@ -217,6 +218,7 @@ export default function ResourceAssignmentV2({
   onUpdate
 }: ResourceAssignmentV2Props) {
   const t = useTranslations('resourceAssignment')
+  const dialog = useConfirmDialog()
   const [activeTab, setActiveTab] = useState('guide')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -415,7 +417,7 @@ export default function ResourceAssignmentV2({
 
   const handleAddResource = async () => {
     if (!addFormData.resource_id) {
-      alert('Please select a resource')
+      await dialog.alert('Missing Selection', 'Please select a resource', 'warning')
       return
     }
 
@@ -424,10 +426,10 @@ export default function ResourceAssignmentV2({
       const activeType = RESOURCE_TYPES.find(t => t.key === activeTab)
       const filteredResources = getFilteredResourcesForModal()
       const selectedResource = filteredResources.find(r => r.id === addFormData.resource_id)
-      
+
       // Build resource name with location info
       let resourceName = selectedResource?.[activeType?.nameField || 'name'] || 'Unknown'
-      
+
       // Add location context to the name
       if (activeTab === 'airport_staff' && selectedResource?.airport_location) {
         resourceName += ` (${selectedResource.airport_location})`
@@ -443,7 +445,7 @@ export default function ResourceAssignmentV2({
       } else if (selectedResource?.city && ['guide', 'vehicle', 'hotel', 'restaurant'].includes(activeTab)) {
         resourceName += ` (${selectedResource.city})`
       }
-      
+
       const response = await fetch('/api/itinerary-resources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -469,18 +471,24 @@ export default function ResourceAssignmentV2({
         resetAddForm()
         if (onUpdate) onUpdate()
       } else {
-        alert(data.error || 'Failed to add resource')
+        await dialog.alert('Error', data.error || 'Failed to add resource', 'warning')
       }
     } catch (error) {
       console.error('Error adding resource:', error)
-      alert('Failed to add resource')
+      await dialog.alert('Error', 'Failed to add resource', 'warning')
     } finally {
       setSaving(false)
     }
   }
 
   const handleRemoveResource = async (resourceId: string) => {
-    if (!confirm('Remove this resource assignment?')) return
+    const confirmed = await dialog.confirm({
+      message: 'Remove this resource assignment?',
+      variant: 'danger',
+      confirmText: 'Remove',
+      cancelText: 'Cancel'
+    })
+    if (!confirmed) return
 
     try {
       const response = await fetch(`/api/itinerary-resources?id=${resourceId}`, {
@@ -494,11 +502,11 @@ export default function ResourceAssignmentV2({
         await fetchConflicts()
         if (onUpdate) onUpdate()
       } else {
-        alert(data.error || 'Failed to remove resource')
+        await dialog.alert('Error', data.error || 'Failed to remove resource', 'warning')
       }
     } catch (error) {
       console.error('Error removing resource:', error)
-      alert('Failed to remove resource')
+      await dialog.alert('Error', 'Failed to remove resource', 'warning')
     }
   }
 
@@ -553,11 +561,11 @@ export default function ResourceAssignmentV2({
           })
         }, 3000)
       } else {
-        alert(data.error || 'Failed to send WhatsApp notification')
+        await dialog.alert('Error', data.error || 'Failed to send WhatsApp notification', 'warning')
       }
     } catch (error) {
       console.error('Error sending WhatsApp:', error)
-      alert('Failed to send WhatsApp notification')
+      await dialog.alert('Error', 'Failed to send WhatsApp notification', 'warning')
     } finally {
       setSendingWhatsApp(null)
     }

@@ -7,9 +7,11 @@ import TourSetup from './components/TourSetup'
 import DayPlanner from './components/DayPlanner'
 import PricingSidebar from './components/PricingSidebar'
 import { Users, Globe, ArrowLeft, Save, FileDown } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 export default function TourBuilderPage() {
   const t = useTranslations('tourBuilder')
+  const dialog = useConfirmDialog()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [tour, setTour] = useState<Tour>({
     tour_code: '',
@@ -136,13 +138,13 @@ export default function TourBuilderPage() {
       const data = await response.json()
 
       if (data.success) {
-        alert(`✅ Tour saved successfully!\n\nTour Code: ${data.data.tour_code}\nTour Name: ${data.data.tour_name}`)
+        await dialog.alert(t('tourSaved'), `Tour Code: ${data.data.tour_code}\nTour Name: ${data.data.tour_name}`, 'success')
       } else {
-        alert(`❌ Failed to save tour:\n${data.error}`)
+        await dialog.alert(t('error'), data.error || t('failedToSaveTour'), 'warning')
       }
     } catch (error) {
       console.error('Failed to save tour:', error)
-      alert('❌ Error saving tour. Please try again.')
+      await dialog.alert(t('error'), t('errorSavingTour'), 'warning')
     } finally {
       setIsSaving(false)
     }
@@ -378,7 +380,7 @@ export default function TourBuilderPage() {
                           a.click()
                           window.URL.revokeObjectURL(url)
                         } catch (error) {
-                          alert(t('review.failedToExport'))
+                          dialog.alert(t('error'), t('review.failedToExport'), 'warning')
                         }
                       }}
                       className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold flex items-center gap-2"

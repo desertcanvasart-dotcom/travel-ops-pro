@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { 
+import {
   Search,
   DollarSign,
   Clock,
@@ -22,6 +22,7 @@ import {
   TrendingUp,
   CheckCircle
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface AgingBucket {
   current: number
@@ -74,6 +75,7 @@ interface Summary {
 const ITEMS_PER_PAGE = 15
 
 export default function AccountsReceivablePage() {
+  const dialog = useConfirmDialog()
   const [clients, setClients] = useState<ClientReceivable[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -117,7 +119,7 @@ export default function AccountsReceivablePage() {
 
   const handleSendReminder = async (invoice: Invoice) => {
     if (!invoice.client_email) {
-      alert('No email address for this client')
+      await dialog.alert('Missing Email', 'No email address for this client', 'warning')
       return
     }
 

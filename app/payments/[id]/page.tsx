@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Trash2, FileText, Calendar, DollarSign, CreditCard } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Payment {
   id: string
@@ -27,6 +28,7 @@ export default function PaymentDetailPage() {
   const params = useParams()
   const router = useRouter()
   const t = useTranslations('payments.detail')
+  const dialog = useConfirmDialog()
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -69,11 +71,11 @@ export default function PaymentDetailPage() {
       if (data.success) {
         router.push('/payments')
       } else {
-        alert('Failed to delete payment: ' + data.error)
+        await dialog.alert(t('error'), 'Failed to delete payment: ' + data.error, 'warning')
       }
     } catch (error) {
       console.error('Error deleting payment:', error)
-      alert('Failed to delete payment')
+      await dialog.alert(t('error'), 'Failed to delete payment', 'warning')
     }
   }
 
