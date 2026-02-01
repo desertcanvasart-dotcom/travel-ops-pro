@@ -1,14 +1,13 @@
 // ============================================
-// B2B TOURS BROWSE API - UPDATED
+// B2B TOURS BROWSE API - OPTIMIZED
 // File: app/api/tours/browse/route.ts
 //
-// Now uses auto-pricing for "Starting From" price
-// instead of requiring manual variation_pricing
+// Uses cached pricing for fast loading.
+// Prices are pre-calculated by /api/tours/recalculate-prices
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,7 +17,7 @@ const supabaseAdmin = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    
+
     // Filters
     const tourType = searchParams.get('tour_type')
     const category = searchParams.get('category')
@@ -33,7 +32,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '12')
     const offset = (page - 1) * limit
 
-    // Build query for templates
+    // Build query for templates - include cached pricing columns
     let query = supabaseAdmin
       .from('tour_templates')
       .select(`
@@ -49,6 +48,9 @@ export async function GET(request: NextRequest) {
         image_url,
         uses_day_builder,
         pricing_mode,
+        cached_starting_price,
+        cached_starting_tier,
+        cached_price_updated_at,
         tour_categories (
           id,
           category_name,
@@ -105,86 +107,66 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Calculate pricing for each template
-    const templatesWithPricing = await Promise.all(
-      (templates || []).map(async (template) => {
-        // Filter variations by tier if specified
-        let variations = template.tour_variations?.filter((v: any) => v.is_active) || []
-        
-        if (tier) {
-          variations = variations.filter((v: any) => v.tier === tier)
-        }
+    // Transform templates - NO additional DB calls!
+    const templatesWithPricing = (templates || []).map((template) => {
+      // Filter variations by tier if specified
+      let variations = template.tour_variations?.filter((v: any) => v.is_active) || []
 
-        // Get auto-calculated price range
-        let startingFromPrice = null
-        let startingFromTier = null
+      if (tier) {
+        variations = variations.filter((v: any) => v.tier === tier)
+      }
 
-        // If template uses day builder, use auto-pricing
-        if (template.uses_day_builder || template.pricing_mode === 'auto') {
-          const priceRange = await getTemplatePriceRange(template.id)
-          if (priceRange) {
-            startingFromPrice = priceRange.minPrice
-            startingFromTier = priceRange.tier
-          }
-        }
+      // Use cached price or fallback to estimate
+      let startingFromPrice = template.cached_starting_price
+      let startingFromTier = template.cached_starting_tier
 
-        // Fallback: check for manual variation pricing
-        if (startingFromPrice === null && variations.length > 0) {
-          // Try to get from variation_pricing table (legacy)
-          const { data: pricing } = await supabaseAdmin
-            .from('variation_pricing')
-            .select('selling_price_per_person')
-            .in('variation_id', variations.map((v: any) => v.id))
-            .order('selling_price_per_person', { ascending: true })
-            .limit(1)
+      // Fallback: quick estimate based on duration (if no cached price)
+      if (startingFromPrice === null || startingFromPrice === undefined) {
+        // Estimate: €150/day for standard tier
+        startingFromPrice = template.duration_days * 150
+        startingFromTier = 'standard'
+      }
 
-          if (pricing?.length) {
-            startingFromPrice = pricing[0].selling_price_per_person
-          }
-        }
+      return {
+        id: template.id,
+        template_name: template.template_name,
+        template_code: template.template_code,
+        tour_type: template.tour_type,
+        duration_days: template.duration_days,
+        cities_covered: template.cities_covered || [],
+        highlights: template.highlights || [],
+        short_description: template.short_description,
+        is_featured: template.is_featured,
+        cover_image_url: template.image_url,
+        category: template.tour_categories,
 
-        // Final fallback: calculate quick estimate
-        if (startingFromPrice === null) {
-          // Quick estimate: €100/day base + €50/day for activities
-          startingFromPrice = template.duration_days * 150
-          startingFromTier = 'standard'
-        }
+        // Variations summary
+        variations_count: variations.length,
+        available_tiers: [...new Set(variations.map((v: any) => v.tier))],
+        min_pax: variations.length > 0
+          ? Math.min(...variations.map((v: any) => v.min_pax || 1))
+          : 1,
+        max_pax: variations.length > 0
+          ? Math.max(...variations.map((v: any) => v.max_pax || 15))
+          : 15,
 
-        return {
-          id: template.id,
-          template_name: template.template_name,
-          template_code: template.template_code,
-          tour_type: template.tour_type,
-          duration_days: template.duration_days,
-          cities_covered: template.cities_covered || [],
-          highlights: template.highlights || [],
-          short_description: template.short_description,
-          is_featured: template.is_featured,
-          cover_image_url: template.image_url,
-          category: template.tour_categories,
-          
-          // Variations summary
-          variations_count: variations.length,
-          available_tiers: [...new Set(variations.map((v: any) => v.tier))],
-          min_pax: Math.min(...variations.map((v: any) => v.min_pax || 1)),
-          max_pax: Math.max(...variations.map((v: any) => v.max_pax || 15)),
-          
-          // Pricing
-          starting_from: startingFromPrice,
-          starting_from_tier: startingFromTier,
-          currency: 'EUR',
-          
-          // Flags
-          uses_day_builder: template.uses_day_builder,
-          pricing_mode: template.pricing_mode || 'manual'
-        }
-      })
-    )
+        // Pricing (from cache)
+        starting_from: startingFromPrice,
+        starting_from_tier: startingFromTier,
+        currency: 'EUR',
+        price_is_cached: template.cached_starting_price !== null,
+        price_updated_at: template.cached_price_updated_at,
 
-    // Filter out templates with €Infinity or invalid pricing
-    const validTemplates = templatesWithPricing.filter(t => 
-      t.starting_from !== null && 
-      isFinite(t.starting_from) && 
+        // Flags
+        uses_day_builder: template.uses_day_builder,
+        pricing_mode: template.pricing_mode || 'manual'
+      }
+    })
+
+    // Filter out templates with invalid pricing
+    const validTemplates = templatesWithPricing.filter(t =>
+      t.starting_from !== null &&
+      isFinite(t.starting_from) &&
       t.starting_from > 0
     )
 
