@@ -118,6 +118,15 @@ export interface BookingWithDetails extends Booking {
     vehicle_type: string
     plate_number: string | null
   } | null
+  // Summary data from API
+  supplier_summary?: {
+    total: number
+    confirmed: number
+    pending: number
+  }
+  payment_summary?: {
+    total_paid: number
+  }
 }
 
 // =====================================================

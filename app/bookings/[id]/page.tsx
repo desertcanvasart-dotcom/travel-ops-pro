@@ -374,7 +374,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                     <span className="text-gray-600">Pending</span>
                     <span className="text-amber-600 font-medium">{booking.supplier_summary?.pending || 0}</span>
                   </div>
-                  {booking.supplier_summary?.total === booking.supplier_summary?.confirmed && booking.supplier_summary?.total > 0 && (
+                  {booking.supplier_summary?.total === booking.supplier_summary?.confirmed && (booking.supplier_summary?.total ?? 0) > 0 && (
                     <div className="pt-2 border-t">
                       <span className="text-green-600 text-xs flex items-center gap-1">
                         <CheckCircle2 className="w-4 h-4" />
