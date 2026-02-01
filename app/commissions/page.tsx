@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Commission {
   id: string
@@ -147,6 +148,7 @@ const initialFormData: FormData = {
 
 export default function CommissionsPage() {
   const t = useTranslations('commissions')
+  const dialog = useConfirmDialog()
   const [commissions, setCommissions] = useState<Commission[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -240,11 +242,11 @@ export default function CommissionsPage() {
         fetchCommissions()
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to save commission')
+        await dialog.alert(t('error'), error.error || t('failedToSave'), 'warning')
       }
     } catch (error) {
       console.error('Error saving commission:', error)
-      alert('Failed to save commission')
+      await dialog.alert(t('error'), t('failedToSave'), 'warning')
     } finally {
       setSaving(false)
     }

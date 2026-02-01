@@ -4,9 +4,9 @@ import { useState, useEffect, use } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  ArrowLeft, 
-  Edit2, 
+import {
+  ArrowLeft,
+  Edit2,
   Trash2,
   Receipt,
   Calendar,
@@ -21,6 +21,7 @@ import {
   X,
   MapPin
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Expense {
   id: string
@@ -108,6 +109,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
   const resolvedParams = use(params)
   const router = useRouter()
   const t = useTranslations('expenseDetail')
+  const dialog = useConfirmDialog()
   const [expense, setExpense] = useState<Expense | null>(null)
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -169,11 +171,11 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
       if (response.ok) {
         fetchExpense()
       } else {
-        alert(t('failedToUpdateStatus'))
+        await dialog.alert(t('error'), t('failedToUpdateStatus'), 'warning')
       }
     } catch (error) {
       console.error('Error updating expense:', error)
-      alert(t('failedToUpdateStatus'))
+      await dialog.alert(t('error'), t('failedToUpdateStatus'), 'warning')
     } finally {
       setUpdating(false)
     }
@@ -181,18 +183,19 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
 
   const handleDelete = async () => {
     if (!expense) return
-    if (!confirm(t('confirmDeleteExpense'))) return
+    const confirmed = await dialog.confirmDelete(t('expense'))
+    if (!confirmed) return
 
     try {
       const response = await fetch(`/api/expenses/${expense.id}`, { method: 'DELETE' })
       if (response.ok) {
         router.push('/expenses')
       } else {
-        alert(t('failedToDeleteExpense'))
+        await dialog.alert(t('error'), t('failedToDeleteExpense'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
-      alert(t('failedToDeleteExpense'))
+      await dialog.alert(t('error'), t('failedToDeleteExpense'), 'warning')
     }
   }
 

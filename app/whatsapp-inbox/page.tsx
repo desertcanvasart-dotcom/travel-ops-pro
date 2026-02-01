@@ -4,11 +4,12 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   MessageSquare, Send, Search, Phone, User, Clock,
-  Sparkles, RefreshCw, Plus, CheckCheck, Check, 
+  Sparkles, RefreshCw, Plus, CheckCheck, Check,
   AlertCircle, X, Languages, ChevronDown, Loader2,
   Trash2, UserPlus, Users, History, ArrowRight,
   Settings, Filter, UserCheck, UserX
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // Supported languages
 const QUICK_LANGUAGES = [
@@ -501,6 +502,7 @@ function AgentsManagementModal({
 // ============================================
 export default function WhatsAppInboxPage() {
   const router = useRouter()
+  const dialog = useConfirmDialog()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
@@ -638,11 +640,11 @@ export default function WhatsAppInboxPage() {
   }
 
   // Claim conversation
-  const claimConversation = () => {
+  const claimConversation = async () => {
     if (currentAgentId) {
       assignConversation(currentAgentId, 'claim')
     } else {
-      alert('Please set yourself as an agent first in the Agents settings')
+      await dialog.alert('Agent Required', 'Please set yourself as an agent first in the Agents settings', 'info')
       setShowAgentsModal(true)
     }
   }

@@ -4,11 +4,11 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { 
-  ArrowLeft, 
-  FileText, 
-  Send, 
-  Download, 
+import {
+  ArrowLeft,
+  FileText,
+  Send,
+  Download,
   Plus,
   X,
   Trash2,
@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Invoice {
   id: string
@@ -139,6 +140,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const router = useRouter()
   const t = useTranslations('invoices.detail')
   const tCommon = useTranslations('common')
+  const dialog = useConfirmDialog()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [linkedInvoice, setLinkedInvoice] = useState<Invoice | null>(null)
   const [childInvoice, setChildInvoice] = useState<Invoice | null>(null)
@@ -254,11 +256,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         })
       } else {
         const error = await response.json()
-        alert(error.error || t('failedToRecordPayment'))
+        await dialog.alert(tCommon('error'), error.error || t('failedToRecordPayment'), 'warning')
       }
     } catch (error) {
       console.error('Error recording payment:', error)
-      alert(t('failedToRecordPayment'))
+      await dialog.alert(tCommon('error'), t('failedToRecordPayment'), 'warning')
     } finally {
       setSavingPayment(false)
     }
@@ -287,7 +289,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       downloadInvoicePDF(invoice)
     } catch (error) {
       console.error('Error generating PDF:', error)
-      alert(t('failedToGeneratePDF'))
+      dialog.alert(tCommon('error'), t('failedToGeneratePDF'), 'warning')
     } finally {
       setGeneratingPDF(false)
     }
@@ -310,11 +312,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         throw new Error(data.error || t('failedToSendInvoice'))
       }
 
-      alert(t('invoiceSentWhatsApp'))
+      await dialog.alert(tCommon('success'), t('invoiceSentWhatsApp'), 'success')
       fetchInvoice()
     } catch (error: any) {
       console.error('Error sending WhatsApp:', error)
-      alert(t('failedToSendError', { error: error.message }))
+      await dialog.alert(tCommon('error'), t('failedToSendError', { error: error.message }), 'warning')
     } finally {
       setSendingWhatsApp(false)
     }
@@ -398,11 +400,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         router.push(`/invoices/${newInvoice.id}`)
       } else {
         const error = await response.json()
-        alert(error.error || t('failedToCreateFinalInvoice'))
+        await dialog.alert(tCommon('error'), error.error || t('failedToCreateFinalInvoice'), 'warning')
       }
     } catch (error) {
       console.error('Error creating final invoice:', error)
-      alert(t('failedToCreateFinalInvoice'))
+      await dialog.alert(tCommon('error'), t('failedToCreateFinalInvoice'), 'warning')
     } finally {
       setCreatingFinalInvoice(false)
     }

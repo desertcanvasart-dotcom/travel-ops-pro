@@ -14,6 +14,7 @@ import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ItineraryPL from '@/app/components/ItineraryPL'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Itinerary {
   id: string
@@ -76,10 +77,11 @@ interface ExistingInvoice {
 export default function ViewItineraryPage() {
   const t = useTranslations('itineraries.detail')
   const tCommon = useTranslations('common')
+  const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
-  
+
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
   const [loading, setLoading] = useState(true)
@@ -172,7 +174,7 @@ export default function ViewItineraryPage() {
       }
     } catch (error) {
       console.error('Error updating cost mode:', error)
-      alert(t('failedToUpdateCostMode'))
+      await dialog.alert(tCommon('error'), t('failedToUpdateCostMode'), 'warning')
     } finally {
       setSavingCostMode(false)
     }
@@ -192,7 +194,7 @@ export default function ViewItineraryPage() {
   const handleSaveServiceCost = async (serviceId: string, dayId: string) => {
     const newCost = parseFloat(editedCost)
     if (isNaN(newCost) || newCost < 0) {
-      alert(t('pleaseEnterValidCost'))
+      await dialog.alert(tCommon('error'), t('pleaseEnterValidCost'), 'warning')
       return
     }
 
@@ -242,7 +244,7 @@ export default function ViewItineraryPage() {
       setEditedCost('')
     } catch (error) {
       console.error('Error updating service cost:', error)
-      alert(t('failedToUpdateCost'))
+      await dialog.alert(tCommon('error'), t('failedToUpdateCost'), 'warning')
     } finally {
       setSavingServiceCost(false)
     }
@@ -262,11 +264,11 @@ export default function ViewItineraryPage() {
         setCommissionResult(`✅ ${result.message}`)
         setTimeout(() => setCommissionResult(null), 5000)
       } else {
-        alert(result.error || t('failedToGenerateCommissions'))
+        await dialog.alert(tCommon('error'), result.error || t('failedToGenerateCommissions'), 'warning')
       }
     } catch (error) {
       console.error('Error generating commissions:', error)
-      alert(t('failedToGenerateCommissions'))
+      await dialog.alert(tCommon('error'), t('failedToGenerateCommissions'), 'warning')
     } finally {
       setGeneratingCommissions(false)
     }
@@ -373,11 +375,11 @@ export default function ViewItineraryPage() {
         router.push(`/invoices/${invoice.id}`)
       } else {
         const error = await response.json()
-        alert(error.error || t('failedToCreateInvoice'))
+        await dialog.alert(tCommon('error'), error.error || t('failedToCreateInvoice'), 'warning')
       }
     } catch (error) {
       console.error('Error creating invoice:', error)
-      alert(t('failedToCreateInvoice'))
+      await dialog.alert(tCommon('error'), t('failedToCreateInvoice'), 'warning')
     } finally {
       setGeneratingInvoice(false)
     }
@@ -393,7 +395,7 @@ export default function ViewItineraryPage() {
       pdf.save(filename)
     } catch (error) {
       console.error('Error generating PDF:', error)
-      alert(t('failedToGeneratePDF'))
+      await dialog.alert(tCommon('error'), t('failedToGeneratePDF'), 'warning')
     } finally {
       setGeneratingPDF(false)
     }
@@ -401,9 +403,9 @@ export default function ViewItineraryPage() {
 
   const handleSendWhatsApp = async () => {
     if (!itinerary) return
-  
+
     if (!itinerary.client_phone) {
-      alert(t('clientPhoneRequired'))
+      await dialog.alert(tCommon('error'), t('clientPhoneRequired'), 'warning')
       return
     }
   
@@ -432,7 +434,7 @@ export default function ViewItineraryPage() {
       setTimeout(() => setSendSuccess(null), 5000)
     } catch (error: any) {
       console.error('WhatsApp send error:', error)
-      alert(t('failedToSendWhatsAppError', { error: error.message }))
+      await dialog.alert(tCommon('error'), t('failedToSendWhatsAppError', { error: error.message }), 'warning')
     } finally {
       setSendingEmail(false)
     }
@@ -442,7 +444,7 @@ export default function ViewItineraryPage() {
     if (!itinerary || days.length === 0) return
 
     if (!itinerary.client_email) {
-      alert(t('clientEmailRequired'))
+      await dialog.alert(tCommon('error'), t('clientEmailRequired'), 'warning')
       return
     }
 
@@ -480,7 +482,7 @@ export default function ViewItineraryPage() {
       }
     } catch (error) {
       console.error('Error sending email:', error)
-      alert(t('failedToSendEmailError', { error: error instanceof Error ? error.message : tCommon('unknownError') }))
+      await dialog.alert(tCommon('error'), t('failedToSendEmailError', { error: error instanceof Error ? error.message : tCommon('unknownError') }), 'warning')
     } finally {
       setSendingEmail(false)
     }
