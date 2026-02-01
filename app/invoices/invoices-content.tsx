@@ -17,6 +17,7 @@ import {
   Wallet
 } from 'lucide-react'
 import Link from 'next/link'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Invoice {
   id: string
@@ -132,6 +133,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
 
 export default function InvoicesContent() {
   const t = useTranslations('invoices')
+  const dialog = useConfirmDialog()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
@@ -464,29 +466,30 @@ export default function InvoicesContent() {
         fetchInvoices()
       } else {
         const error = await response.json()
-        alert(error.error || t('failedToCreateInvoice'))
+        await dialog.alert(t('error'), error.error || t('failedToCreateInvoice'), 'warning')
       }
     } catch (error) {
       console.error('Error creating invoice:', error)
-      alert(t('failedToCreateInvoice'))
+      await dialog.alert(t('error'), t('failedToCreateInvoice'), 'warning')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('confirmDeleteInvoice'))) return
+    const confirmed = await dialog.confirmDelete(t('invoice'))
+    if (!confirmed) return
 
     try {
       const response = await fetch(`/api/invoices/${id}`, { method: 'DELETE' })
       if (response.ok) {
         fetchInvoices()
       } else {
-        alert(t('failedToDeleteInvoice'))
+        await dialog.alert(t('error'), t('failedToDeleteInvoice'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting invoice:', error)
-      alert('Failed to delete invoice')
+      await dialog.alert(t('error'), t('failedToDeleteInvoice'), 'warning')
     }
   }
 

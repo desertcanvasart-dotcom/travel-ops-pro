@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
-import { 
-  Search, 
-  Plus, 
+import {
+  Search,
+  Plus,
   Eye,
   Edit2,
-  Trash2, 
+  Trash2,
   X,
   Receipt,
   ChevronDown,
@@ -27,6 +27,7 @@ import {
   Filter
 } from 'lucide-react'
 import Link from 'next/link'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Expense {
   id: string
@@ -148,6 +149,7 @@ const ITEMS_PER_PAGE = 15
 
 export default function ExpensesPage() {
   const t = useTranslations('expenses')
+  const dialog = useConfirmDialog()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [loading, setLoading] = useState(true)
@@ -257,29 +259,30 @@ export default function ExpensesPage() {
         fetchExpenses()
       } else {
         const error = await response.json()
-        alert(error.error || t('failedToSaveExpense'))
+        await dialog.alert(t('error'), error.error || t('failedToSaveExpense'), 'warning')
       }
     } catch (error) {
       console.error('Error saving expense:', error)
-      alert(t('failedToSaveExpense'))
+      await dialog.alert(t('error'), t('failedToSaveExpense'), 'warning')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('confirmDeleteExpense'))) return
+    const confirmed = await dialog.confirmDelete(t('expense'))
+    if (!confirmed) return
 
     try {
       const response = await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
       if (response.ok) {
         fetchExpenses()
       } else {
-        alert(t('failedToDeleteExpense'))
+        await dialog.alert(t('error'), t('failedToDeleteExpense'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
-      alert(t('failedToDeleteExpense'))
+      await dialog.alert(t('error'), t('failedToDeleteExpense'), 'warning')
     }
   }
 

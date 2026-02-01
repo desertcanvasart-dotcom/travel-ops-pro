@@ -8,6 +8,7 @@ import {
   Calendar, Clock, AlertCircle, CheckCircle, Phone, Mail,
   MessageSquare, Users, TrendingUp, Filter, X
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 const supabase = createClient()
 
@@ -31,6 +32,7 @@ interface Followup {
 
 export default function FollowupDashboard() {
   const t = useTranslations('followups')
+  const dialog = useConfirmDialog()
   const [followups, setFollowups] = useState<Followup[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'today' | 'week' | 'overdue'>('today')
@@ -74,7 +76,7 @@ export default function FollowupDashboard() {
     try {
       const { error } = await supabase
         .from('client_followups')
-        .update({ 
+        .update({
           status: 'completed',
           completed_at: new Date().toISOString()
         })
@@ -83,11 +85,11 @@ export default function FollowupDashboard() {
       if (error) throw error
 
       // Show success message
-      alert(t('followupCompleted'))
+      await dialog.alert(t('success'), t('followupCompleted'), 'success')
       loadFollowups()
     } catch (error) {
       console.error('Error completing follow-up:', error)
-      alert(t('failedToCompleteFollowup'))
+      await dialog.alert(t('error'), t('failedToCompleteFollowup'), 'warning')
     }
   }
 
@@ -98,7 +100,7 @@ export default function FollowupDashboard() {
 
       const { error } = await supabase
         .from('client_followups')
-        .update({ 
+        .update({
           due_date: newDate.toISOString().split('T')[0]
         })
         .eq('id', id)
@@ -106,16 +108,17 @@ export default function FollowupDashboard() {
       if (error) throw error
 
       // Show success message
-      alert(t('followupSnoozed', { days }))
+      await dialog.alert(t('snoozed'), t('followupSnoozed', { days }), 'success')
       loadFollowups()
     } catch (error) {
       console.error('Error snoozing follow-up:', error)
-      alert(t('failedToSnoozeFollowup'))
+      await dialog.alert(t('error'), t('failedToSnoozeFollowup'), 'warning')
     }
   }
 
   const deleteFollowup = async (id: string) => {
-    if (!confirm(t('confirmDeleteFollowup'))) return
+    const confirmed = await dialog.confirmDelete(t('followup'))
+    if (!confirmed) return
 
     try {
       const { error } = await supabase
@@ -125,11 +128,11 @@ export default function FollowupDashboard() {
 
       if (error) throw error
 
-      alert(t('followupDeleted'))
+      await dialog.alert(t('deleted'), t('followupDeleted'), 'success')
       loadFollowups()
     } catch (error) {
       console.error('Error deleting follow-up:', error)
-      alert(t('failedToDeleteFollowup'))
+      await dialog.alert(t('error'), t('failedToDeleteFollowup'), 'warning')
     }
   }
 

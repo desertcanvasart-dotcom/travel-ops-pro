@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface ClientSummary {
   id: string
@@ -51,6 +52,7 @@ const LEAD_SOURCES = [
 export default function ClientsPage() {
   const t = useTranslations('clients')
   const tCommon = useTranslations('common')
+  const dialog = useConfirmDialog()
   const [clients, setClients] = useState<ClientSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
@@ -199,7 +201,7 @@ export default function ClientsPage() {
       fetchClients()
     } catch (error) {
       console.error('Error deleting client:', error)
-      alert(t('failedToDelete'))
+      await dialog.alert(t('error'), t('failedToDelete'), 'warning')
     } finally {
       setDeleting(false)
     }

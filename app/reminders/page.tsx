@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { 
+import {
   Bell,
   Send,
   Clock,
@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   Filter
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface PendingReminder {
   invoice_id: string
@@ -85,6 +86,7 @@ const REMINDER_TYPE_LABELS: Record<string, { label: string; color: string }> = {
 }
 
 export default function PaymentRemindersPage() {
+  const dialog = useConfirmDialog()
   const [pendingReminders, setPendingReminders] = useState<PendingReminder[]>([])
   const [reminderHistory, setReminderHistory] = useState<ReminderHistoryItem[]>([])
   const [historyStats, setHistoryStats] = useState<HistoryStats>({ total: 0, sent: 0, failed: 0 })
@@ -165,13 +167,13 @@ export default function PaymentRemindersPage() {
       
       if (result.success) {
         setPendingReminders(prev => prev.filter(r => r.invoice_id !== invoiceId))
-        alert(`Reminder sent successfully!`)
+        await dialog.alert('Success', 'Reminder sent successfully!', 'success')
       } else {
-        alert(result.error || 'Failed to send reminder')
+        await dialog.alert('Error', result.error || 'Failed to send reminder', 'warning')
       }
     } catch (error) {
       console.error('Error sending reminder:', error)
-      alert('Failed to send reminder')
+      await dialog.alert('Error', 'Failed to send reminder', 'warning')
     } finally {
       setSendingId(null)
     }
@@ -185,21 +187,21 @@ export default function PaymentRemindersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paused: !currentPaused })
       })
-      
+
       const result = await response.json()
-      
+
       if (result.success) {
-        setPendingReminders(prev => prev.map(r => 
-          r.invoice_id === invoiceId 
+        setPendingReminders(prev => prev.map(r =>
+          r.invoice_id === invoiceId
             ? { ...r, reminder_paused: !currentPaused }
             : r
         ))
       } else {
-        alert(result.error || 'Failed to toggle pause status')
+        await dialog.alert('Error', result.error || 'Failed to toggle pause status', 'warning')
       }
     } catch (error) {
       console.error('Error toggling pause:', error)
-      alert('Failed to toggle pause status')
+      await dialog.alert('Error', 'Failed to toggle pause status', 'warning')
     } finally {
       setTogglingId(null)
     }
@@ -207,7 +209,7 @@ export default function PaymentRemindersPage() {
 
   const handleSendSelected = async () => {
     if (selectedIds.size === 0) {
-      alert('Please select invoices to send reminders')
+      await dialog.alert('Selection Required', 'Please select invoices to send reminders', 'info')
       return
     }
 

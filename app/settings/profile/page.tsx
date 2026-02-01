@@ -3,18 +3,19 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/app/contexts/AuthContext'
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  Building2, 
-  MapPin, 
-  Globe, 
+import {
+  User,
+  Mail,
+  Phone,
+  Building2,
+  MapPin,
+  Globe,
   Lock,
   Camera,
   Save,
   ArrowLeft
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 // ============================================
 // INTERFACES
@@ -45,6 +46,7 @@ interface PasswordData {
 
 export default function ProfilePage() {
   const { profile } = useAuth()
+  const dialog = useConfirmDialog()
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile')
   const [loading, setLoading] = useState(false)
   const [profileData, setProfileData] = useState<UserProfile>({
@@ -90,8 +92,8 @@ export default function ProfilePage() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setTimeout(() => {
-      alert('Profile updated successfully!')
+    setTimeout(async () => {
+      await dialog.alert('Success', 'Profile updated successfully!', 'success')
       setLoading(false)
     }, 1000)
   }
@@ -99,16 +101,16 @@ export default function ProfilePage() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      alert('New passwords do not match!')
+      await dialog.alert('Error', 'New passwords do not match!', 'warning')
       return
     }
     if (passwordData.newPassword.length < 8) {
-      alert('Password must be at least 8 characters long!')
+      await dialog.alert('Error', 'Password must be at least 8 characters long!', 'warning')
       return
     }
     setLoading(true)
-    setTimeout(() => {
-      alert('Password changed successfully!')
+    setTimeout(async () => {
+      await dialog.alert('Success', 'Password changed successfully!', 'success')
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
       setLoading(false)
     }, 1000)

@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  Receipt, 
-  Download, 
-  Search, 
-  Eye, 
-  Calendar, 
-  User, 
-  CreditCard, 
+import {
+  Receipt,
+  Download,
+  Search,
+  Eye,
+  Calendar,
+  User,
+  CreditCard,
   Loader2,
   MessageCircle,
   Check,
@@ -18,6 +18,7 @@ import {
   MapPin
 } from 'lucide-react'
 import { downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface UnifiedPayment {
   id: string
@@ -38,6 +39,7 @@ interface UnifiedPayment {
 
 export default function ReceiptsPage() {
   const router = useRouter()
+  const dialog = useConfirmDialog()
   const [payments, setPayments] = useState<UnifiedPayment[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -172,7 +174,7 @@ export default function ReceiptsPage() {
       })
     } catch (error) {
       console.error('Error downloading receipt:', error)
-      alert('Failed to download receipt')
+      await dialog.alert('Error', 'Failed to download receipt', 'warning')
     } finally {
       setDownloadingId(null)
     }
@@ -180,7 +182,7 @@ export default function ReceiptsPage() {
 
   const handleSendWhatsApp = async (payment: UnifiedPayment) => {
     if (!payment.client_phone) {
-      alert('No phone number available for this client')
+      await dialog.alert('No Phone', 'No phone number available for this client', 'warning')
       return
     }
 
@@ -211,11 +213,11 @@ export default function ReceiptsPage() {
           setSentIds(prev => prev.filter(id => id !== payment.id))
         }, 3000)
       } else {
-        alert(data.error || 'Failed to send receipt')
+        await dialog.alert('Error', data.error || 'Failed to send receipt', 'warning')
       }
     } catch (error) {
       console.error('Error sending receipt:', error)
-      alert('Failed to send receipt via WhatsApp')
+      await dialog.alert('Error', 'Failed to send receipt via WhatsApp', 'warning')
     } finally {
       setSendingId(null)
     }

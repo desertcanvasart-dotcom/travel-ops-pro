@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  ChevronLeft,
+  ChevronRight,
   Calendar as CalendarIcon,
   List,
   LayoutGrid,
@@ -23,6 +23,7 @@ import {
   User,
   Car
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 import {
   format,
   startOfMonth,
@@ -102,6 +103,7 @@ interface Stats {
 }
 
 export default function CalendarPage() {
+  const dialog = useConfirmDialog()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [bookings, setBookings] = useState<Booking[]>([])
   const [filteredBookings, setFilteredBookings] = useState<Booking[]>([])
@@ -399,7 +401,7 @@ export default function CalendarPage() {
     if (!booking) return
     
     if (newDate < startOfDay(new Date())) {
-      alert('Cannot move booking to a past date')
+      dialog.alert('Invalid Date', 'Cannot move booking to a past date', 'warning')
       return
     }
     
@@ -451,11 +453,11 @@ export default function CalendarPage() {
         setShowConfirmModal(false)
         setPendingMove(null)
       } else {
-        alert('Failed to update booking: ' + data.error)
+        await dialog.alert('Error', 'Failed to update booking: ' + data.error, 'warning')
       }
     } catch (error) {
       console.error('Error updating booking:', error)
-      alert('Failed to update booking')
+      await dialog.alert('Error', 'Failed to update booking', 'warning')
     }
   }
 
