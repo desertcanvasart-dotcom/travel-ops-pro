@@ -46,12 +46,12 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   'MessageSquare': MessageSquare,
 }
 
-// Tier badge colors
-const TIER_COLORS: Record<string, { bg: string; text: string }> = {
-  budget: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  standard: { bg: 'bg-blue-50', text: 'text-blue-700' },
-  deluxe: { bg: 'bg-purple-50', text: 'text-purple-700' },
-  luxury: { bg: 'bg-amber-50', text: 'text-amber-700' },
+// Tier badge colors and labels
+const TIER_CONFIG: Record<string, { bg: string; activeBg: string; text: string; activeText: string; letter: string; label: string }> = {
+  budget: { bg: 'bg-gray-100', activeBg: 'bg-emerald-100', text: 'text-gray-400', activeText: 'text-emerald-700', letter: 'B', label: 'Budget' },
+  standard: { bg: 'bg-gray-100', activeBg: 'bg-blue-100', text: 'text-gray-400', activeText: 'text-blue-700', letter: 'S', label: 'Standard' },
+  deluxe: { bg: 'bg-gray-100', activeBg: 'bg-purple-100', text: 'text-gray-400', activeText: 'text-purple-700', letter: 'D', label: 'Deluxe' },
+  luxury: { bg: 'bg-gray-100', activeBg: 'bg-amber-100', text: 'text-gray-400', activeText: 'text-amber-700', letter: 'L', label: 'Luxury' },
 }
 
 interface Category {
@@ -384,18 +384,21 @@ export default function ContentLibraryPage() {
                         )}
                       </div>
                       
-                      {/* Tier Badges */}
-                      <div className="flex gap-1">
+                      {/* Tier Badges - Letters */}
+                      <div className="flex gap-0.5">
                         {['budget', 'standard', 'deluxe', 'luxury'].map(tier => {
+                          const config = TIER_CONFIG[tier]
                           const hasTier = !item.missing_tiers.includes(tier)
                           return (
                             <div
                               key={tier}
-                              className={`w-2 h-2 rounded-full ${
-                                hasTier ? TIER_COLORS[tier].bg.replace('50', '400') : 'bg-gray-200'
+                              className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-semibold ${
+                                hasTier ? `${config.activeBg} ${config.activeText}` : `${config.bg} ${config.text}`
                               }`}
-                              title={`${tier}: ${hasTier ? '✓' : '✗'}`}
-                            />
+                              title={`${config.label}: ${hasTier ? 'Available' : 'Not available'}`}
+                            >
+                              {config.letter}
+                            </div>
                           )
                         })}
                       </div>
