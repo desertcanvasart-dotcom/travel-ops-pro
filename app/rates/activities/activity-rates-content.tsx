@@ -31,6 +31,7 @@ import {
   PersonStanding,
   Banknote
 } from 'lucide-react'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // Egyptian cities
 const EGYPT_CITIES = [
@@ -146,6 +147,10 @@ export default function ActivityRatesContent() {
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
+
+  // Currency conversion
+  const { currency, formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
   const [rates, setRates] = useState<ActivityRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -822,10 +827,10 @@ export default function ActivityRatesContent() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">€{rate.base_rate_eur}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">€{rate.base_rate_non_eur}</span>
+                      <span className="text-sm text-gray-600">{formatRate(rate.base_rate_non_eur)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -896,7 +901,7 @@ export default function ActivityRatesContent() {
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-xs text-gray-500">EUR Rate</p>
-                    <p className="text-lg font-bold text-green-600">€{rate.base_rate_eur}</p>
+                    <p className="text-lg font-bold text-green-600">{formatRate(rate.base_rate_eur)}</p>
                   </div>
                   <div className="flex gap-1">
                     <button
@@ -932,7 +937,7 @@ export default function ActivityRatesContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">€{rate.base_rate_eur}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>

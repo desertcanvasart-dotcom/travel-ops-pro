@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // CONSTANTS
@@ -198,6 +199,10 @@ export default function AttractionsContent() {
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
+
+  // Currency conversion
+  const { currency, formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
   
   const [attractions, setAttractions] = useState<Attraction[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -645,7 +650,7 @@ export default function AttractionsContent() {
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
             <p className="text-xs text-gray-600">{t('stats.avgEurRate')}</p>
-            <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
           </div>
         </div>
 
@@ -777,12 +782,12 @@ export default function AttractionsContent() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">
-                      {attraction.fee_type === 'free' ? 'FREE' : `€${(attraction.eur_rate || 0).toFixed(2)}`}
+                      {attraction.fee_type === 'free' ? 'FREE' : formatRate(attraction.eur_rate || 0)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-semibold text-primary-600">
-                      {attraction.fee_type === 'free' ? 'FREE' : `€${(attraction.non_eur_rate || 0).toFixed(2)}`}
+                      {attraction.fee_type === 'free' ? 'FREE' : formatRate(attraction.non_eur_rate || 0)}
                       </span>
                     </td>
                     {/* NEW: Add-on toggle column */}

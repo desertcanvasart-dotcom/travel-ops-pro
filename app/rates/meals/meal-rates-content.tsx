@@ -25,6 +25,7 @@ import {
   XCircle,
   Info
 } from 'lucide-react'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // Egyptian cities
 const EGYPT_CITIES = [
@@ -127,6 +128,10 @@ export default function MealRatesContent() {
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
+
+  // Currency conversion
+  const { currency, formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
   const [rates, setRates] = useState<MealRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -607,10 +612,10 @@ export default function MealRatesContent() {
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-gray-400 font-bold">€</span>
+            <span className="text-gray-400 font-bold">{currency}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
           <p className="text-xs text-gray-600">{t('avgRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
@@ -791,11 +796,11 @@ export default function MealRatesContent() {
                       {getTierBadge(rate.tier)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">€{rate.base_rate_eur}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
                       {rate.per_person_rate && <span className="text-xs text-gray-400">/pp</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">€{rate.base_rate_non_eur}</span>
+                      <span className="text-sm text-gray-600">{formatRate(rate.base_rate_non_eur)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -858,7 +863,7 @@ export default function MealRatesContent() {
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-xs text-gray-500">{tCommon('eurRate')} {rate.per_person_rate && `(${t('perPerson')})`}</p>
-                    <p className="text-lg font-bold text-green-600">€{rate.base_rate_eur}</p>
+                    <p className="text-lg font-bold text-green-600">{formatRate(rate.base_rate_eur)}</p>
                   </div>
                   <div className="flex gap-1">
                     <button
@@ -894,7 +899,7 @@ export default function MealRatesContent() {
                   {getTierBadge(rate.tier)}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">€{rate.base_rate_eur}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>

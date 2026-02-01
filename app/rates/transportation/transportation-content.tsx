@@ -17,6 +17,7 @@ import {
   Building2
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface TransportationRate {
   id: string
@@ -118,6 +119,10 @@ export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
+
+  // Currency conversion
+  const { formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
   const [rates, setRates] = useState<TransportationRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])  // NEW: suppliers list
@@ -636,7 +641,7 @@ export default function TransportationContent() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <span className="text-sm font-medium text-gray-900">€{Number(rate.base_rate_eur).toFixed(2)}</span>
+                      <span className="text-sm font-medium text-gray-900">{formatRate(Number(rate.base_rate_eur))}</span>
                     </td>
                     <td className="px-4 py-2 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${

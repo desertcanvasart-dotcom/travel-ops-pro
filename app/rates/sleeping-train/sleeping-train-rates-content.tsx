@@ -26,6 +26,7 @@ import {
   XCircle,
   Info
 } from 'lucide-react'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // Sleeping train routes (Cairo-Luxor-Aswan corridor)
 const SLEEPER_CITIES = [
@@ -82,6 +83,10 @@ export default function SleepingTrainRatesContent() {
   const t = useTranslations('rates.sleepingTrains')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
+
+  // Currency conversion
+  const { currency, formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
   const [rates, setRates] = useState<SleepingTrainRate[]>([])
   const [loading, setLoading] = useState(true)
@@ -483,10 +488,10 @@ export default function SleepingTrainRatesContent() {
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-gray-400 font-bold">€</span>
+            <span className="text-gray-400 font-bold">{currency}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">€{avgOneway}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgOneway))}</p>
           <p className="text-xs text-gray-600">Avg. One-way</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
@@ -668,11 +673,11 @@ export default function SleepingTrainRatesContent() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">€{rate.rate_oneway_eur}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       {rate.rate_roundtrip_eur ? (
-                        <span className="text-sm text-gray-600">€{rate.rate_roundtrip_eur}</span>
+                        <span className="text-sm text-gray-600">{formatRate(rate.rate_roundtrip_eur)}</span>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
                       )}
@@ -745,9 +750,9 @@ export default function SleepingTrainRatesContent() {
                   <div>
                     <p className="text-xs text-gray-500">One-way / Roundtrip</p>
                     <p className="text-lg font-bold text-green-600">
-                      €{rate.rate_oneway_eur}
+                      {formatRate(rate.rate_oneway_eur)}
                       {rate.rate_roundtrip_eur && (
-                        <span className="text-sm text-gray-500 font-normal"> / €{rate.rate_roundtrip_eur}</span>
+                        <span className="text-sm text-gray-500 font-normal"> / {formatRate(rate.rate_roundtrip_eur)}</span>
                       )}
                     </p>
                   </div>
@@ -783,7 +788,7 @@ export default function SleepingTrainRatesContent() {
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">€{rate.rate_oneway_eur}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
