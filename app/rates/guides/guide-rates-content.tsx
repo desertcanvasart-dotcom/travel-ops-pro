@@ -181,10 +181,13 @@ export default function GuideRatesContent() {
   // Fetch guides (suppliers)
   const fetchGuides = async () => {
     try {
-      const response = await fetch('/api/guides?active_only=true')
+      const response = await fetch('/api/guides?is_active=true')
       const data = await response.json()
 
-      if (data.success) {
+      // API returns array directly, not { success, data } format
+      if (Array.isArray(data)) {
+        setGuides(data)
+      } else if (data.success && data.data) {
         setGuides(data.data)
       }
     } catch (error) {
