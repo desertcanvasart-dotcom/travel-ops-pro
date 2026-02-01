@@ -1591,22 +1591,22 @@ export default function HotelsContent() {
                   <p className="text-xs font-medium text-gray-600 mb-2">EUR Passport Holders</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Single</label>
                       <input type="number" name="single_rate_eur" value={formData.single_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Double</label>
                       <input type="number" name="double_rate_eur" value={formData.double_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
                       <input type="number" name="triple_rate_eur" value={formData.triple_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
                       <input type="number" name="suite_rate_eur" value={formData.suite_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1614,22 +1614,22 @@ export default function HotelsContent() {
                   <p className="text-xs font-medium text-gray-600 mb-2">Non-EUR Passport Holders</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Single</label>
                       <input type="number" name="single_rate_non_eur" value={formData.single_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Double</label>
                       <input type="number" name="double_rate_non_eur" value={formData.double_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
                       <input type="number" name="triple_rate_non_eur" value={formData.triple_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
                       <input type="number" name="suite_rate_non_eur" value={formData.suite_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1660,22 +1660,22 @@ export default function HotelsContent() {
                   <p className="text-xs font-medium text-gray-600 mb-2">EUR Passport Holders</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Single</label>
                       <input type="number" name="high_season_single_eur" value={formData.high_season_single_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Double</label>
                       <input type="number" name="high_season_double_eur" value={formData.high_season_double_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
                       <input type="number" name="high_season_triple_eur" value={formData.high_season_triple_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
                       <input type="number" name="high_season_suite_eur" value={formData.high_season_suite_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1683,22 +1683,22 @@ export default function HotelsContent() {
                   <p className="text-xs font-medium text-gray-600 mb-2">Non-EUR Passport Holders</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Single</label>
                       <input type="number" name="high_season_single_non_eur" value={formData.high_season_single_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Double</label>
                       <input type="number" name="high_season_double_non_eur" value={formData.high_season_double_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
                       <input type="number" name="high_season_triple_non_eur" value={formData.high_season_triple_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
                       <input type="number" name="high_season_suite_non_eur" value={formData.high_season_suite_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1739,22 +1739,22 @@ export default function HotelsContent() {
                   <p className="text-xs font-medium text-gray-600 mb-2">EUR Passport Holders</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Single</label>
                       <input type="number" name="peak_season_single_eur" value={formData.peak_season_single_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Double</label>
                       <input type="number" name="peak_season_double_eur" value={formData.peak_season_double_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
                       <input type="number" name="peak_season_triple_eur" value={formData.peak_season_triple_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
                       <input type="number" name="peak_season_suite_eur" value={formData.peak_season_suite_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1762,22 +1762,22 @@ export default function HotelsContent() {
                   <p className="text-xs font-medium text-gray-600 mb-2">Non-EUR Passport Holders</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Single</label>
                       <input type="number" name="peak_season_single_non_eur" value={formData.peak_season_single_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Double</label>
                       <input type="number" name="peak_season_double_non_eur" value={formData.peak_season_double_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
                       <input type="number" name="peak_season_triple_non_eur" value={formData.peak_season_triple_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite (€)</label>
+                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
                       <input type="number" name="peak_season_suite_non_eur" value={formData.peak_season_suite_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>

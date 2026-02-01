@@ -1163,7 +1163,7 @@ export default function MealRatesContent() {
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('eurRate')} (€) *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('eurRate')} *</label>
                     <input
                       type="number"
                       name="base_rate_eur"
@@ -1176,7 +1176,7 @@ export default function MealRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('nonEurRate')} (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('nonEurRate')}</label>
                     <input
                       type="number"
                       name="base_rate_non_eur"

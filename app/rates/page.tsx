@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // INTERFACES
@@ -178,6 +179,9 @@ interface RatesData {
 type TabType = 'transportation' | 'guides' | 'entrances' | 'accommodation' | 'meals' | 'cruises' | 'sleepingTrains' | 'trains' | 'airportStaff' | 'hotelStaff' | 'tipping'
 
 export default function RatesPage() {
+  const { formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+
   const [rates, setRates] = useState<RatesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -853,8 +857,8 @@ export default function RatesPage() {
                           <span className="text-gray-400">-</span>
                         }
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">€{Number(rate.base_rate_eur || rate.eur_rate || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">€{Number(rate.base_rate_non_eur || rate.non_eur_rate || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}</td>
                       <td className="px-4 py-3 text-xs text-gray-600">{rate.supplier_name || '-'}</td>
                     </tr>
                   ))}
@@ -898,8 +902,8 @@ export default function RatesPage() {
                           {rate.tour_duration?.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">€{Number(rate.base_rate_eur || rate.eur_rate || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">€{Number(rate.base_rate_non_eur || rate.non_eur_rate || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}</td>
                     </tr>
                   ))}
                   {paginatedRates.guides.length === 0 && (
@@ -943,10 +947,10 @@ export default function RatesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{Number(rate.base_rate_eur || rate.eur_rate || 0).toFixed(2)}
+                        {formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">
-                        €{Number(rate.base_rate_non_eur || rate.non_eur_rate || 0).toFixed(2)}
+                        {formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}
                       </td>
                     </tr>
                   ))}
@@ -995,10 +999,10 @@ export default function RatesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{Number(rate.base_rate_eur).toFixed(2)}
+                        {formatRate(Number(rate.base_rate_eur))}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">
-                        €{Number(rate.base_rate_non_eur).toFixed(2)}
+                        {formatRate(Number(rate.base_rate_non_eur))}
                       </td>
                     </tr>
                   ))}
@@ -1036,8 +1040,8 @@ export default function RatesPage() {
                           {rate.city}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">€{Number(rate.base_rate_eur || rate.eur_rate || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">€{Number(rate.base_rate_non_eur || rate.non_eur_rate || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}</td>
                     </tr>
                   ))}
                   {paginatedRates.meals.length === 0 && (
@@ -1107,13 +1111,13 @@ export default function RatesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{rate.rate_single_eur.toFixed(0)}
+                        {formatRate(rate.rate_single_eur)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                        €{rate.rate_double_eur.toFixed(0)}
+                        {formatRate(rate.rate_double_eur)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                        {rate.rate_triple_eur ? `€${rate.rate_triple_eur.toFixed(0)}` : '-'}
+                        {rate.rate_triple_eur ? formatRate(rate.rate_triple_eur) : '-'}
                       </td>
                     </tr>
                   ))}
@@ -1166,10 +1170,10 @@ export default function RatesPage() {
                         {rate.arrival_time || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{rate.rate_oneway_eur.toFixed(0)}
+                        {formatRate(rate.rate_oneway_eur)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                        {rate.rate_roundtrip_eur ? `€${rate.rate_roundtrip_eur.toFixed(0)}` : '-'}
+                        {rate.rate_roundtrip_eur ? formatRate(rate.rate_roundtrip_eur) : '-'}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {rate.meals_included || 'Dinner & Breakfast'}
@@ -1223,7 +1227,7 @@ export default function RatesPage() {
                         {rate.departure_times || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{rate.rate_eur.toFixed(0)}
+                        {formatRate(rate.rate_eur)}
                       </td>
                     </tr>
                   ))}
@@ -1282,7 +1286,7 @@ export default function RatesPage() {
                         {rate.description || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{rate.rate_eur.toFixed(0)}
+                        {formatRate(rate.rate_eur)}
                       </td>
                     </tr>
                   ))}
@@ -1339,7 +1343,7 @@ export default function RatesPage() {
                         {rate.description || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{rate.rate_eur.toFixed(0)}
+                        {formatRate(rate.rate_eur)}
                       </td>
                     </tr>
                   ))}
@@ -1397,7 +1401,7 @@ export default function RatesPage() {
                         {rate.description || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        €{rate.rate_eur.toFixed(0)}
+                        {formatRate(rate.rate_eur)}
                       </td>
                     </tr>
                   ))}

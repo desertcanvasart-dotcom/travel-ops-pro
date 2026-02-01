@@ -1032,7 +1032,7 @@ export default function SleepingTrainRatesContent() {
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">One-way Rate (€) *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">One-way Rate *</label>
                     <input
                       type="number"
                       name="rate_oneway_eur"
@@ -1045,7 +1045,7 @@ export default function SleepingTrainRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Roundtrip Rate (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Roundtrip Rate</label>
                     <input
                       type="number"
                       name="rate_roundtrip_eur"

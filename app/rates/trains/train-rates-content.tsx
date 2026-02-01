@@ -987,7 +987,7 @@ export default function TrainRatesContent() {
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Rate (€) *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Rate *</label>
                     <input
                       type="number"
                       name="rate_eur"

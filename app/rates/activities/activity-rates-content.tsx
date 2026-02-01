@@ -1207,7 +1207,7 @@ export default function ActivityRatesContent() {
                       </div>
                     </div>
                     <p className="text-xs text-blue-600">
-                      💡 Example: Felucca ride costs €25/boat and can hold 1-6 passengers
+                      💡 Example: Felucca ride costs 25/boat and can hold 1-6 passengers
                     </p>
                   </div>
                 )}

@@ -970,21 +970,19 @@ export default function TransportationContent() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                    <label htmlFor="base_rate_eur" className="block text-sm font-medium text-gray-600 mb-1.5">
                       Rate <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">€</span>
-                      <input
+                    <input
+                        id="base_rate_eur"
                         type="number"
                         value={formData.base_rate_eur}
                         onChange={(e) => setFormData(prev => ({ ...prev, base_rate_eur: parseFloat(e.target.value) || 0 }))}
                         step="0.01"
                         min="0"
                         required
-                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       />
-                    </div>
                   </div>
 
                   <div>
