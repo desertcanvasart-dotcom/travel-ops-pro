@@ -33,7 +33,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   default_cost_mode: 'auto',
   default_tier: 'standard',
   default_margin_percent: 25,
-  default_currency: 'EUR'
+  default_currency: 'USD'
 }
 
 // ============================================

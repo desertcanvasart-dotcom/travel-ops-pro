@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     body.num_adults = body.num_adults || 1
     body.num_children = body.num_children || 0
     body.total_cost = body.total_cost || 0
-    body.currency = body.currency || 'EUR'
+    body.currency = body.currency || 'USD'
 
     // Set timestamps
     const now = new Date().toISOString()

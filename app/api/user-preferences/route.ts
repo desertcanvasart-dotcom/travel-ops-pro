@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       default_cost_mode: 'auto',
       default_tier: 'standard',
       default_margin_percent: 25,
-      default_currency: 'EUR'
+      default_currency: 'USD'
     }
 
     return NextResponse.json({
@@ -86,7 +86,7 @@ export async function PUT(request: NextRequest) {
       default_cost_mode: body.default_cost_mode || 'auto',
       default_tier: body.default_tier || 'standard',
       default_margin_percent: body.default_margin_percent || 25,
-      default_currency: body.default_currency || 'EUR',
+      default_currency: body.default_currency || 'USD',
       updated_at: new Date().toISOString()
     }
 

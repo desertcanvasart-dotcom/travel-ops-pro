@@ -24,7 +24,7 @@ export default function NewItineraryPage() {
     end_date: '',
     num_adults: 2,
     num_children: 0,
-    currency: 'EUR',
+    currency: 'USD',
     notes: ''
   })
 

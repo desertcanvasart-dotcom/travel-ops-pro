@@ -133,7 +133,7 @@ function SettingsContent() {
     default_cost_mode: 'auto',
     default_tier: 'standard',
     default_margin_percent: 25,
-    default_currency: 'EUR'
+    default_currency: 'USD'
   })
 
   // Update URL when tab changes
@@ -212,7 +212,7 @@ function SettingsContent() {
           default_cost_mode: data.default_cost_mode || 'auto',
           default_tier: data.default_tier || 'standard',
           default_margin_percent: data.default_margin_percent || 25,
-          default_currency: data.default_currency || 'EUR'
+          default_currency: data.default_currency || 'USD'
         })
       }
     } catch (error) {
