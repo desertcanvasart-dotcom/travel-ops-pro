@@ -16,6 +16,12 @@ export interface UserPreferences {
   default_currency: string
 }
 
+export interface ExchangeRates {
+  base: string
+  date: string
+  rates: Record<string, number>
+}
+
 interface PreferencesContextType {
   preferences: UserPreferences
   loading: boolean
@@ -23,6 +29,12 @@ interface PreferencesContextType {
   refreshPreferences: () => Promise<void>
   updatePreferences: (newPrefs: Partial<UserPreferences>) => Promise<boolean>
   formatCurrency: (amount: number, currency?: string) => string
+  // Exchange rate functions
+  exchangeRates: ExchangeRates | null
+  exchangeRatesLoading: boolean
+  convertCurrency: (amount: number, fromCurrency: string, toCurrency?: string) => number
+  formatWithConversion: (amount: number, fromCurrency: string) => string
+  refreshExchangeRates: () => Promise<void>
 }
 
 // ============================================
@@ -34,6 +46,13 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   default_tier: 'standard',
   default_margin_percent: 25,
   default_currency: 'USD'
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  EGP: 'E£'
 }
 
 // ============================================
@@ -51,6 +70,11 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Exchange rates state
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates | null>(null)
+  const [exchangeRatesLoading, setExchangeRatesLoading] = useState(false)
+
+  // Fetch user preferences
   const fetchPreferences = useCallback(async () => {
     try {
       setLoading(true)
@@ -78,12 +102,39 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Fetch exchange rates from API
+  const fetchExchangeRates = useCallback(async () => {
+    try {
+      setExchangeRatesLoading(true)
+
+      const response = await fetch('/api/exchange-rates?base=USD')
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.data) {
+          setExchangeRates(result.data)
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching exchange rates:', err)
+      // Use fallback rates if API fails
+      setExchangeRates({
+        base: 'USD',
+        date: new Date().toISOString().split('T')[0],
+        rates: { USD: 1, EUR: 0.92, GBP: 0.79, EGP: 50.5 }
+      })
+    } finally {
+      setExchangeRatesLoading(false)
+    }
+  }, [])
+
   // Load preferences on mount
   useEffect(() => {
     fetchPreferences()
-  }, [fetchPreferences])
+    fetchExchangeRates()
+  }, [fetchPreferences, fetchExchangeRates])
 
-  // Also reload preferences when window gains focus (user might have changed them in another tab)
+  // Reload preferences when window gains focus
   useEffect(() => {
     const handleFocus = () => {
       fetchPreferences()
@@ -93,8 +144,21 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('focus', handleFocus)
   }, [fetchPreferences])
 
+  // Refresh exchange rates every hour
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchExchangeRates()
+    }, 60 * 60 * 1000) // 1 hour
+
+    return () => clearInterval(interval)
+  }, [fetchExchangeRates])
+
   const refreshPreferences = async () => {
     await fetchPreferences()
+  }
+
+  const refreshExchangeRates = async () => {
+    await fetchExchangeRates()
   }
 
   const updatePreferences = async (newPrefs: Partial<UserPreferences>): Promise<boolean> => {
@@ -118,17 +182,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Currency formatting helper
+  // Currency formatting helper (displays in specified currency)
   const formatCurrency = useCallback((amount: number, currency?: string): string => {
     const curr = currency || preferences.default_currency
-    const symbols: Record<string, string> = {
-      EUR: '€',
-      USD: '$',
-      GBP: '£',
-      EGP: 'E£'
-    }
-
-    const symbol = symbols[curr] || curr
+    const symbol = CURRENCY_SYMBOLS[curr] || curr
     const formatted = amount.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
@@ -137,6 +194,54 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     return `${symbol}${formatted}`
   }, [preferences.default_currency])
 
+  // Convert currency using exchange rates
+  const convertCurrency = useCallback((
+    amount: number,
+    fromCurrency: string,
+    toCurrency?: string
+  ): number => {
+    const targetCurrency = toCurrency || preferences.default_currency
+
+    // Same currency, no conversion needed
+    if (fromCurrency === targetCurrency) {
+      return amount
+    }
+
+    // No rates available, return original amount
+    if (!exchangeRates) {
+      return amount
+    }
+
+    const rates = exchangeRates.rates
+
+    // Get rate for source currency (relative to USD base)
+    const fromRate = rates[fromCurrency]
+    const toRate = rates[targetCurrency]
+
+    if (!fromRate || !toRate) {
+      console.warn(`Exchange rate not available for ${fromCurrency} or ${targetCurrency}`)
+      return amount
+    }
+
+    // Convert: amount in fromCurrency -> USD -> targetCurrency
+    // Since rates are USD-based: 1 USD = X currency
+    // So: amount in fromCurrency / fromRate = amount in USD
+    // Then: amount in USD * toRate = amount in targetCurrency
+    const amountInUSD = amount / fromRate
+    const convertedAmount = amountInUSD * toRate
+
+    return Math.round(convertedAmount * 100) / 100
+  }, [preferences.default_currency, exchangeRates])
+
+  // Format with automatic conversion to user's preferred currency
+  const formatWithConversion = useCallback((
+    amount: number,
+    fromCurrency: string
+  ): string => {
+    const convertedAmount = convertCurrency(amount, fromCurrency)
+    return formatCurrency(convertedAmount)
+  }, [convertCurrency, formatCurrency])
+
   return (
     <PreferencesContext.Provider value={{
       preferences,
@@ -144,7 +249,13 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       error,
       refreshPreferences,
       updatePreferences,
-      formatCurrency
+      formatCurrency,
+      // Exchange rate values
+      exchangeRates,
+      exchangeRatesLoading,
+      convertCurrency,
+      formatWithConversion,
+      refreshExchangeRates
     }}>
       {children}
     </PreferencesContext.Provider>
@@ -164,13 +275,25 @@ export function usePreferences() {
 }
 
 // ============================================
-// UTILITY HOOK FOR JUST CURRENCY
+// UTILITY HOOK FOR CURRENCY
 // ============================================
 
 export function useCurrency() {
-  const { preferences, formatCurrency } = usePreferences()
+  const {
+    preferences,
+    formatCurrency,
+    convertCurrency,
+    formatWithConversion,
+    exchangeRates,
+    exchangeRatesLoading
+  } = usePreferences()
+
   return {
     currency: preferences.default_currency,
-    formatCurrency
+    formatCurrency,
+    convertCurrency,
+    formatWithConversion,
+    exchangeRates,
+    exchangeRatesLoading
   }
 }
