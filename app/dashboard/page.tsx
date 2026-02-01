@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useAuth } from '@/app/contexts/AuthContext'
 import {
   Users,
   CheckSquare,
@@ -43,6 +44,7 @@ export default function DashboardPage() {
   const t = useTranslations('dashboard')
   const tCommon = useTranslations('common')
   const tDates = useTranslations('dates')
+  const { profile } = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
     activeClients: 0,
@@ -58,40 +60,13 @@ export default function DashboardPage() {
   const [upcomingFollowups, setUpcomingFollowups] = useState<any[]>([])
   const [recentQuotes, setRecentQuotes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [userName, setUserName] = useState<string>('')
+
+  // Get first name from profile
+  const firstName = profile?.full_name?.split(' ')[0] || ''
 
   useEffect(() => {
-    loadUserProfile()
     loadDashboardData()
   }, [])
-
-  async function loadUserProfile() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        // Try to get profile name first
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, first_name')
-          .eq('id', user.id)
-          .single()
-        
-        if (profile?.full_name) {
-          // Get first name from full name
-          setUserName(profile.full_name.split(' ')[0])
-        } else if (profile?.first_name) {
-          setUserName(profile.first_name)
-        } else if (user.user_metadata?.full_name) {
-          setUserName(user.user_metadata.full_name.split(' ')[0])
-        } else if (user.email) {
-          // Fallback to email username
-          setUserName(user.email.split('@')[0])
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error)
-    }
-  }
 
   async function loadDashboardData() {
     try {
@@ -194,7 +169,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          {t('welcomeBack')}{userName ? `, ${userName}` : ''}! 👋
+          {t('welcomeBack')}{firstName ? `, ${firstName}` : ''}! 👋
         </h1>
         <p className="text-sm text-gray-600 mt-1">
           {t('subtitle')}
