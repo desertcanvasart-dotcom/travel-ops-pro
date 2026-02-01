@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // CONSTANTS
@@ -182,7 +183,9 @@ export default function AirportServicesPage() {
   const t = useTranslations('rates.airportServices')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  
+  const { formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+
   const [rates, setRates] = useState<AirportStaffRate[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -427,7 +430,7 @@ export default function AirportServicesPage() {
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">{tCommon('avgRate')}</p>
-            <p className="text-2xl font-bold text-green-600">€{stats.avgRate}</p>
+            <p className="text-2xl font-bold text-green-600">{formatRate(stats.avgRate)}</p>
           </div>
         </div>
 
@@ -523,7 +526,7 @@ export default function AirportServicesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      €{rate.rate_eur}
+                      {formatRate(rate.rate_eur)}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate">
                       {rate.description || '-'}

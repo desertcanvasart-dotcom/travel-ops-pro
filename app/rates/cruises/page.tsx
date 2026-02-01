@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // CONSTANTS
@@ -519,6 +520,8 @@ export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
+  const { formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
   const [cruises, setCruises] = useState<Cruise[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -919,7 +922,7 @@ export default function CruisesPage() {
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">{t('stats.avgDoubleRate')}</p>
-            <p className="text-2xl font-bold text-purple-600">€{stats.avgRate}</p>
+            <p className="text-2xl font-bold text-purple-600">{formatRate(stats.avgRate)}</p>
           </div>
         </div>
 
@@ -1042,13 +1045,13 @@ export default function CruisesPage() {
                       <TierBadge tier={cruise.tier} />
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      €{cruise.rate_single_eur}
+                      {formatRate(cruise.rate_single_eur)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                      €{cruise.rate_double_eur}
+                      {formatRate(cruise.rate_double_eur)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                      {cruise.rate_triple_eur ? `€${cruise.rate_triple_eur}` : '-'}
+                      {cruise.rate_triple_eur ? formatRate(cruise.rate_triple_eur) : '-'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${

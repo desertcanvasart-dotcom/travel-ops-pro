@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // CONSTANTS
@@ -167,6 +168,8 @@ export default function TippingPage() {
   const t = useTranslations('rates.tipping')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
+  const { formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
   const [rates, setRates] = useState<TippingRate[]>([])
   const [loading, setLoading] = useState(true)
@@ -407,7 +410,7 @@ export default function TippingPage() {
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">{t('stats.avgTip')}</p>
-            <p className="text-2xl font-bold text-green-600">€{stats.avgTip}</p>
+            <p className="text-2xl font-bold text-green-600">{formatRate(stats.avgTip)}</p>
           </div>
         </div>
 
@@ -488,7 +491,7 @@ export default function TippingPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      €{rate.rate_eur}
+                      {formatRate(rate.rate_eur)}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate">
                       {rate.description || '-'}
