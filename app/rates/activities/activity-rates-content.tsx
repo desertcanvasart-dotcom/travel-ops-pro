@@ -900,7 +900,7 @@ export default function ActivityRatesContent() {
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
-                    <p className="text-xs text-gray-500">EUR Rate</p>
+                    <p className="text-xs text-gray-500">Rate</p>
                     <p className="text-lg font-bold text-green-600">{formatRate(rate.base_rate_eur)}</p>
                   </div>
                   <div className="flex gap-1">

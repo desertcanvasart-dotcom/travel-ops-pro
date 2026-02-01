@@ -832,8 +832,8 @@ export default function RatesPage() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Vehicle</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Capacity</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Supplier</th>
                   </tr>
                 </thead>
@@ -879,8 +879,8 @@ export default function RatesPage() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Duration</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -922,8 +922,8 @@ export default function RatesPage() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Attraction</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Category</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -971,8 +971,8 @@ export default function RatesPage() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Tier</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Stars</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1022,8 +1022,8 @@ export default function RatesPage() {
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Restaurant</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Meal Type</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">EUR Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Non-EUR</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">

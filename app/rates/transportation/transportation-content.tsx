@@ -971,7 +971,7 @@ export default function TransportationContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      EUR Rate <span className="text-red-500">*</span>
+                      Rate <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">€</span>
@@ -989,7 +989,7 @@ export default function TransportationContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Non-EUR Rate
+                      Rate
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">$</span>
