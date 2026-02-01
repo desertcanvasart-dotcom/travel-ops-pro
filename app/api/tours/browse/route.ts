@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '12')
     const offset = (page - 1) * limit
 
-    // Build query for templates - include cached pricing columns
+    // Build query for templates
+    // Note: cached_starting_price columns are optional - works without migration
     let query = supabaseAdmin
       .from('tour_templates')
       .select(`
@@ -48,9 +49,6 @@ export async function GET(request: NextRequest) {
         image_url,
         uses_day_builder,
         pricing_mode,
-        cached_starting_price,
-        cached_starting_tier,
-        cached_price_updated_at,
         tour_categories (
           id,
           category_name,
@@ -116,16 +114,10 @@ export async function GET(request: NextRequest) {
         variations = variations.filter((v: any) => v.tier === tier)
       }
 
-      // Use cached price or fallback to estimate
-      let startingFromPrice = template.cached_starting_price
-      let startingFromTier = template.cached_starting_tier
-
-      // Fallback: quick estimate based on duration (if no cached price)
-      if (startingFromPrice === null || startingFromPrice === undefined) {
-        // Estimate: €150/day for standard tier
-        startingFromPrice = template.duration_days * 150
-        startingFromTier = 'standard'
-      }
+      // Estimate price based on duration
+      // Note: When cached pricing columns are added, this can use cached values
+      const startingFromPrice = template.duration_days * 150
+      const startingFromTier = 'standard'
 
       return {
         id: template.id,
@@ -150,12 +142,12 @@ export async function GET(request: NextRequest) {
           ? Math.max(...variations.map((v: any) => v.max_pax || 15))
           : 15,
 
-        // Pricing (from cache)
+        // Pricing (estimated based on duration)
         starting_from: startingFromPrice,
         starting_from_tier: startingFromTier,
         currency: 'EUR',
-        price_is_cached: template.cached_starting_price !== null,
-        price_updated_at: template.cached_price_updated_at,
+        price_is_cached: false,
+        price_updated_at: null,
 
         // Flags
         uses_day_builder: template.uses_day_builder,
