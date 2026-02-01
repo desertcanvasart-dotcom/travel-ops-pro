@@ -5,6 +5,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import Sidebar from "@/components/Sidebar"
 import { AuthProvider } from './contexts/AuthContext'
+import { PreferencesProvider } from './contexts/PreferencesContext'
 import { ConfirmDialogProvider } from '@/components/ConfirmDialog'
 import { IntlClientProvider } from './providers/IntlClientProvider'
 
@@ -27,7 +28,8 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning>
         <IntlClientProvider>
           <AuthProvider>
-            <ConfirmDialogProvider>
+            <PreferencesProvider>
+              <ConfirmDialogProvider>
               {isPublicPage ? (
                 // Public pages - no sidebar
                 <main className="min-h-screen">
@@ -47,6 +49,7 @@ export default function RootLayout({
                 </div>
               )}
             </ConfirmDialogProvider>
+            </PreferencesProvider>
           </AuthProvider>
         </IntlClientProvider>
       </body>

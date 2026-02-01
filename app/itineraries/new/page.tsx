@@ -1,18 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Check, User, Plane, Users, FileText } from 'lucide-react'
+import { usePreferences } from '@/app/contexts/PreferencesContext'
 
 export default function NewItineraryPage() {
   const router = useRouter()
   const t = useTranslations('itineraries')
   const tCommon = useTranslations('common')
+  const { preferences, loading: prefsLoading } = usePreferences()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   const [formData, setFormData] = useState({
     client_name: '',
     client_email: '',
@@ -25,6 +27,16 @@ export default function NewItineraryPage() {
     currency: 'EUR',
     notes: ''
   })
+
+  // Update currency from preferences once loaded
+  useEffect(() => {
+    if (!prefsLoading && preferences.default_currency) {
+      setFormData(prev => ({
+        ...prev,
+        currency: preferences.default_currency
+      }))
+    }
+  }, [prefsLoading, preferences.default_currency])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -267,6 +279,7 @@ export default function NewItineraryPage() {
                   <option value="EUR">EUR (€)</option>
                   <option value="USD">USD ($)</option>
                   <option value="GBP">GBP (£)</option>
+                  <option value="EGP">EGP (E£)</option>
                 </select>
               </div>
             </div>
