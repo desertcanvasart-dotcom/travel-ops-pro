@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/app/supabase'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 
 const supabase = createClient()
+
+// Admin client for operations that need to bypass RLS (like booking creation)
+const supabaseAdmin = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // GET - Used by VIEW page
 export async function GET(
@@ -101,22 +108,89 @@ export async function PUT(
     // Auto-create booking when status changes to "confirmed"
     if (body.status === 'confirmed' && previousStatus !== 'confirmed' && data) {
       try {
-        // Check if booking already exists
-        const { data: existingBooking } = await supabase
+        // Check if booking already exists (use admin client to bypass RLS)
+        const { data: existingBooking } = await supabaseAdmin
           .from('bookings')
           .select('id')
           .eq('itinerary_id', id)
           .single()
 
         if (!existingBooking) {
-          // Create booking via internal API call
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-          await fetch(`${baseUrl}/api/bookings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ itinerary_id: id })
-          })
-          console.log('✅ Auto-created booking for confirmed itinerary:', id)
+          // Generate booking code
+          const { data: codeData } = await supabaseAdmin.rpc('generate_booking_code')
+          const bookingCode = codeData || `BKG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
+
+          // Calculate deposit (30% default)
+          const depositAmount = (data.total_cost || 0) * 0.3
+          const balanceDue = (data.total_cost || 0) - depositAmount
+
+          // Create booking directly with admin client
+          const { data: newBooking, error: bookingError } = await supabaseAdmin
+            .from('bookings')
+            .insert({
+              booking_code: bookingCode,
+              itinerary_id: id,
+              client_name: data.client_name,
+              client_email: data.client_email,
+              client_phone: data.client_phone,
+              trip_name: data.trip_name,
+              start_date: data.start_date,
+              end_date: data.end_date,
+              num_adults: data.num_adults || 1,
+              num_children: data.num_children || 0,
+              total_cost: data.total_cost || 0,
+              currency: data.currency || 'EUR',
+              tier: data.tier,
+              status: 'pending',
+              deposit_amount: depositAmount,
+              balance_due: balanceDue,
+              assigned_guide_id: data.assigned_guide_id,
+              assigned_vehicle_id: data.assigned_vehicle_id,
+            })
+            .select()
+            .single()
+
+          if (bookingError) {
+            console.error('⚠️ Failed to create booking:', bookingError)
+          } else {
+            console.log('✅ Auto-created booking for confirmed itinerary:', id, 'Code:', bookingCode)
+
+            // Populate suppliers from itinerary services
+            if (newBooking) {
+              const { data: days } = await supabaseAdmin
+                .from('itinerary_days')
+                .select('id, date, day_number')
+                .eq('itinerary_id', id)
+                .order('day_number', { ascending: true })
+
+              if (days && days.length > 0) {
+                const dayIds = days.map(d => d.id)
+                const { data: services } = await supabaseAdmin
+                  .from('itinerary_services')
+                  .select('*, itinerary_day_id')
+                  .in('itinerary_day_id', dayIds)
+
+                if (services && services.length > 0) {
+                  const supplierStatuses = services.map(service => {
+                    const day = days.find(d => d.id === service.itinerary_day_id)
+                    return {
+                      booking_id: newBooking.id,
+                      supplier_type: service.service_type || 'other',
+                      supplier_name: service.service_name || service.supplier_name || 'Unknown',
+                      service_description: service.notes,
+                      service_date: day?.date,
+                      quoted_cost: service.total_cost,
+                      status: 'pending'
+                    }
+                  })
+
+                  await supabaseAdmin
+                    .from('booking_supplier_status')
+                    .insert(supplierStatuses)
+                }
+              }
+            }
+          }
         }
       } catch (bookingError) {
         console.error('⚠️ Failed to auto-create booking:', bookingError)
