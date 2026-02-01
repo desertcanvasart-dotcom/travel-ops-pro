@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 import {
   Building2,
   Plus,
@@ -354,7 +355,11 @@ export default function HotelsContent() {
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dialog = useConfirmDialog()
-  
+
+  // Currency conversion
+  const { currency, formatWithConversion } = useCurrency()
+  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+
   const [rates, setRates] = useState<AccommodationRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
@@ -931,7 +936,7 @@ export default function HotelsContent() {
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
             <p className="text-xs text-gray-600">{t('avgDoubleLow')}</p>
-            <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
           </div>
 
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
@@ -1104,12 +1109,12 @@ export default function HotelsContent() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-green-600">
-                          €{(rate.double_rate_eur || 0).toFixed(0)}
+                          {formatRate(rate.double_rate_eur || 0)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-orange-600">
-                          €{(rate.high_season_double_eur || 0).toFixed(0)}
+                          {formatRate(rate.high_season_double_eur || 0)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1230,15 +1235,15 @@ export default function HotelsContent() {
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
                       <div className="text-center">
                         <p className="text-xs text-blue-600 font-medium">{t('low')}</p>
-                        <p className="text-sm font-bold text-gray-700">€{(rate.double_rate_eur || 0).toFixed(0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.double_rate_eur || 0)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-orange-600 font-medium">{t('high')}</p>
-                        <p className="text-sm font-bold text-gray-700">€{(rate.high_season_double_eur || 0).toFixed(0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.high_season_double_eur || 0)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-red-600 font-medium">{t('peak')}</p>
-                        <p className="text-sm font-bold text-gray-700">€{(rate.peak_season_double_eur || 0).toFixed(0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.peak_season_double_eur || 0)}</p>
                       </div>
                     </div>
                   </div>
@@ -1301,7 +1306,7 @@ export default function HotelsContent() {
                     )}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold text-green-600">€{(rate.double_rate_eur || 0).toFixed(0)}</span>
+                    <span className="text-sm font-bold text-green-600">{formatRate(rate.double_rate_eur || 0)}</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleEdit(rate)}
