@@ -2,16 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { 
-  MessageSquare, 
-  Mail, 
-  Check, 
-  ArrowRight, 
+import {
+  MessageSquare,
+  Mail,
+  Check,
+  ArrowRight,
   Sparkles,
   Globe,
   Clock,
   Zap,
-  Shield,
   Menu,
   X as XIcon
 } from 'lucide-react'
@@ -126,27 +125,6 @@ const comingSoonIntegrations = [
     icon: Zap,
     region: "Global",
     eta: "Q3 2026"
-  },
-  {
-    name: "QuickBooks",
-    description: "Sync invoices and payments automatically with your accounting software.",
-    icon: Shield,
-    region: "Global",
-    eta: "Q3 2026"
-  },
-  {
-    name: "Google Calendar",
-    description: "Sync tour schedules, guide assignments, and client appointments to your calendar.",
-    icon: Clock,
-    region: "Global",
-    eta: "Q4 2026"
-  },
-  {
-    name: "Booking.com / Expedia",
-    description: "Receive OTA bookings directly in Autoura and manage them alongside direct clients.",
-    icon: Globe,
-    region: "Global",
-    eta: "2027"
   }
 ]
 
