@@ -114,7 +114,8 @@
     "userManagement": "User Management",
     "help": "Help",
     "logout": "Logout",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "bookings": "Bookings"
   },
   "roles": {
     "admin": "Admin",
@@ -4130,5 +4131,75 @@
     "failedToCalculate": "Failed to calculate price",
     "failedToGenerateSheet": "Failed to generate rate sheet",
     "failedToSaveQuote": "Failed to save quote"
+  },
+  "bookings": {
+    "title": "Bookings",
+    "subtitle": "Manage confirmed trips and operational tracking",
+    "searchPlaceholder": "Search by code, client, or trip name...",
+    "noBookingsFound": "No bookings found",
+    "adults": "adults",
+    "children": "children",
+    "bookingNotFound": "Booking not found",
+    "status": {
+      "pending": "Pending",
+      "supplier_confirmed": "Suppliers Confirmed",
+      "payment_received": "Payment Received",
+      "ready": "Ready",
+      "in_progress": "In Progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "suppliers": "Suppliers",
+      "payments": "Payments",
+      "notes": "Notes"
+    },
+    "fields": {
+      "bookingCode": "Booking Code",
+      "client": "Client",
+      "tripName": "Trip Name",
+      "dates": "Dates",
+      "passengers": "Passengers",
+      "totalCost": "Total Cost",
+      "depositAmount": "Deposit Amount",
+      "depositPaid": "Deposit Paid",
+      "balanceDue": "Balance Due",
+      "paymentDeadline": "Payment Deadline",
+      "emergencyContact": "Emergency Contact",
+      "emergencyPhone": "Emergency Phone",
+      "specialRequests": "Special Requests",
+      "operationalNotes": "Operational Notes",
+      "tier": "Tier"
+    },
+    "actions": {
+      "view": "View",
+      "viewItinerary": "View Itinerary",
+      "markSupplierConfirmed": "Mark Confirmed",
+      "recordPayment": "Record Payment",
+      "generateVouchers": "Generate Vouchers"
+    },
+    "filters": {
+      "allStatuses": "All Statuses",
+      "dateRange": "Date Range"
+    },
+    "summary": {
+      "total": "Total",
+      "pending": "Pending",
+      "ready": "Ready",
+      "inProgress": "In Progress"
+    },
+    "detail": {
+      "backToList": "Back to Bookings",
+      "clientInfo": "Client Information",
+      "tripDetails": "Trip Details",
+      "paymentSummary": "Payment Summary",
+      "supplierConfirmations": "Supplier Confirmations"
+    },
+    "messages": {
+      "noSuppliersYet": "No suppliers added yet",
+      "noPaymentsYet": "No payments recorded yet",
+      "allSuppliersConfirmed": "All suppliers confirmed"
+    }
   }
 }

@@ -78,6 +78,17 @@ export async function PUT(
     if (body.pickup_location !== undefined) updateData.pickup_location = body.pickup_location
     if (body.pickup_time !== undefined) updateData.pickup_time = body.pickup_time
 
+    // Get current itinerary status before update (for booking auto-creation)
+    let previousStatus: string | null = null
+    if (body.status === 'confirmed') {
+      const { data: currentItinerary } = await supabase
+        .from('itineraries')
+        .select('status')
+        .eq('id', id)
+        .single()
+      previousStatus = currentItinerary?.status || null
+    }
+
     const { data, error } = await supabase
       .from('itineraries')
       .update(updateData)
@@ -86,6 +97,32 @@ export async function PUT(
       .single()
 
     if (error) throw error
+
+    // Auto-create booking when status changes to "confirmed"
+    if (body.status === 'confirmed' && previousStatus !== 'confirmed' && data) {
+      try {
+        // Check if booking already exists
+        const { data: existingBooking } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('itinerary_id', id)
+          .single()
+
+        if (!existingBooking) {
+          // Create booking via internal API call
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+          await fetch(`${baseUrl}/api/bookings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itinerary_id: id })
+          })
+          console.log('✅ Auto-created booking for confirmed itinerary:', id)
+        }
+      } catch (bookingError) {
+        console.error('⚠️ Failed to auto-create booking:', bookingError)
+        // Don't fail the itinerary update if booking creation fails
+      }
+    }
 
     return NextResponse.json({
       success: true,
