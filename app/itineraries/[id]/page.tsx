@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
@@ -95,7 +95,9 @@ export default function ViewItineraryPage() {
   const [existingInvoice, setExistingInvoice] = useState<ExistingInvoice | null>(null)
   const [generatingCommissions, setGeneratingCommissions] = useState(false)
   const [commissionResult, setCommissionResult] = useState<string | null>(null)
-  
+  const [existingBooking, setExistingBooking] = useState<{ id: string; booking_code: string } | null>(null)
+  const [creatingBooking, setCreatingBooking] = useState(false)
+
   // Cost Mode State
   const [costMode, setCostMode] = useState<'auto' | 'manual'>('auto')
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null)
@@ -108,6 +110,7 @@ export default function ViewItineraryPage() {
     if (params.id) {
       fetchItinerary()
       checkExistingInvoice()
+      checkExistingBooking()
     }
   }, [params.id])
 
@@ -150,6 +153,53 @@ export default function ViewItineraryPage() {
       }
     } catch (error) {
       console.error('Error checking existing invoice:', error)
+    }
+  }
+
+  const checkExistingBooking = async () => {
+    try {
+      const response = await fetch(`/api/bookings?search=${params.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data && data.data.length > 0) {
+          // Find booking that matches this itinerary
+          const booking = data.data.find((b: any) => b.itinerary_id === params.id)
+          if (booking) {
+            setExistingBooking({ id: booking.id, booking_code: booking.booking_code })
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking existing booking:', error)
+    }
+  }
+
+  const handleCreateBooking = async () => {
+    setCreatingBooking(true)
+    try {
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itinerary_id: params.id })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        setExistingBooking({ id: data.data.id, booking_code: data.data.booking_code })
+        setSendSuccess(t('bookingCreatedSuccessfully'))
+        setTimeout(() => setSendSuccess(null), 5000)
+      } else {
+        if (data.existing_booking) {
+          setExistingBooking({ id: data.existing_booking.id, booking_code: data.existing_booking.booking_code })
+        } else {
+          await dialog.alert(tCommon('error'), data.error || t('failedToCreateBooking'), 'warning')
+        }
+      }
+    } catch (error) {
+      console.error('Error creating booking:', error)
+      await dialog.alert(tCommon('error'), t('failedToCreateBooking'), 'warning')
+    } finally {
+      setCreatingBooking(false)
     }
   }
 
@@ -659,6 +709,35 @@ export default function ViewItineraryPage() {
                   </>
                 )}
               </button>
+              {existingBooking ? (
+                <Link
+                  href={`/bookings/${existingBooking.id}`}
+                  className="px-3 py-1.5 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-1.5"
+                  title={t('viewBooking')}
+                >
+                  <Briefcase className="w-4 h-4" />
+                  {existingBooking.booking_code}
+                </Link>
+              ) : itinerary.status === 'confirmed' && (
+                <button
+                  onClick={handleCreateBooking}
+                  disabled={creatingBooking}
+                  className={`px-3 py-1.5 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-1.5 ${creatingBooking ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title={t('createBooking')}
+                >
+                  {creatingBooking ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>{t('creating')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Briefcase className="w-4 h-4" />
+                      {t('createBooking')}
+                    </>
+                  )}
+                </button>
+              )}
               <button
                 onClick={handleGenerateCommissions}
                 disabled={generatingCommissions}

@@ -1258,7 +1258,11 @@
       "clickToEdit": "クリックして編集",
       "switchToManualMode": "編集するには手動モードに切り替えてください",
       "noServicesAdded": "まだサービスが追加されていません",
-      "overnightIn": "<span class=\"font-medium\">{city}</span>で宿泊"
+      "overnightIn": "<span class=\"font-medium\">{city}</span>で宿泊",
+      "viewBooking": "予約を表示",
+      "createBooking": "予約を作成",
+      "bookingCreatedSuccessfully": "予約が正常に作成されました",
+      "failedToCreateBooking": "予約の作成に失敗しました"
     }
   },
   "payments": {
