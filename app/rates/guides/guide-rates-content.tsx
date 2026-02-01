@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -204,6 +204,26 @@ export default function GuideRatesContent() {
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm, selectedCity, selectedLanguage, selectedGuide, selectedGuideType, showInactive, itemsPerPage])
+
+  // Filter guides based on form's city and language selection
+  const filteredGuidesForDropdown = useMemo(() => {
+    return guides.filter(guide => {
+      // Filter by city if one is selected in the form
+      if (formData.city && guide.city && guide.city !== formData.city) {
+        return false
+      }
+      // Filter by language if one is selected in the form
+      if (formData.guide_language && guide.languages && Array.isArray(guide.languages)) {
+        const hasLanguage = guide.languages.some(
+          (lang: string) => lang.toLowerCase() === formData.guide_language.toLowerCase()
+        )
+        if (!hasLanguage) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [guides, formData.city, formData.guide_language])
 
   // Handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1026,13 +1046,18 @@ export default function GuideRatesContent() {
                   onChange={(e) => handleGuideChange(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                 >
-                  <option value="">{t('form.selectGuide')}</option>
-                  {guides.map(guide => (
+                  <option value="">{t('form.selectGuide')} {filteredGuidesForDropdown.length < guides.length ? `(${filteredGuidesForDropdown.length} matching)` : ''}</option>
+                  {filteredGuidesForDropdown.map(guide => (
                     <option key={guide.id} value={guide.id}>
-                      {guide.name} {guide.city ? `(${guide.city})` : ''}
+                      {guide.name}
                     </option>
                   ))}
                 </select>
+                {filteredGuidesForDropdown.length === 0 && guides.length > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    No guides match the selected city/language. Try changing the filters above.
+                  </p>
+                )}
               </div>
 
               {/* Duration & Rates */}
