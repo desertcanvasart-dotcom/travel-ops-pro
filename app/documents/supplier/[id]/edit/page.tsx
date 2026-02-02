@@ -135,6 +135,9 @@ export default function EditSupplierDocumentPage() {
 
   // Handle supplier selection and auto-populate fields
   const handleSupplierSelect = (supplierId: string) => {
+    console.log('handleSupplierSelect called with:', supplierId)
+    console.log('Available suppliers:', suppliers)
+
     if (!supplierId) {
       // Clear supplier fields if "No supplier" is selected
       setDocument({
@@ -150,10 +153,21 @@ export default function EditSupplierDocumentPage() {
     }
 
     const supplier = suppliers.find(s => s.id === supplierId)
+    console.log('Found supplier:', supplier)
+
     if (supplier) {
       const address = [supplier.address, supplier.city, supplier.country]
         .filter(Boolean)
         .join(', ')
+
+      console.log('Setting document with:', {
+        supplier_id: supplier.id,
+        supplier_name: supplier.name,
+        supplier_contact_name: supplier.contact_name,
+        supplier_contact_email: supplier.contact_email,
+        supplier_contact_phone: supplier.contact_phone,
+        supplier_address: address
+      })
 
       setDocument({
         ...document,
