@@ -178,12 +178,20 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
 
       const data = await response.json()
       if (data.success) {
+        // Show message about what was synced
+        if (data.data?.added === 0) {
+          alert(data.message || 'No new services found to sync')
+        } else {
+          alert(`Synced ${data.data?.added} supplier(s) from itinerary`)
+        }
         fetchBooking()
       } else {
+        alert(`Sync failed: ${data.error || 'Unknown error'}`)
         console.error('Sync error:', data.error)
       }
     } catch (error) {
       console.error('Error syncing suppliers:', error)
+      alert('Error syncing suppliers. Check console for details.')
     } finally {
       setSyncing(false)
     }

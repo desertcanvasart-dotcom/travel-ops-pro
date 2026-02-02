@@ -79,8 +79,15 @@ export async function POST(
     if (!services || services.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'No services found in itinerary',
-        data: { added: 0 }
+        message: `No services found in itinerary. Booking itinerary_id: ${booking.itinerary_id}, Days found: ${days?.length || 0}`,
+        data: {
+          added: 0,
+          debug: {
+            itinerary_id: booking.itinerary_id,
+            days_count: days?.length || 0,
+            day_ids: dayIds
+          }
+        }
       })
     }
 
