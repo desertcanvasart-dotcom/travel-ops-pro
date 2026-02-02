@@ -103,9 +103,9 @@ export default function EditSupplierDocumentPage() {
     setLoadingSuppliers(true)
     try {
       const response = await fetch('/api/suppliers')
-      const data = await response.json()
-      if (Array.isArray(data)) {
-        setSuppliers(data)
+      const result = await response.json()
+      if (result.success && Array.isArray(result.data)) {
+        setSuppliers(result.data)
       }
     } catch (err) {
       console.error('Error fetching suppliers:', err)
