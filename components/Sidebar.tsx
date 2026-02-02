@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -231,8 +231,8 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const t = useTranslations('navigation')
   const tRoles = useTranslations('roles')
 
-  // Build navigation with translated labels
-  const navigation: NavSection[] = navigationConfig.map(section => ({
+  // Build navigation with translated labels - memoized to prevent unnecessary re-renders
+  const navigation: NavSection[] = useMemo(() => navigationConfig.map(section => ({
     title: t(section.titleKey),
     key: section.key,
     roles: section.roles,
@@ -248,15 +248,15 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         roles: child.roles,
       })),
     })),
-  }))
+  })), [t])
   
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['main', 'crm', 'trips'])
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Contacts'])
   const [currentUrl, setCurrentUrl] = useState('')
 
-  // Filter navigation based on user role
-  const filteredNavigation = navigation.filter(section => {
+  // Filter navigation based on user role - memoized to prevent auto-expand useEffect from running on every render
+  const filteredNavigation = useMemo(() => navigation.filter(section => {
     if (!section.roles) return true
     return canAccess(section.roles)
   }).map(section => ({
@@ -265,7 +265,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       if (!item.roles) return true
       return canAccess(item.roles)
     })
-  }))
+  })), [navigation, canAccess])
 
   // Load saved section states from localStorage
   useEffect(() => {
