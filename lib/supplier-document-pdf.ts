@@ -34,6 +34,8 @@ interface SupplierDocument {
   pickup_time?: string
   pickup_location?: string
   dropoff_location?: string
+  vehicle_type?: string
+  driver_name?: string
   services: ServiceItem[]
   currency: string
   total_cost: number
@@ -346,11 +348,11 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     if (doc.document_type === 'transport_voucher' && (doc.pickup_location || doc.dropoff_location)) {
       pdf.setFillColor(BRAND.background.r, BRAND.background.g, BRAND.background.b)
       pdf.roundedRect(margin, y, contentWidth, 18, 3, 3, 'F')
-      
+
       pdf.setFontSize(8)
       pdf.setFont('helvetica', 'normal')
       pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-      
+
       if (doc.pickup_location) {
         pdf.setFont('helvetica', 'bold')
         pdf.text('FROM:', margin + 4, y + 7)
@@ -358,7 +360,7 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
         pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
         pdf.text(doc.pickup_location, margin + 20, y + 7)
       }
-      
+
       if (doc.dropoff_location) {
         pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
         pdf.setFont('helvetica', 'bold')
@@ -367,7 +369,56 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
         pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
         pdf.text(doc.dropoff_location, margin + 20, y + 13)
       }
-      
+
+      y += 24
+    }
+
+    // Vehicle Type & Driver for transport
+    if (doc.document_type === 'transport_voucher' && (doc.vehicle_type || doc.driver_name)) {
+      const vehicleTypeLabels: Record<string, string> = {
+        'sedan': 'Sedan (1-3 pax)',
+        'suv': 'SUV / 4x4 (1-4 pax)',
+        'minivan': 'Minivan (4-6 pax)',
+        'van': 'Van (7-10 pax)',
+        'minibus': 'Minibus (11-20 pax)',
+        'bus': 'Bus (21+ pax)',
+        'luxury_sedan': 'Luxury Sedan',
+        'luxury_van': 'Luxury Van / Sprinter'
+      }
+
+      const halfWidth = (contentWidth - 6) / 2
+
+      // Vehicle Type Box
+      pdf.setFillColor(BRAND.primaryLight.r, BRAND.primaryLight.g, BRAND.primaryLight.b)
+      pdf.setDrawColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
+      pdf.roundedRect(margin, y, halfWidth, 18, 3, 3, 'FD')
+
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
+      pdf.text('VEHICLE TYPE', margin + 4, y + 5)
+
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
+      const vehicleLabel = doc.vehicle_type ? (vehicleTypeLabels[doc.vehicle_type] || doc.vehicle_type) : '—'
+      pdf.text(vehicleLabel, margin + 4, y + 13)
+
+      // Driver Name Box
+      pdf.setFillColor(BRAND.background.r, BRAND.background.g, BRAND.background.b)
+      pdf.setDrawColor(BRAND.border.r, BRAND.border.g, BRAND.border.b)
+      pdf.roundedRect(margin + halfWidth + 6, y, halfWidth, 18, 3, 3, 'FD')
+
+      pdf.setFontSize(7)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
+      pdf.text('DRIVER', margin + halfWidth + 10, y + 5)
+
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
+      pdf.text(doc.driver_name || 'To be assigned', margin + halfWidth + 10, y + 13)
+
       y += 24
     }
   }

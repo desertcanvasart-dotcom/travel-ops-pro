@@ -404,26 +404,59 @@ export default function EditSupplierDocumentPage() {
             </div>
 
             {document.document_type === 'transport_voucher' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('pickupLocation')}</label>
-                  <input
-                    type="text"
-                    value={document.pickup_location || ''}
-                    onChange={(e) => setDocument({ ...document, pickup_location: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('pickupLocation')}</label>
+                    <input
+                      type="text"
+                      value={document.pickup_location || ''}
+                      onChange={(e) => setDocument({ ...document, pickup_location: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('dropoffLocation')}</label>
+                    <input
+                      type="text"
+                      value={document.dropoff_location || ''}
+                      onChange={(e) => setDocument({ ...document, dropoff_location: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('dropoffLocation')}</label>
-                  <input
-                    type="text"
-                    value={document.dropoff_location || ''}
-                    onChange={(e) => setDocument({ ...document, dropoff_location: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('vehicleType')}</label>
+                    <select
+                      value={document.vehicle_type || ''}
+                      onChange={(e) => setDocument({ ...document, vehicle_type: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      title={t('vehicleType')}
+                    >
+                      <option value="">{t('vehicleTypes.select')}</option>
+                      <option value="sedan">{t('vehicleTypes.sedan')}</option>
+                      <option value="suv">{t('vehicleTypes.suv')}</option>
+                      <option value="minivan">{t('vehicleTypes.minivan')}</option>
+                      <option value="van">{t('vehicleTypes.van')}</option>
+                      <option value="minibus">{t('vehicleTypes.minibus')}</option>
+                      <option value="bus">{t('vehicleTypes.bus')}</option>
+                      <option value="luxury_sedan">{t('vehicleTypes.luxurySedan')}</option>
+                      <option value="luxury_van">{t('vehicleTypes.luxuryVan')}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('driverName')}</label>
+                    <input
+                      type="text"
+                      value={document.driver_name || ''}
+                      onChange={(e) => setDocument({ ...document, driver_name: e.target.value })}
+                      placeholder={t('driverNamePlaceholder')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
                 </div>
-              </div>
+              </>
             )}
 
             <hr className="border-gray-200" />
