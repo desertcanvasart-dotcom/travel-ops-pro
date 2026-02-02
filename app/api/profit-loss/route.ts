@@ -18,7 +18,9 @@ interface TripPnL {
   quoted_amount: number
   total_revenue: number
   total_paid: number
-  total_expenses: number
+  supplier_cost: number      // Cost from itinerary services (hotels, transport, guides, etc.)
+  manual_expenses: number    // Additional manual expenses
+  total_expenses: number     // supplier_cost + manual_expenses
   expenses_paid: number
   expenses_pending: number
   gross_profit: number
@@ -36,10 +38,10 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
     const status = searchParams.get('status')
 
-    // Fetch itineraries
+    // Fetch itineraries - include supplier_cost which is calculated during pricing
     let itineraryQuery = supabaseAdmin
       .from('itineraries')
-      .select('id, itinerary_code, trip_name, client_name, start_date, end_date, status, currency, total_cost')
+      .select('id, itinerary_code, trip_name, client_name, start_date, end_date, status, currency, total_cost, supplier_cost')
       .order('start_date', { ascending: false })
 
     if (itineraryId) {
@@ -94,9 +96,9 @@ export async function GET(request: NextRequest) {
       const totalRevenue = itinInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0)
       const totalPaid = itinInvoices.reduce((sum, inv) => sum + Number(inv.amount_paid || 0), 0)
 
-      // Get expenses for this itinerary
+      // Get manual expenses for this itinerary (additional costs beyond services)
       const itinExpenses = (expenses || []).filter(exp => exp.itinerary_id === itinerary.id)
-      const totalExpenses = itinExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
+      const manualExpenses = itinExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
       const expensesPaid = itinExpenses
         .filter(exp => exp.status === 'paid')
         .reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
@@ -104,8 +106,17 @@ export async function GET(request: NextRequest) {
         .filter(exp => exp.status !== 'paid' && exp.status !== 'rejected')
         .reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
 
+      // Total expenses = supplier_cost (from itinerary services) + manual expenses
+      const supplierCost = Number(itinerary.supplier_cost || 0)
+      const totalExpenses = supplierCost + manualExpenses
+
       // Calculate expense breakdown by category
       const expenseBreakdown: Record<string, number> = {}
+      // Add supplier cost as a category
+      if (supplierCost > 0) {
+        expenseBreakdown['supplier_services'] = supplierCost
+      }
+      // Add manual expenses by category
       itinExpenses.forEach(exp => {
         const cat = exp.category || 'other'
         expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + Number(exp.amount || 0)
@@ -129,6 +140,8 @@ export async function GET(request: NextRequest) {
         quoted_amount: Number(itinerary.total_cost || 0),
         total_revenue: totalRevenue,
         total_paid: totalPaid,
+        supplier_cost: supplierCost,
+        manual_expenses: manualExpenses,
         total_expenses: totalExpenses,
         expenses_paid: expensesPaid,
         expenses_pending: expensesPending,
@@ -141,14 +154,20 @@ export async function GET(request: NextRequest) {
     })
 
     // Calculate summary stats
+    const totalRevenue = pnlData.reduce((sum, p) => sum + (p.total_revenue || p.quoted_amount), 0)
+    const totalSupplierCost = pnlData.reduce((sum, p) => sum + p.supplier_cost, 0)
+    const totalManualExpenses = pnlData.reduce((sum, p) => sum + p.manual_expenses, 0)
+    const totalExpenses = totalSupplierCost + totalManualExpenses
+    const totalProfit = totalRevenue - totalExpenses
+
     const summary = {
       total_trips: pnlData.length,
-      total_revenue: pnlData.reduce((sum, p) => sum + (p.total_revenue || p.quoted_amount), 0),
-      total_expenses: pnlData.reduce((sum, p) => sum + p.total_expenses, 0),
-      total_profit: pnlData.reduce((sum, p) => sum + p.gross_profit, 0),
-      average_margin: pnlData.length > 0 
-        ? pnlData.reduce((sum, p) => sum + p.profit_margin, 0) / pnlData.length 
-        : 0,
+      total_revenue: totalRevenue,
+      total_supplier_cost: totalSupplierCost,
+      total_manual_expenses: totalManualExpenses,
+      total_expenses: totalExpenses,
+      total_profit: totalProfit,
+      average_margin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
       profitable_trips: pnlData.filter(p => p.gross_profit > 0).length,
       loss_trips: pnlData.filter(p => p.gross_profit < 0).length
     }
