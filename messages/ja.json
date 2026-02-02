@@ -5084,5 +5084,36 @@
       "invoiceRequiredDescription": "支払いを記録するには、まずこの予約の請求書を作成する必要があります。支払いは適切な財務記録のために請求書に対して追跡されます。",
       "paymentsLinkedToInvoice": "支払いは請求書ページから記録されます"
     }
+  },
+  "supplierDocuments": {
+    "supplierDocuments": "サプライヤー書類",
+    "supplierDocumentsSubtitle": "バウチャー、サービスオーダー、割り当てを管理",
+    "backToAllDocuments": "すべての書類に戻る",
+    "tryAgain": "再試行",
+    "totalDocuments": "書類合計",
+    "draft": "下書き",
+    "sent": "送信済み",
+    "confirmed": "確認済み",
+    "completed": "完了",
+    "allTypes": "すべての種類",
+    "searchPlaceholder": "書類番号、サプライヤー、顧客、または都市で検索...",
+    "allStatus": "すべてのステータス",
+    "loadingDocuments": "書類を読み込み中...",
+    "noDocumentsFound": "書類が見つかりません",
+    "generateDocumentsHint": "旅程から書類を生成して開始してください",
+    "goToItineraries": "旅程へ移動",
+    "document": "書類",
+    "supplier": "サプライヤー",
+    "guest": "ゲスト",
+    "status": "ステータス",
+    "actions": "操作",
+    "view": "表示",
+    "edit": "編集",
+    "markAsSent": "送信済みにする",
+    "markAsConfirmed": "確認済みにする",
+    "markAsCompleted": "完了にする",
+    "revertToDraft": "下書きに戻す",
+    "delete": "削除",
+    "confirmDeleteDocument": "この書類を削除してもよろしいですか？"
   }
 }

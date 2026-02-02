@@ -4277,5 +4277,36 @@
       "invoiceRequiredDescription": "To record payments, you must first create an invoice for this booking. Payments are tracked against invoices for proper financial records.",
       "paymentsLinkedToInvoice": "Payments are recorded via the invoice page"
     }
+  },
+  "supplierDocuments": {
+    "supplierDocuments": "Supplier Documents",
+    "supplierDocumentsSubtitle": "Manage vouchers, service orders, and assignments",
+    "backToAllDocuments": "Back to All Documents",
+    "tryAgain": "Try Again",
+    "totalDocuments": "Total Documents",
+    "draft": "Draft",
+    "sent": "Sent",
+    "confirmed": "Confirmed",
+    "completed": "Completed",
+    "allTypes": "All Types",
+    "searchPlaceholder": "Search by document number, supplier, client, or city...",
+    "allStatus": "All Status",
+    "loadingDocuments": "Loading documents...",
+    "noDocumentsFound": "No documents found",
+    "generateDocumentsHint": "Generate documents from an itinerary to get started",
+    "goToItineraries": "Go to Itineraries",
+    "document": "Document",
+    "supplier": "Supplier",
+    "guest": "Guest",
+    "status": "Status",
+    "actions": "Actions",
+    "view": "View",
+    "edit": "Edit",
+    "markAsSent": "Mark as Sent",
+    "markAsConfirmed": "Mark as Confirmed",
+    "markAsCompleted": "Mark as Completed",
+    "revertToDraft": "Revert to Draft",
+    "delete": "Delete",
+    "confirmDeleteDocument": "Are you sure you want to delete this document?"
   }
 }
