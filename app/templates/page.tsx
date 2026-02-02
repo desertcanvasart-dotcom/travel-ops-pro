@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   FileText,
   Plus,
@@ -19,7 +20,6 @@ import {
   Check,
   X,
   Eye,
-  Filter,
   Sparkles,
   Ship,
   Car,
@@ -68,52 +68,20 @@ interface Recipient {
 // CONSTANTS
 // ============================================
 
-const CATEGORIES = [
-  { id: 'all', label: 'All Templates', icon: FileText },
-  { id: 'customer', label: 'Customer', icon: Users },
-  { id: 'partner', label: 'Partner', icon: Building2 },
-  { id: 'supplier', label: 'Supplier', icon: Car },
-  { id: 'internal', label: 'Internal', icon: Briefcase },
+const CATEGORY_IDS = [
+  { id: 'all', icon: FileText },
+  { id: 'customer', icon: Users },
+  { id: 'partner', icon: Building2 },
+  { id: 'supplier', icon: Car },
+  { id: 'internal', icon: Briefcase },
 ]
 
-const CHANNELS = [
-  { id: 'all', label: 'All Channels' },
-  { id: 'email', label: 'Email', icon: Mail },
-  { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare },
-  { id: 'both', label: 'Both', icon: Sparkles },
+const CHANNEL_IDS = [
+  { id: 'all', icon: null },
+  { id: 'email', icon: Mail },
+  { id: 'whatsapp', icon: MessageSquare },
+  { id: 'both', icon: Sparkles },
 ]
-
-const SUBCATEGORY_LABELS: Record<string, string> = {
-  // Customer
-  lead_response: 'Lead Response',
-  quotation: 'Quotation',
-  booking_confirmation: 'Booking Confirmation',
-  deposit_request: 'Deposit Request',
-  day_before: 'Day Before',
-  voucher: 'Voucher',
-  check_in: 'Check-in',
-  post_trip: 'Post Trip',
-  // Partner (B2B)
-  rate_request: 'Rate Request',
-  booking_request: 'Booking Request',
-  cruise_hold: 'Cruise Hold',
-  // Supplier
-  hotel_reservation: 'Hotel Reservation',
-  transport_booking: 'Transport Booking',
-  guide_assignment: 'Guide Assignment',
-  cruise_booking: 'Cruise Booking',
-  service_order: 'Service Order',
-  confirmation_request: 'Confirmation Request',
-  payment_notice: 'Payment Notice',
-  amendment: 'Amendment',
-  cancellation: 'Cancellation',
-  // Internal
-  transport: 'Transport',
-  guide_booking: 'Guide Booking',
-  handover: 'Handover',
-  incident: 'Incident',
-  debrief: 'Debrief',
-}
 
 // Map subcategories to partner/supplier types
 const SUBCATEGORY_TO_PARTNER_TYPE: Record<string, string> = {
@@ -141,6 +109,7 @@ const SUBCATEGORY_TO_PARTNER_TYPE: Record<string, string> = {
 // ============================================
 
 export default function TemplatesPage() {
+  const t = useTranslations('templates')
   const dialog = useConfirmDialog()
   const [templates, setTemplates] = useState<Template[]>([])
   const [placeholders, setPlaceholders] = useState<Placeholder[]>([])
@@ -374,6 +343,7 @@ export default function TemplatesPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
+        <span className="sr-only">{t('loading')}</span>
       </div>
     )
   }
@@ -383,9 +353,9 @@ export default function TemplatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Message Templates</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {filteredTemplates.length} of {templates.length} templates • Quick-send via Email or WhatsApp
+            {t('subtitle', { filtered: filteredTemplates.length, total: templates.length })}
           </p>
         </div>
         <button
@@ -405,7 +375,7 @@ export default function TemplatesPage() {
           className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6339] transition-colors"
         >
           <Plus className="w-4 h-4" />
-          New Template
+          {t('newTemplate')}
         </button>
       </div>
 
@@ -420,14 +390,14 @@ export default function TemplatesPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search templates..."
+              placeholder={t('searchPlaceholder')}
               className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
             />
           </div>
 
           {/* Category Filter */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            {CATEGORIES.map((cat) => (
+            {CATEGORY_IDS.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
@@ -438,7 +408,7 @@ export default function TemplatesPage() {
                 }`}
               >
                 <cat.icon className="w-4 h-4" />
-                {cat.label}
+                {t(`categories.${cat.id}`)}
               </button>
             ))}
           </div>
@@ -446,9 +416,9 @@ export default function TemplatesPage() {
 
         {/* Row 2: Channel Filter */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Channel:</span>
+          <span className="text-sm text-gray-500">{t('channel')}:</span>
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            {CHANNELS.map((ch) => (
+            {CHANNEL_IDS.map((ch) => (
               <button
                 key={ch.id}
                 onClick={() => setSelectedChannel(ch.id)}
@@ -459,7 +429,7 @@ export default function TemplatesPage() {
                 }`}
               >
                 {ch.icon && <ch.icon className="w-4 h-4" />}
-                {ch.label}
+                {t(`channels.${ch.id}`)}
               </button>
             ))}
           </div>
@@ -470,8 +440,8 @@ export default function TemplatesPage() {
       {filteredTemplates.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No templates found</p>
-          <p className="text-sm text-gray-400 mt-1">Try adjusting your filters or create a new template</p>
+          <p className="text-gray-500">{t('empty.noTemplates')}</p>
+          <p className="text-sm text-gray-400 mt-1">{t('empty.tryAdjusting')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -498,10 +468,10 @@ export default function TemplatesPage() {
               {/* Tags */}
               <div className="flex items-center gap-1.5 mb-2">
                 <span className={`px-1.5 py-0.5 rounded text-[10px] ${getCategoryColor(template.category)}`}>
-                  {template.category}
+                  {t(`categories.${template.category}`)}
                 </span>
                 <span className="text-[10px] text-gray-400 uppercase">
-                  {SUBCATEGORY_LABELS[template.subcategory] || template.subcategory}
+                  {template.subcategory}
                 </span>
               </div>
 
@@ -510,7 +480,7 @@ export default function TemplatesPage() {
                 <button
                   onClick={() => handleCopy(template)}
                   className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                  title="Copy to clipboard"
+                  title={t('actions.copyToClipboard')}
                 >
                   {copied === template.id ? (
                     <Check className="w-3 h-3 text-green-600" />
@@ -521,7 +491,7 @@ export default function TemplatesPage() {
                 <button
                   onClick={() => handlePreview(template)}
                   className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                  title="Preview"
+                  title={t('actions.preview')}
                 >
                   <Eye className="w-3 h-3" />
                 </button>
@@ -530,10 +500,10 @@ export default function TemplatesPage() {
                   className="flex items-center gap-1 px-2 py-1 text-xs text-white bg-[#647C47] hover:bg-[#4f6339] rounded transition-colors ml-auto"
                 >
                   <Send className="w-3 h-3" />
-                  Send
+                  {t('actions.send')}
                 </button>
                 <div className="relative">
-                  <button 
+                  <button
                     onClick={() => setShowDropdown(showDropdown === template.id ? null : template.id)}
                     className="p-1 text-gray-400 hover:text-gray-600 rounded"
                   >
@@ -546,14 +516,14 @@ export default function TemplatesPage() {
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                       >
                         <Edit2 className="w-3 h-3" />
-                        Edit
+                        {t('actions.edit')}
                       </button>
                       <button
                         onClick={() => { handleDelete(template); setShowDropdown(null); }}
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
                       >
                         <Trash2 className="w-3 h-3" />
-                        Delete
+                        {t('actions.delete')}
                       </button>
                     </div>
                   )}
@@ -570,7 +540,7 @@ export default function TemplatesPage() {
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">
-                {selectedTemplate ? 'Edit Template' : 'New Template'}
+                {selectedTemplate ? t('modal.editTemplate') : t('modal.newTemplate')}
               </h2>
               <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
@@ -580,7 +550,7 @@ export default function TemplatesPage() {
             <form onSubmit={handleSaveTemplate} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.name')}</label>
                   <input
                     type="text"
                     value={formData.name}
@@ -590,81 +560,81 @@ export default function TemplatesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.category')}</label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   >
-                    <option value="customer">Customer</option>
-                    <option value="partner">Partner (B2B)</option>
-                    <option value="supplier">Supplier</option>
-                    <option value="internal">Internal</option>
+                    <option value="customer">{t('categories.customer')}</option>
+                    <option value="partner">{t('modal.partnerB2B')}</option>
+                    <option value="supplier">{t('categories.supplier')}</option>
+                    <option value="internal">{t('categories.internal')}</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Channel</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.channelLabel')}</label>
                   <select
                     value={formData.channel}
                     onChange={(e) => setFormData({ ...formData, channel: e.target.value as any })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   >
-                    <option value="email">Email</option>
-                    <option value="whatsapp">WhatsApp</option>
-                    <option value="both">Both</option>
+                    <option value="email">{t('channels.email')}</option>
+                    <option value="whatsapp">{t('channels.whatsapp')}</option>
+                    <option value="both">{t('channels.both')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Subcategory</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.subcategory')}</label>
                   <input
                     type="text"
                     value={formData.subcategory}
                     onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                    placeholder="e.g., quotation, voucher"
+                    placeholder={t('modal.subcategoryPlaceholder')}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.description')}</label>
                 <input
                   type="text"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                  placeholder="Brief description of when to use this template"
+                  placeholder={t('modal.descriptionPlaceholder')}
                 />
               </div>
 
               {(formData.channel === 'email' || formData.channel === 'both') && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Subject (Email)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.subjectEmail')}</label>
                   <input
                     type="text"
                     value={formData.subject}
                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                    placeholder="Email subject line with {{placeholders}}"
+                    placeholder={t('modal.subjectPlaceholder')}
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Body</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.body')}</label>
                 <textarea
                   value={formData.body}
                   onChange={(e) => setFormData({ ...formData, body: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] font-mono text-sm"
                   rows={12}
-                  placeholder="Template content with {{placeholders}}"
+                  placeholder={t('modal.bodyPlaceholder')}
                   required
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Use {"{{PlaceholderName}}"} for dynamic content. Click "Preview" to see placeholder hints.
+                  {t('modal.placeholderHint')}
                 </p>
               </div>
 
@@ -674,7 +644,7 @@ export default function TemplatesPage() {
                   onClick={() => setShowCreateModal(false)}
                   className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  Cancel
+                  {t('modal.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -682,7 +652,7 @@ export default function TemplatesPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6339] transition-colors disabled:opacity-50"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {selectedTemplate ? 'Update Template' : 'Create Template'}
+                  {selectedTemplate ? t('modal.updateTemplate') : t('modal.createTemplate')}
                 </button>
               </div>
             </form>
@@ -699,11 +669,11 @@ export default function TemplatesPage() {
                 <h2 className="text-lg font-semibold text-gray-900">{selectedTemplate.name}</h2>
                 <div className="flex items-center gap-2 mt-1">
                   <span className={`px-2 py-0.5 rounded-full text-xs ${getCategoryColor(selectedTemplate.category)}`}>
-                    {selectedTemplate.category}
+                    {t(`categories.${selectedTemplate.category}`)}
                   </span>
                   <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${getChannelColor(selectedTemplate.channel)}`}>
                     {getChannelIcon(selectedTemplate.channel)}
-                    {selectedTemplate.channel}
+                    {t(`channels.${selectedTemplate.channel}`)}
                   </span>
                 </div>
               </div>
@@ -715,13 +685,13 @@ export default function TemplatesPage() {
             <div className="p-6">
               {selectedTemplate.subject && (
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Subject</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">{t('preview.subject')}</label>
                   <div className="p-3 bg-gray-50 rounded-lg text-gray-900">{selectedTemplate.subject}</div>
                 </div>
               )}
 
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-500 mb-1">Body</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">{t('preview.body')}</label>
                 <div className="p-4 bg-gray-50 rounded-lg whitespace-pre-wrap font-mono text-sm text-gray-800">
                   {selectedTemplate.body}
                 </div>
@@ -729,7 +699,7 @@ export default function TemplatesPage() {
 
               {selectedTemplate.placeholders && selectedTemplate.placeholders.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-2">Placeholders Used</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">{t('preview.placeholdersUsed')}</label>
                   <div className="flex flex-wrap gap-2">
                     {selectedTemplate.placeholders.map((ph) => (
                       <span key={ph} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-mono">
@@ -747,7 +717,7 @@ export default function TemplatesPage() {
                 className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
               >
                 <Copy className="w-4 h-4" />
-                Copy
+                {t('actions.copy')}
               </button>
               <button
                 onClick={() => {
@@ -757,7 +727,7 @@ export default function TemplatesPage() {
                 className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6339] transition-colors"
               >
                 <Send className="w-4 h-4" />
-                Send This Template
+                {t('preview.sendThisTemplate')}
               </button>
             </div>
           </div>
@@ -787,6 +757,7 @@ interface SendTemplateModalProps {
 }
 
 function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModalProps) {
+  const t = useTranslations('templates')
   const dialog = useConfirmDialog()
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null)
@@ -804,14 +775,14 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
   const supplierType = SUBCATEGORY_TO_PARTNER_TYPE[template.subcategory] || 'supplier'
 
   const getRecipientLabel = () => {
-    if (isPartnerTemplate) return 'Select B2B Partner'
-    if (!isSupplierTemplate) return 'Select Client'
+    if (isPartnerTemplate) return t('send.selectB2BPartner')
+    if (!isSupplierTemplate) return t('send.selectClient')
     switch (supplierType) {
-      case 'hotel': return 'Select Hotel'
-      case 'cruise': return 'Select Nile Cruise'
-      case 'transport': return 'Select Transport Supplier'
-      case 'guide': return 'Select Guide'
-      default: return 'Select Supplier'
+      case 'hotel': return t('send.selectHotel')
+      case 'cruise': return t('send.selectCruise')
+      case 'transport': return t('send.selectTransport')
+      case 'guide': return t('send.selectGuide')
+      default: return t('send.selectSupplier')
     }
   }
 
@@ -948,13 +919,13 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
 
   const handleSend = async () => {
     if (!selectedRecipient) {
-      await dialog.alert('Missing Recipient', 'Please select a recipient', 'warning')
+      await dialog.alert(t('send.missingRecipient'), t('send.pleaseSelectRecipient'), 'warning')
       return
     }
 
     const recipientContact = channel === 'email' ? selectedRecipient.email : selectedRecipient.phone
     if (!recipientContact) {
-      await dialog.alert('Contact Missing', `No ${channel === 'email' ? 'email' : 'phone number'} available for this recipient`, 'warning')
+      await dialog.alert(t('send.contactMissing'), channel === 'email' ? t('send.noEmailAvailable') : t('send.noPhoneAvailable'), 'warning')
       return
     }
 
@@ -978,15 +949,15 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
       })
 
       if (response.ok) {
-        await dialog.alert('Success', 'Message sent successfully!', 'success')
+        await dialog.alert(t('send.success'), t('send.messageSent'), 'success')
         onClose()
       } else {
         const data = await response.json()
-        await dialog.alert('Error', data.error || 'Failed to send message', 'warning')
+        await dialog.alert(t('send.error'), data.error || t('send.failedToSend'), 'warning')
       }
     } catch (error) {
       console.error('Error sending:', error)
-      await dialog.alert('Error', 'Failed to send message', 'warning')
+      await dialog.alert(t('send.error'), t('send.failedToSend'), 'warning')
     } finally {
       setSending(false)
     }
@@ -997,8 +968,8 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
       <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Send: {template.name}</h2>
-            <p className="text-sm text-gray-500">Fill in the placeholders and send</p>
+            <h2 className="text-lg font-semibold text-gray-900">{t('send.title', { name: template.name })}</h2>
+            <p className="text-sm text-gray-500">{t('send.subtitle')}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
@@ -1012,29 +983,29 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
               {/* Channel Selector */}
               {template.channel === 'both' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Send via</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('send.sendVia')}</label>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setChannel('whatsapp')}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
-                        channel === 'whatsapp' 
-                          ? 'border-green-500 bg-green-50 text-green-700' 
+                        channel === 'whatsapp'
+                          ? 'border-green-500 bg-green-50 text-green-700'
                           : 'border-gray-200 text-gray-600'
                       }`}
                     >
                       <MessageSquare className="w-4 h-4" />
-                      WhatsApp
+                      {t('channels.whatsapp')}
                     </button>
                     <button
                       onClick={() => setChannel('email')}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${
-                        channel === 'email' 
-                          ? 'border-blue-500 bg-blue-50 text-blue-700' 
+                        channel === 'email'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-200 text-gray-600'
                       }`}
                     >
                       <Mail className="w-4 h-4" />
-                      Email
+                      {t('channels.email')}
                     </button>
                   </div>
                 </div>
@@ -1044,12 +1015,12 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
                   {getRecipientIcon()}
-                  {getRecipientLabel()} (auto-fill)
+                  {getRecipientLabel()} {t('send.autoFill')}
                 </label>
                 {loading ? (
                   <div className="flex items-center gap-2 px-3 py-2 text-gray-500">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading...
+                    {t('send.loadingRecipients')}
                   </div>
                 ) : (
                   <select
@@ -1070,14 +1041,14 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
                 )}
                 {recipients.length === 0 && !loading && (
                   <p className="text-xs text-amber-600 mt-1">
-                    No {isSupplierTemplate ? 'suppliers' : isPartnerTemplate ? 'partners' : 'clients'} found. Add some first.
+                    {t('send.noRecipientsFound', { type: isSupplierTemplate ? t('categories.supplier').toLowerCase() : isPartnerTemplate ? t('categories.partner').toLowerCase() : t('categories.customer').toLowerCase() })}
                   </p>
                 )}
               </div>
 
               {/* Placeholder Fields */}
               <div className="space-y-3">
-                <label className="block text-sm font-medium text-gray-700">Fill Placeholders</label>
+                <label className="block text-sm font-medium text-gray-700">{t('send.fillPlaceholders')}</label>
                 {uniquePlaceholders.map((ph) => {
                   const info = placeholders.find(p => p.placeholder === ph)
                   return (
@@ -1085,7 +1056,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
                       <label className="block text-xs text-gray-500 mb-1">
                         {info?.display_name || ph}
                         {info?.example_value && (
-                          <span className="text-gray-400 ml-1">e.g., {info.example_value}</span>
+                          <span className="text-gray-400 ml-1">{t('send.example')} {info.example_value}</span>
                         )}
                       </label>
                       <input
@@ -1103,13 +1074,13 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
 
             {/* Right: Preview */}
             <div className="p-6 bg-gray-50">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Preview</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('send.previewLabel')}</label>
               {template.subject && (
                 <div className="mb-3">
-                  <span className="text-xs text-gray-500">Subject:</span>
+                  <span className="text-xs text-gray-500">{t('send.subjectLabel')}</span>
                   <div className="p-2 bg-white rounded border border-gray-200 text-sm">
                     {Object.entries(filledValues).reduce(
-                      (s, [k, v]) => s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v || k), 
+                      (s, [k, v]) => s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v || k),
                       template.subject
                     )}
                   </div>
@@ -1127,7 +1098,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
           <div className="text-sm text-gray-500">
             {selectedRecipient && (
               <>
-                Sending to: <strong>{selectedRecipient.name}</strong>
+                {t('send.sendingTo')} <strong>{selectedRecipient.name}</strong>
                 {channel === 'email' && selectedRecipient.email && ` (${selectedRecipient.email})`}
                 {channel === 'whatsapp' && selectedRecipient.phone && ` (${selectedRecipient.phone})`}
               </>
@@ -1138,7 +1109,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
               onClick={onClose}
               className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              Cancel
+              {t('modal.cancel')}
             </button>
             <button
               onClick={handleSend}
@@ -1146,7 +1117,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
               className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6339] transition-colors disabled:opacity-50"
             >
               {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Send {channel === 'whatsapp' ? 'WhatsApp' : 'Email'}
+              {channel === 'whatsapp' ? t('send.sendWhatsApp') : t('send.sendEmail')}
             </button>
           </div>
         </div>
