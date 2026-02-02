@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator } from 'lucide-react'
+import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2 } from 'lucide-react'
 
 interface EntranceFee {
   id: string
@@ -25,6 +25,18 @@ interface SelectedAttraction {
   quantity: number
 }
 
+interface Supplier {
+  id: string
+  name: string
+  type: string
+  contact_name?: string
+  contact_email?: string
+  contact_phone?: string
+  address?: string
+  city?: string
+  country?: string
+}
+
 export default function EditSupplierDocumentPage() {
   const t = useTranslations('supplierDocumentEdit')
   const params = useParams()
@@ -33,7 +45,11 @@ export default function EditSupplierDocumentPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
+  // Suppliers state
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false)
+
   // Entrance fees state
   const [entranceFees, setEntranceFees] = useState<EntranceFee[]>([])
   const [selectedAttractions, setSelectedAttractions] = useState<SelectedAttraction[]>([])
@@ -45,6 +61,7 @@ export default function EditSupplierDocumentPage() {
   useEffect(() => {
     fetchDocument()
     fetchEntranceFees()
+    fetchSuppliers()
   }, [params.id])
 
   const fetchDocument = async () => {
@@ -79,6 +96,74 @@ export default function EditSupplierDocumentPage() {
       console.error('Error fetching entrance fees:', err)
     } finally {
       setLoadingFees(false)
+    }
+  }
+
+  const fetchSuppliers = async () => {
+    setLoadingSuppliers(true)
+    try {
+      const response = await fetch('/api/suppliers')
+      const data = await response.json()
+      if (Array.isArray(data)) {
+        setSuppliers(data)
+      }
+    } catch (err) {
+      console.error('Error fetching suppliers:', err)
+    } finally {
+      setLoadingSuppliers(false)
+    }
+  }
+
+  // Get relevant suppliers based on document type
+  const getRelevantSuppliers = () => {
+    if (!document) return suppliers
+
+    const typeMapping: Record<string, string[]> = {
+      transport_voucher: ['transport', 'driver', 'dmc', 'ground_handler'],
+      hotel_voucher: ['hotel'],
+      cruise_voucher: ['cruise', 'cruise_line'],
+      guide_assignment: ['guide', 'dmc', 'ground_handler'],
+      service_order: ['restaurant', 'activity_provider', 'attraction', 'dmc', 'ground_handler', 'tour_operator'],
+      activity_voucher: ['activity_provider', 'attraction', 'dmc']
+    }
+
+    const relevantTypes = typeMapping[document.document_type] || []
+    if (relevantTypes.length === 0) return suppliers
+
+    return suppliers.filter(s => relevantTypes.includes(s.type))
+  }
+
+  // Handle supplier selection and auto-populate fields
+  const handleSupplierSelect = (supplierId: string) => {
+    if (!supplierId) {
+      // Clear supplier fields if "No supplier" is selected
+      setDocument({
+        ...document,
+        supplier_id: null,
+        supplier_name: '',
+        supplier_contact_name: '',
+        supplier_contact_email: '',
+        supplier_contact_phone: '',
+        supplier_address: ''
+      })
+      return
+    }
+
+    const supplier = suppliers.find(s => s.id === supplierId)
+    if (supplier) {
+      const address = [supplier.address, supplier.city, supplier.country]
+        .filter(Boolean)
+        .join(', ')
+
+      setDocument({
+        ...document,
+        supplier_id: supplier.id,
+        supplier_name: supplier.name,
+        supplier_contact_name: supplier.contact_name || '',
+        supplier_contact_email: supplier.contact_email || '',
+        supplier_contact_phone: supplier.contact_phone || '',
+        supplier_address: address
+      })
     }
   }
 
@@ -257,7 +342,43 @@ export default function EditSupplierDocumentPage() {
               </div>
             </div>
 
-            {/* Supplier Info */}
+            {/* Supplier Selection */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Building2 className="w-5 h-5 text-blue-600" />
+                <label className="text-sm font-semibold text-blue-900">{t('selectSupplier')}</label>
+              </div>
+              <select
+                value={document.supplier_id || ''}
+                onChange={(e) => handleSupplierSelect(e.target.value)}
+                className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={loadingSuppliers}
+                title={t('selectSupplier')}
+              >
+                <option value="">{t('selectSupplierPlaceholder')}</option>
+                {getRelevantSuppliers().length > 0 && (
+                  <optgroup label={t('recommendedSuppliers')}>
+                    {getRelevantSuppliers().map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.city ? `(${s.city})` : ''} — {s.type.replace('_', ' ')}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {suppliers.filter(s => !getRelevantSuppliers().find(r => r.id === s.id)).length > 0 && (
+                  <optgroup label={t('otherSuppliers')}>
+                    {suppliers.filter(s => !getRelevantSuppliers().find(r => r.id === s.id)).map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.city ? `(${s.city})` : ''} — {s.type.replace('_', ' ')}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <p className="text-xs text-blue-600 mt-2">{t('selectSupplierHint')}</p>
+            </div>
+
+            {/* Supplier Info (editable) */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierName')}</label>
@@ -266,8 +387,22 @@ export default function EditSupplierDocumentPage() {
                   value={document.supplier_name || ''}
                   onChange={(e) => setDocument({ ...document, supplier_name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('supplierNamePlaceholder')}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('contactName')}</label>
+                <input
+                  type="text"
+                  value={document.supplier_contact_name || ''}
+                  onChange={(e) => setDocument({ ...document, supplier_contact_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('contactNamePlaceholder')}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('contactEmail')}</label>
                 <input
@@ -275,11 +410,9 @@ export default function EditSupplierDocumentPage() {
                   value={document.supplier_contact_email || ''}
                   onChange={(e) => setDocument({ ...document, supplier_contact_email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('contactEmailPlaceholder')}
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('contactPhone')}</label>
                 <input
@@ -287,17 +420,20 @@ export default function EditSupplierDocumentPage() {
                   value={document.supplier_contact_phone || ''}
                   onChange={(e) => setDocument({ ...document, supplier_contact_phone: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('contactPhonePlaceholder')}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('address')}</label>
-                <input
-                  type="text"
-                  value={document.supplier_address || ''}
-                  onChange={(e) => setDocument({ ...document, supplier_address: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('address')}</label>
+              <input
+                type="text"
+                value={document.supplier_address || ''}
+                onChange={(e) => setDocument({ ...document, supplier_address: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder={t('addressPlaceholder')}
+              />
             </div>
 
             <hr className="border-gray-200" />
