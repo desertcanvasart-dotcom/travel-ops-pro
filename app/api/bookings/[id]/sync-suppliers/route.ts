@@ -82,16 +82,27 @@ export async function POST(
       console.log(`📋 First service sample: ${JSON.stringify(services[0])}`)
     }
 
+    // If no services found, also check if there are ANY services for this itinerary
+    // This helps diagnose if the issue is with column names or if services just haven't been saved
     if (!services || services.length === 0) {
+      // Try to count ALL services regardless of day_id to help debug
+      const { count: totalServicesCount } = await supabaseAdmin
+        .from('itinerary_services')
+        .select('*', { count: 'exact', head: true })
+
+      console.log(`📊 Total services in itinerary_services table: ${totalServicesCount}`)
+
       return NextResponse.json({
         success: true,
-        message: `No services found in itinerary_services table. Itinerary: ${booking.itinerary_id}, Days: ${days?.length || 0}, Day IDs: ${dayIds.slice(0, 3).join(', ')}...`,
+        message: `No services found in itinerary_services table for this itinerary. Make sure to save the itinerary after adding services (click 'Save Changes' or 'Calculate Pricing' in the itinerary edit page).`,
         data: {
           added: 0,
           debug: {
             itinerary_id: booking.itinerary_id,
             days_count: days?.length || 0,
-            day_ids: dayIds
+            day_ids: dayIds,
+            total_services_in_db: totalServicesCount || 0,
+            hint: 'Services must be saved in the itinerary edit page before they can be synced to bookings'
           }
         }
       })

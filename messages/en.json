@@ -4234,6 +4234,7 @@
     "actions": {
       "view": "View",
       "viewItinerary": "View Itinerary",
+      "editItinerary": "Edit Itinerary",
       "markSupplierConfirmed": "Mark Confirmed",
       "recordPayment": "Record Payment",
       "generateVouchers": "Generate Vouchers",
@@ -4260,7 +4261,8 @@
     "messages": {
       "noSuppliersYet": "No suppliers added yet",
       "noPaymentsYet": "No payments recorded yet",
-      "allSuppliersConfirmed": "All suppliers confirmed"
+      "allSuppliersConfirmed": "All suppliers confirmed",
+      "syncSuppliersHint": "Click 'Sync from Itinerary' to import services. Make sure you saved the itinerary after adding services (use 'Save Changes' or 'Calculate Pricing' in the edit page)."
     }
   }
 }
