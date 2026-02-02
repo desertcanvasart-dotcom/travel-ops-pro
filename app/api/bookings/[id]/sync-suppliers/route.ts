@@ -18,10 +18,10 @@ export async function POST(
   try {
     const { id: bookingId } = await params
 
-    // Get booking with itinerary_id
+    // Get booking with itinerary_id and start_date
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
-      .select('id, itinerary_id, booking_code')
+      .select('id, itinerary_id, booking_code, start_date')
       .eq('id', bookingId)
       .single()
 
@@ -32,6 +32,15 @@ export async function POST(
     if (!booking.itinerary_id) {
       return NextResponse.json({ success: false, error: 'No linked itinerary found' }, { status: 400 })
     }
+
+    // Get itinerary start_date as fallback for calculating service dates
+    const { data: itinerary } = await supabaseAdmin
+      .from('itineraries')
+      .select('start_date')
+      .eq('id', booking.itinerary_id)
+      .single()
+
+    const tripStartDate = booking.start_date || itinerary?.start_date
 
     // Get itinerary days
     const { data: days, error: daysError } = await supabaseAdmin
@@ -57,13 +66,15 @@ export async function POST(
     const dayIds = days.map(d => d.id)
     const { data: services, error: servicesError } = await supabaseAdmin
       .from('itinerary_services')
-      .select('*, itinerary_day_id')
+      .select('*')
       .in('itinerary_day_id', dayIds)
 
     if (servicesError) {
       console.error('Error fetching itinerary services:', servicesError)
       return NextResponse.json({ success: false, error: 'Failed to fetch itinerary services' }, { status: 500 })
     }
+
+    console.log(`📋 Found ${services?.length || 0} services in itinerary`)
 
     if (!services || services.length === 0) {
       return NextResponse.json({
@@ -76,32 +87,62 @@ export async function POST(
     // Check existing suppliers to avoid duplicates
     const { data: existingSuppliers } = await supabaseAdmin
       .from('booking_supplier_status')
-      .select('supplier_name, service_date')
+      .select('supplier_name, supplier_type, service_date')
       .eq('booking_id', bookingId)
 
+    // Create a more robust key for deduplication
     const existingKeys = new Set(
-      existingSuppliers?.map(s => `${s.supplier_name}-${s.service_date}`) || []
+      existingSuppliers?.map(s => `${s.supplier_type}|${s.supplier_name}|${s.service_date || 'no-date'}`) || []
     )
+
+    // Helper to calculate service date from day_number
+    const calculateServiceDate = (day: { date: string | null; day_number: number }): string | null => {
+      // Use day.date if available
+      if (day.date) return day.date
+
+      // Calculate from trip start date and day number
+      if (tripStartDate) {
+        const startDate = new Date(tripStartDate)
+        startDate.setDate(startDate.getDate() + (day.day_number - 1))
+        return startDate.toISOString().split('T')[0]
+      }
+
+      return null
+    }
 
     // Prepare supplier status entries
     const supplierStatuses = services
       .map(service => {
         const day = days.find(d => d.id === service.itinerary_day_id)
-        const supplierName = service.service_name || service.supplier_name || 'Unknown Service'
-        const key = `${supplierName}-${day?.date}`
-
-        // Skip if already exists
-        if (existingKeys.has(key)) {
+        if (!day) {
+          console.log(`⚠️ No day found for service: ${service.service_name}`)
           return null
         }
 
+        // Use supplier_name if available, otherwise fall back to service_name
+        const supplierName = service.supplier_name || service.service_name || 'Unknown Service'
+        const serviceDate = calculateServiceDate(day)
+        const supplierType = mapServiceType(service.service_type)
+
+        // Create dedup key
+        const key = `${supplierType}|${supplierName}|${serviceDate || 'no-date'}`
+
+        // Skip if already exists
+        if (existingKeys.has(key)) {
+          console.log(`⏭️ Skipping duplicate: ${supplierName} on ${serviceDate}`)
+          return null
+        }
+
+        console.log(`✅ Adding supplier: ${supplierName} (${supplierType}) on ${serviceDate}`)
+
         return {
           booking_id: bookingId,
-          supplier_type: mapServiceType(service.service_type),
+          supplier_id: service.supplier_id || null,
+          supplier_type: supplierType,
           supplier_name: supplierName,
-          service_description: service.notes || service.description || null,
-          service_date: day?.date || null,
-          quoted_cost: service.total_cost || service.unit_cost || null,
+          service_description: service.notes || null,
+          service_date: serviceDate,
+          quoted_cost: service.total_cost || service.rate_eur || null,
           status: 'pending'
         }
       })
@@ -110,7 +151,7 @@ export async function POST(
     if (supplierStatuses.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'All services already synced',
+        message: 'All services already synced or no valid services found',
         data: { added: 0 }
       })
     }
@@ -125,6 +166,8 @@ export async function POST(
       console.error('Error inserting supplier statuses:', insertError)
       return NextResponse.json({ success: false, error: insertError.message }, { status: 500 })
     }
+
+    console.log(`✅ Synced ${inserted?.length || 0} suppliers to booking ${booking.booking_code}`)
 
     return NextResponse.json({
       success: true,
@@ -163,7 +206,10 @@ function mapServiceType(type: string | null): string {
     'flight': 'flight',
     'domestic_flight': 'flight',
     'train': 'transport',
-    'sleeping_train': 'transport'
+    'sleeping_train': 'transport',
+    'tips': 'other',
+    'supplies': 'other',
+    'service_fee': 'other'
   }
 
   return typeMap[type.toLowerCase()] || 'other'
