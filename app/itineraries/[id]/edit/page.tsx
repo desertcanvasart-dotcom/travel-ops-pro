@@ -389,14 +389,20 @@ export default function ItineraryEditorPage() {
   const updateStatus = async (newStatus: string) => {
     if (!itinerary) return
     setUpdatingStatus(true)
-    
-    try {
-      const { error } = await supabase
-        .from('itineraries')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', itineraryId)
 
-      if (error) throw error
+    try {
+      // Use API endpoint to trigger auto-booking creation when status changes to "confirmed"
+      const response = await fetch(`/api/itineraries/${itineraryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to update status')
+      }
+
       setItinerary({ ...itinerary, status: newStatus })
     } catch (error) {
       console.error('Error updating status:', error)
