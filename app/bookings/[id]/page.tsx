@@ -54,16 +54,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [updating, setUpdating] = useState(false)
 
-  // Payment modal state
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [paymentForm, setPaymentForm] = useState({
-    payment_type: 'deposit',
-    amount: '',
-    payment_method: 'bank_transfer',
-    payment_date: new Date().toISOString().split('T')[0],
-    transaction_reference: '',
-    notes: ''
-  })
+  // Invoice linked to this booking's itinerary
+  const [linkedInvoice, setLinkedInvoice] = useState<{ id: string; invoice_number: string } | null>(null)
 
   // Supplier modal state
   const [showSupplierModal, setShowSupplierModal] = useState(false)
@@ -87,6 +79,20 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
 
       if (data.success) {
         setBooking(data.data)
+
+        // Fetch linked invoice if itinerary exists
+        if (data.data.itinerary_id) {
+          const invoiceRes = await fetch(`/api/invoices?itineraryId=${data.data.itinerary_id}`)
+          const invoiceData = await invoiceRes.json()
+          if (invoiceData.invoices && invoiceData.invoices.length > 0) {
+            setLinkedInvoice({
+              id: invoiceData.invoices[0].id,
+              invoice_number: invoiceData.invoices[0].invoice_number
+            })
+          } else {
+            setLinkedInvoice(null)
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching booking:', error)
@@ -113,39 +119,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch (error) {
       console.error('Error updating supplier:', error)
-    } finally {
-      setUpdating(false)
-    }
-  }
-
-  const recordPayment = async () => {
-    if (!paymentForm.amount) return
-
-    setUpdating(true)
-    try {
-      const response = await fetch(`/api/bookings/${resolvedParams.id}/payments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...paymentForm,
-          amount: parseFloat(paymentForm.amount)
-        })
-      })
-
-      if (response.ok) {
-        setShowPaymentModal(false)
-        setPaymentForm({
-          payment_type: 'deposit',
-          amount: '',
-          payment_method: 'bank_transfer',
-          payment_date: new Date().toISOString().split('T')[0],
-          transaction_reference: '',
-          notes: ''
-        })
-        fetchBooking()
-      }
-    } catch (error) {
-      console.error('Error recording payment:', error)
     } finally {
       setUpdating(false)
     }
@@ -290,74 +263,32 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Link href="/bookings" className="p-2 hover:bg-gray-200 rounded-lg">
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
-          </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-gray-900">{booking.booking_code}</h1>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
-                {statusConfig.label}
-              </span>
+      {/* Header - Two Row Layout */}
+      <div className="bg-white rounded-xl shadow-sm border mb-6 p-4">
+        {/* Row 1: Booking Info & Status */}
+        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-4">
+            <Link href="/bookings" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </Link>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-semibold text-gray-900">{booking.booking_code}</h1>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
+                  {statusConfig.label}
+                </span>
+              </div>
+              <p className="text-sm text-gray-500">{booking.client_name} - {booking.trip_name}</p>
             </div>
-            <p className="text-sm text-gray-500">{booking.client_name} - {booking.trip_name}</p>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Operational Actions - only if linked to itinerary */}
-          {booking.itinerary && (
-            <>
-              {/* Invoice Button */}
-              <Link
-                href={`/invoices?itineraryId=${booking.itinerary.id}`}
-                className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
-              >
-                <Receipt className="w-4 h-4" />
-                {t('actions.invoice')}
-              </Link>
-
-              {/* Documents (Service Orders) */}
-              <GenerateDocumentsButton
-                itineraryId={booking.itinerary.id}
-                itineraryCode={booking.itinerary.itinerary_code}
-              />
-
-              {/* Add Expense */}
-              <AddExpenseFromItinerary
-                itineraryId={booking.itinerary.id}
-                itineraryCode={booking.itinerary.itinerary_code}
-                clientName={booking.client_name}
-              />
-
-              {/* Contract */}
-              <Link
-                href={`/documents/contract/${booking.itinerary.id}`}
-                className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
-              >
-                <FileText className="w-4 h-4" />
-                {t('actions.contract')}
-              </Link>
-
-              {/* View Itinerary */}
-              <Link
-                href={`/itineraries/${booking.itinerary.id}`}
-                className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
-              >
-                <FileText className="w-4 h-4" />
-                {t('actions.viewItinerary')}
-              </Link>
-            </>
-          )}
 
           {/* Status Dropdown */}
           <select
             value={booking.status}
             onChange={(e) => updateBookingStatus(e.target.value)}
             disabled={updating}
-            className="px-4 py-2 text-sm border rounded-lg bg-white"
+            title={t('fields.status')}
+            className="px-4 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
           >
             <option value="pending">{t('status.pending')}</option>
             <option value="supplier_confirmed">{t('status.supplier_confirmed')}</option>
@@ -368,6 +299,48 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
             <option value="cancelled">{t('status.cancelled')}</option>
           </select>
         </div>
+
+        {/* Row 2: Action Buttons */}
+        {booking.itinerary && (
+          <div className="pt-4 flex flex-wrap items-center gap-3">
+            {/* Primary Actions - Filled */}
+            <Link
+              href={`/invoices?itineraryId=${booking.itinerary.id}`}
+              className="px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors flex items-center gap-2"
+            >
+              <Receipt className="w-4 h-4" />
+              {t('actions.invoice')}
+            </Link>
+
+            <GenerateDocumentsButton
+              itineraryId={booking.itinerary.id}
+              itineraryCode={booking.itinerary.itinerary_code}
+            />
+
+            <AddExpenseFromItinerary
+              itineraryId={booking.itinerary.id}
+              itineraryCode={booking.itinerary.itinerary_code}
+              clientName={booking.client_name}
+            />
+
+            {/* Secondary Actions - Outlined */}
+            <Link
+              href={`/documents/contract/${booking.itinerary.id}`}
+              className="px-4 py-2 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#e8ede3] transition-colors flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              {t('actions.contract')}
+            </Link>
+
+            <Link
+              href={`/itineraries/${booking.itinerary.id}`}
+              className="px-4 py-2 text-sm font-medium border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              {t('actions.viewItinerary')}
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -513,6 +486,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex gap-2">
                   {booking.itinerary && (
                     <button
+                      type="button"
                       onClick={syncSuppliers}
                       disabled={syncing}
                       className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50"
@@ -522,6 +496,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                     </button>
                   )}
                   <button
+                    type="button"
                     onClick={() => setShowSupplierModal(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] text-sm"
                   >
@@ -545,7 +520,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                           type="button"
                           onClick={syncSuppliers}
                           disabled={syncing}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm disabled:opacity-50"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-[#e8ede3] text-[#4f6238] rounded-lg hover:bg-[#d9e2cf] text-sm disabled:opacity-50"
                         >
                           <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
                           {syncing ? 'Syncing...' : t('actions.syncFromItinerary')}
@@ -599,6 +574,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                           <td className="px-4 py-3">
                             {supplier.status !== 'confirmed' && (
                               <button
+                                type="button"
                                 onClick={() => {
                                   const confNum = prompt('Enter confirmation number (optional):')
                                   updateSupplierStatus(supplier.id, 'confirmed', confNum || undefined)
@@ -622,23 +598,53 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           {/* Payments Tab */}
           {activeTab === 'payments' && (
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-medium text-gray-900">Payment History</h3>
-                <button
-                  onClick={() => setShowPaymentModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] text-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  {t('actions.recordPayment')}
-                </button>
-              </div>
-
-              {!booking.payments || booking.payments.length === 0 ? (
-                <div className="text-center py-12">
+              {/* Invoice Required Check */}
+              {!linkedInvoice ? (
+                <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg">
                   <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">{t('messages.noPaymentsYet')}</p>
+                  <p className="text-gray-900 font-medium mb-2">{t('messages.invoiceRequiredTitle')}</p>
+                  <p className="text-gray-500 text-sm mb-6 max-w-md mx-auto">
+                    {t('messages.invoiceRequiredDescription')}
+                  </p>
+                  {booking.itinerary && (
+                    <Link
+                      href={`/invoices?itineraryId=${booking.itinerary.id}`}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] text-sm font-medium"
+                    >
+                      <Receipt className="w-4 h-4" />
+                      {t('actions.createInvoice')}
+                    </Link>
+                  )}
                 </div>
               ) : (
+                <>
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-medium text-gray-900">Payment History</h3>
+                      <Link
+                        href={`/invoices/${linkedInvoice.id}`}
+                        className="text-sm text-[#647C47] hover:underline flex items-center gap-1"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        {linkedInvoice.invoice_number}
+                      </Link>
+                    </div>
+                    <Link
+                      href={`/invoices/${linkedInvoice.id}#payments`}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] text-sm"
+                    >
+                      <Plus className="w-4 h-4" />
+                      {t('actions.recordPayment')}
+                    </Link>
+                  </div>
+
+                  {!booking.payments || booking.payments.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500">{t('messages.noPaymentsYet')}</p>
+                      <p className="text-gray-400 text-sm mt-2">{t('messages.paymentsLinkedToInvoice')}</p>
+                    </div>
+                  ) : (
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
@@ -681,6 +687,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                     </tr>
                   </tfoot>
                 </table>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -723,106 +731,13 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold">{t('actions.recordPayment')}</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Type</label>
-                <select
-                  value={paymentForm.payment_type}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, payment_type: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                >
-                  <option value="deposit">Deposit</option>
-                  <option value="partial">Partial Payment</option>
-                  <option value="final">Final Payment</option>
-                  <option value="refund">Refund</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount ({booking.currency})</label>
-                <input
-                  type="number"
-                  value={paymentForm.amount}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                  placeholder="0.00"
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                <select
-                  value={paymentForm.payment_method}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                >
-                  <option value="bank_transfer">Bank Transfer</option>
-                  <option value="credit_card">Credit Card</option>
-                  <option value="cash">Cash</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="wise">Wise</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
-                <input
-                  type="date"
-                  value={paymentForm.payment_date}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Reference</label>
-                <input
-                  type="text"
-                  value={paymentForm.transaction_reference}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, transaction_reference: e.target.value })}
-                  placeholder="TXN-12345"
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  value={paymentForm.notes}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                  rows={2}
-                  className="w-full border rounded-lg px-3 py-2 resize-none"
-                />
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t bg-gray-50 flex gap-3 justify-end rounded-b-lg">
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 text-sm border rounded-lg hover:bg-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={recordPayment}
-                disabled={!paymentForm.amount || updating}
-                className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] disabled:opacity-50"
-              >
-                {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Record Payment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Supplier Modal */}
       {showSupplierModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-lg font-semibold">{t('actions.addSupplier')}</h2>
-              <button onClick={() => setShowSupplierModal(false)} className="p-1 hover:bg-gray-100 rounded" title="Close">
+              <button type="button" onClick={() => setShowSupplierModal(false)} className="p-1 hover:bg-gray-100 rounded" title="Close">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -832,6 +747,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                 <select
                   value={supplierForm.supplier_type}
                   onChange={(e) => setSupplierForm({ ...supplierForm, supplier_type: e.target.value })}
+                  title={t('fields.supplierType')}
                   className="w-full border rounded-lg px-3 py-2"
                 >
                   <option value="hotel">Hotel</option>
@@ -890,12 +806,14 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
             </div>
             <div className="px-6 py-4 border-t bg-gray-50 flex gap-3 justify-end rounded-b-lg">
               <button
+                type="button"
                 onClick={() => setShowSupplierModal(false)}
                 className="px-4 py-2 text-sm border rounded-lg hover:bg-white"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={addSupplier}
                 disabled={!supplierForm.supplier_name || updating}
                 className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] disabled:opacity-50"

@@ -103,10 +103,10 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         disabled={generating}
-        className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${
+        className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
           generating
             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            : 'bg-blue-600 text-white hover:bg-blue-700'
+            : 'bg-[#647C47] text-white hover:bg-[#4f6238]'
         }`}
       >
         {generating ? (
@@ -149,7 +149,7 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: 
               onClick={() => generateDocuments(type.value)}
               className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-3 ${
                 type.value === 'all'
-                  ? 'text-blue-700 font-medium bg-blue-50 hover:bg-blue-100'
+                  ? 'text-[#4f6238] font-medium bg-[#e8ede3] hover:bg-[#d9e2cf]'
                   : 'text-gray-700'
               }`}
             >

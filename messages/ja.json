@@ -5042,7 +5042,8 @@
       "supplierName": "サプライヤー名",
       "serviceDescription": "サービス内容",
       "serviceDate": "サービス日",
-      "quotedCost": "見積費用"
+      "quotedCost": "見積費用",
+      "status": "ステータス"
     },
     "actions": {
       "view": "表示",
@@ -5054,7 +5055,8 @@
       "recordPayment": "支払いを記録",
       "generateVouchers": "バウチャー生成",
       "syncFromItinerary": "旅程から同期",
-      "addSupplier": "サプライヤー追加"
+      "addSupplier": "サプライヤー追加",
+      "createInvoice": "請求書を作成"
     },
     "filters": {
       "allStatuses": "すべてのステータス",
@@ -5077,7 +5079,10 @@
       "noSuppliersYet": "サプライヤーがまだ追加されていません",
       "noPaymentsYet": "支払いが記録されていません",
       "allSuppliersConfirmed": "すべてのサプライヤーが確認済みです",
-      "syncSuppliersHint": "「旅程から同期」をクリックしてサービスをインポートしてください。サービスを追加した後、旅程を保存してください（編集ページで「変更を保存」または「料金を計算」を使用）。"
+      "syncSuppliersHint": "「旅程から同期」をクリックしてサービスをインポートしてください。サービスを追加した後、旅程を保存してください（編集ページで「変更を保存」または「料金を計算」を使用）。",
+      "invoiceRequiredTitle": "請求書が必要です",
+      "invoiceRequiredDescription": "支払いを記録するには、まずこの予約の請求書を作成する必要があります。支払いは適切な財務記録のために請求書に対して追跡されます。",
+      "paymentsLinkedToInvoice": "支払いは請求書ページから記録されます"
     }
   }
 }

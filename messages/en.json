@@ -763,6 +763,7 @@
     "errorDeleteFailed": "Failed to delete itinerary",
     "errorUpdateFailed": "Failed to update status",
     "detail": {
+      "loadingItinerary": "Loading itinerary...",
       "viewBooking": "View Booking",
       "createBooking": "Create Booking",
       "bookingCreatedSuccessfully": "Booking created successfully",
@@ -4234,7 +4235,8 @@
       "supplierName": "Supplier Name",
       "serviceDescription": "Service Description",
       "serviceDate": "Service Date",
-      "quotedCost": "Quoted Cost"
+      "quotedCost": "Quoted Cost",
+      "status": "Status"
     },
     "actions": {
       "view": "View",
@@ -4246,7 +4248,8 @@
       "recordPayment": "Record Payment",
       "generateVouchers": "Generate Vouchers",
       "syncFromItinerary": "Sync from Itinerary",
-      "addSupplier": "Add Supplier"
+      "addSupplier": "Add Supplier",
+      "createInvoice": "Create Invoice"
     },
     "filters": {
       "allStatuses": "All Statuses",
@@ -4269,7 +4272,10 @@
       "noSuppliersYet": "No suppliers added yet",
       "noPaymentsYet": "No payments recorded yet",
       "allSuppliersConfirmed": "All suppliers confirmed",
-      "syncSuppliersHint": "Click 'Sync from Itinerary' to import services. Make sure you saved the itinerary after adding services (use 'Save Changes' or 'Calculate Pricing' in the edit page)."
+      "syncSuppliersHint": "Click 'Sync from Itinerary' to import services. Make sure you saved the itinerary after adding services (use 'Save Changes' or 'Calculate Pricing' in the edit page).",
+      "invoiceRequiredTitle": "Invoice Required",
+      "invoiceRequiredDescription": "To record payments, you must first create an invoice for this booking. Payments are tracked against invoices for proper financial records.",
+      "paymentsLinkedToInvoice": "Payments are recorded via the invoice page"
     }
   }
 }
