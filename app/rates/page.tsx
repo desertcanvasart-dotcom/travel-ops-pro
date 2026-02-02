@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
@@ -179,6 +180,7 @@ interface RatesData {
 type TabType = 'transportation' | 'guides' | 'entrances' | 'accommodation' | 'meals' | 'cruises' | 'sleepingTrains' | 'trains' | 'airportStaff' | 'hotelStaff' | 'tipping'
 
 export default function RatesPage() {
+  const t = useTranslations('rates')
   const { formatWithConversion } = useCurrency()
   const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
@@ -304,7 +306,7 @@ export default function RatesPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading rates...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -317,10 +319,10 @@ export default function RatesPage() {
           <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <span className="text-red-500 text-xl">⚠️</span>
           </div>
-          <h2 className="text-lg font-bold text-gray-900 mb-2">Oops! Something went wrong</h2>
-          <p className="text-sm text-red-600 mb-3">{error || 'Failed to load rates'}</p>
+          <h2 className="text-lg font-bold text-gray-900 mb-2">{t('errorTitle')}</h2>
+          <p className="text-sm text-red-600 mb-3">{error || t('errorLoadingRates')}</p>
           <Link href="/" className="inline-block px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors">
-            ← Back to Home
+            ← {t('backToHome')}
           </Link>
         </div>
       </div>
@@ -488,34 +490,34 @@ export default function RatesPage() {
                 <span className="text-primary-600 text-sm font-bold">💰</span>
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Rate Management</h1>
-                <p className="text-xs text-gray-600">Autoura • {new Date().toLocaleDateString()}</p>
+                <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
+                <p className="text-xs text-gray-600">{t('autoura')} • {new Date().toLocaleDateString()}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 onClick={exportToCSV}
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors print:hidden font-medium"
               >
-                📊 Export
+                📊 {t('export')}
               </button>
-              <button 
+              <button
                 onClick={printPage}
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors print:hidden font-medium"
               >
-                🖨️ Print
+                🖨️ {t('print')}
               </button>
-              <Link 
-                href="/rates" 
+              <Link
+                href="/rates"
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors print:hidden font-medium"
               >
-                ← Resources
+                ← {t('resources')}
               </Link>
-              <Link 
-                href="/" 
+              <Link
+                href="/"
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors print:hidden font-medium"
               >
-                🏠 Home
+                🏠 {t('home')}
               </Link>
             </div>
           </div>
@@ -530,7 +532,7 @@ export default function RatesPage() {
               <span className="text-gray-400 text-xl">🎯</span>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
-            <p className="text-xs text-gray-600">Total Services</p>
+            <p className="text-xs text-gray-600">{t('totalServices')}</p>
             <p className="text-2xl font-bold text-gray-900">{totalServices}</p>
           </div>
 
@@ -539,7 +541,7 @@ export default function RatesPage() {
               <span className="text-gray-400 text-xl">📂</span>
               <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
             </div>
-            <p className="text-xs text-gray-600">Categories</p>
+            <p className="text-xs text-gray-600">{t('categories')}</p>
             <p className="text-2xl font-bold text-gray-900">11</p>
           </div>
 
@@ -548,7 +550,7 @@ export default function RatesPage() {
               <span className="text-gray-400 text-xl">🏙️</span>
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
-            <p className="text-xs text-gray-600">Cities</p>
+            <p className="text-xs text-gray-600">{t('cities')}</p>
             <p className="text-2xl font-bold text-gray-900">{allCities.length}</p>
           </div>
 
@@ -557,7 +559,7 @@ export default function RatesPage() {
               <span className="text-gray-400 text-xl">👁️</span>
               <div className="w-1.5 h-1.5 rounded-full bg-orange-600" />
             </div>
-            <p className="text-xs text-gray-600">Current View</p>
+            <p className="text-xs text-gray-600">{t('currentView')}</p>
             <p className="text-2xl font-bold text-gray-900">{getCurrentCount()}</p>
           </div>
         </div>
@@ -570,7 +572,7 @@ export default function RatesPage() {
             <div className="flex-1">
               <input
                 type="text"
-                placeholder="Search by any field..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
@@ -583,7 +585,7 @@ export default function RatesPage() {
                   onChange={(e) => setSelectedCity(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                 >
-                  <option value="all">All Cities</option>
+                  <option value="all">{t('allCities')}</option>
                   {allCities.map(city => (
                     <option key={city} value={city}>{city}</option>
                   ))}
@@ -597,7 +599,7 @@ export default function RatesPage() {
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                 >
-                  <option value="all">All Categories</option>
+                  <option value="all">{t('allCategories')}</option>
                   {getUniqueCategoriesFromEntrances().map(cat => (
                     <option key={cat} value={cat}>
                       {cat && cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -615,7 +617,7 @@ export default function RatesPage() {
                     onChange={(e) => setSelectedTier(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                   >
-                    <option value="all">All Tiers</option>
+                    <option value="all">{t('allTiers')}</option>
                     {getUniqueTiersFromAccommodation().map(tier => (
                       <option key={tier} value={tier}>
                         {tier && tier.charAt(0).toUpperCase() + tier.slice(1)}
@@ -629,7 +631,7 @@ export default function RatesPage() {
                     onChange={(e) => setSelectedPropertyType(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                   >
-                    <option value="all">All Types</option>
+                    <option value="all">{t('allTypes')}</option>
                     {getUniquePropertyTypes().map(type => (
                       <option key={type} value={type}>{type}</option>
                     ))}
@@ -644,17 +646,17 @@ export default function RatesPage() {
               <div className="text-xs text-gray-600">
                 {totalItems > 0 ? (
                   <>
-                    Showing <span className="font-bold text-gray-900">{startIndex + 1}-{Math.min(endIndex, totalItems)}</span> of <span className="font-bold text-gray-900">{totalItems}</span> rates
+                    {t('showing')} <span className="font-bold text-gray-900">{startIndex + 1}-{Math.min(endIndex, totalItems)}</span> {t('of')} <span className="font-bold text-gray-900">{totalItems}</span> {t('ratesLabel')}
                     {totalItems !== getTotalUnfilteredForTab() && (
-                      <span className="text-gray-400"> (filtered from {getTotalUnfilteredForTab()})</span>
+                      <span className="text-gray-400"> ({t('filteredFrom')} {getTotalUnfilteredForTab()})</span>
                     )}
                   </>
                 ) : (
-                  <span>No rates found</span>
+                  <span>{t('noRatesFound')}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Per page:</span>
+                <span className="text-xs text-gray-500">{t('perPage')}</span>
                 <select
                   value={itemsPerPage}
                   onChange={(e) => {
@@ -682,7 +684,7 @@ export default function RatesPage() {
                 }}
                 className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors font-medium"
               >
-                🔄 Clear
+                🔄 {t('clear')}
               </button>
 
               {activeTab === 'accommodation' && (
@@ -690,7 +692,7 @@ export default function RatesPage() {
                   onClick={() => setShowSeasonalPricing(!showSeasonalPricing)}
                   className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors font-medium"
                 >
-                  {showSeasonalPricing ? '📅 Base' : '🔄 Seasonal'}
+                  {showSeasonalPricing ? `📅 ${t('base')}` : `🔄 ${t('seasonal')}`}
                 </button>
               )}
             </div>
@@ -711,7 +713,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50'
               }`}
             >
-              🚗 Transport ({rates.transportation.length})
+              🚗 {t('tabs.transport')} ({rates.transportation.length})
             </button>
             <button
               onClick={() => setActiveTab('guides')}
@@ -721,7 +723,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50'
               }`}
             >
-              👨‍🏫 Guides ({rates.guides.length})
+              👨‍🏫 {t('tabs.guides')} ({rates.guides.length})
             </button>
             <button
               onClick={() => setActiveTab('entrances')}
@@ -731,7 +733,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50'
               }`}
             >
-              🎫 Entrances ({rates.entrances.length})
+              🎫 {t('tabs.entrances')} ({rates.entrances.length})
             </button>
             <button
               onClick={() => setActiveTab('accommodation')}
@@ -741,7 +743,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50'
               }`}
             >
-              🏨 Hotels ({rates.accommodation.length})
+              🏨 {t('tabs.hotels')} ({rates.accommodation.length})
             </button>
             <button
               onClick={() => setActiveTab('meals')}
@@ -751,7 +753,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-primary-600 hover:bg-gray-50'
               }`}
             >
-              🍽️ Meals ({rates.meals.length})
+              🍽️ {t('tabs.meals')} ({rates.meals.length})
             </button>
             
             {/* Divider */}
@@ -766,7 +768,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
               }`}
             >
-              🚢 Cruises ({rates.cruises.length})
+              🚢 {t('tabs.cruises')} ({rates.cruises.length})
             </button>
             <button
               onClick={() => setActiveTab('sleepingTrains')}
@@ -776,7 +778,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-purple-600 hover:bg-gray-50'
               }`}
             >
-              🛏️ Sleep Train ({rates.sleepingTrains.length})
+              🛏️ {t('tabs.sleepTrain')} ({rates.sleepingTrains.length})
             </button>
             <button
               onClick={() => setActiveTab('trains')}
@@ -786,7 +788,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-orange-600 hover:bg-gray-50'
               }`}
             >
-              🚂 Trains ({rates.trains.length})
+              🚂 {t('tabs.trains')} ({rates.trains.length})
             </button>
             <button
               onClick={() => setActiveTab('airportStaff')}
@@ -796,7 +798,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-cyan-600 hover:bg-gray-50'
               }`}
             >
-              ✈️ Airport ({rates.airportStaff.length})
+              ✈️ {t('tabs.airport')} ({rates.airportStaff.length})
             </button>
             <button
               onClick={() => setActiveTab('hotelStaff')}
@@ -806,7 +808,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-pink-600 hover:bg-gray-50'
               }`}
             >
-              🛎️ Hotel Svc ({rates.hotelStaff.length})
+              🛎️ {t('tabs.hotelSvc')} ({rates.hotelStaff.length})
             </button>
             <button
               onClick={() => setActiveTab('tipping')}
@@ -816,7 +818,7 @@ export default function RatesPage() {
                   : 'text-gray-600 hover:text-green-600 hover:bg-gray-50'
               }`}
             >
-              💵 Tips ({rates.tipping.length})
+              💵 {t('tabs.tips')} ({rates.tipping.length})
             </button>
           </div>
         </div>
@@ -832,13 +834,13 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Service</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Vehicle</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Capacity</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Supplier</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.service')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.vehicle')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.capacity')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.supplier')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -866,7 +868,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🚗</span>
-                        <p className="text-sm font-medium mt-2">No transportation rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.transportation')}</p>
                       </td>
                     </tr>
                   )}
@@ -879,12 +881,12 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Language</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Duration</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.language')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.type')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.duration')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -910,7 +912,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">👨‍🏫</span>
-                        <p className="text-sm font-medium mt-2">No guide rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.guides')}</p>
                       </td>
                     </tr>
                   )}
@@ -923,11 +925,11 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Attraction</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Category</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.attraction')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.category')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -958,7 +960,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🎫</span>
-                        <p className="text-sm font-medium mt-2">No entrance fees found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.entrances')}</p>
                       </td>
                     </tr>
                   )}
@@ -971,12 +973,12 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Property</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Tier</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Stars</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.property')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.tier')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.stars')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1010,7 +1012,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🏨</span>
-                        <p className="text-sm font-medium mt-2">No accommodation found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.accommodation')}</p>
                       </td>
                     </tr>
                   )}
@@ -1023,11 +1025,11 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Restaurant</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Meal Type</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.restaurant')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.mealType')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1048,7 +1050,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🍽️</span>
-                        <p className="text-sm font-medium mt-2">No meal rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.meals')}</p>
                       </td>
                     </tr>
                   )}
@@ -1065,14 +1067,14 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-blue-50 border-b border-blue-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Ship</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Category</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">Route</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Nights</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">Cabin</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Single</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Double</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">Triple</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{t('table.ship')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.category')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{t('table.route')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.nights')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.cabin')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.single')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.double')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.triple')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1125,7 +1127,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🚢</span>
-                        <p className="text-sm font-medium mt-2">No cruise rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.cruises')}</p>
                       </td>
                     </tr>
                   )}
@@ -1138,13 +1140,13 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-purple-50 border-b border-purple-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-purple-800">Route</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-purple-800">Cabin</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-purple-800">Departure</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-purple-800">Arrival</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-purple-800">One-Way</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-purple-800">Round-Trip</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-purple-800">Includes</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-purple-800">{t('table.route')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-purple-800">{t('table.cabin')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-purple-800">{t('table.departure')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-purple-800">{t('table.arrival')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-purple-800">{t('table.oneWay')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-purple-800">{t('table.roundTrip')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-purple-800">{t('table.includes')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1184,7 +1186,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🛏️</span>
-                        <p className="text-sm font-medium mt-2">No sleeping train rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.sleepingTrains')}</p>
                       </td>
                     </tr>
                   )}
@@ -1197,11 +1199,11 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-orange-50 border-b border-orange-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-800">Route</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-orange-800">Class</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-orange-800">Duration</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-800">Departures</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-orange-800">Rate/Person</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-800">{t('table.route')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-orange-800">{t('table.class')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-orange-800">{t('table.duration')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-orange-800">{t('table.departures')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-orange-800">{t('table.ratePerson')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1235,7 +1237,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🚂</span>
-                        <p className="text-sm font-medium mt-2">No train rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.trains')}</p>
                       </td>
                     </tr>
                   )}
@@ -1248,11 +1250,11 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-cyan-50 border-b border-cyan-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-cyan-800">Airport</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-cyan-800">Service</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-cyan-800">Direction</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-cyan-800">Description</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-cyan-800">Rate</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-cyan-800">{t('table.airport')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-cyan-800">{t('table.service')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-cyan-800">{t('table.direction')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-cyan-800">{t('table.description')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-cyan-800">{t('table.rate')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1294,7 +1296,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">✈️</span>
-                        <p className="text-sm font-medium mt-2">No airport staff rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.airportStaff')}</p>
                       </td>
                     </tr>
                   )}
@@ -1307,11 +1309,11 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-pink-50 border-b border-pink-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-pink-800">Service Code</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-pink-800">Service Type</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-pink-800">Hotel Category</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-pink-800">Description</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-pink-800">Rate/Stay</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-pink-800">{t('table.serviceCode')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-pink-800">{t('table.serviceType')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-pink-800">{t('table.hotelCategory')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-pink-800">{t('table.description')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-pink-800">{t('table.rateStay')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1351,7 +1353,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">🛎️</span>
-                        <p className="text-sm font-medium mt-2">No hotel staff rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.hotelStaff')}</p>
                       </td>
                     </tr>
                   )}
@@ -1364,11 +1366,11 @@ export default function RatesPage() {
               <table className="w-full">
                 <thead className="bg-green-50 border-b border-green-200">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">Role</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">Context</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">Rate Unit</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">Description</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-green-800">Amount</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">{t('table.role')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{t('table.context')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{t('table.rateUnit')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">{t('table.description')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-green-800">{t('table.amount')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1409,7 +1411,7 @@ export default function RatesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
                         <span className="text-3xl">💵</span>
-                        <p className="text-sm font-medium mt-2">No tipping rates found</p>
+                        <p className="text-sm font-medium mt-2">{t('empty.tipping')}</p>
                       </td>
                     </tr>
                   )}
@@ -1424,16 +1426,16 @@ export default function RatesPage() {
         {totalPages > 1 && (
           <div className="bg-white rounded-lg shadow-md border border-gray-200 p-3 mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="text-xs text-gray-600">
-              Page <span className="font-bold text-gray-900">{currentPage}</span> of <span className="font-bold text-gray-900">{totalPages}</span>
+              {t('page')} <span className="font-bold text-gray-900">{currentPage}</span> {t('of')} <span className="font-bold text-gray-900">{totalPages}</span>
             </div>
-            
+
             <div className="flex items-center gap-1">
               {/* First & Previous */}
               <button
                 onClick={() => goToPage(1)}
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="First page"
+                title={t('firstPage')}
               >
                 ««
               </button>
@@ -1441,9 +1443,9 @@ export default function RatesPage() {
                 onClick={() => goToPage(currentPage - 1)}
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Previous page"
+                title={t('previousPage')}
               >
-                ‹ Prev
+                ‹ {t('prev')}
               </button>
               
               {/* Page Numbers */}
@@ -1472,23 +1474,23 @@ export default function RatesPage() {
                 onClick={() => goToPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Next page"
+                title={t('nextPage')}
               >
-                Next ›
+                {t('next')} ›
               </button>
               <button
                 onClick={() => goToPage(totalPages)}
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Last page"
+                title={t('lastPage')}
               >
                 »»
               </button>
             </div>
-            
+
             {/* Quick Jump */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Go to:</span>
+              <span className="text-xs text-gray-500">{t('goTo')}</span>
               <input
                 type="number"
                 min={1}
@@ -1508,7 +1510,7 @@ export default function RatesPage() {
 
         {/* Footer */}
         <div className="mt-6 text-center text-xs text-gray-500 print:hidden">
-          <p>© 2024 Autoura Operations System</p>
+          <p>{t('footer')}</p>
         </div>
       </main>
     </div>
