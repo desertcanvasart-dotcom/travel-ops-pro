@@ -1103,7 +1103,7 @@ export default function SuppliersContent() {
                   {selectedSupplier.parent_supplier_id && (
                     <p className="text-xs text-purple-600 flex items-center gap-1 mt-0.5">
                       <Link2 className="w-3 h-3" />
-                      {t('partOf', { name: getParentName(selectedSupplier.parent_supplier_id) })}
+                      {t('partOf', { name: getParentName(selectedSupplier.parent_supplier_id) ?? '' })}
                     </p>
                   )}
                 </div>
