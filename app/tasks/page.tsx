@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { 
   Search,
@@ -120,6 +121,7 @@ const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 }
 const STATUS_ORDER = { todo: 0, in_progress: 1, done: 2 }
 
 export default function TasksPage() {
+  const t = useTranslations('tasks')
   const [tasks, setTasks] = useState<Task[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -346,7 +348,7 @@ export default function TasksPage() {
     const doneTasks = tasks.filter(t => t.status === 'done' && !t.archived)
     if (doneTasks.length === 0) return
     
-    if (!confirm(`Archive ${doneTasks.length} completed task${doneTasks.length > 1 ? 's' : ''}?`)) return
+    if (!confirm(t('confirmBulkArchive', { count: doneTasks.length }))) return
 
     setArchiving('bulk')
     try {
@@ -384,7 +386,7 @@ export default function TasksPage() {
   }
 
   const handleDelete = async (task: Task) => {
-    if (!confirm(`Delete task "${task.title}"?`)) return
+    if (!confirm(t('confirmDelete', { title: task.title }))) return
 
     try {
       const response = await fetch(`/api/tasks/${task.id}`, {
@@ -554,8 +556,8 @@ export default function TasksPage() {
             ✅
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Tasks</h1>
-            <p className="text-sm text-gray-500">Manage operational tasks and assignments</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
 
@@ -565,21 +567,21 @@ export default function TasksPage() {
             <button
               onClick={() => setViewMode('kanban')}
               className={`p-1.5 rounded ${viewMode === 'kanban' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              title="Kanban View"
+              title={t('kanbanView')}
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              title="Table View"
+              title={t('tableView')}
             >
               <TableIcon className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
               className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              title="List View"
+              title={t('listView')}
             >
               <List className="h-4 w-4" />
             </button>
@@ -590,7 +592,7 @@ export default function TasksPage() {
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Add Task
+            {t('addTask')}
           </button>
         </div>
       </div>
@@ -599,55 +601,55 @@ export default function TasksPage() {
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           <div className="bg-white border border-gray-200 rounded-lg p-3">
-            <p className="text-xs text-gray-500 mb-1">Total</p>
+            <p className="text-xs text-gray-500 mb-1">{t('total')}</p>
             <p className="text-xl font-semibold text-gray-900">{summary.total}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <Circle className="h-3 w-3 text-gray-400" />
-              <p className="text-xs text-gray-500">To Do</p>
+              <p className="text-xs text-gray-500">{t('toDo')}</p>
             </div>
             <p className="text-xl font-semibold text-gray-600">{summary.todo}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <Play className="h-3 w-3 text-blue-500" />
-              <p className="text-xs text-gray-500">In Progress</p>
+              <p className="text-xs text-gray-500">{t('inProgress')}</p>
             </div>
             <p className="text-xl font-semibold text-blue-600">{summary.in_progress}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <CheckCircle className="h-3 w-3 text-green-500" />
-              <p className="text-xs text-gray-500">Done</p>
+              <p className="text-xs text-gray-500">{t('done')}</p>
             </div>
             <p className="text-xl font-semibold text-green-600">{summary.done}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <AlertCircle className="h-3 w-3 text-red-500" />
-              <p className="text-xs text-gray-500">Overdue</p>
+              <p className="text-xs text-gray-500">{t('overdue')}</p>
             </div>
             <p className="text-xl font-semibold text-red-600">{summary.overdue}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <Clock className="h-3 w-3 text-amber-500" />
-              <p className="text-xs text-gray-500">Due Today</p>
+              <p className="text-xs text-gray-500">{t('dueToday')}</p>
             </div>
             <p className="text-xl font-semibold text-amber-600">{summary.due_today}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <AlertTriangle className="h-3 w-3 text-orange-500" />
-              <p className="text-xs text-gray-500">High Priority</p>
+              <p className="text-xs text-gray-500">{t('highPriority')}</p>
             </div>
             <p className="text-xl font-semibold text-orange-600">{summary.high_priority}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-1.5 mb-1">
               <Archive className="h-3 w-3 text-gray-400" />
-              <p className="text-xs text-gray-500">Archived</p>
+              <p className="text-xs text-gray-500">{t('archived')}</p>
             </div>
             <p className="text-xl font-semibold text-gray-400">{summary.archived || 0}</p>
           </div>
@@ -660,7 +662,7 @@ export default function TasksPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search tasks..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
@@ -672,32 +674,32 @@ export default function TasksPage() {
           <button
             onClick={() => setDueDateFilter(dueDateFilter === 'overdue' ? '' : 'overdue')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              dueDateFilter === 'overdue' 
-                ? 'bg-red-100 text-red-700 border border-red-200' 
+              dueDateFilter === 'overdue'
+                ? 'bg-red-100 text-red-700 border border-red-200'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            Overdue
+            {t('overdue')}
           </button>
           <button
             onClick={() => setDueDateFilter(dueDateFilter === 'today' ? '' : 'today')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              dueDateFilter === 'today' 
-                ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+              dueDateFilter === 'today'
+                ? 'bg-amber-100 text-amber-700 border border-amber-200'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            Due Today
+            {t('dueToday')}
           </button>
           <button
             onClick={() => setDueDateFilter(dueDateFilter === 'week' ? '' : 'week')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              dueDateFilter === 'week' 
-                ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+              dueDateFilter === 'week'
+                ? 'bg-blue-100 text-blue-700 border border-blue-200'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            This Week
+            {t('thisWeek')}
           </button>
 
           <div className="w-px h-5 bg-gray-200 mx-1" />
@@ -712,7 +714,7 @@ export default function TasksPage() {
             }`}
           >
             {showArchived ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-            {showArchived ? 'Showing Archived' : 'Show Archived'}
+            {showArchived ? t('showingArchived') : t('showArchived')}
           </button>
 
           {/* Bulk Archive Done */}
@@ -727,7 +729,7 @@ export default function TasksPage() {
               ) : (
                 <Archive className="h-3 w-3" />
               )}
-              Archive Done ({archivableDoneCount})
+              {t('archiveDone')} ({archivableDoneCount})
             </button>
           )}
         </div>
@@ -741,13 +743,13 @@ export default function TasksPage() {
           }`}
         >
           <Filter className="h-4 w-4" />
-          Filters
+          {t('filters')}
           {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-[#647C47]"></span>}
         </button>
 
         {hasActiveFilters && (
           <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-700">
-            Clear
+            {t('clear')}
           </button>
         )}
       </div>
@@ -757,56 +759,56 @@ export default function TasksPage() {
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Status</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('status')}</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
               >
-                <option value="">All Statuses</option>
+                <option value="">{t('allStatuses')}</option>
                 {STATUSES.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
+                  <option key={s.value} value={s.value}>{t(`status${s.value.charAt(0).toUpperCase() + s.value.slice(1).replace('_', '')}`)}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Priority</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('priority')}</label>
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
               >
-                <option value="">All Priorities</option>
+                <option value="">{t('allPriorities')}</option>
                 {PRIORITIES.map(p => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
+                  <option key={p.value} value={p.value}>{t(`priority${p.value.charAt(0).toUpperCase() + p.value.slice(1)}`)}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Assigned To</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('assignedTo')}</label>
               <select
                 value={assigneeFilter}
                 onChange={(e) => setAssigneeFilter(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
               >
-                <option value="">All Members</option>
+                <option value="">{t('allMembers')}</option>
                 {teamMembers.map(m => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Due Date</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('dueDate')}</label>
               <select
                 value={dueDateFilter}
                 onChange={(e) => setDueDateFilter(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
               >
-                <option value="">All Dates</option>
-                <option value="overdue">Overdue</option>
-                <option value="today">Due Today</option>
-                <option value="week">This Week</option>
-                <option value="upcoming">Upcoming</option>
+                <option value="">{t('allDates')}</option>
+                <option value="overdue">{t('overdue')}</option>
+                <option value="today">{t('dueToday')}</option>
+                <option value="week">{t('thisWeek')}</option>
+                <option value="upcoming">{t('upcoming')}</option>
               </select>
             </div>
           </div>
@@ -825,7 +827,7 @@ export default function TasksPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <StatusIcon className={`h-4 w-4 ${status.color}`} />
-                    <h3 className="text-sm font-semibold text-gray-900">{status.label}</h3>
+                    <h3 className="text-sm font-semibold text-gray-900">{t(`status${status.value.charAt(0).toUpperCase() + status.value.slice(1)}`)}</h3>
                     <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
                       {statusTasks.length}
                     </span>
@@ -835,7 +837,7 @@ export default function TasksPage() {
                 <div className="space-y-2 max-h-[calc(100vh-420px)] overflow-y-auto">
                   {statusTasks.length === 0 ? (
                     <div className="p-4 bg-white border border-dashed border-gray-200 rounded-lg text-center">
-                      <p className="text-xs text-gray-400">No tasks</p>
+                      <p className="text-xs text-gray-400">{t('noTasks')}</p>
                     </div>
                   ) : (
                     statusTasks.map(task => {
@@ -858,7 +860,7 @@ export default function TasksPage() {
                                 onClick={() => handleArchive(task)}
                                 disabled={archiving === task.id}
                                 className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                                title="Archive"
+                                title={t('archive')}
                               >
                                 {archiving === task.id ? (
                                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -887,7 +889,7 @@ export default function TasksPage() {
 
                           <div className="flex items-center gap-2 flex-wrap mb-2">
                             <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
-                              {priorityConfig.label}
+                              {t(`priority${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
                             </span>
                             
                             {task.due_date && (
@@ -920,7 +922,7 @@ export default function TasksPage() {
                                 className="flex items-center gap-1 text-xs text-[#647C47] hover:underline"
                               >
                                 <LinkIcon className="h-3 w-3" />
-                                {linkedConfig.label}
+                                {t(`linked${task.linked_type.charAt(0).toUpperCase() + task.linked_type.slice(1)}`)}
                               </Link>
                             )}
                           </div>
@@ -934,7 +936,7 @@ export default function TasksPage() {
                                   className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                 >
                                   <Play className="h-3 w-3" />
-                                  Start
+                                  {t('start')}
                                 </button>
                               )}
                               <button
@@ -942,7 +944,7 @@ export default function TasksPage() {
                                 className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
                               >
                                 <CheckCircle className="h-3 w-3" />
-                                Complete
+                                {t('complete')}
                               </button>
                             </div>
                           )}
@@ -954,7 +956,7 @@ export default function TasksPage() {
                                 className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors"
                               >
                                 <Circle className="h-3 w-3" />
-                                Reopen
+                                {t('reopen')}
                               </button>
                             </div>
                           )}
@@ -981,7 +983,7 @@ export default function TasksPage() {
                     onClick={() => handleSort('title')}
                   >
                     <div className="flex items-center gap-1">
-                      Title
+                      {t('titleLabel')}
                       <SortIcon field="title" />
                     </div>
                   </th>
@@ -990,7 +992,7 @@ export default function TasksPage() {
                     onClick={() => handleSort('status')}
                   >
                     <div className="flex items-center gap-1">
-                      Status
+                      {t('status')}
                       <SortIcon field="status" />
                     </div>
                   </th>
@@ -999,7 +1001,7 @@ export default function TasksPage() {
                     onClick={() => handleSort('priority')}
                   >
                     <div className="flex items-center gap-1">
-                      Priority
+                      {t('priority')}
                       <SortIcon field="priority" />
                     </div>
                   </th>
@@ -1008,7 +1010,7 @@ export default function TasksPage() {
                     onClick={() => handleSort('due_date')}
                   >
                     <div className="flex items-center gap-1">
-                      Due Date
+                      {t('dueDate')}
                       <SortIcon field="due_date" />
                     </div>
                   </th>
@@ -1017,15 +1019,15 @@ export default function TasksPage() {
                     onClick={() => handleSort('assigned_to')}
                   >
                     <div className="flex items-center gap-1">
-                      Assigned To
+                      {t('assignedTo')}
                       <SortIcon field="assigned_to" />
                     </div>
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Linked To
+                    {t('linkedTo')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                    {t('actions')}
                   </th>
                 </tr>
               </thead>
@@ -1033,7 +1035,7 @@ export default function TasksPage() {
                 {paginatedTasks.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
-                      No tasks found
+                      {t('noTasksFound')}
                     </td>
                   </tr>
                 ) : (
@@ -1061,12 +1063,12 @@ export default function TasksPage() {
                         <td className="px-4 py-3">
                           <div className={`inline-flex items-center gap-1.5 text-xs font-medium ${statusConfig.color}`}>
                             <StatusIcon className="h-3 w-3" />
-                            {statusConfig.label}
+                            {t(`status${task.status.charAt(0).toUpperCase() + task.status.slice(1)}`)}
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
-                            {priorityConfig.label}
+                            {t(`priority${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -1075,7 +1077,7 @@ export default function TasksPage() {
                               {new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             </span>
                           ) : (
-                            <span className="text-xs text-gray-400">No date</span>
+                            <span className="text-xs text-gray-400">{t('noDate')}</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -1087,7 +1089,7 @@ export default function TasksPage() {
                               <span className="text-xs text-gray-600">{task.assigned_member.name}</span>
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400">Unassigned</span>
+                            <span className="text-xs text-gray-400">{t('unassigned')}</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -1097,7 +1099,7 @@ export default function TasksPage() {
                               className="flex items-center gap-1 text-xs text-[#647C47] hover:underline"
                             >
                               <LinkIcon className="h-3 w-3" />
-                              {linkedConfig.label}
+                              {t(`linked${task.linked_type.charAt(0).toUpperCase() + task.linked_type.slice(1)}`)}
                             </Link>
                           ) : (
                             <span className="text-xs text-gray-400">—</span>
@@ -1109,7 +1111,7 @@ export default function TasksPage() {
                               <button
                                 onClick={() => handleStatusChange(task, 'done')}
                                 className="p-1.5 text-gray-400 hover:text-green-600 rounded hover:bg-green-50"
-                                title="Mark Complete"
+                                title={t('markComplete')}
                               >
                                 <CheckCircle className="h-4 w-4" />
                               </button>
@@ -1118,7 +1120,7 @@ export default function TasksPage() {
                               onClick={() => handleArchive(task)}
                               disabled={archiving === task.id}
                               className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
-                              title={task.archived ? 'Unarchive' : 'Archive'}
+                              title={task.archived ? t('unarchive') : t('archive')}
                             >
                               {archiving === task.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1131,14 +1133,14 @@ export default function TasksPage() {
                             <button
                               onClick={() => handleEdit(task)}
                               className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
-                              title="Edit"
+                              title={t('edit')}
                             >
                               <Edit2 className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(task)}
                               className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
-                              title="Delete"
+                              title={t('delete')}
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -1155,7 +1157,7 @@ export default function TasksPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Show</span>
+              <span className="text-sm text-gray-600">{t('show')}</span>
               <select
                 value={itemsPerPage}
                 onChange={(e) => setItemsPerPage(Number(e.target.value))}
@@ -1166,7 +1168,7 @@ export default function TasksPage() {
                 <option value={50}>50</option>
                 <option value={100}>100</option>
               </select>
-              <span className="text-sm text-gray-600">per page</span>
+              <span className="text-sm text-gray-600">{t('perPage')}</span>
             </div>
 
             <div className="flex items-center gap-4">
@@ -1261,7 +1263,7 @@ export default function TasksPage() {
                       {/* Meta Info */}
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
-                          {priorityConfig.label}
+                          {t(`priority${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
                         </span>
 
                         {task.due_date && (
@@ -1284,7 +1286,7 @@ export default function TasksPage() {
                             className="flex items-center gap-1 text-xs text-[#647C47] hover:underline"
                           >
                             <LinkIcon className="h-3 w-3" />
-                            {linkedConfig.label}
+                            {t(`linked${task.linked_type.charAt(0).toUpperCase() + task.linked_type.slice(1)}`)}
                           </Link>
                         )}
                       </div>
@@ -1295,7 +1297,7 @@ export default function TasksPage() {
                           onClick={() => handleArchive(task)}
                           disabled={archiving === task.id}
                           className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
-                          title={task.archived ? 'Unarchive' : 'Archive'}
+                          title={task.archived ? t('unarchive') : t('archive')}
                         >
                           {archiving === task.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1326,7 +1328,7 @@ export default function TasksPage() {
               {/* Pagination for List View */}
               <div className="flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Show</span>
+                  <span className="text-sm text-gray-600">{t('show')}</span>
                   <select
                     value={itemsPerPage}
                     onChange={(e) => setItemsPerPage(Number(e.target.value))}
@@ -1337,7 +1339,7 @@ export default function TasksPage() {
                     <option value={50}>50</option>
                     <option value={100}>100</option>
                   </select>
-                  <span className="text-sm text-gray-600">per page</span>
+                  <span className="text-sm text-gray-600">{t('perPage')}</span>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -1390,7 +1392,7 @@ export default function TasksPage() {
         <div className="bg-gray-100 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
             <Archive className="h-4 w-4 text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-700">Archived</h3>
+            <h3 className="text-sm font-semibold text-gray-700">{t('archived')}</h3>
             <span className="px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
               {archivedTasks.length}
             </span>
@@ -1411,7 +1413,7 @@ export default function TasksPage() {
                         onClick={() => handleArchive(task)}
                         disabled={archiving === task.id}
                         className="p-1 text-gray-400 hover:text-[#647C47] rounded"
-                        title="Unarchive"
+                        title={t('unarchive')}
                       >
                         {archiving === task.id ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -1429,7 +1431,7 @@ export default function TasksPage() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <span className={`px-1.5 py-0.5 rounded ${priorityConfig.color}`}>
-                      {priorityConfig.label}
+                      {t(`priority${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
                     </span>
                     {task.archived_at && (
                       <span>Archived {new Date(task.archived_at).toLocaleDateString()}</span>
@@ -1448,7 +1450,7 @@ export default function TasksPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                {editingTask ? 'Edit Task' : 'Add Task'}
+                {editingTask ? t('editTask') : t('addTask')}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
@@ -1461,32 +1463,32 @@ export default function TasksPage() {
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Title <span className="text-red-500">*</span>
+                  {t('titleLabel')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                  placeholder="Task title"
+                  placeholder={t('taskTitlePlaceholder')}
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('description')}</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   rows={2}
-                  placeholder="Task description..."
+                  placeholder={t('taskDescriptionPlaceholder')}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('dueDate')}</label>
                   <input
                     type="date"
                     value={formData.due_date}
@@ -1496,7 +1498,7 @@ export default function TasksPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('priority')}</label>
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
@@ -1511,15 +1513,15 @@ export default function TasksPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Assign To
-                  <span className="text-xs text-gray-400 font-normal ml-2">(will receive email notification)</span>
+                  {t('assignTo')}
+                  <span className="text-xs text-gray-400 font-normal ml-2">{t('emailNotificationHint')}</span>
                 </label>
                 <select
                   value={formData.assigned_to}
                   onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                 >
-                  <option value="">Unassigned</option>
+                  <option value="">{t('unassigned')}</option>
                   {teamMembers.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.name} {m.email ? `(${m.email})` : ''}
@@ -1530,7 +1532,7 @@ export default function TasksPage() {
 
               {/* Link To Section */}
               <div className="space-y-3">
-                <label className="block text-sm font-medium text-gray-700">Link To</label>
+                <label className="block text-sm font-medium text-gray-700">{t('linkTo')}</label>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1539,9 +1541,9 @@ export default function TasksPage() {
                       onChange={(e) => setFormData({ ...formData, linked_type: e.target.value, linked_id: '' })}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                     >
-                      <option value="">None</option>
-                      {LINKED_TYPES.map(t => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
+                      <option value="">{t('none')}</option>
+                      {LINKED_TYPES.map(lt => (
+                        <option key={lt.value} value={lt.value}>{t(`linked${lt.value.charAt(0).toUpperCase() + lt.value.slice(1)}`)}</option>
                       ))}
                     </select>
                   </div>
@@ -1553,7 +1555,7 @@ export default function TasksPage() {
                         onChange={(e) => setFormData({ ...formData, linked_id: e.target.value })}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                       >
-                        <option value="">Select client...</option>
+                        <option value="">{t('selectClient')}</option>
                         {clients.map(c => (
                           <option key={c.id} value={c.id}>
                             {c.name} {c.company ? `(${c.company})` : ''}
@@ -1570,7 +1572,7 @@ export default function TasksPage() {
                         onChange={(e) => setFormData({ ...formData, linked_id: e.target.value })}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                       >
-                        <option value="">Select itinerary...</option>
+                        <option value="">{t('selectItinerary')}</option>
                         {itineraries.map(i => (
                           <option key={i.id} value={i.id}>
                             {i.itinerary_code} - {i.client_name}
@@ -1610,13 +1612,13 @@ export default function TasksPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('notes')}</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   rows={2}
-                  placeholder="Additional notes..."
+                  placeholder={t('notesPlaceholder')}
                 />
               </div>
 
@@ -1626,7 +1628,7 @@ export default function TasksPage() {
                   onClick={() => setShowModal(false)}
                   className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1634,7 +1636,7 @@ export default function TasksPage() {
                   className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {saving ? 'Saving...' : editingTask ? 'Update' : 'Add Task'}
+                  {saving ? t('saving') : editingTask ? t('update') : t('addTask')}
                 </button>
               </div>
             </form>

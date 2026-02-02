@@ -825,7 +825,7 @@ export default function SuppliersContent() {
                             <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
                               {supplier.name}
                               {supplier.is_property && (
-                                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] font-medium">Property</span>
+                                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] font-medium">{t('property')}</span>
                               )}
                             </h3>
                             <p className="text-xs text-gray-500">
@@ -888,7 +888,7 @@ export default function SuppliersContent() {
                       )}
 
                       <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[supplier.status]}`}>{supplier.status}</span>
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[supplier.status]}`}>{t(`status${supplier.status.charAt(0).toUpperCase() + supplier.status.slice(1)}`)}</span>
                         {supplier.default_commission_rate != null && (
                           <span className="flex items-center gap-1 text-xs text-gray-500"><Percent className="w-3 h-3" /> {supplier.default_commission_rate}%</span>
                         )}
@@ -905,13 +905,13 @@ export default function SuppliersContent() {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('name')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Name <SortIcon field="name" /></button></th>
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('type')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Type <SortIcon field="type" /></button></th>
-                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">Parent</span></th>
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('city')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">City <SortIcon field="city" /></button></th>
-                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">Contact</span></th>
-                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('status')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">Status <SortIcon field="status" /></button></th>
-                      <th className="text-right px-4 py-3"><span className="text-xs font-semibold text-gray-600">Actions</span></th>
+                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('name')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('name')} <SortIcon field="name" /></button></th>
+                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('type')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('type')} <SortIcon field="type" /></button></th>
+                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">{t('parent')}</span></th>
+                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('city')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('city')} <SortIcon field="city" /></button></th>
+                      <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">{t('contact')}</span></th>
+                      <th className="text-left px-4 py-3"><button onClick={() => handleSort('status')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('status')} <SortIcon field="status" /></button></th>
+                      <th className="text-right px-4 py-3"><span className="text-xs font-semibold text-gray-600">{t('actions')}</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -928,7 +928,7 @@ export default function SuppliersContent() {
                                 <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
                                   {supplier.name}
                                   {supplier.is_property && (
-                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px]">Property</span>
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px]">{t('property')}</span>
                                   )}
                                 </span>
                               </div>
@@ -947,7 +947,7 @@ export default function SuppliersContent() {
                           </td>
                           <td className="px-4 py-3"><span className="text-sm text-gray-600">{supplier.city || '—'}</span></td>
                           <td className="px-4 py-3">{supplier.contact_email ? <a href={`mailto:${supplier.contact_email}`} onClick={(e) => e.stopPropagation()} className="text-sm text-primary-600 hover:underline">{supplier.contact_email}</a> : <span className="text-sm text-gray-400">—</span>}</td>
-                          <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[supplier.status]}`}>{supplier.status}</span></td>
+                          <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[supplier.status]}`}>{t(`status${supplier.status.charAt(0).toUpperCase() + supplier.status.slice(1)}`)}</span></td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
                               <button onClick={(e) => { e.stopPropagation(); handleEdit(supplier) }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Edit className="w-4 h-4" /></button>
@@ -984,7 +984,7 @@ export default function SuppliersContent() {
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">{supplier.city && <><MapPin className="w-3.5 h-3.5 text-gray-400" />{supplier.city}</>}</div>
                         <div>{supplier.contact_email && <a href={`mailto:${supplier.contact_email}`} onClick={(e) => e.stopPropagation()} className="text-sm text-gray-600 hover:text-primary-600 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-gray-400" /><span className="truncate">{supplier.contact_email}</span></a>}</div>
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">{supplier.default_commission_rate != null && <><Percent className="w-3.5 h-3.5 text-gray-400" />{supplier.default_commission_rate}%</>}</div>
-                        <div><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[supplier.status]}`}>{supplier.status}</span></div>
+                        <div><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[supplier.status]}`}>{t(`status${supplier.status.charAt(0).toUpperCase() + supplier.status.slice(1)}`)}</span></div>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                         <button onClick={(e) => { e.stopPropagation(); handleEdit(supplier) }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Edit className="w-4 h-4" /></button>
@@ -999,7 +999,7 @@ export default function SuppliersContent() {
             {/* Pagination */}
             {totalPages > 0 && (
               <div className="mt-6 flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
-                <p className="text-sm text-gray-600">Showing <span className="font-medium">{startIndex + 1}</span>–<span className="font-medium">{Math.min(startIndex + itemsPerPage, filteredSuppliers.length)}</span> of <span className="font-medium">{filteredSuppliers.length}</span></p>
+                <p className="text-sm text-gray-600">{t('showing')} <span className="font-medium">{startIndex + 1}</span>–<span className="font-medium">{Math.min(startIndex + itemsPerPage, filteredSuppliers.length)}</span> {t('of')} <span className="font-medium">{filteredSuppliers.length}</span></p>
                 <div className="flex items-center gap-4">
                   {totalPages > 1 && (
                     <div className="flex items-center gap-1">
@@ -1013,9 +1013,9 @@ export default function SuppliersContent() {
                     </div>
                   )}
                   <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="h-8 w-24 px-2 text-sm border border-gray-200 rounded-lg outline-none bg-white">
-                    <option value={12}>12 / page</option>
-                    <option value={24}>24 / page</option>
-                    <option value={48}>48 / page</option>
+                    <option value={12}>12 {t('perPage')}</option>
+                    <option value={24}>24 {t('perPage')}</option>
+                    <option value={48}>48 {t('perPage')}</option>
                   </select>
                 </div>
               </div>
@@ -1096,14 +1096,14 @@ export default function SuppliersContent() {
                   <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                     {selectedSupplier.name}
                     {selectedSupplier.is_property && (
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs font-medium">Property</span>
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs font-medium">{t('property')}</span>
                     )}
                   </h2>
                   <p className="text-sm text-gray-500">{getTypeConfig(selectedSupplier.type).singular}</p>
                   {selectedSupplier.parent_supplier_id && (
                     <p className="text-xs text-purple-600 flex items-center gap-1 mt-0.5">
                       <Link2 className="w-3 h-3" />
-                      Part of {getParentName(selectedSupplier.parent_supplier_id)}
+                      {t('partOf', { name: getParentName(selectedSupplier.parent_supplier_id) })}
                     </p>
                   )}
                 </div>
@@ -1138,33 +1138,33 @@ export default function SuppliersContent() {
                   <div className="space-y-4">
                     <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><Users className="w-4 h-4 text-gray-400" /> {t('contactInformation')}</h3>
                     <div className="space-y-3">
-                      {selectedSupplier.contact_name && <div><p className="text-xs text-gray-500">Contact Person</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.contact_name}</p></div>}
-                      {selectedSupplier.contact_email && <div><p className="text-xs text-gray-500">Email</p><a href={`mailto:${selectedSupplier.contact_email}`} className="text-sm font-medium text-primary-600 hover:underline">{selectedSupplier.contact_email}</a></div>}
-                      {selectedSupplier.contact_phone && <div><p className="text-xs text-gray-500">Phone</p><a href={`tel:${selectedSupplier.contact_phone}`} className="text-sm font-medium text-gray-900">{selectedSupplier.contact_phone}</a></div>}
-                      {selectedSupplier.phone2 && <div><p className="text-xs text-gray-500">Phone 2</p><a href={`tel:${selectedSupplier.phone2}`} className="text-sm font-medium text-gray-900">{selectedSupplier.phone2}</a></div>}
-                      {selectedSupplier.whatsapp && <div><p className="text-xs text-gray-500">WhatsApp</p><a href={`https://wa.me/${selectedSupplier.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" className="text-sm font-medium text-green-600 hover:underline flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5" />{selectedSupplier.whatsapp}</a></div>}
-                      {selectedSupplier.website && <div><p className="text-xs text-gray-500">Website</p><a href={selectedSupplier.website} target="_blank" className="text-sm font-medium text-primary-600 hover:underline flex items-center gap-1"><Globe className="w-3.5 h-3.5" />{selectedSupplier.website}</a></div>}
+                      {selectedSupplier.contact_name && <div><p className="text-xs text-gray-500">{t('contactPerson')}</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.contact_name}</p></div>}
+                      {selectedSupplier.contact_email && <div><p className="text-xs text-gray-500">{t('email')}</p><a href={`mailto:${selectedSupplier.contact_email}`} className="text-sm font-medium text-primary-600 hover:underline">{selectedSupplier.contact_email}</a></div>}
+                      {selectedSupplier.contact_phone && <div><p className="text-xs text-gray-500">{t('phone')}</p><a href={`tel:${selectedSupplier.contact_phone}`} className="text-sm font-medium text-gray-900">{selectedSupplier.contact_phone}</a></div>}
+                      {selectedSupplier.phone2 && <div><p className="text-xs text-gray-500">{t('phone2')}</p><a href={`tel:${selectedSupplier.phone2}`} className="text-sm font-medium text-gray-900">{selectedSupplier.phone2}</a></div>}
+                      {selectedSupplier.whatsapp && <div><p className="text-xs text-gray-500">{t('whatsApp')}</p><a href={`https://wa.me/${selectedSupplier.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" className="text-sm font-medium text-green-600 hover:underline flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5" />{selectedSupplier.whatsapp}</a></div>}
+                      {selectedSupplier.website && <div><p className="text-xs text-gray-500">{t('website')}</p><a href={selectedSupplier.website} target="_blank" className="text-sm font-medium text-primary-600 hover:underline flex items-center gap-1"><Globe className="w-3.5 h-3.5" />{selectedSupplier.website}</a></div>}
                     </div>
                   </div>
                   <div className="space-y-4">
                     <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> {t('locationDetails')}</h3>
                     <div className="space-y-3">
-                      {selectedSupplier.city && <div><p className="text-xs text-gray-500">City</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.city}</p></div>}
-                      {selectedSupplier.address && <div><p className="text-xs text-gray-500">Address</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.address}</p></div>}
-                      {selectedSupplier.star_rating && <div><p className="text-xs text-gray-500">Star Rating</p><div className="flex items-center gap-1">{Array.from({ length: parseInt(selectedSupplier.star_rating) || 0 }).map((_, i) => <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />)}</div></div>}
-                      <div><p className="text-xs text-gray-500">Status</p><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[selectedSupplier.status]}`}>{selectedSupplier.status}</span></div>
+                      {selectedSupplier.city && <div><p className="text-xs text-gray-500">{t('city')}</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.city}</p></div>}
+                      {selectedSupplier.address && <div><p className="text-xs text-gray-500">{t('address')}</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.address}</p></div>}
+                      {selectedSupplier.star_rating && <div><p className="text-xs text-gray-500">{t('starRating')}</p><div className="flex items-center gap-1">{Array.from({ length: parseInt(selectedSupplier.star_rating) || 0 }).map((_, i) => <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />)}</div></div>}
+                      <div><p className="text-xs text-gray-500">{t('status')}</p><span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[selectedSupplier.status]}`}>{t(`status${selectedSupplier.status.charAt(0).toUpperCase() + selectedSupplier.status.slice(1)}`)}</span></div>
                     </div>
                   </div>
                   <div className="col-span-2 space-y-4 pt-4 border-t border-gray-100">
                     <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> {t('financial')}</h3>
                     <div className="grid grid-cols-3 gap-4">
                       {selectedSupplier.default_commission_rate != null && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">{t('commissionRate')}</p><p className="text-lg font-semibold text-gray-900">{selectedSupplier.default_commission_rate}%</p></div>}
-                      {selectedSupplier.payment_terms && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">Payment Terms</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.payment_terms?.replace(/_/g, ' ')}</p></div>}
+                      {selectedSupplier.payment_terms && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500">{t('paymentTerms')}</p><p className="text-sm font-medium text-gray-900">{selectedSupplier.payment_terms?.replace(/_/g, ' ')}</p></div>}
                     </div>
                   </div>
                   {selectedSupplier.notes && (
                     <div className="col-span-2 space-y-2 pt-4 border-t border-gray-100">
-                      <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-4 h-4 text-gray-400" /> Notes</h3>
+                      <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FileText className="w-4 h-4 text-gray-400" /> {t('notes')}</h3>
                       <p className="text-sm text-gray-600 whitespace-pre-wrap">{selectedSupplier.notes}</p>
                     </div>
                   )}
@@ -1182,7 +1182,7 @@ export default function SuppliersContent() {
                     </div>
                   ) : (
                     <table className="w-full">
-                      <thead><tr className="bg-gray-50"><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Service</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Vehicle</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">Route</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">EUR Rate</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">Non-EUR</th></tr></thead>
+                      <thead><tr className="bg-gray-50"><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('service')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('vehicle')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('route')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('eurRate')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('nonEurRate')}</th></tr></thead>
                       <tbody>{supplierRates.map(rate => (<tr key={rate.id} className="border-t border-gray-100"><td className="px-3 py-2 text-sm font-medium">{rate.service_code}</td><td className="px-3 py-2 text-sm">{rate.vehicle_type}</td><td className="px-3 py-2 text-sm">{rate.city}{rate.destination_city && ` → ${rate.destination_city}`}</td><td className="px-3 py-2 text-sm text-right font-medium text-green-600">€{rate.base_rate_eur}</td><td className="px-3 py-2 text-sm text-right">€{rate.base_rate_non_eur}</td></tr>))}</tbody>
                     </table>
                   )}
@@ -1231,9 +1231,9 @@ export default function SuppliersContent() {
                             </div>
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-900">{property.name}</p>
-                              <p className="text-xs text-gray-500">{property.city || 'No city'} • {property.contact_email || 'No email'}</p>
+                              <p className="text-xs text-gray-500">{property.city || t('noCity')} • {property.contact_email || t('noEmail')}</p>
                             </div>
-                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[property.status]}`}>{property.status}</span>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[property.status]}`}>{t(`status${property.status.charAt(0).toUpperCase() + property.status.slice(1)}`)}</span>
                           </div>
                         )
                       })}

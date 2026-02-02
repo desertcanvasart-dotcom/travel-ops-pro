@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
+import { useTranslations } from 'next-intl'
+import {
   Search,
   Plus,
   Edit2,
@@ -39,6 +40,7 @@ const ROLES = [
 ]
 
 export default function TeamMembersPage() {
+  const t = useTranslations('teamMembers')
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -119,7 +121,7 @@ export default function TeamMembersPage() {
   }
 
   const handleDelete = async (member: TeamMember) => {
-    if (!confirm(`Are you sure you want to deactivate ${member.name}?`)) return
+    if (!confirm(t('confirmDeactivate', { name: member.name }))) return
 
     try {
       const response = await fetch(`/api/team-members/${member.id}`, {
@@ -193,8 +195,8 @@ export default function TeamMembersPage() {
             👥
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Team Members</h1>
-            <p className="text-sm text-gray-500">Manage your team for task assignments</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
 
@@ -203,7 +205,7 @@ export default function TeamMembersPage() {
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Add Member
+          {t('addMember')}
         </button>
       </div>
 
@@ -212,7 +214,7 @@ export default function TeamMembersPage() {
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <Users className="h-4 w-4 text-gray-400" />
-            <span className="text-xs text-gray-500">Total Members</span>
+            <span className="text-xs text-gray-500">{t('totalMembers')}</span>
           </div>
           <p className="text-2xl font-semibold text-gray-900">{members.filter(m => m.is_active).length}</p>
         </div>
@@ -222,7 +224,7 @@ export default function TeamMembersPage() {
             <div key={role.value} className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span>{role.icon}</span>
-                <span className="text-xs text-gray-500">{role.label}s</span>
+                <span className="text-xs text-gray-500">{t(`role${role.value.charAt(0).toUpperCase() + role.value.slice(1)}s`)}</span>
               </div>
               <p className="text-2xl font-semibold text-gray-900">{count}</p>
             </div>
@@ -236,7 +238,7 @@ export default function TeamMembersPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search team members..."
+            placeholder={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
@@ -248,9 +250,9 @@ export default function TeamMembersPage() {
           onChange={(e) => setRoleFilter(e.target.value)}
           className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
         >
-          <option value="">All Roles</option>
+          <option value="">{t('allRoles')}</option>
           {ROLES.map(role => (
-            <option key={role.value} value={role.value}>{role.icon} {role.label}</option>
+            <option key={role.value} value={role.value}>{role.icon} {t(`role${role.value.charAt(0).toUpperCase() + role.value.slice(1)}`)}</option>
           ))}
         </select>
 
@@ -261,7 +263,7 @@ export default function TeamMembersPage() {
             onChange={(e) => setShowInactive(e.target.checked)}
             className="rounded border-gray-300 text-[#647C47] focus:ring-[#647C47]"
           />
-          Show inactive
+          {t('showInactive')}
         </label>
       </div>
 
@@ -270,12 +272,12 @@ export default function TeamMembersPage() {
         {filteredMembers.length === 0 ? (
           <div className="col-span-full bg-white border border-gray-200 rounded-lg p-8 text-center">
             <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No team members found</p>
+            <p className="text-gray-500">{t('noMembersFound')}</p>
             <button
               onClick={openAddModal}
               className="mt-3 text-sm text-[#647C47] hover:underline"
             >
-              Add your first team member
+              {t('addFirstMember')}
             </button>
           </div>
         ) : (
@@ -294,7 +296,7 @@ export default function TeamMembersPage() {
                     <div>
                       <h3 className="text-sm font-semibold text-gray-900">{member.name}</h3>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${roleConfig.color}`}>
-                        {roleConfig.label}
+                        {t(`role${member.role.charAt(0).toUpperCase() + member.role.slice(1)}`)}
                       </span>
                     </div>
                   </div>
@@ -332,7 +334,7 @@ export default function TeamMembersPage() {
                     className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors"
                   >
                     <Edit2 className="h-3 w-3" />
-                    Edit
+                    {t('edit')}
                   </button>
                   {member.is_active ? (
                     <button
@@ -340,7 +342,7 @@ export default function TeamMembersPage() {
                       className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
                     >
                       <Trash2 className="h-3 w-3" />
-                      Deactivate
+                      {t('deactivate')}
                     </button>
                   ) : (
                     <button
@@ -348,7 +350,7 @@ export default function TeamMembersPage() {
                       className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
                     >
                       <CheckCircle className="h-3 w-3" />
-                      Reactivate
+                      {t('reactivate')}
                     </button>
                   )}
                 </div>
@@ -364,7 +366,7 @@ export default function TeamMembersPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
-                {editingMember ? 'Edit Team Member' : 'Add Team Member'}
+                {editingMember ? t('editTeamMember') : t('addTeamMember')}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
@@ -377,7 +379,7 @@ export default function TeamMembersPage() {
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name <span className="text-red-500">*</span>
+                  {t('name')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -390,7 +392,7 @@ export default function TeamMembersPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('email')}</label>
                 <input
                   type="email"
                   value={formData.email}
@@ -401,7 +403,7 @@ export default function TeamMembersPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('phone')}</label>
                 <input
                   type="tel"
                   value={formData.phone}
@@ -412,20 +414,20 @@ export default function TeamMembersPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('role')}</label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                 >
                   {ROLES.map(role => (
-                    <option key={role.value} value={role.value}>{role.icon} {role.label}</option>
+                    <option key={role.value} value={role.value}>{role.icon} {t(`role${role.value.charAt(0).toUpperCase() + role.value.slice(1)}`)}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('notes')}</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -441,14 +443,14 @@ export default function TeamMembersPage() {
                   onClick={() => setShowModal(false)}
                   className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : editingMember ? 'Update' : 'Add Member'}
+                  {saving ? t('saving') : editingMember ? t('update') : t('addMember')}
                 </button>
               </div>
             </form>
