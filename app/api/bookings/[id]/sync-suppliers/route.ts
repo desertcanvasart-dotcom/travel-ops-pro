@@ -54,11 +54,13 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Failed to fetch itinerary days' }, { status: 500 })
     }
 
+    console.log(`📅 Found ${days?.length || 0} days for itinerary ${booking.itinerary_id}`)
+
     if (!days || days.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'No itinerary days found',
-        data: { added: 0 }
+        message: `No itinerary days found for itinerary_id: ${booking.itinerary_id}`,
+        data: { added: 0, itinerary_id: booking.itinerary_id }
       })
     }
 
@@ -75,11 +77,15 @@ export async function POST(
     }
 
     console.log(`📋 Found ${services?.length || 0} services in itinerary`)
+    console.log(`📋 Day IDs searched: ${JSON.stringify(dayIds)}`)
+    if (services && services.length > 0) {
+      console.log(`📋 First service sample: ${JSON.stringify(services[0])}`)
+    }
 
     if (!services || services.length === 0) {
       return NextResponse.json({
         success: true,
-        message: `No services found in itinerary. Booking itinerary_id: ${booking.itinerary_id}, Days found: ${days?.length || 0}`,
+        message: `No services found in itinerary_services table. Itinerary: ${booking.itinerary_id}, Days: ${days?.length || 0}, Day IDs: ${dayIds.slice(0, 3).join(', ')}...`,
         data: {
           added: 0,
           debug: {
