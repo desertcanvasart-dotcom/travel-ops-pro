@@ -1282,6 +1282,7 @@ export default function HotelsContent() {
                   itemsPerPage={itemsPerPage}
                   onPageChange={setCurrentPage}
                   onItemsPerPageChange={setItemsPerPage}
+                  t={t}
                 />
               </div>
             )}
