@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import {
   ChevronLeft,
@@ -103,6 +104,7 @@ interface Stats {
 }
 
 export default function CalendarPage() {
+  const t = useTranslations('calendar')
   const dialog = useConfirmDialog()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -369,11 +371,11 @@ export default function CalendarPage() {
 
   const getStatusLabel = (status: string) => {
     const labels: any = {
-      'not_paid': 'Not Paid',
-      'deposit_received': 'Deposit',
-      'partially_paid': 'Partial',
-      'paid': 'Paid',
-      'completed': 'Completed'
+      'not_paid': t('status.notPaid'),
+      'deposit_received': t('status.deposit'),
+      'partially_paid': t('status.partial'),
+      'paid': t('status.paid'),
+      'completed': t('status.completed')
     }
     return labels[status] || status
   }
@@ -401,7 +403,7 @@ export default function CalendarPage() {
     if (!booking) return
     
     if (newDate < startOfDay(new Date())) {
-      dialog.alert('Invalid Date', 'Cannot move booking to a past date', 'warning')
+      dialog.alert(t('alerts.invalidDate'), t('alerts.cannotMoveToPast'), 'warning')
       return
     }
     
@@ -440,24 +442,24 @@ export default function CalendarPage() {
       const data = await response.json()
       
       if (data.success) {
-        setBookings(prev => prev.map(b => 
-          b.id === bookingId 
-            ? { 
-                ...b, 
+        setBookings(prev => prev.map(b =>
+          b.id === bookingId
+            ? {
+                ...b,
                 start_date: format(newDate, 'yyyy-MM-dd'),
                 end_date: format(newEndDate, 'yyyy-MM-dd')
               }
             : b
         ))
-        
+
         setShowConfirmModal(false)
         setPendingMove(null)
       } else {
-        await dialog.alert('Error', 'Failed to update booking: ' + data.error, 'warning')
+        await dialog.alert(t('alerts.error'), t('alerts.failedToUpdate') + ': ' + data.error, 'warning')
       }
     } catch (error) {
       console.error('Error updating booking:', error)
-      await dialog.alert('Error', 'Failed to update booking', 'warning')
+      await dialog.alert(t('alerts.error'), t('alerts.failedToUpdate'), 'warning')
     }
   }
 
@@ -475,7 +477,7 @@ export default function CalendarPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading calendar...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -492,10 +494,10 @@ export default function CalendarPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Booking Calendar</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
             <p className="text-sm text-gray-600 mt-1">
-              View and manage all your bookings • Drag to reschedule
-              {activeFilterCount() > 0 && ` • ${activeFilterCount()} filter${activeFilterCount() > 1 ? 's' : ''} active`}
+              {t('subtitle')}
+              {activeFilterCount() > 0 && ` • ${activeFilterCount() > 1 ? t('filtersActiveMultiple', { count: activeFilterCount() }) : t('filtersActive', { count: activeFilterCount() })}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -504,14 +506,14 @@ export default function CalendarPage() {
               className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors"
             >
               {showStats ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              <span className="font-medium">{showStats ? 'Hide' : 'Show'} Stats</span>
+              <span className="font-medium">{showStats ? t('buttons.hideStats') : t('buttons.showStats')}</span>
             </button>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors relative"
             >
               <Filter className="w-4 h-4" />
-              <span className="font-medium">Filters</span>
+              <span className="font-medium">{t('buttons.filters')}</span>
               {activeFilterCount() > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-600 text-white text-xs rounded-full flex items-center justify-center font-bold">
                   {activeFilterCount()}
@@ -523,7 +525,7 @@ export default function CalendarPage() {
               className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
             >
               <Download className="w-4 h-4" />
-              <span className="font-medium">Export</span>
+              <span className="font-medium">{t('buttons.export')}</span>
             </button>
           </div>
         </div>
@@ -533,28 +535,28 @@ export default function CalendarPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard
               icon={<CalendarIcon className="w-4 h-4" />}
-              label="Total Bookings"
+              label={t('stats.totalBookings')}
               value={stats.totalBookings}
               color="blue"
             />
             <StatCard
               icon={<DollarSign className="w-4 h-4" />}
-              label="Total Revenue"
+              label={t('stats.totalRevenue')}
               value={`€${stats.totalRevenue.toLocaleString()}`}
               color="green"
             />
             <StatCard
               icon={<Users className="w-4 h-4" />}
-              label="Total Travelers"
+              label={t('stats.totalTravelers')}
               value={stats.totalTravelers}
               color="purple"
             />
             <StatCard
               icon={<TrendingUp className="w-4 h-4" />}
-              label="Upcoming"
+              label={t('stats.upcoming')}
               value={stats.upcomingBookings}
               color="orange"
-              badge={stats.conflictCount > 0 ? `${stats.conflictCount} conflicts` : undefined}
+              badge={stats.conflictCount > 0 ? `${stats.conflictCount} ${t('stats.conflicts')}` : undefined}
             />
           </div>
         )}
@@ -564,7 +566,7 @@ export default function CalendarPage() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center gap-2 mb-3">
               <PieChart className="w-4 h-4 text-primary-600" />
-              <h3 className="text-base font-bold text-gray-900">Payment Status Breakdown</h3>
+              <h3 className="text-base font-bold text-gray-900">{t('stats.paymentStatusBreakdown')}</h3>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {Object.entries(stats.statusBreakdown).map(([status, count]) => (
@@ -585,7 +587,7 @@ export default function CalendarPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-primary-600" />
-                <h3 className="text-base font-bold text-gray-900">Filters</h3>
+                <h3 className="text-base font-bold text-gray-900">{t('filters.title')}</h3>
               </div>
               {activeFilterCount() > 0 && (
                 <button
@@ -593,7 +595,7 @@ export default function CalendarPage() {
                   className="flex items-center gap-2 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <X className="w-3 h-3" />
-                  Clear All
+                  {t('buttons.clearAll')}
                 </button>
               )}
             </div>
@@ -602,13 +604,13 @@ export default function CalendarPage() {
               {/* Search */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Search
+                  {t('filters.search')}
                 </label>
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Client, code, destination..."
+                    placeholder={t('filters.searchPlaceholder')}
                     value={filters.searchQuery}
                     onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
                     className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
@@ -620,15 +622,15 @@ export default function CalendarPage() {
               <div>
                 <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-1">
                   <User className="w-3 h-3" />
-                  Filter by Guide
+                  {t('filters.filterByGuide')}
                 </label>
                 <select
                   value={filters.guideId}
                   onChange={(e) => setFilters({ ...filters, guideId: e.target.value })}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
-                  <option value="">All Guides</option>
-                  <option value="unassigned">Unassigned</option>
+                  <option value="">{t('filters.allGuides')}</option>
+                  <option value="unassigned">{t('filters.unassigned')}</option>
                   {guides.map(guide => (
                     <option key={guide.id} value={guide.id}>{guide.name}</option>
                   ))}
@@ -639,15 +641,15 @@ export default function CalendarPage() {
               <div>
                 <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-1">
                   <Car className="w-3 h-3" />
-                  Filter by Vehicle
+                  {t('filters.filterByVehicle')}
                 </label>
                 <select
                   value={filters.vehicleId}
                   onChange={(e) => setFilters({ ...filters, vehicleId: e.target.value })}
                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
-                  <option value="">All Vehicles</option>
-                  <option value="unassigned">Unassigned</option>
+                  <option value="">{t('filters.allVehicles')}</option>
+                  <option value="unassigned">{t('filters.unassigned')}</option>
                   {vehicles.map(vehicle => (
                     <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>
                   ))}
@@ -657,7 +659,7 @@ export default function CalendarPage() {
               {/* Payment Status */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Payment Status
+                  {t('filters.paymentStatus')}
                 </label>
                 <select
                   multiple
@@ -669,19 +671,19 @@ export default function CalendarPage() {
                   className="w-full p-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   style={{ height: '38px' }}
                 >
-                  <option value="not_paid">Not Paid</option>
-                  <option value="deposit_received">Deposit Received</option>
-                  <option value="partially_paid">Partially Paid</option>
-                  <option value="paid">Paid</option>
-                  <option value="completed">Completed</option>
+                  <option value="not_paid">{t('status.notPaid')}</option>
+                  <option value="deposit_received">{t('status.depositReceived')}</option>
+                  <option value="partially_paid">{t('status.partiallyPaid')}</option>
+                  <option value="paid">{t('status.paid')}</option>
+                  <option value="completed">{t('status.completed')}</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+                <p className="text-xs text-gray-500 mt-1">{t('filters.multiSelectHint')}</p>
               </div>
 
               {/* Date From */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  From Date
+                  {t('filters.fromDate')}
                 </label>
                 <input
                   type="date"
@@ -694,7 +696,7 @@ export default function CalendarPage() {
               {/* Date To */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  To Date
+                  {t('filters.toDate')}
                 </label>
                 <input
                   type="date"
@@ -714,7 +716,7 @@ export default function CalendarPage() {
                   onChange={(e) => setFilters({ ...filters, showConflictsOnly: e.target.checked })}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-600"
                 />
-                <span className="text-xs font-medium text-gray-700">Show conflicts only</span>
+                <span className="text-xs font-medium text-gray-700">{t('filters.showConflictsOnly')}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -723,7 +725,7 @@ export default function CalendarPage() {
                   onChange={(e) => setFilters({ ...filters, hideCompleted: e.target.checked })}
                   className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-600"
                 />
-                <span className="text-xs font-medium text-gray-700">Hide completed bookings</span>
+                <span className="text-xs font-medium text-gray-700">{t('filters.hideCompleted')}</span>
               </label>
             </div>
           </div>
@@ -743,7 +745,7 @@ export default function CalendarPage() {
                 onClick={today}
                 className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 font-medium"
               >
-                Today
+                {t('buttons.today')}
               </button>
               <button
                 onClick={nextMonth}
@@ -760,35 +762,35 @@ export default function CalendarPage() {
               <button
                 onClick={() => setViewMode('month')}
                 className={`px-3 py-1.5 text-sm rounded-lg font-medium flex items-center gap-2 transition-colors ${
-                  viewMode === 'month' 
-                    ? 'bg-white text-primary-600 shadow-sm' 
+                  viewMode === 'month'
+                    ? 'bg-white text-primary-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <LayoutGrid className="w-4 h-4" />
-                Month
+                {t('viewModes.month')}
               </button>
               <button
                 onClick={() => setViewMode('week')}
                 className={`px-3 py-1.5 text-sm rounded-lg font-medium flex items-center gap-2 transition-colors ${
-                  viewMode === 'week' 
-                    ? 'bg-white text-primary-600 shadow-sm' 
+                  viewMode === 'week'
+                    ? 'bg-white text-primary-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <CalendarIcon className="w-4 h-4" />
-                Week
+                {t('viewModes.week')}
               </button>
               <button
                 onClick={() => setViewMode('timeline')}
                 className={`px-3 py-1.5 text-sm rounded-lg font-medium flex items-center gap-2 transition-colors ${
-                  viewMode === 'timeline' 
-                    ? 'bg-white text-primary-600 shadow-sm' 
+                  viewMode === 'timeline'
+                    ? 'bg-white text-primary-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <List className="w-4 h-4" />
-                Timeline
+                {t('viewModes.timeline')}
               </button>
             </div>
           </div>
@@ -797,35 +799,35 @@ export default function CalendarPage() {
           <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-200 flex-wrap text-xs">
             <div className="flex items-center gap-1.5">
               <Move className="w-3 h-3 text-primary-600" />
-              <span className="text-gray-600">Drag to reschedule</span>
+              <span className="text-gray-600">{t('legend.dragToReschedule')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <User className="w-3 h-3 text-blue-600" />
-              <span className="text-gray-600">Has Guide</span>
+              <span className="text-gray-600">{t('legend.hasGuide')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Car className="w-3 h-3 text-green-600" />
-              <span className="text-gray-600">Has Vehicle</span>
+              <span className="text-gray-600">{t('legend.hasVehicle')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 bg-gray-400 rounded"></div>
-              <span className="text-gray-600">Not Paid</span>
+              <span className="text-gray-600">{t('status.notPaid')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 bg-blue-500 rounded"></div>
-              <span className="text-gray-600">Deposit Received</span>
+              <span className="text-gray-600">{t('status.depositReceived')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-              <span className="text-gray-600">Partially Paid</span>
+              <span className="text-gray-600">{t('status.partiallyPaid')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <span className="text-gray-600">Paid</span>
+              <span className="text-gray-600">{t('status.paid')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 bg-orange-500 rounded border-2 border-orange-700"></div>
-              <span className="text-gray-600">Conflict</span>
+              <span className="text-gray-600">{t('legend.conflict')}</span>
             </div>
           </div>
 
@@ -833,17 +835,17 @@ export default function CalendarPage() {
           {activeFilterCount() > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-200">
               <p className="text-xs text-gray-600">
-                Showing <span className="font-semibold text-gray-900">{filteredBookings.length}</span> of{' '}
-                <span className="font-semibold text-gray-900">{bookings.length}</span> bookings
+                {t('results.showing')} <span className="font-semibold text-gray-900">{filteredBookings.length}</span> {t('results.of')}{' '}
+                <span className="font-semibold text-gray-900">{bookings.length}</span> {t('results.bookings')}
               </p>
             </div>
           )}
         </div>
 
         {/* Calendar Views */}
-        {viewMode === 'month' && <MonthView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} />}
-        {viewMode === 'week' && <WeekView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} />}
-        {viewMode === 'timeline' && <TimelineView bookings={filteredBookings} conflicts={conflicts} getStatusColor={getStatusColor} />}
+        {viewMode === 'month' && <MonthView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} t={t} />}
+        {viewMode === 'week' && <WeekView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} t={t} />}
+        {viewMode === 'timeline' && <TimelineView bookings={filteredBookings} conflicts={conflicts} getStatusColor={getStatusColor} t={t} />}
 
         {/* Drag Overlay */}
         <DragOverlay>
@@ -868,6 +870,7 @@ export default function CalendarPage() {
             newDate={pendingMove.newDate}
             onConfirm={confirmMove}
             onCancel={cancelMove}
+            t={t}
           />
         )}
       </div>
@@ -905,13 +908,23 @@ function StatCard({ icon, label, value, color, badge }: any) {
   )
 }
 
-function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor }: any) {
+function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, t }: any) {
   const { useDroppable } = require('@dnd-kit/core')
-  
+
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(monthStart)
   const startDate = startOfWeek(monthStart)
   const endDate = endOfWeek(monthEnd)
+
+  const dayNames = [
+    t('days.sunday'),
+    t('days.monday'),
+    t('days.tuesday'),
+    t('days.wednesday'),
+    t('days.thursday'),
+    t('days.friday'),
+    t('days.saturday')
+  ]
 
   const rows = []
   let days = []
@@ -935,6 +948,7 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
           isPast={isPast}
           conflicts={conflicts}
           getStatusColor={getStatusColor}
+          t={t}
         />
       )
       day = addDays(day, 1)
@@ -950,9 +964,9 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       <div className="grid grid-cols-7 bg-gray-50">
-        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
-          <div key={day} className="p-2 text-center font-semibold text-xs text-gray-600">
-            {day}
+        {dayNames.map(dayName => (
+          <div key={dayName} className="p-2 text-center font-semibold text-xs text-gray-600">
+            {dayName}
           </div>
         ))}
       </div>
@@ -961,9 +975,9 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
   )
 }
 
-function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflicts, getStatusColor }: any) {
+function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflicts, getStatusColor, t }: any) {
   const { useDroppable } = require('@dnd-kit/core')
-  
+
   const { setNodeRef, isOver } = useDroppable({
     id: `date-${format(date, 'yyyy-MM-dd')}`,
     disabled: isPast
@@ -990,7 +1004,7 @@ function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflic
           </span>
         )}
       </div>
-      
+
       <div className="space-y-1">
         {bookings.slice(0, 3).map((booking: any) => (
           <DraggableBooking
@@ -1002,7 +1016,7 @@ function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflic
         ))}
         {bookings.length > 3 && (
           <div className="text-xs text-gray-500 text-center">
-            +{bookings.length - 3} more
+            {t('more', { count: bookings.length - 3 })}
           </div>
         )}
       </div>
@@ -1043,10 +1057,10 @@ function DraggableBooking({ booking, getStatusColor, conflicts }: any) {
   )
 }
 
-function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor }: any) {
+function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, t }: any) {
   const weekStart = startOfWeek(currentDate)
   const weekDays = []
-  
+
   for (let i = 0; i < 7; i++) {
     weekDays.push(addDays(weekStart, i))
   }
@@ -1057,7 +1071,7 @@ function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getSta
         {weekDays.map(day => {
           const dayBookings = getBookingsForDate(day)
           const isToday = isSameDay(day, new Date())
-          
+
           return (
             <div key={day.toString()} className="space-y-2">
               <div className={`text-center pb-2 border-b-2 ${
@@ -1076,7 +1090,7 @@ function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getSta
               <div className="space-y-1.5">
                 {dayBookings.length === 0 ? (
                   <div className="text-center text-xs text-gray-400 py-6">
-                    No bookings
+                    {t('week.noBookings')}
                   </div>
                 ) : (
                   dayBookings.map((booking: any) => (
@@ -1094,24 +1108,24 @@ function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getSta
                         {booking.itinerary_code}
                       </div>
                       <div className="flex items-center gap-1.5 text-xs opacity-75">
-                        <span>{booking.num_travelers} pax</span>
+                        <span>{booking.num_travelers} {t('week.pax')}</span>
                         {booking.assigned_guide_id && (
                           <span className="flex items-center gap-0.5">
                             <User className="w-3 h-3" />
-                            Guide
+                            {t('week.guide')}
                           </span>
                         )}
                         {booking.assigned_vehicle_id && (
                           <span className="flex items-center gap-0.5">
                             <Car className="w-3 h-3" />
-                            Vehicle
+                            {t('week.vehicle')}
                           </span>
                         )}
                       </div>
                       {conflicts.includes(booking.id) && (
                         <div className="flex items-center gap-1 mt-1.5 text-xs">
                           <AlertCircle className="w-3 h-3" />
-                          <span>Conflict</span>
+                          <span>{t('legend.conflict')}</span>
                         </div>
                       )}
                     </Link>
@@ -1126,8 +1140,8 @@ function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getSta
   )
 }
 
-function TimelineView({ bookings, conflicts, getStatusColor }: any) {
-  const sortedBookings = [...bookings].sort((a, b) => 
+function TimelineView({ bookings, conflicts, getStatusColor, t }: any) {
+  const sortedBookings = [...bookings].sort((a, b) =>
     new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
   )
 
@@ -1144,7 +1158,7 @@ function TimelineView({ bookings, conflicts, getStatusColor }: any) {
     const end = parseISO(booking.end_date)
     const daysFromStart = differenceInDays(start, minDate)
     const duration = differenceInDays(end, start) + 1
-    
+
     return {
       left: `${(daysFromStart / totalDays) * 100}%`,
       width: `${(duration / totalDays) * 100}%`
@@ -1155,8 +1169,8 @@ function TimelineView({ bookings, conflicts, getStatusColor }: any) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
         <CalendarIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">No Bookings Match Filters</h3>
-        <p className="text-sm text-gray-600">Try adjusting your filters to see more bookings</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('timeline.noBookingsTitle')}</h3>
+        <p className="text-sm text-gray-600">{t('timeline.noBookingsDescription')}</p>
       </div>
     )
   }
@@ -1166,7 +1180,7 @@ function TimelineView({ bookings, conflicts, getStatusColor }: any) {
       <div className="bg-gray-50 border-b border-gray-200 p-3">
         <div className="flex items-center justify-between text-xs text-gray-600">
           <span className="font-medium">{format(minDate, 'MMM d, yyyy')}</span>
-          <span className="font-medium">{totalDays} days span</span>
+          <span className="font-medium">{totalDays} {t('timeline.daysSpan')}</span>
           <span className="font-medium">{format(maxDate, 'MMM d, yyyy')}</span>
         </div>
       </div>
@@ -1177,12 +1191,12 @@ function TimelineView({ bookings, conflicts, getStatusColor }: any) {
             const position = getBookingPosition(booking)
             const hasConflict = conflicts.includes(booking.id)
             const duration = differenceInDays(parseISO(booking.end_date), parseISO(booking.start_date)) + 1
-            
+
             return (
               <div key={booking.id} className="relative">
                 <div className="flex items-center mb-1.5">
                   <div className="w-40 flex-shrink-0">
-                    <Link 
+                    <Link
                       href={`/itineraries/${booking.id}`}
                       className="text-sm font-medium text-gray-900 hover:text-primary-600 transition-colors"
                     >
@@ -1212,7 +1226,7 @@ function TimelineView({ bookings, conflicts, getStatusColor }: any) {
                         )}
                       </div>
                       <div className="text-xs opacity-90">
-                        {booking.num_travelers} pax
+                        {booking.num_travelers} {t('week.pax')}
                       </div>
                     </div>
                   </Link>
@@ -1234,10 +1248,10 @@ function TimelineView({ bookings, conflicts, getStatusColor }: any) {
             <AlertCircle className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
             <div>
               <h4 className="text-sm font-semibold text-orange-900 mb-1">
-                {conflicts.length} Booking Conflict{conflicts.length > 1 ? 's' : ''} Detected
+                {conflicts.length > 1 ? t('timeline.conflictsDetected', { count: conflicts.length }) : t('timeline.conflictDetected', { count: conflicts.length })}
               </h4>
               <p className="text-xs text-orange-700">
-                Some bookings have overlapping dates. Review these bookings to ensure you have adequate resources.
+                {t('timeline.conflictWarning')}
               </p>
             </div>
           </div>
@@ -1247,7 +1261,7 @@ function TimelineView({ bookings, conflicts, getStatusColor }: any) {
   )
 }
 
-function ConfirmMoveModal({ booking, newDate, onConfirm, onCancel }: any) {
+function ConfirmMoveModal({ booking, newDate, onConfirm, onCancel, t }: any) {
   const currentStart = parseISO(booking.start_date)
   const currentEnd = parseISO(booking.end_date)
   const duration = differenceInDays(currentEnd, currentStart)
@@ -1261,14 +1275,14 @@ function ConfirmMoveModal({ booking, newDate, onConfirm, onCancel }: any) {
             <Move className="w-5 h-5 text-primary-600" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900 mb-1">Confirm Reschedule</h3>
-            <p className="text-sm text-gray-600">Are you sure you want to move this booking?</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">{t('modal.confirmReschedule')}</h3>
+            <p className="text-sm text-gray-600">{t('modal.confirmQuestion')}</p>
           </div>
         </div>
 
         <div className="bg-gray-50 rounded-lg p-3 mb-4 space-y-2">
           <div>
-            <p className="text-xs text-gray-600 mb-1">Booking</p>
+            <p className="text-xs text-gray-600 mb-1">{t('modal.booking')}</p>
             <p className="text-sm font-semibold text-gray-900">{booking.client_name}</p>
             <p className="text-xs text-gray-600">{booking.itinerary_code}</p>
           </div>
@@ -1276,13 +1290,13 @@ function ConfirmMoveModal({ booking, newDate, onConfirm, onCancel }: any) {
           <div className="border-t border-gray-200 pt-2">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-gray-600 mb-1">Current Dates</p>
+                <p className="text-xs text-gray-600 mb-1">{t('modal.currentDates')}</p>
                 <p className="text-xs font-medium text-gray-900">
                   {format(currentStart, 'MMM d')} - {format(currentEnd, 'MMM d')}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-600 mb-1">New Dates</p>
+                <p className="text-xs text-gray-600 mb-1">{t('modal.newDates')}</p>
                 <p className="text-xs font-medium text-primary-600">
                   {format(newDate, 'MMM d')} - {format(newEndDate, 'MMM d')}
                 </p>
@@ -1293,16 +1307,18 @@ function ConfirmMoveModal({ booking, newDate, onConfirm, onCancel }: any) {
 
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={onCancel}
             className="flex-1 px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 font-medium transition-colors"
           >
-            Cancel
+            {t('modal.cancel')}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             className="flex-1 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 font-medium transition-colors"
           >
-            Confirm Move
+            {t('modal.confirmMove')}
           </button>
         </div>
       </div>

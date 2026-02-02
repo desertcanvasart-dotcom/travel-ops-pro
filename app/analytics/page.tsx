@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { 
-  TrendingUp, 
-  Users, 
-  DollarSign, 
+import { useTranslations } from 'next-intl'
+import {
+  TrendingUp,
+  Users,
+  DollarSign,
   Calendar,
   MapPin,
   ArrowUpRight,
@@ -122,6 +123,7 @@ const emptyData: AnalyticsData = {
 }
 
 export default function AnalyticsPage() {
+  const t = useTranslations('analytics')
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d')
@@ -181,32 +183,32 @@ export default function AnalyticsPage() {
   const getInsights = () => {
     const revenueData = displayData.revenue.monthlyData
     const hasRevenue = revenueData.some(d => d.revenue > 0)
-    
+
     if (!hasRevenue) {
       return {
-        revenueInsight: 'No revenue data available yet. Start adding confirmed bookings!',
-        bookingInsight: 'Start adding bookings to see insights.',
-        conversionInsight: 'Conversion data will appear once you have bookings.'
+        revenueInsight: t('insights.noRevenueData'),
+        bookingInsight: t('insights.noBookingInsights'),
+        conversionInsight: t('insights.noConversionData')
       }
     }
-    
+
     const maxRevenue = Math.max(...revenueData.map(d => d.revenue))
     const maxRevenueWeek = revenueData.find(d => d.revenue === maxRevenue)
-    
+
     const pendingPercentage = safePercent(displayData.bookings.pending, displayData.bookings.total)
-    
+
     return {
-      revenueInsight: maxRevenue > 0 
-        ? `Your busiest period was ${maxRevenueWeek?.month} with ${formatCurrency(maxRevenue)} in revenue.`
-        : 'No revenue data available yet.',
+      revenueInsight: maxRevenue > 0
+        ? t('insights.busiestPeriod', { period: maxRevenueWeek?.month, amount: formatCurrency(maxRevenue) })
+        : t('insights.noRevenueYet'),
       bookingInsight: displayData.bookings.total > 0
-        ? `${pendingPercentage}% of active bookings are still pending — consider follow-ups.`
-        : 'No bookings recorded yet.',
-      conversionInsight: displayData.conversionRate > 30 
-        ? 'Strong conversion rate! Your sales process is working well.' 
+        ? t('insights.pendingPercentage', { percent: pendingPercentage })
+        : t('insights.noBookingsRecorded'),
+      conversionInsight: displayData.conversionRate > 30
+        ? t('insights.strongConversion')
         : displayData.conversionRate > 0
-          ? 'Conversion rate needs attention. Review your sales funnel.'
-          : 'Add bookings to see conversion insights.'
+          ? t('insights.lowConversion')
+          : t('insights.addBookingsForInsights')
     }
   }
 
@@ -229,12 +231,12 @@ export default function AnalyticsPage() {
 
   // Pipeline stages configuration
   const pipelineStages = [
-    { key: 'leads', label: 'Leads', color: COLORS.leads },
-    { key: 'followups', label: 'Follow-ups', color: COLORS.followups },
-    { key: 'pending', label: 'Pending', color: COLORS.pending },
-    { key: 'cancelled', label: 'Cancelled', color: COLORS.cancelled },
-    { key: 'confirmed', label: 'Confirmed', color: COLORS.confirmed },
-    { key: 'completed', label: 'Completed', color: COLORS.completed }
+    { key: 'leads', label: t('pipeline.leads'), color: COLORS.leads },
+    { key: 'followups', label: t('pipeline.followups'), color: COLORS.followups },
+    { key: 'pending', label: t('pipeline.pending'), color: COLORS.pending },
+    { key: 'cancelled', label: t('pipeline.cancelled'), color: COLORS.cancelled },
+    { key: 'confirmed', label: t('pipeline.confirmed'), color: COLORS.confirmed },
+    { key: 'completed', label: t('pipeline.completed'), color: COLORS.completed }
   ]
 
   // Calculate returning rate safely
@@ -254,7 +256,7 @@ export default function AnalyticsPage() {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading analytics...</p>
+          <p className="text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -265,10 +267,10 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
-          <p className="text-sm text-gray-600 mt-1">Business performance and insights</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="text-sm text-gray-600 mt-1">{t('subtitle')}</p>
         </div>
-        
+
         {/* Time Range Filter */}
         <div className="flex gap-2">
           {(['7d', '30d', '90d', '1y'] as const).map((range) => (
@@ -281,10 +283,7 @@ export default function AnalyticsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {range === '7d' && 'Last 7 Days'}
-              {range === '30d' && 'Last 30 Days'}
-              {range === '90d' && 'Last 90 Days'}
-              {range === '1y' && 'Last Year'}
+              {t(`timeRange.${range}`)}
             </button>
           ))}
         </div>
@@ -295,24 +294,24 @@ export default function AnalyticsPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="text-sm font-semibold text-amber-800">No data yet</h3>
+            <h3 className="text-sm font-semibold text-amber-800">{t('emptyState.title')}</h3>
             <p className="text-sm text-amber-700 mt-1">
-              Start by adding clients and creating itineraries. Your analytics will populate automatically.
+              {t('emptyState.description')}
             </p>
             <div className="flex gap-2 mt-3">
-              <Link 
+              <Link
                 href="/clients"
                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                Add Client
+                {t('emptyState.addClient')}
               </Link>
-              <Link 
+              <Link
                 href="/itineraries"
                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 transition-colors"
               >
                 <Calendar className="w-3.5 h-3.5" />
-                Create Itinerary
+                {t('emptyState.createItinerary')}
               </Link>
             </div>
           </div>
@@ -346,11 +345,11 @@ export default function AnalyticsPage() {
                 )
               )}
             </div>
-            <h3 className="text-xs text-gray-600 font-medium mb-1">Total Revenue</h3>
+            <h3 className="text-xs text-gray-600 font-medium mb-1">{t('metrics.totalRevenue')}</h3>
             <p className="text-3xl font-bold text-gray-900">
               {formatCurrency(displayData.revenue.total)}
             </p>
-            <p className="text-xs text-gray-500 mt-1 mb-2">vs. previous period</p>
+            <p className="text-xs text-gray-500 mt-1 mb-2">{t('metrics.vsPreviousPeriod')}</p>
             
             {/* Mini Sparkline */}
             <div className="h-8 mt-2">
@@ -377,13 +376,13 @@ export default function AnalyticsPage() {
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.bookings }} />
             </div>
           </div>
-          <h3 className="text-xs text-gray-600 font-medium mb-1">Total Bookings</h3>
+          <h3 className="text-xs text-gray-600 font-medium mb-1">{t('metrics.totalBookings')}</h3>
           <p className="text-3xl font-bold text-gray-900">
             {displayData.bookings.total}
           </p>
           <div className="flex items-center gap-3 mt-1 text-xs">
-            <span className="text-gray-600">{displayData.bookings.confirmed} confirmed</span>
-            <span className="text-gray-600">{displayData.bookings.pending} pending</span>
+            <span className="text-gray-600">{displayData.bookings.confirmed} {t('metrics.confirmed')}</span>
+            <span className="text-gray-600">{displayData.bookings.pending} {t('metrics.pending')}</span>
           </div>
           
           {/* Mini bar indicator */}
@@ -421,28 +420,28 @@ export default function AnalyticsPage() {
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.clients }} />
             </div>
           </div>
-          <h3 className="text-xs text-gray-600 font-medium mb-1">Total Clients</h3>
+          <h3 className="text-xs text-gray-600 font-medium mb-1">{t('metrics.totalClients')}</h3>
           <p className="text-3xl font-bold text-gray-900">
             {displayData.clients.total}
           </p>
           <div className="flex items-center gap-3 mt-1 text-xs">
-            <span className="text-gray-600">{displayData.clients.new} new</span>
-            <span className="text-gray-600">{displayData.clients.returning} returning</span>
+            <span className="text-gray-600">{displayData.clients.new} {t('metrics.new')}</span>
+            <span className="text-gray-600">{displayData.clients.returning} {t('metrics.returning')}</span>
           </div>
-          
+
           {/* Progress bar */}
           <div className="mt-2">
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
+              <div
                 className="h-2 rounded-full transition-all"
-                style={{ 
+                style={{
                   backgroundColor: displayData.clients.total > 0 ? COLORS.clients : '#e5e7eb',
                   width: displayData.clients.total > 0 ? `${returningRate}%` : '0%'
                 }}
               />
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              {returningRate}% returning rate
+              {returningRate}% {t('metrics.returningRate')}
             </p>
           </div>
         </div>
@@ -455,12 +454,12 @@ export default function AnalyticsPage() {
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.conversion }} />
             </div>
           </div>
-          <h3 className="text-xs text-gray-600 font-medium mb-1">Conversion Rate</h3>
+          <h3 className="text-xs text-gray-600 font-medium mb-1">{t('metrics.conversionRate')}</h3>
           <p className="text-3xl font-bold text-gray-900">
             {formatPercent(displayData.conversionRate)}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            Avg deal: {formatCurrency(displayData.avgDealSize)}
+            {t('metrics.avgDeal')}: {formatCurrency(displayData.avgDealSize)}
           </p>
           
           {/* Circular progress indicator */}
@@ -496,9 +495,9 @@ export default function AnalyticsPage() {
       {/* Booking Pipeline - Data from API */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-gray-900">Booking Pipeline</h3>
+          <h3 className="text-base font-semibold text-gray-900">{t('pipeline.title')}</h3>
           {!hasAnyData && (
-            <span className="text-xs text-gray-400">Data will appear as you add clients and bookings</span>
+            <span className="text-xs text-gray-400">{t('pipeline.emptyHint')}</span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
@@ -529,32 +528,32 @@ export default function AnalyticsPage() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-5 h-5 text-yellow-500" />
-          <h3 className="text-base font-semibold text-gray-900">Highlights This Month</h3>
+          <h3 className="text-base font-semibold text-gray-900">{t('highlights.title')}</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <p className="text-2xl font-bold text-gray-900">{displayData.clients.new}</p>
-            <p className="text-xs text-gray-600 mt-1">New clients</p>
+            <p className="text-xs text-gray-600 mt-1">{t('highlights.newClients')}</p>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <p className="text-2xl font-bold text-gray-900">{displayData.bookings.pending}</p>
-            <p className="text-xs text-gray-600 mt-1">Pending bookings</p>
+            <p className="text-xs text-gray-600 mt-1">{t('highlights.pendingBookings')}</p>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(displayData.avgDealSize)}</p>
-            <p className="text-xs text-gray-600 mt-1">Avg deal size</p>
+            <p className="text-xs text-gray-600 mt-1">{t('highlights.avgDealSize')}</p>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <p className="text-2xl font-bold text-gray-900">
-              {displayData.destinations && displayData.destinations.length > 0 
-                ? displayData.destinations[0].name 
-                : 'N/A'}
+              {displayData.destinations && displayData.destinations.length > 0
+                ? displayData.destinations[0].name
+                : t('highlights.na')}
             </p>
-            <p className="text-xs text-gray-600 mt-1">Top destination</p>
+            <p className="text-xs text-gray-600 mt-1">{t('highlights.topDestination')}</p>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <p className="text-2xl font-bold text-gray-900">WhatsApp</p>
-            <p className="text-xs text-gray-600 mt-1">Best channel</p>
+            <p className="text-xs text-gray-600 mt-1">{t('highlights.bestChannel')}</p>
           </div>
         </div>
       </div>
@@ -563,7 +562,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Revenue Trend Chart with Insight */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <h3 className="text-base font-semibold text-gray-900 mb-3">Revenue Trend</h3>
+          <h3 className="text-base font-semibold text-gray-900 mb-3">{t('charts.revenueTrend')}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={displayData.revenue.monthlyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -584,7 +583,7 @@ export default function AnalyticsPage() {
                   borderRadius: '8px',
                   fontSize: '12px'
                 }}
-                formatter={(value: any) => [formatCurrency(value), 'Revenue']}
+                formatter={(value: any) => [formatCurrency(value), t('charts.revenue')]}
               />
               <Line 
                 type="monotone" 
@@ -603,14 +602,15 @@ export default function AnalyticsPage() {
         {/* Top Destinations Chart with Filter */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-semibold text-gray-900">Top Destinations</h3>
+            <h3 className="text-base font-semibold text-gray-900">{t('charts.topDestinations')}</h3>
             {displayData.destinations.length > 0 && (
               <select
                 value={destinationFilter}
                 onChange={(e) => setDestinationFilter(e.target.value)}
                 className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                aria-label={t('charts.allDestinations')}
               >
-                <option value="all">All Destinations</option>
+                <option value="all">{t('charts.allDestinations')}</option>
                 {displayData.destinations.map(dest => (
                   <option key={dest.name} value={dest.name}>{dest.name}</option>
                 ))}
@@ -640,8 +640,8 @@ export default function AnalyticsPage() {
                       fontSize: '12px'
                     }}
                     formatter={(value: any, name?: string) => [
-                    name === 'revenue' ? formatCurrency(value) : value,
-                      name === 'revenue' ? 'Revenue' : 'Bookings'
+                      name === 'revenue' ? formatCurrency(value) : value,
+                      name === 'revenue' ? t('charts.revenue') : t('charts.bookings')
                     ]}
                   />
                   <Bar 
@@ -652,14 +652,14 @@ export default function AnalyticsPage() {
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-2 p-2 bg-purple-50 rounded text-xs text-gray-700">
-                💡 {filteredDestinations[0].name} leads with {filteredDestinations[0].bookings} bookings ({formatCurrency(filteredDestinations[0].revenue)})
+                💡 {t('insights.destinationLeads', { destination: filteredDestinations[0].name, bookings: filteredDestinations[0].bookings, revenue: formatCurrency(filteredDestinations[0].revenue) })}
               </div>
             </>
           ) : (
             <div className="h-80 flex flex-col items-center justify-center text-center">
               <MapPin className="w-12 h-12 text-gray-300 mb-3" />
-              <p className="text-sm text-gray-500 mb-2">No destination data yet</p>
-              <p className="text-xs text-gray-400">Data will appear as you add bookings with cities</p>
+              <p className="text-sm text-gray-500 mb-2">{t('empty.noDestinationData')}</p>
+              <p className="text-xs text-gray-400">{t('empty.destinationHint')}</p>
             </div>
           )}
         </div>
@@ -670,29 +670,30 @@ export default function AnalyticsPage() {
         {/* Pie Chart with Labels and Filter */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-semibold text-gray-900">Booking Status</h3>
+            <h3 className="text-base font-semibold text-gray-900">{t('charts.bookingStatus')}</h3>
             {displayData.bookings.total > 0 && (
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                aria-label={t('charts.allStatus')}
               >
-                <option value="all">All Status</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="pending">Pending</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="all">{t('charts.allStatus')}</option>
+                <option value="confirmed">{t('pipeline.confirmed')}</option>
+                <option value="pending">{t('pipeline.pending')}</option>
+                <option value="cancelled">{t('pipeline.cancelled')}</option>
               </select>
             )}
           </div>
-          
+
           {displayData.bookings.total > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
                   data={[
-                    { name: 'Confirmed', value: displayData.bookings.confirmed },
-                    { name: 'Pending', value: displayData.bookings.pending },
-                    { name: 'Cancelled', value: displayData.bookings.cancelled }
+                    { name: t('pipeline.confirmed'), value: displayData.bookings.confirmed },
+                    { name: t('pipeline.pending'), value: displayData.bookings.pending },
+                    { name: t('pipeline.cancelled'), value: displayData.bookings.cancelled }
                   ]}
                   cx="50%"
                   cy="50%"
@@ -702,14 +703,14 @@ export default function AnalyticsPage() {
                   dataKey="value"
                 >
                   {[
-                    { name: 'Confirmed', value: displayData.bookings.confirmed },
-                    { name: 'Pending', value: displayData.bookings.pending },
-                    { name: 'Cancelled', value: displayData.bookings.cancelled }
+                    { name: t('pipeline.confirmed'), value: displayData.bookings.confirmed },
+                    { name: t('pipeline.pending'), value: displayData.bookings.pending },
+                    { name: t('pipeline.cancelled'), value: displayData.bookings.cancelled }
                   ].map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={PIE_COLORS[index]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: any) => [value, 'Bookings']} />
+                <Tooltip formatter={(value: any) => [value, t('charts.bookings')]} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -718,17 +719,17 @@ export default function AnalyticsPage() {
                 <div className="w-20 h-20 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-2">
                   <Calendar className="w-8 h-8 text-gray-400" />
                 </div>
-                <p className="text-xs text-gray-500">No bookings yet</p>
+                <p className="text-xs text-gray-500">{t('empty.noBookings')}</p>
               </div>
             </div>
           )}
-          
+
           {/* Status Legend with Counts */}
           <div className="space-y-2 mt-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.confirmed }} />
-                <span className="text-xs text-gray-700">Confirmed</span>
+                <span className="text-xs text-gray-700">{t('pipeline.confirmed')}</span>
               </div>
               <span className="text-xs font-bold text-gray-900">
                 {displayData.bookings.confirmed} ({safePercent(displayData.bookings.confirmed, displayData.bookings.total)}%)
@@ -737,7 +738,7 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.pending }} />
-                <span className="text-xs text-gray-700">Pending</span>
+                <span className="text-xs text-gray-700">{t('pipeline.pending')}</span>
               </div>
               <span className="text-xs font-bold text-gray-900">
                 {displayData.bookings.pending} ({safePercent(displayData.bookings.pending, displayData.bookings.total)}%)
@@ -746,7 +747,7 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.cancelled }} />
-                <span className="text-xs text-gray-700">Cancelled</span>
+                <span className="text-xs text-gray-700">{t('pipeline.cancelled')}</span>
               </div>
               <span className="text-xs font-bold text-gray-900">
                 {displayData.bookings.cancelled} ({safePercent(displayData.bookings.cancelled, displayData.bookings.total)}%)
@@ -761,7 +762,7 @@ export default function AnalyticsPage() {
 
         {/* Destination Revenue Breakdown */}
         <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <h3 className="text-base font-semibold text-gray-900 mb-3">Revenue by Destination</h3>
+          <h3 className="text-base font-semibold text-gray-900 mb-3">{t('charts.revenueByDestination')}</h3>
           {displayData.destinations && displayData.destinations.length > 0 ? (
             <div className="space-y-3">
               {displayData.destinations.map((dest, index) => (
@@ -773,15 +774,15 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="text-right">
                       <span className="text-sm font-bold text-gray-900">{formatCurrency(dest.revenue)}</span>
-                      <span className="text-xs text-gray-500 ml-2">({dest.bookings} bookings)</span>
+                      <span className="text-xs text-gray-500 ml-2">({dest.bookings} {t('charts.bookings')})</span>
                     </div>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
+                    <div
                       className="h-2 rounded-full transition-all duration-500"
-                      style={{ 
+                      style={{
                         backgroundColor: COLORS.revenue,
-                        width: `${displayData.destinations[0].revenue > 0 ? (dest.revenue / displayData.destinations[0].revenue) * 100 : 0}%` 
+                        width: `${displayData.destinations[0].revenue > 0 ? (dest.revenue / displayData.destinations[0].revenue) * 100 : 0}%`
                       }}
                     />
                   </div>
@@ -791,8 +792,8 @@ export default function AnalyticsPage() {
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <MapPin className="w-12 h-12 text-gray-300 mb-3" />
-              <p className="text-sm text-gray-500 mb-2">No destination data yet</p>
-              <p className="text-xs text-gray-400">Revenue will appear as you add itineraries with cities</p>
+              <p className="text-sm text-gray-500 mb-2">{t('empty.noDestinationData')}</p>
+              <p className="text-xs text-gray-400">{t('empty.revenueHint')}</p>
             </div>
           )}
         </div>
@@ -800,42 +801,42 @@ export default function AnalyticsPage() {
 
       {/* Quick Actions - Enhanced */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <h3 className="text-base font-semibold text-gray-900 mb-3">Quick Actions</h3>
+        <h3 className="text-base font-semibold text-gray-900 mb-3">{t('quickActions.title')}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Link href="/itineraries" className="p-3 border border-gray-200 rounded-lg hover:shadow-md hover:border-primary-300 transition-all text-left group">
             <div className="flex items-center gap-2 mb-2">
               <Activity className="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" />
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.revenue }} />
             </div>
-            <p className="text-sm font-medium text-gray-900">View Bookings</p>
-            <p className="text-xs text-gray-500 mt-1">See all itineraries</p>
+            <p className="text-sm font-medium text-gray-900">{t('quickActions.viewBookings')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('quickActions.seeAllItineraries')}</p>
           </Link>
-          
+
           <Link href="/calendar" className="p-3 border border-gray-200 rounded-lg hover:shadow-md hover:border-blue-300 transition-all text-left group">
             <div className="flex items-center gap-2 mb-2">
               <Calendar className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.clients }} />
             </div>
-            <p className="text-sm font-medium text-gray-900">Booking Calendar</p>
-            <p className="text-xs text-gray-500 mt-1">See schedule</p>
+            <p className="text-sm font-medium text-gray-900">{t('quickActions.bookingCalendar')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('quickActions.seeSchedule')}</p>
           </Link>
-          
+
           <Link href="/clients" className="p-3 border border-gray-200 rounded-lg hover:shadow-md hover:border-purple-300 transition-all text-left group">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.bookings }} />
             </div>
-            <p className="text-sm font-medium text-gray-900">Client Insights</p>
-            <p className="text-xs text-gray-500 mt-1">View all clients</p>
+            <p className="text-sm font-medium text-gray-900">{t('quickActions.clientInsights')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('quickActions.viewAllClients')}</p>
           </Link>
-          
+
           <Link href="/follow-ups" className="p-3 border border-gray-200 rounded-lg hover:shadow-md hover:border-green-300 transition-all text-left group">
             <div className="flex items-center gap-2 mb-2">
               <Clock className="w-4 h-4 text-gray-400 group-hover:text-green-600 transition-colors" />
               <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.followups }} />
             </div>
-            <p className="text-sm font-medium text-gray-900">Follow-ups</p>
-            <p className="text-xs text-gray-500 mt-1">Pending tasks</p>
+            <p className="text-sm font-medium text-gray-900">{t('quickActions.followups')}</p>
+            <p className="text-xs text-gray-500 mt-1">{t('quickActions.pendingTasks')}</p>
           </Link>
         </div>
       </div>

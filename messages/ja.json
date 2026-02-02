@@ -246,6 +246,96 @@
     "days": "日",
     "startNow": "今すぐ開始 →"
   },
+  "analytics": {
+    "title": "分析ダッシュボード",
+    "subtitle": "ビジネスパフォーマンスとインサイト",
+    "loading": "分析を読み込み中...",
+    "timeRange": {
+      "7d": "過去7日間",
+      "30d": "過去30日間",
+      "90d": "過去90日間",
+      "1y": "過去1年間"
+    },
+    "emptyState": {
+      "title": "データがありません",
+      "description": "顧客を追加し、旅程を作成してください。分析は自動的に更新されます。",
+      "addClient": "顧客を追加",
+      "createItinerary": "旅程を作成"
+    },
+    "metrics": {
+      "totalRevenue": "総売上",
+      "vsPreviousPeriod": "前期比",
+      "totalBookings": "総予約数",
+      "confirmed": "確定",
+      "pending": "保留中",
+      "cancelled": "キャンセル",
+      "totalClients": "総顧客数",
+      "new": "新規",
+      "returning": "リピーター",
+      "returningRate": "リピート率",
+      "conversionRate": "コンバージョン率",
+      "avgDeal": "平均取引額"
+    },
+    "pipeline": {
+      "title": "予約パイプライン",
+      "emptyHint": "顧客と予約を追加するとデータが表示されます",
+      "leads": "リード",
+      "followups": "フォローアップ",
+      "pending": "保留中",
+      "cancelled": "キャンセル",
+      "confirmed": "確定",
+      "completed": "完了"
+    },
+    "highlights": {
+      "title": "今月のハイライト",
+      "newClients": "新規顧客",
+      "pendingBookings": "保留中の予約",
+      "avgDealSize": "平均取引額",
+      "topDestination": "人気の目的地",
+      "bestChannel": "最適なチャネル",
+      "na": "N/A"
+    },
+    "charts": {
+      "revenueTrend": "売上推移",
+      "topDestinations": "人気目的地",
+      "allDestinations": "すべての目的地",
+      "bookingStatus": "予約ステータス",
+      "allStatus": "すべてのステータス",
+      "revenueByDestination": "目的地別売上",
+      "revenue": "売上",
+      "bookings": "予約"
+    },
+    "quickActions": {
+      "title": "クイックアクション",
+      "viewBookings": "予約を見る",
+      "seeAllItineraries": "すべての旅程を見る",
+      "bookingCalendar": "予約カレンダー",
+      "seeSchedule": "スケジュールを見る",
+      "clientInsights": "顧客インサイト",
+      "viewAllClients": "すべての顧客を見る",
+      "followups": "フォローアップ",
+      "pendingTasks": "保留中のタスク"
+    },
+    "empty": {
+      "noDestinationData": "目的地データがありません",
+      "destinationHint": "都市を含む予約を追加するとデータが表示されます",
+      "noBookings": "予約がありません",
+      "revenueHint": "都市を含む旅程を追加すると売上が表示されます"
+    },
+    "insights": {
+      "noRevenueData": "売上データがありません。確定済みの予約を追加してください！",
+      "noBookingInsights": "予約を追加するとインサイトが表示されます。",
+      "noConversionData": "予約があるとコンバージョンデータが表示されます。",
+      "busiestPeriod": "最も忙しかった期間は{period}で、売上は{amount}でした。",
+      "pendingPercentage": "アクティブな予約の{percent}%がまだ保留中です。フォローアップを検討してください。",
+      "strongConversion": "コンバージョン率は良好です！セールスプロセスがうまく機能しています。",
+      "lowConversion": "コンバージョン率に注意が必要です。セールスファネルを見直してください。",
+      "addBookingsForInsights": "予約を追加するとコンバージョンインサイトが表示されます。",
+      "noRevenueYet": "売上データがありません。",
+      "noBookingsRecorded": "予約がまだありません。",
+      "destinationLeads": "{destination}が{bookings}件の予約（{revenue}）でトップです"
+    }
+  },
   "packageTypeSelector": {
     "selectPackageType": "パッケージタイプを選択",
     "description": "これにより旅程に含まれるサービスが決まります",
@@ -2265,6 +2355,109 @@
     "of": "/",
     "perPage": "/ ページ",
     "select": "{field}を選択"
+  },
+  "calendar": {
+    "title": "予約カレンダー",
+    "subtitle": "すべての予約を確認・管理 • ドラッグで日程変更",
+    "filtersActive": "{count}件のフィルター適用中",
+    "filtersActiveMultiple": "{count}件のフィルター適用中",
+    "loading": "カレンダーを読み込み中...",
+    "buttons": {
+      "hideStats": "統計を非表示",
+      "showStats": "統計を表示",
+      "filters": "フィルター",
+      "export": "エクスポート",
+      "today": "今日",
+      "clearAll": "すべてクリア"
+    },
+    "viewModes": {
+      "month": "月",
+      "week": "週",
+      "timeline": "タイムライン"
+    },
+    "stats": {
+      "totalBookings": "総予約数",
+      "totalRevenue": "総売上",
+      "totalTravelers": "総旅行者数",
+      "upcoming": "今後の予約",
+      "conflicts": "件の重複",
+      "paymentStatusBreakdown": "支払い状況内訳"
+    },
+    "status": {
+      "notPaid": "未払い",
+      "depositReceived": "デポジット受領済み",
+      "deposit": "デポジット",
+      "partiallyPaid": "一部支払い済み",
+      "partial": "一部",
+      "paid": "支払い済み",
+      "completed": "完了"
+    },
+    "filters": {
+      "title": "フィルター",
+      "search": "検索",
+      "searchPlaceholder": "顧客名、コード、目的地...",
+      "filterByGuide": "ガイドで絞り込み",
+      "allGuides": "すべてのガイド",
+      "unassigned": "未割り当て",
+      "filterByVehicle": "車両で絞り込み",
+      "allVehicles": "すべての車両",
+      "paymentStatus": "支払い状況",
+      "multiSelectHint": "Ctrl/Cmdを押しながら複数選択",
+      "fromDate": "開始日",
+      "toDate": "終了日",
+      "showConflictsOnly": "重複のみ表示",
+      "hideCompleted": "完了した予約を非表示"
+    },
+    "legend": {
+      "dragToReschedule": "ドラッグで日程変更",
+      "hasGuide": "ガイドあり",
+      "hasVehicle": "車両あり",
+      "conflict": "重複"
+    },
+    "results": {
+      "showing": "表示中",
+      "of": "/",
+      "bookings": "件の予約"
+    },
+    "days": {
+      "sunday": "日曜日",
+      "monday": "月曜日",
+      "tuesday": "火曜日",
+      "wednesday": "水曜日",
+      "thursday": "木曜日",
+      "friday": "金曜日",
+      "saturday": "土曜日"
+    },
+    "week": {
+      "noBookings": "予約なし",
+      "pax": "名",
+      "guide": "ガイド",
+      "vehicle": "車両"
+    },
+    "timeline": {
+      "daysSpan": "日間",
+      "noBookingsTitle": "フィルターに一致する予約がありません",
+      "noBookingsDescription": "フィルターを調整して予約を表示してください",
+      "conflictDetected": "{count}件の予約重複を検出",
+      "conflictsDetected": "{count}件の予約重複を検出",
+      "conflictWarning": "一部の予約で日程が重複しています。リソースが十分か確認してください。"
+    },
+    "more": "+{count}件",
+    "modal": {
+      "confirmReschedule": "日程変更の確認",
+      "confirmQuestion": "この予約を移動してもよろしいですか？",
+      "booking": "予約",
+      "currentDates": "現在の日程",
+      "newDates": "新しい日程",
+      "cancel": "キャンセル",
+      "confirmMove": "移動を確定"
+    },
+    "alerts": {
+      "invalidDate": "無効な日付",
+      "cannotMoveToPast": "過去の日付には移動できません",
+      "error": "エラー",
+      "failedToUpdate": "予約の更新に失敗しました"
+    }
   },
   "settings": {
     "title": "設定",
@@ -4293,7 +4486,8 @@
     "clients": "顧客",
     "staff": "スタッフ",
     "subtitle": "顧客とチームメンバーの管理",
-    "export": {
+    "export": "エクスポート",
+    "exportHeaders": {
       "type": "タイプ",
       "name": "名前",
       "email": "メールアドレス",

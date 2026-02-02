@@ -230,6 +230,96 @@
     "days": "days",
     "startNow": "Start now →"
   },
+  "analytics": {
+    "title": "Analytics Dashboard",
+    "subtitle": "Business performance and insights",
+    "loading": "Loading analytics...",
+    "timeRange": {
+      "7d": "Last 7 Days",
+      "30d": "Last 30 Days",
+      "90d": "Last 90 Days",
+      "1y": "Last Year"
+    },
+    "emptyState": {
+      "title": "No data yet",
+      "description": "Start by adding clients and creating itineraries. Your analytics will populate automatically.",
+      "addClient": "Add Client",
+      "createItinerary": "Create Itinerary"
+    },
+    "metrics": {
+      "totalRevenue": "Total Revenue",
+      "vsPreviousPeriod": "vs. previous period",
+      "totalBookings": "Total Bookings",
+      "confirmed": "confirmed",
+      "pending": "pending",
+      "cancelled": "cancelled",
+      "totalClients": "Total Clients",
+      "new": "new",
+      "returning": "returning",
+      "returningRate": "returning rate",
+      "conversionRate": "Conversion Rate",
+      "avgDeal": "Avg deal"
+    },
+    "pipeline": {
+      "title": "Booking Pipeline",
+      "emptyHint": "Data will appear as you add clients and bookings",
+      "leads": "Leads",
+      "followups": "Follow-ups",
+      "pending": "Pending",
+      "cancelled": "Cancelled",
+      "confirmed": "Confirmed",
+      "completed": "Completed"
+    },
+    "highlights": {
+      "title": "Highlights This Month",
+      "newClients": "New clients",
+      "pendingBookings": "Pending bookings",
+      "avgDealSize": "Avg deal size",
+      "topDestination": "Top destination",
+      "bestChannel": "Best channel",
+      "na": "N/A"
+    },
+    "charts": {
+      "revenueTrend": "Revenue Trend",
+      "topDestinations": "Top Destinations",
+      "allDestinations": "All Destinations",
+      "bookingStatus": "Booking Status",
+      "allStatus": "All Status",
+      "revenueByDestination": "Revenue by Destination",
+      "revenue": "Revenue",
+      "bookings": "Bookings"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "viewBookings": "View Bookings",
+      "seeAllItineraries": "See all itineraries",
+      "bookingCalendar": "Booking Calendar",
+      "seeSchedule": "See schedule",
+      "clientInsights": "Client Insights",
+      "viewAllClients": "View all clients",
+      "followups": "Follow-ups",
+      "pendingTasks": "Pending tasks"
+    },
+    "empty": {
+      "noDestinationData": "No destination data yet",
+      "destinationHint": "Data will appear as you add bookings with cities",
+      "noBookings": "No bookings yet",
+      "revenueHint": "Revenue will appear as you add itineraries with cities"
+    },
+    "insights": {
+      "noRevenueData": "No revenue data available yet. Start adding confirmed bookings!",
+      "noBookingInsights": "Start adding bookings to see insights.",
+      "noConversionData": "Conversion data will appear once you have bookings.",
+      "busiestPeriod": "Your busiest period was {period} with {amount} in revenue.",
+      "pendingPercentage": "{percent}% of active bookings are still pending — consider follow-ups.",
+      "strongConversion": "Strong conversion rate! Your sales process is working well.",
+      "lowConversion": "Conversion rate needs attention. Review your sales funnel.",
+      "addBookingsForInsights": "Add bookings to see conversion insights.",
+      "noRevenueYet": "No revenue data available yet.",
+      "noBookingsRecorded": "No bookings recorded yet.",
+      "destinationLeads": "{destination} leads with {bookings} bookings ({revenue})"
+    }
+  },
   "clients": {
     "title": "Clients",
     "addClient": "Add Client",
@@ -1352,6 +1442,14 @@
     "statusVip": "VIP",
     "searchPlaceholder": "Search by name, email, phone...",
     "export": "Export",
+    "exportHeaders": {
+      "type": "Type",
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "locationNationality": "Location/Nationality",
+      "statusRole": "Status/Role"
+    },
     "view": "View",
     "edit": "Edit",
     "delete": "Delete",
@@ -1369,6 +1467,109 @@
     "showing": "Showing",
     "of": "of",
     "perPage": "/ page"
+  },
+  "calendar": {
+    "title": "Booking Calendar",
+    "subtitle": "View and manage all your bookings • Drag to reschedule",
+    "filtersActive": "{count} filter active",
+    "filtersActiveMultiple": "{count} filters active",
+    "loading": "Loading calendar...",
+    "buttons": {
+      "hideStats": "Hide Stats",
+      "showStats": "Show Stats",
+      "filters": "Filters",
+      "export": "Export",
+      "today": "Today",
+      "clearAll": "Clear All"
+    },
+    "viewModes": {
+      "month": "Month",
+      "week": "Week",
+      "timeline": "Timeline"
+    },
+    "stats": {
+      "totalBookings": "Total Bookings",
+      "totalRevenue": "Total Revenue",
+      "totalTravelers": "Total Travelers",
+      "upcoming": "Upcoming",
+      "conflicts": "conflicts",
+      "paymentStatusBreakdown": "Payment Status Breakdown"
+    },
+    "status": {
+      "notPaid": "Not Paid",
+      "depositReceived": "Deposit Received",
+      "deposit": "Deposit",
+      "partiallyPaid": "Partially Paid",
+      "partial": "Partial",
+      "paid": "Paid",
+      "completed": "Completed"
+    },
+    "filters": {
+      "title": "Filters",
+      "search": "Search",
+      "searchPlaceholder": "Client, code, destination...",
+      "filterByGuide": "Filter by Guide",
+      "allGuides": "All Guides",
+      "unassigned": "Unassigned",
+      "filterByVehicle": "Filter by Vehicle",
+      "allVehicles": "All Vehicles",
+      "paymentStatus": "Payment Status",
+      "multiSelectHint": "Hold Ctrl/Cmd to select multiple",
+      "fromDate": "From Date",
+      "toDate": "To Date",
+      "showConflictsOnly": "Show conflicts only",
+      "hideCompleted": "Hide completed bookings"
+    },
+    "legend": {
+      "dragToReschedule": "Drag to reschedule",
+      "hasGuide": "Has Guide",
+      "hasVehicle": "Has Vehicle",
+      "conflict": "Conflict"
+    },
+    "results": {
+      "showing": "Showing",
+      "of": "of",
+      "bookings": "bookings"
+    },
+    "days": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "week": {
+      "noBookings": "No bookings",
+      "pax": "pax",
+      "guide": "Guide",
+      "vehicle": "Vehicle"
+    },
+    "timeline": {
+      "daysSpan": "days span",
+      "noBookingsTitle": "No Bookings Match Filters",
+      "noBookingsDescription": "Try adjusting your filters to see more bookings",
+      "conflictDetected": "{count} Booking Conflict Detected",
+      "conflictsDetected": "{count} Booking Conflicts Detected",
+      "conflictWarning": "Some bookings have overlapping dates. Review these bookings to ensure you have adequate resources."
+    },
+    "more": "+{count} more",
+    "modal": {
+      "confirmReschedule": "Confirm Reschedule",
+      "confirmQuestion": "Are you sure you want to move this booking?",
+      "booking": "Booking",
+      "currentDates": "Current Dates",
+      "newDates": "New Dates",
+      "cancel": "Cancel",
+      "confirmMove": "Confirm Move"
+    },
+    "alerts": {
+      "invalidDate": "Invalid Date",
+      "cannotMoveToPast": "Cannot move booking to a past date",
+      "error": "Error",
+      "failedToUpdate": "Failed to update booking"
+    }
   },
   "settings": {
     "title": "Settings",
