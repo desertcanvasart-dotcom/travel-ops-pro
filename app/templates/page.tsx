@@ -799,31 +799,30 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
   )
 
   // Determine recipient type based on template
-  const isPartnerTemplate = template.category === 'partner'
-  const isSupplierTemplate = template.category === 'supplier'
-  const isPartnerOrSupplier = isPartnerTemplate || isSupplierTemplate
-  const partnerType = SUBCATEGORY_TO_PARTNER_TYPE[template.subcategory] || 'supplier'
+  const isPartnerTemplate = template.category === 'partner'  // B2B partners (travel agencies)
+  const isSupplierTemplate = template.category === 'supplier'  // Service providers (hotels, transport, guides)
+  const supplierType = SUBCATEGORY_TO_PARTNER_TYPE[template.subcategory] || 'supplier'
 
   const getRecipientLabel = () => {
-    if (!isPartnerOrSupplier) return 'Select Client'
-    switch (partnerType) {
+    if (isPartnerTemplate) return 'Select B2B Partner'
+    if (!isSupplierTemplate) return 'Select Client'
+    switch (supplierType) {
       case 'hotel': return 'Select Hotel'
       case 'cruise': return 'Select Nile Cruise'
       case 'transport': return 'Select Transport Supplier'
       case 'guide': return 'Select Guide'
-      case 'supplier': return 'Select Supplier'
-      default: return isSupplierTemplate ? 'Select Supplier' : 'Select Partner'
+      default: return 'Select Supplier'
     }
   }
 
   const getRecipientIcon = () => {
-    if (!isPartnerOrSupplier) return <User className="w-4 h-4" />
-    switch (partnerType) {
+    if (isPartnerTemplate) return <Building2 className="w-4 h-4" />
+    if (!isSupplierTemplate) return <User className="w-4 h-4" />
+    switch (supplierType) {
       case 'hotel': return <Hotel className="w-4 h-4" />
       case 'cruise': return <Ship className="w-4 h-4" />
       case 'transport': return <Car className="w-4 h-4" />
       case 'guide': return <User className="w-4 h-4" />
-      case 'supplier': return <Building2 className="w-4 h-4" />
       default: return <Building2 className="w-4 h-4" />
     }
   }
@@ -837,15 +836,20 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     if (selectedRecipient) {
       const values: Record<string, string> = {}
 
-      if (isPartnerOrSupplier) {
-        // Partner/Supplier placeholders
+      if (isPartnerTemplate) {
+        // B2B Partner placeholders (travel agencies)
+        values['{{PartnerName}}'] = selectedRecipient.name || ''
+        values['{{PartnerCompany}}'] = selectedRecipient.name || ''
+        values['{{PartnerEmail}}'] = selectedRecipient.email || ''
+        values['{{PartnerPhone}}'] = selectedRecipient.phone || ''
+        values['{{ContactName}}'] = selectedRecipient.name || ''
+      } else if (isSupplierTemplate) {
+        // Supplier placeholders (hotels, transport, guides, etc.)
         values['{{ProviderName}}'] = selectedRecipient.name || ''
         values['{{HotelName}}'] = selectedRecipient.name || ''
         values['{{CruiseName}}'] = selectedRecipient.name || ''
         values['{{SupplierName}}'] = selectedRecipient.name || ''
         values['{{GuideName}}'] = selectedRecipient.name || ''
-        values['{{PartnerEmail}}'] = selectedRecipient.email || ''
-        values['{{PartnerPhone}}'] = selectedRecipient.phone || ''
         values['{{SupplierEmail}}'] = selectedRecipient.email || ''
         values['{{SupplierPhone}}'] = selectedRecipient.phone || ''
         values['{{SupplierWhatsApp}}'] = selectedRecipient.phone || ''
@@ -860,7 +864,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
 
       setFilledValues(prev => ({ ...prev, ...values }))
     }
-  }, [selectedRecipient, isPartnerOrSupplier])
+  }, [selectedRecipient, isPartnerTemplate, isSupplierTemplate])
 
   useEffect(() => {
     // Generate preview
@@ -876,8 +880,12 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     try {
       let endpoint = '/api/clients?limit=100'
 
-      if (isPartnerOrSupplier) {
-        switch (partnerType) {
+      if (isPartnerTemplate) {
+        // B2B partners are travel agencies who request quotes
+        endpoint = '/api/b2b/partners'
+      } else if (isSupplierTemplate) {
+        // Suppliers are service providers (hotels, transport, guides, etc.)
+        switch (supplierType) {
           case 'hotel':
             endpoint = '/api/suppliers?type=hotel'
             break
@@ -889,9 +897,6 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
             break
           case 'guide':
             endpoint = '/api/guides'
-            break
-          case 'supplier':
-            endpoint = '/api/suppliers'
             break
           default:
             endpoint = '/api/suppliers'
@@ -921,10 +926,10 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
         // Normalize to Recipient format
         const normalized: Recipient[] = items.map(item => ({
           id: item.id,
-          name: item.name || item.hotel_name || item.cruise_name || item.supplier_name || 'Unknown',
+          name: item.company_name || item.name || item.hotel_name || item.cruise_name || item.supplier_name || 'Unknown',
           email: item.email || item.contact_email || item.reservations_email,
-          phone: item.phone || item.contact_phone || item.whatsapp_number,
-          type: isPartnerOrSupplier ? partnerType as any : 'client'
+          phone: item.phone || item.contact_phone || item.whatsapp_number || item.whatsapp,
+          type: isPartnerTemplate ? 'partner' : isSupplierTemplate ? supplierType as any : 'client'
         }))
 
         setRecipients(normalized)
