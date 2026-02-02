@@ -4338,6 +4338,8 @@
     "contactEmailPlaceholder": "Enter email address",
     "contactPhone": "Contact Phone",
     "contactPhonePlaceholder": "Enter phone number",
+    "whatsapp": "WhatsApp",
+    "whatsappPlaceholder": "Enter WhatsApp number (with country code)",
     "address": "Address",
     "addressPlaceholder": "Enter full address",
     "guestName": "Guest Name",

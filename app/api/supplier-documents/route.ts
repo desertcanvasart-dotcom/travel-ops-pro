@@ -132,15 +132,16 @@ export async function POST(request: NextRequest) {
     if (body.supplier_id && !body.supplier_name) {
       const { data: supplier } = await supabase
         .from('suppliers')
-        .select('name, contact_name, contact_email, contact_phone, address, city, country')
+        .select('name, contact_name, contact_email, contact_phone, whatsapp, address, city, country')
         .eq('id', body.supplier_id)
         .single()
-      
+
       if (supplier) {
         body.supplier_name = supplier.name
         body.supplier_contact_name = body.supplier_contact_name || supplier.contact_name
         body.supplier_contact_email = body.supplier_contact_email || supplier.contact_email
         body.supplier_contact_phone = body.supplier_contact_phone || supplier.contact_phone
+        body.supplier_whatsapp = body.supplier_whatsapp || supplier.whatsapp
         body.supplier_address = body.supplier_address || [supplier.address, supplier.city, supplier.country].filter(Boolean).join(', ')
       }
     }

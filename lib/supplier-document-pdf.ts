@@ -22,6 +22,7 @@ interface SupplierDocument {
   supplier_contact_name?: string
   supplier_contact_email?: string
   supplier_contact_phone?: string
+  supplier_whatsapp?: string
   supplier_address?: string
   client_name: string
   client_nationality?: string
@@ -189,11 +190,15 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     supplierY += addressLines.slice(0, 2).length * 4
   }
   if (doc.supplier_contact_phone) {
-    pdf.text(`📞 ${doc.supplier_contact_phone}`, margin + 4, supplierY)
+    pdf.text(`Tel: ${doc.supplier_contact_phone}`, margin + 4, supplierY)
+    supplierY += 4
+  }
+  if (doc.supplier_whatsapp) {
+    pdf.text(`WhatsApp: ${doc.supplier_whatsapp}`, margin + 4, supplierY)
     supplierY += 4
   }
   if (doc.supplier_contact_email) {
-    pdf.text(`✉️ ${doc.supplier_contact_email}`, margin + 4, supplierY)
+    pdf.text(`Email: ${doc.supplier_contact_email}`, margin + 4, supplierY)
   }
   
   // Guest Box (Right)

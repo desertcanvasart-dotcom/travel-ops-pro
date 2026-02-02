@@ -32,6 +32,7 @@ interface Supplier {
   contact_name?: string
   contact_email?: string
   contact_phone?: string
+  whatsapp?: string
   address?: string
   city?: string
   country?: string
@@ -135,9 +136,6 @@ export default function EditSupplierDocumentPage() {
 
   // Handle supplier selection and auto-populate fields
   const handleSupplierSelect = (supplierId: string) => {
-    console.log('handleSupplierSelect called with:', supplierId)
-    console.log('Available suppliers:', suppliers)
-
     if (!supplierId) {
       // Clear supplier fields if "No supplier" is selected
       setDocument({
@@ -147,27 +145,17 @@ export default function EditSupplierDocumentPage() {
         supplier_contact_name: '',
         supplier_contact_email: '',
         supplier_contact_phone: '',
+        supplier_whatsapp: '',
         supplier_address: ''
       })
       return
     }
 
     const supplier = suppliers.find(s => s.id === supplierId)
-    console.log('Found supplier:', supplier)
-
     if (supplier) {
       const address = [supplier.address, supplier.city, supplier.country]
         .filter(Boolean)
         .join(', ')
-
-      console.log('Setting document with:', {
-        supplier_id: supplier.id,
-        supplier_name: supplier.name,
-        supplier_contact_name: supplier.contact_name,
-        supplier_contact_email: supplier.contact_email,
-        supplier_contact_phone: supplier.contact_phone,
-        supplier_address: address
-      })
 
       setDocument({
         ...document,
@@ -176,6 +164,7 @@ export default function EditSupplierDocumentPage() {
         supplier_contact_name: supplier.contact_name || '',
         supplier_contact_email: supplier.contact_email || '',
         supplier_contact_phone: supplier.contact_phone || '',
+        supplier_whatsapp: supplier.whatsapp || '',
         supplier_address: address
       })
     }
@@ -416,7 +405,7 @@ export default function EditSupplierDocumentPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('contactEmail')}</label>
                 <input
@@ -435,6 +424,16 @@ export default function EditSupplierDocumentPage() {
                   onChange={(e) => setDocument({ ...document, supplier_contact_phone: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   placeholder={t('contactPhonePlaceholder')}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('whatsapp')}</label>
+                <input
+                  type="text"
+                  value={document.supplier_whatsapp || ''}
+                  onChange={(e) => setDocument({ ...document, supplier_whatsapp: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('whatsappPlaceholder')}
                 />
               </div>
             </div>
