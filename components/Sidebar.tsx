@@ -28,7 +28,6 @@ import {
   Plane,
   Coins,
   LogOut,
-  Mail,
   Ticket,
   Contact,
   Library,
@@ -121,8 +120,6 @@ const navigationConfig: NavConfig[] = [
     roles: ['admin', 'manager', 'agent'],
     items: [
       { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
-      { labelKey: 'email', href: '/inbox', icon: Mail },
-      { labelKey: 'whatsapp', href: '/whatsapp-inbox', icon: MessageSquare },
       { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: Send },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
     ]
