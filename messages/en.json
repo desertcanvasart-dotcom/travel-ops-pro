@@ -713,6 +713,11 @@
         "completed": "Completed",
         "cancelled": "Cancelled"
       },
+      "confirmedBookingBanner": {
+        "title": "This itinerary has an active booking",
+        "description": "Manage invoices, service orders, and expenses from the booking page.",
+        "goToBooking": "Go to Booking"
+      },
       "serviceTypes": {
         "transportation": "Transportation",
         "guide": "Guide",
@@ -4235,6 +4240,8 @@
       "view": "View",
       "viewItinerary": "View Itinerary",
       "editItinerary": "Edit Itinerary",
+      "invoice": "Invoice",
+      "contract": "Contract",
       "markSupplierConfirmed": "Mark Confirmed",
       "recordPayment": "Record Payment",
       "generateVouchers": "Generate Vouchers",

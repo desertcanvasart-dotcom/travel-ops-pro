@@ -855,71 +855,77 @@ export default function ItineraryEditorPage() {
               {tCommon('view')}
             </Link>
 
-            {/* Invoice Button */}
-            {existingInvoice ? (
-              <Link
-                href={`/invoices/${existingInvoice.id}`}
-                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-1.5"
-              >
-                <Receipt size={14} />
-                {existingInvoice.invoice_number}
-              </Link>
-            ) : (
-              <button
-                onClick={async () => {
-                  const response = await fetch('/api/invoices', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      itinerary_id: itinerary.id,
-                      client_name: itinerary.client_name,
-                      client_email: itinerary.client_email,
-                      line_items: [{
-                        description: `${itinerary.trip_name} - ${itinerary.itinerary_code}`,
-                        quantity: 1,
-                        unit_price: itinerary.total_cost,
-                        amount: itinerary.total_cost
-                      }],
-                      subtotal: itinerary.total_cost,
-                      total_amount: itinerary.total_cost,
-                      currency: itinerary.currency || 'EUR',
-                      issue_date: new Date().toISOString().split('T')[0],
-                      due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                    })
-                  })
-                  if (response.ok) {
-                    const invoice = await response.json()
-                    router.push(`/invoices/${invoice.id}`)
-                  }
-                }}
-                className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 flex items-center gap-1.5"
-              >
-                <Receipt size={14} />
-                {t('invoice')}
-              </button>
+            {/* Operational buttons - hidden when confirmed (use booking page instead) */}
+            {itinerary.status !== 'confirmed' && (
+              <>
+                {/* Invoice Button */}
+                {existingInvoice ? (
+                  <Link
+                    href={`/invoices/${existingInvoice.id}`}
+                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-1.5"
+                  >
+                    <Receipt size={14} />
+                    {existingInvoice.invoice_number}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const response = await fetch('/api/invoices', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          itinerary_id: itinerary.id,
+                          client_name: itinerary.client_name,
+                          client_email: itinerary.client_email,
+                          line_items: [{
+                            description: `${itinerary.trip_name} - ${itinerary.itinerary_code}`,
+                            quantity: 1,
+                            unit_price: itinerary.total_cost,
+                            amount: itinerary.total_cost
+                          }],
+                          subtotal: itinerary.total_cost,
+                          total_amount: itinerary.total_cost,
+                          currency: itinerary.currency || 'EUR',
+                          issue_date: new Date().toISOString().split('T')[0],
+                          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                        })
+                      })
+                      if (response.ok) {
+                        const invoice = await response.json()
+                        router.push(`/invoices/${invoice.id}`)
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 flex items-center gap-1.5"
+                  >
+                    <Receipt size={14} />
+                    {t('invoice')}
+                  </button>
+                )}
+
+                {/* Documents Dropdown */}
+                <GenerateDocumentsButton
+                  itineraryId={itinerary.id}
+                  itineraryCode={itinerary.itinerary_code}
+                />
+
+                {/* Contract Link */}
+                <Link
+                  href={`/documents/contract/${itinerary.id}`}
+                  className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5"
+                >
+                  <FileText size={14} />
+                  {t('contract')}
+                </Link>
+
+                {/* Add Expense */}
+                <AddExpenseFromItinerary
+                  itineraryId={itinerary.id}
+                  itineraryCode={itinerary.itinerary_code}
+                  clientName={itinerary.client_name}
+                />
+              </>
             )}
-
-            {/* Documents Dropdown */}
-            <GenerateDocumentsButton 
-              itineraryId={itinerary.id}
-              itineraryCode={itinerary.itinerary_code}
-            />
-
-            {/* Contract Link */}
-            <Link
-              href={`/documents/contract/${itinerary.id}`}
-              className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5"
-            >
-              <FileText size={14} />
-              {t('contract')}
-            </Link>
-
-            {/* Add Expense */}
-            <AddExpenseFromItinerary 
-              itineraryId={itinerary.id}
-              itineraryCode={itinerary.itinerary_code}
-              clientName={itinerary.client_name}
-            />
 
             {/* Calculate Pricing */}
             <button
@@ -933,6 +939,30 @@ export default function ItineraryEditorPage() {
           </div>
         </div>
       </div>
+
+      {/* BOOKING BANNER - shown when itinerary is confirmed */}
+      {itinerary.status === 'confirmed' && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <Check className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-green-800">{t('confirmedBookingBanner.title')}</h3>
+                <p className="text-sm text-green-600">{t('confirmedBookingBanner.description')}</p>
+              </div>
+            </div>
+            <Link
+              href={`/bookings?search=${encodeURIComponent(itinerary.itinerary_code)}`}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-2"
+            >
+              {t('confirmedBookingBanner.goToBooking')}
+              <ChevronRight size={16} />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* WORKFLOW STATUS BAR */}
       <div className="bg-white rounded-xl p-4 mb-5 shadow-sm flex items-center gap-2">

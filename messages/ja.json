@@ -1075,6 +1075,11 @@
         "completed": "完了",
         "cancelled": "キャンセル"
       },
+      "confirmedBookingBanner": {
+        "title": "この旅程には有効な予約があります",
+        "description": "請求書、サービスオーダー、経費は予約ページから管理してください。",
+        "goToBooking": "予約へ移動"
+      },
       "daysCount": "{count}日間",
       "adultsCount": "{count}名（大人）",
       "childrenCount": "{count}名（子供）",
@@ -5043,6 +5048,8 @@
       "view": "表示",
       "viewItinerary": "旅程を表示",
       "editItinerary": "旅程を編集",
+      "invoice": "請求書",
+      "contract": "契約書",
       "markSupplierConfirmed": "確認済みにする",
       "recordPayment": "支払いを記録",
       "generateVouchers": "バウチャー生成",

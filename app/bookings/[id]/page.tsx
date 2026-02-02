@@ -40,6 +40,8 @@ import {
   PAYMENT_STATUS_CONFIG,
   SupplierConfirmationStatus
 } from '@/types/bookings'
+import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
+import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'notes'
 
@@ -305,14 +307,52 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Operational Actions - only if linked to itinerary */}
           {booking.itinerary && (
-            <Link
-              href={`/itineraries/${booking.itinerary.id}`}
-              className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
-            >
-              {t('actions.viewItinerary')}
-            </Link>
+            <>
+              {/* Invoice Button */}
+              <Link
+                href={`/invoices?itineraryId=${booking.itinerary.id}`}
+                className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+              >
+                <Receipt className="w-4 h-4" />
+                {t('actions.invoice')}
+              </Link>
+
+              {/* Documents (Service Orders) */}
+              <GenerateDocumentsButton
+                itineraryId={booking.itinerary.id}
+                itineraryCode={booking.itinerary.itinerary_code}
+              />
+
+              {/* Add Expense */}
+              <AddExpenseFromItinerary
+                itineraryId={booking.itinerary.id}
+                itineraryCode={booking.itinerary.itinerary_code}
+                clientName={booking.client_name}
+              />
+
+              {/* Contract */}
+              <Link
+                href={`/documents/contract/${booking.itinerary.id}`}
+                className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+              >
+                <FileText className="w-4 h-4" />
+                {t('actions.contract')}
+              </Link>
+
+              {/* View Itinerary */}
+              <Link
+                href={`/itineraries/${booking.itinerary.id}`}
+                className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+              >
+                <FileText className="w-4 h-4" />
+                {t('actions.viewItinerary')}
+              </Link>
+            </>
           )}
+
+          {/* Status Dropdown */}
           <select
             value={booking.status}
             onChange={(e) => updateBookingStatus(e.target.value)}
