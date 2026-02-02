@@ -42,10 +42,13 @@ const SERVICE_TO_DOC_TYPE: Record<string, { docType: string | null, category?: s
 // Map supplier types to document types
 const SUPPLIER_TO_DOC_TYPE: Record<string, string> = {
   hotel: 'hotel_voucher',
+  hotel_chain: 'hotel_voucher',
   transport: 'transport_voucher',
+  transport_company: 'transport_voucher',
   driver: 'transport_voucher',
   guide: 'guide_assignment',
   cruise: 'cruise_voucher',
+  cruise_line: 'cruise_voucher',
   restaurant: 'service_order',
   activity_provider: 'service_order',
   attraction: 'service_order',
@@ -356,6 +359,7 @@ export async function POST(
         supplier_contact_name: group.supplier.contact_name,
         supplier_contact_email: group.supplier.contact_email,
         supplier_contact_phone: group.supplier.contact_phone,
+        supplier_whatsapp: group.supplier.whatsapp,
         supplier_address: [group.supplier.address, group.supplier.city, group.supplier.country].filter(Boolean).join(', '),
         client_name: itinerary.client_name,
         client_nationality: itinerary.client_nationality,

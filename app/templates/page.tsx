@@ -36,7 +36,7 @@ interface Template {
   id: string
   name: string
   description: string
-  category: 'customer' | 'partner' | 'internal'
+  category: 'customer' | 'partner' | 'supplier' | 'internal'
   subcategory: string
   channel: 'email' | 'whatsapp' | 'both'
   subject?: string
@@ -72,6 +72,7 @@ const CATEGORIES = [
   { id: 'all', label: 'All Templates', icon: FileText },
   { id: 'customer', label: 'Customer', icon: Users },
   { id: 'partner', label: 'Partner', icon: Building2 },
+  { id: 'supplier', label: 'Supplier', icon: Car },
   { id: 'internal', label: 'Internal', icon: Briefcase },
 ]
 
@@ -83,6 +84,7 @@ const CHANNELS = [
 ]
 
 const SUBCATEGORY_LABELS: Record<string, string> = {
+  // Customer
   lead_response: 'Lead Response',
   quotation: 'Quotation',
   booking_confirmation: 'Booking Confirmation',
@@ -91,9 +93,21 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   voucher: 'Voucher',
   check_in: 'Check-in',
   post_trip: 'Post Trip',
+  // Partner (B2B)
   rate_request: 'Rate Request',
   booking_request: 'Booking Request',
   cruise_hold: 'Cruise Hold',
+  // Supplier
+  hotel_reservation: 'Hotel Reservation',
+  transport_booking: 'Transport Booking',
+  guide_assignment: 'Guide Assignment',
+  cruise_booking: 'Cruise Booking',
+  service_order: 'Service Order',
+  confirmation_request: 'Confirmation Request',
+  payment_notice: 'Payment Notice',
+  amendment: 'Amendment',
+  cancellation: 'Cancellation',
+  // Internal
   transport: 'Transport',
   guide_booking: 'Guide Booking',
   handover: 'Handover',
@@ -101,11 +115,23 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   debrief: 'Debrief',
 }
 
-// Map subcategories to partner types
+// Map subcategories to partner/supplier types
 const SUBCATEGORY_TO_PARTNER_TYPE: Record<string, string> = {
+  // Partner (B2B)
   rate_request: 'hotel',
   booking_request: 'hotel',
   cruise_hold: 'cruise',
+  // Supplier
+  hotel_reservation: 'hotel',
+  transport_booking: 'transport',
+  guide_assignment: 'guide',
+  cruise_booking: 'cruise',
+  service_order: 'supplier',
+  confirmation_request: 'supplier',
+  payment_notice: 'supplier',
+  amendment: 'supplier',
+  cancellation: 'supplier',
+  // Internal
   transport: 'transport',
   guide_booking: 'guide',
 }
@@ -334,6 +360,7 @@ export default function TemplatesPage() {
     switch (category) {
       case 'customer': return 'bg-emerald-100 text-emerald-700'
       case 'partner': return 'bg-amber-100 text-amber-700'
+      case 'supplier': return 'bg-blue-100 text-blue-700'
       case 'internal': return 'bg-slate-100 text-slate-700'
       default: return 'bg-gray-100 text-gray-700'
     }
@@ -383,10 +410,11 @@ export default function TemplatesPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 space-y-3">
+        {/* Row 1: Search + Category Filter */}
         <div className="flex flex-wrap items-center gap-4">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
@@ -414,8 +442,11 @@ export default function TemplatesPage() {
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Channel Filter */}
+        {/* Row 2: Channel Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Channel:</span>
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
             {CHANNELS.map((ch) => (
               <button
@@ -566,7 +597,8 @@ export default function TemplatesPage() {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   >
                     <option value="customer">Customer</option>
-                    <option value="partner">Partner</option>
+                    <option value="partner">Partner (B2B)</option>
+                    <option value="supplier">Supplier</option>
                     <option value="internal">Internal</option>
                   </select>
                 </div>
@@ -768,26 +800,30 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
 
   // Determine recipient type based on template
   const isPartnerTemplate = template.category === 'partner'
-  const partnerType = SUBCATEGORY_TO_PARTNER_TYPE[template.subcategory] || 'hotel'
+  const isSupplierTemplate = template.category === 'supplier'
+  const isPartnerOrSupplier = isPartnerTemplate || isSupplierTemplate
+  const partnerType = SUBCATEGORY_TO_PARTNER_TYPE[template.subcategory] || 'supplier'
 
   const getRecipientLabel = () => {
-    if (!isPartnerTemplate) return 'Select Client'
+    if (!isPartnerOrSupplier) return 'Select Client'
     switch (partnerType) {
       case 'hotel': return 'Select Hotel'
       case 'cruise': return 'Select Nile Cruise'
       case 'transport': return 'Select Transport Supplier'
       case 'guide': return 'Select Guide'
-      default: return 'Select Partner'
+      case 'supplier': return 'Select Supplier'
+      default: return isSupplierTemplate ? 'Select Supplier' : 'Select Partner'
     }
   }
 
   const getRecipientIcon = () => {
-    if (!isPartnerTemplate) return <User className="w-4 h-4" />
+    if (!isPartnerOrSupplier) return <User className="w-4 h-4" />
     switch (partnerType) {
       case 'hotel': return <Hotel className="w-4 h-4" />
       case 'cruise': return <Ship className="w-4 h-4" />
       case 'transport': return <Car className="w-4 h-4" />
       case 'guide': return <User className="w-4 h-4" />
+      case 'supplier': return <Building2 className="w-4 h-4" />
       default: return <Building2 className="w-4 h-4" />
     }
   }
@@ -800,9 +836,9 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     // Auto-fill from selected recipient
     if (selectedRecipient) {
       const values: Record<string, string> = {}
-      
-      if (isPartnerTemplate) {
-        // Partner placeholders
+
+      if (isPartnerOrSupplier) {
+        // Partner/Supplier placeholders
         values['{{ProviderName}}'] = selectedRecipient.name || ''
         values['{{HotelName}}'] = selectedRecipient.name || ''
         values['{{CruiseName}}'] = selectedRecipient.name || ''
@@ -810,6 +846,10 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
         values['{{GuideName}}'] = selectedRecipient.name || ''
         values['{{PartnerEmail}}'] = selectedRecipient.email || ''
         values['{{PartnerPhone}}'] = selectedRecipient.phone || ''
+        values['{{SupplierEmail}}'] = selectedRecipient.email || ''
+        values['{{SupplierPhone}}'] = selectedRecipient.phone || ''
+        values['{{SupplierWhatsApp}}'] = selectedRecipient.phone || ''
+        values['{{ContactName}}'] = selectedRecipient.name || ''
       } else {
         // Client placeholders
         values['{{GuestName}}'] = selectedRecipient.name || ''
@@ -817,10 +857,10 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
         values['{{ClientPhone}}'] = selectedRecipient.phone || ''
         values['{{ClientEmail}}'] = selectedRecipient.email || ''
       }
-      
+
       setFilledValues(prev => ({ ...prev, ...values }))
     }
-  }, [selectedRecipient, isPartnerTemplate])
+  }, [selectedRecipient, isPartnerOrSupplier])
 
   useEffect(() => {
     // Generate preview
@@ -835,8 +875,8 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     setLoading(true)
     try {
       let endpoint = '/api/clients?limit=100'
-      
-      if (isPartnerTemplate) {
+
+      if (isPartnerOrSupplier) {
         switch (partnerType) {
           case 'hotel':
             endpoint = '/api/hotels'
@@ -845,11 +885,16 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
             endpoint = '/api/nile-cruises'
             break
           case 'transport':
-            endpoint = '/api/suppliers?type=transport'
+            endpoint = '/api/suppliers?type=transport_company'
             break
           case 'guide':
             endpoint = '/api/guides'
             break
+          case 'supplier':
+            endpoint = '/api/suppliers'
+            break
+          default:
+            endpoint = '/api/suppliers'
         }
       }
 
@@ -873,7 +918,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
           name: item.name || item.hotel_name || item.cruise_name || item.supplier_name || 'Unknown',
           email: item.email || item.contact_email || item.reservations_email,
           phone: item.phone || item.contact_phone || item.whatsapp_number,
-          type: isPartnerTemplate ? partnerType as any : 'client'
+          type: isPartnerOrSupplier ? partnerType as any : 'client'
         }))
 
         setRecipients(normalized)
@@ -1014,7 +1059,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
                 )}
                 {recipients.length === 0 && !loading && (
                   <p className="text-xs text-amber-600 mt-1">
-                    No {isPartnerTemplate ? 'partners' : 'clients'} found. Add some first.
+                    No {isSupplierTemplate ? 'suppliers' : isPartnerTemplate ? 'partners' : 'clients'} found. Add some first.
                   </p>
                 )}
               </div>

@@ -135,6 +135,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'suppliers', href: '/suppliers', icon: Building },
       { labelKey: 'itineraries', href: '/itineraries', icon: Route },
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase },
+      { labelKey: 'documents', href: '/documents', icon: FileText },
       { labelKey: 'teamMembers', href: '/team-members', icon: Users },
       { labelKey: 'tasks', href: '/tasks', icon: CheckSquare },
     ]
@@ -182,8 +183,6 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'contentLibrary', href: '/content-library', icon: Library },
       { labelKey: 'writingRules', href: '/content-library/rules', icon: BookOpen },
-      { labelKey: 'aiPrompts', href: '/content-library/prompts', icon: Wand2 },
-      { labelKey: 'documents', href: '/documents', icon: FileText },
     ]
   },
   {
