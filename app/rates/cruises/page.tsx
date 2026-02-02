@@ -14,11 +14,11 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 // CONSTANTS
 // ============================================
 
-const TIER_OPTIONS = [
-  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
-  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
-  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
-  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+const TIER_OPTIONS_CONFIG = [
+  { value: 'budget', labelKey: 'budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', labelKey: 'standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', labelKey: 'deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', labelKey: 'luxury', color: 'bg-amber-100 text-amber-700' }
 ]
 
 const CITIES = ['Luxor', 'Aswan', 'Cairo']
@@ -177,11 +177,11 @@ interface CruiseFormData {
 // COMPONENTS
 // ============================================
 
-function TierBadge({ tier }: { tier: string | null }) {
-  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
+function TierBadge({ tier, t }: { tier: string | null; t: (key: string) => string }) {
+  const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === tier) || TIER_OPTIONS_CONFIG[1]
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {tierConfig.label}
+      {t(`tiers.${tierConfig.labelKey}`)}
     </span>
   )
 }
@@ -209,7 +209,7 @@ function Pagination({
   itemsPerPage: number
   onPageChange: (page: number) => void
   onItemsPerPageChange: (items: number) => void
-  t: any
+  t: (key: string, params?: Record<string, string | number>) => string
 }) {
   const goToPage = (page: number) => {
     onPageChange(Math.max(1, Math.min(page, totalPages)))
@@ -350,7 +350,7 @@ function SeasonalRateSection({
   showSecondPeriod?: boolean
   borderColor?: string
   bgColor?: string
-  t: any
+  t: (key: string) => string
 }) {
   return (
     <div className={`border ${borderColor} rounded-lg p-4 ${bgColor}`}>
@@ -946,7 +946,7 @@ export default function CruisesPage() {
             >
               <option value="all">{t('filters.allCategories')}</option>
               {SHIP_CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                <option key={cat} value={cat}>{t(`shipCategories.${cat}`)}</option>
               ))}
             </select>
             <select
@@ -956,7 +956,7 @@ export default function CruisesPage() {
             >
               <option value="all">{t('filters.allCabins')}</option>
               {CABIN_TYPES.map(type => (
-                <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                <option key={type} value={type}>{t(`cabinTypes.${type}`)}</option>
               ))}
             </select>
             <select
@@ -1021,7 +1021,7 @@ export default function CruisesPage() {
                         cruise.ship_category === 'deluxe' ? 'bg-blue-100 text-blue-800' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {cruise.ship_category}
+                        {t(`shipCategories.${cruise.ship_category}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
@@ -1038,11 +1038,11 @@ export default function CruisesPage() {
                         cruise.cabin_type === 'deluxe' ? 'bg-indigo-100 text-indigo-800' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {cruise.cabin_type}
+                        {t(`cabinTypes.${cruise.cabin_type}`)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <TierBadge tier={cruise.tier} />
+                      <TierBadge tier={cruise.tier} t={t} />
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
                       {formatRate(cruise.rate_single_eur)}
@@ -1158,7 +1158,7 @@ export default function CruisesPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                   >
                     {SHIP_CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                      <option key={cat} value={cat}>{t(`shipCategories.${cat}`)}</option>
                     ))}
                   </select>
                 </div>
@@ -1216,7 +1216,7 @@ export default function CruisesPage() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                 >
                   {CABIN_TYPES.map(type => (
-                    <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                    <option key={type} value={type}>{t(`cabinTypes.${type}`)}</option>
                   ))}
                 </select>
               </div>
@@ -1228,7 +1228,7 @@ export default function CruisesPage() {
                   {t('form.serviceTier')}
                 </h3>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {TIER_OPTIONS.map((tier) => (
+                  {TIER_OPTIONS_CONFIG.map((tier) => (
                     <button
                       key={tier.value}
                       type="button"
@@ -1246,7 +1246,7 @@ export default function CruisesPage() {
                       }`}
                     >
                       {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
-                      {tier.label}
+                      {t(`tiers.${tier.labelKey}`)}
                     </button>
                   ))}
                 </div>
