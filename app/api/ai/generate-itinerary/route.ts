@@ -1432,7 +1432,12 @@ export async function POST(request: NextRequest) {
       is_structured_input = false,
       extracted_days = null,
       raw_itinerary = null,
-      input_mode_override = null // 'creative' | 'structured' | null
+      input_mode_override = null, // 'creative' | 'structured' | null
+
+      // B2B Partner fields
+      partner_id = null,
+      partner_commission_percent = 0,
+      source = 'b2c_whatsapp'
     } = body
 
     const finalTourName = tour_requested || tour_name || 'Egypt Tour'
@@ -1572,7 +1577,7 @@ export async function POST(request: NextRequest) {
 
         const nights = duration_days - 1
         
-        // Create itinerary - UPDATED: Use effectivePackageType
+        // Create itinerary - UPDATED: Use effectivePackageType + B2B partner fields
         const { data: itinerary, error: itineraryError } = await supabase
           .from('itineraries')
           .insert({
@@ -1595,7 +1600,11 @@ export async function POST(request: NextRequest) {
             package_type: effectivePackageType,
             cost_mode,
             notes: special_requests.length > 0 ? special_requests.join('; ') : null,
-            client_id
+            client_id,
+            // B2B Partner fields
+            partner_id: partner_id || null,
+            partner_commission_percent: partner_commission_percent || 0,
+            source: partner_id ? 'b2b_custom' : source
           })
           .select()
           .single()
@@ -1868,7 +1877,7 @@ export async function POST(request: NextRequest) {
     const finalEndDate = new Date(startDateObj)
     finalEndDate.setDate(startDateObj.getDate() + duration_days - 1)
 
-    // Create itinerary record - UPDATED: Use effectivePackageType
+    // Create itinerary record - UPDATED: Use effectivePackageType + B2B partner fields
     const { data: itinerary, error: itineraryError } = await supabase
       .from('itineraries')
       .insert({
@@ -1891,7 +1900,11 @@ export async function POST(request: NextRequest) {
         package_type: effectivePackageType,
         cost_mode,
         notes: special_requests.length > 0 ? special_requests.join('; ') : null,
-        client_id
+        client_id,
+        // B2B Partner fields
+        partner_id: partner_id || null,
+        partner_commission_percent: partner_commission_percent || 0,
+        source: partner_id ? 'b2b_custom' : source
       })
       .select()
       .single()

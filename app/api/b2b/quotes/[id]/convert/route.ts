@@ -31,7 +31,7 @@ export async function POST(
             tour_days (id, day_number, title, description, city, overnight_city, meals_included)
           )
         ),
-        b2b_partners (company_name, partner_code)
+        b2b_partners (id, company_name, partner_code, commission_percent)
       `)
       .eq('id', id)
       .single()
@@ -91,6 +91,9 @@ export async function POST(
     const endDate = new Date(startDate)
     endDate.setDate(endDate.getDate() + (template?.duration_days || 1) - 1)
 
+    // Get partner info for the itinerary
+    const partnerInfo = quote.b2b_partners as { id: string; company_name: string; partner_code: string; commission_percent: number } | null
+
     const { data: itinerary, error: itinError } = await supabaseAdmin
       .from('itineraries')
       .insert({
@@ -115,7 +118,11 @@ export async function POST(
         balance_due: Math.round((quote.selling_price || 0) * 0.7),
         payment_status: 'not_paid',
         created_by: user_id,
-        notes: `Converted from B2B quote ${quote.quote_number}`
+        notes: `Converted from B2B quote ${quote.quote_number}`,
+        // B2B Partner fields
+        partner_id: quote.partner_id || null,
+        partner_commission_percent: partnerInfo?.commission_percent || 0,
+        source: 'b2b_template'
       })
       .select()
       .single()

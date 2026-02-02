@@ -89,6 +89,13 @@ interface ExistingClient {
   phone: string
 }
 
+interface B2BPartner {
+  id: string
+  company_name: string
+  partner_code: string
+  commission_percent: number
+}
+
 // UPDATED: Package types
 type PackageType = 'day-trips' | 'tours-only' | 'land-package' | 'cruise-package' | 'cruise-land'
 type GenerationStep = 'idle' | 'creating-client' | 'checking-suppliers' | 'building-route' | 'calculating-margins' | 'finalizing' | 'complete'
@@ -879,6 +886,11 @@ function WhatsAppParserContent() {
   const [fromInbox, setFromInbox] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
 
+  // B2B Partner state
+  const [b2bPartners, setB2bPartners] = useState<B2BPartner[]>([])
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null)
+  const [isB2BMode, setIsB2BMode] = useState(false)
+
   const itinerarySuccessRef = useRef<HTMLDivElement>(null)
 
   // ============================================
@@ -982,6 +994,29 @@ function WhatsAppParserContent() {
       setParsedMessages(parseConversation(conversation))
     }
   }, [conversation])
+
+  // Fetch B2B partners when B2B mode is enabled
+  useEffect(() => {
+    if (isB2BMode && b2bPartners.length === 0) {
+      const fetchPartners = async () => {
+        try {
+          const response = await fetch('/api/b2b/partners')
+          const data = await response.json()
+          if (data.success && data.data) {
+            setB2bPartners(data.data.map((p: any) => ({
+              id: p.id,
+              company_name: p.company_name,
+              partner_code: p.partner_code,
+              commission_percent: p.commission_percent || 10
+            })))
+          }
+        } catch (err) {
+          console.error('Error fetching B2B partners:', err)
+        }
+      }
+      fetchPartners()
+    }
+  }, [isB2BMode])
 
   // ============================================
   // HANDLERS
@@ -1225,6 +1260,11 @@ function WhatsAppParserContent() {
       
       setGenerationStep('finalizing')
 
+      // Get selected partner details for commission
+      const selectedPartner = selectedPartnerId
+        ? b2bPartners.find(p => p.id === selectedPartnerId)
+        : null
+
       const response = await fetch('/api/ai/generate-itinerary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1241,7 +1281,11 @@ function WhatsAppParserContent() {
           input_mode_override: inputMode,
           is_structured_input: data.is_structured_input,
           extracted_days: data.extracted_days,
-          raw_itinerary: data.raw_itinerary
+          raw_itinerary: data.raw_itinerary,
+          // B2B partner fields
+          partner_id: selectedPartnerId,
+          partner_commission_percent: selectedPartner?.commission_percent || 0,
+          source: selectedPartnerId ? 'b2b_custom' : 'b2c_whatsapp'
         })
       })
 
@@ -1595,6 +1639,86 @@ function WhatsAppParserContent() {
                       )
                     })}
                   </div>
+                </div>
+
+                {/* B2B Partner Selection */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-indigo-500" />
+                      {t('b2bPartner') || 'B2B Partner'}
+                    </h3>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-xs text-gray-500">{t('linkToPartner') || 'Link to partner'}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsB2BMode(!isB2BMode)
+                          if (isB2BMode) {
+                            setSelectedPartnerId(null)
+                          }
+                        }}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          isB2BMode ? 'bg-indigo-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            isB2BMode ? 'translate-x-4' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </label>
+                  </div>
+
+                  {isB2BMode && (
+                    <div className="space-y-3">
+                      <p className="text-xs text-gray-500">
+                        {t('b2bPartnerDesc') || 'Select a B2B partner (travel agency) to link this itinerary for commission tracking.'}
+                      </p>
+
+                      {b2bPartners.length > 0 ? (
+                        <select
+                          value={selectedPartnerId || ''}
+                          onChange={(e) => setSelectedPartnerId(e.target.value || null)}
+                          aria-label="Select B2B Partner"
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        >
+                          <option value="">{t('selectPartner') || '-- Select Partner --'}</option>
+                          {b2bPartners.map((partner) => (
+                            <option key={partner.id} value={partner.id}>
+                              {partner.company_name} ({partner.partner_code}) - {partner.commission_percent}%
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          {t('loadingPartners') || 'Loading partners...'}
+                        </div>
+                      )}
+
+                      {selectedPartnerId && (
+                        <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                          <div className="flex items-center gap-2 text-sm text-indigo-700">
+                            <Building2 className="w-4 h-4" />
+                            <span className="font-medium">
+                              {b2bPartners.find(p => p.id === selectedPartnerId)?.company_name}
+                            </span>
+                          </div>
+                          <p className="text-xs text-indigo-600 mt-1">
+                            {t('commissionRate') || 'Commission'}: {b2bPartners.find(p => p.id === selectedPartnerId)?.commission_percent}%
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!isB2BMode && (
+                    <p className="text-xs text-gray-400">
+                      {t('directClientMode') || 'Direct client mode - no B2B partner linked'}
+                    </p>
+                  )}
                 </div>
 
                 {/* Generation Mode */}

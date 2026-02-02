@@ -122,16 +122,19 @@ export async function POST(request: NextRequest) {
       }, { status: 409 })
     }
 
-    // Fetch itinerary data
+    // Fetch itinerary data with partner info if linked
     const { data: itinerary, error: itineraryError } = await supabaseAdmin
       .from('itineraries')
-      .select('*')
+      .select('*, b2b_partners(id, company_name, partner_code)')
       .eq('id', itinerary_id)
       .single()
 
     if (itineraryError || !itinerary) {
       return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
     }
+
+    // Extract partner info if linked
+    const partnerInfo = itinerary.b2b_partners as { id: string; company_name: string; partner_code: string } | null
 
     // Generate booking code
     const { data: codeData } = await supabaseAdmin.rpc('generate_booking_code')
@@ -141,7 +144,7 @@ export async function POST(request: NextRequest) {
     const depositAmount = itinerary.total_cost * 0.3 // 30% deposit default
     const balanceDue = itinerary.total_cost - depositAmount
 
-    // Create booking
+    // Create booking with B2B partner info if linked
     const { data: booking, error: createError } = await supabaseAdmin
       .from('bookings')
       .insert({
@@ -163,6 +166,9 @@ export async function POST(request: NextRequest) {
         balance_due: balanceDue,
         assigned_guide_id: itinerary.assigned_guide_id,
         assigned_vehicle_id: itinerary.assigned_vehicle_id,
+        // B2B Partner info (copied from itinerary)
+        partner_id: itinerary.partner_id || null,
+        partner_name: partnerInfo?.company_name || null,
       })
       .select()
       .single()
