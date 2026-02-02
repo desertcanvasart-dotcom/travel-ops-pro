@@ -5155,10 +5155,11 @@
     "totalCost": "合計費用",
     "paymentTerms": "支払条件",
     "paymentTermsOptions": {
-      "commission": "コミッション",
-      "prepaid": "前払い",
-      "payDirect": "直接支払い",
-      "invoice": "請求書"
+      "select": "支払条件を選択...",
+      "prepaid": "前払い（支払済み）",
+      "credit": "掛け払い（後日請求）",
+      "onService": "サービス当日支払い",
+      "commission": "コミッションベース"
     },
     "entranceFees": "入場料",
     "addAttraction": "観光地を追加",

@@ -4348,10 +4348,11 @@
     "totalCost": "Total Cost",
     "paymentTerms": "Payment Terms",
     "paymentTermsOptions": {
-      "commission": "Commission",
-      "prepaid": "Prepaid",
-      "payDirect": "Pay Direct",
-      "invoice": "Invoice"
+      "select": "Select payment terms...",
+      "prepaid": "Prepaid (Already Paid)",
+      "credit": "Credit (Invoice Later)",
+      "onService": "Pay on Service Date",
+      "commission": "Commission Based"
     },
     "entranceFees": "Entrance Fees",
     "addAttraction": "Add Attraction",

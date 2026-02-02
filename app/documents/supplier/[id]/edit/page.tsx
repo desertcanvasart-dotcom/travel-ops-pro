@@ -482,14 +482,15 @@ export default function EditSupplierDocumentPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('paymentTerms')}</label>
                 <select
-                  value={document.payment_terms || 'commission'}
+                  value={document.payment_terms || ''}
                   onChange={(e) => setDocument({ ...document, payment_terms: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
-                  <option value="commission">{t('paymentTermsOptions.commission')}</option>
+                  <option value="">{t('paymentTermsOptions.select')}</option>
                   <option value="prepaid">{t('paymentTermsOptions.prepaid')}</option>
-                  <option value="pay_direct">{t('paymentTermsOptions.payDirect')}</option>
-                  <option value="invoice">{t('paymentTermsOptions.invoice')}</option>
+                  <option value="credit">{t('paymentTermsOptions.credit')}</option>
+                  <option value="on_service">{t('paymentTermsOptions.onService')}</option>
+                  <option value="commission">{t('paymentTermsOptions.commission')}</option>
                 </select>
               </div>
             </div>
