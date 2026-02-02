@@ -879,10 +879,10 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
       if (isPartnerOrSupplier) {
         switch (partnerType) {
           case 'hotel':
-            endpoint = '/api/hotels'
+            endpoint = '/api/suppliers?type=hotel'
             break
           case 'cruise':
-            endpoint = '/api/nile-cruises'
+            endpoint = '/api/cruises'
             break
           case 'transport':
             endpoint = '/api/suppliers?type=transport_company'
@@ -901,15 +901,21 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
       const response = await fetch(endpoint)
       if (response.ok) {
         const data = await response.json()
-        
-        // Handle different response formats
+
+        // Handle different response formats from various APIs
         let items: any[] = []
         if (Array.isArray(data)) {
+          // Direct array response (e.g., guides)
           items = data
-        } else if (Array.isArray(data.data)) {
-          items = data.data
         } else if (data.success && Array.isArray(data.data)) {
+          // Standard { success: true, data: [...] } format (suppliers, cruises, etc.)
           items = data.data
+        } else if (Array.isArray(data.data)) {
+          // { data: [...] } format
+          items = data.data
+        } else if (Array.isArray(data.clients)) {
+          // Clients API returns { clients: [...] }
+          items = data.clients
         }
 
         // Normalize to Recipient format
