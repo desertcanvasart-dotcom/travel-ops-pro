@@ -78,19 +78,19 @@ const EGYPT_CITIES = [
   'Taba'
 ]
 
-const TIER_OPTIONS = [
-  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
-  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
-  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
-  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+const TIER_OPTIONS_CONFIG = [
+  { value: 'budget', labelKey: 'budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', labelKey: 'standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', labelKey: 'deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', labelKey: 'luxury', color: 'bg-amber-100 text-amber-700' }
 ]
 
-const BOARD_BASIS_OPTIONS = [
-  { value: 'RO', label: 'Room Only' },
-  { value: 'BB', label: 'Bed & Breakfast' },
-  { value: 'HB', label: 'Half Board' },
-  { value: 'FB', label: 'Full Board' },
-  { value: 'AI', label: 'All Inclusive' }
+const BOARD_BASIS_OPTIONS_CONFIG = [
+  { value: 'RO', labelKey: 'roomOnly' },
+  { value: 'BB', labelKey: 'bedBreakfast' },
+  { value: 'HB', labelKey: 'halfBoard' },
+  { value: 'FB', labelKey: 'fullBoard' },
+  { value: 'AI', labelKey: 'allInclusive' }
 ]
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
@@ -221,11 +221,11 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
   )
 }
 
-function TierBadge({ tier }: { tier: string | undefined }) {
-  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
+function TierBadge({ tier, t }: { tier: string | undefined; t: (key: string) => string }) {
+  const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === tier) || TIER_OPTIONS_CONFIG[1]
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {tierConfig.label}
+      {t(`tiers.${tierConfig.labelKey}`)}
     </span>
   )
 }
@@ -241,7 +241,8 @@ function Pagination({
   endIndex,
   itemsPerPage,
   onPageChange,
-  onItemsPerPageChange
+  onItemsPerPageChange,
+  t
 }: {
   currentPage: number
   totalPages: number
@@ -251,6 +252,7 @@ function Pagination({
   itemsPerPage: number
   onPageChange: (page: number) => void
   onItemsPerPageChange: (items: number) => void
+  t: (key: string, params?: Record<string, string | number>) => string
 }) {
   const goToPage = (page: number) => {
     onPageChange(Math.max(1, Math.min(page, totalPages)))
@@ -260,7 +262,7 @@ function Pagination({
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Show</span>
+          <span className="text-sm text-gray-500">{t('show')}</span>
           <select
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
@@ -270,10 +272,10 @@ function Pagination({
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          <span className="text-sm text-gray-500">per page</span>
+          <span className="text-sm text-gray-500">{t('perPage')}</span>
         </div>
         <span className="text-sm text-gray-500">
-          Showing {startIndex + 1}-{endIndex} of {totalItems} hotels
+          {t('showingHotels', { start: startIndex + 1, end: endIndex, total: totalItems })}
         </span>
       </div>
 
@@ -282,7 +284,7 @@ function Pagination({
           onClick={() => goToPage(1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-          title="First page"
+          title={t('firstPage')}
         >
           <ChevronsLeft className="h-4 w-4" />
         </button>
@@ -290,7 +292,7 @@ function Pagination({
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Previous page"
+          title={t('previousPage')}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -307,7 +309,7 @@ function Pagination({
             } else {
               pageNum = currentPage - 2 + i
             }
-            
+
             return (
               <button
                 key={pageNum}
@@ -328,7 +330,7 @@ function Pagination({
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Next page"
+          title={t('nextPage')}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -336,7 +338,7 @@ function Pagination({
           onClick={() => goToPage(totalPages)}
           disabled={currentPage === totalPages}
           className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Last page"
+          title={t('lastPage')}
         >
           <ChevronsRight className="h-4 w-4" />
         </button>
@@ -466,7 +468,7 @@ export default function HotelsContent() {
       }
     } catch (error) {
       console.error('Error fetching rates:', error)
-      showToast('error', 'Failed to load accommodation rates')
+      showToast('error', t('messages.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -705,16 +707,16 @@ export default function HotelsContent() {
       }
       
       if (data.data) {
-        showToast('success', editingRate ? `${formData.property_name} updated!` : `${formData.property_name} created!`)
+        showToast('success', editingRate ? t('messages.updated', { name: formData.property_name }) : t('messages.created', { name: formData.property_name }))
         setShowModal(false)
         fetchRates()
       } else {
-        showToast('error', 'No data returned from server. Check console for details.')
+        showToast('error', t('messages.noDataReturned'))
         console.error('No data in response:', data)
       }
     } catch (error) {
       console.error('Error saving rate:', error)
-      showToast('error', 'Failed to save accommodation rate')
+      showToast('error', t('messages.saveFailed'))
     }
   }
 
@@ -734,7 +736,7 @@ export default function HotelsContent() {
       const data = await response.json()
       
       if (data.success) {
-        showToast('success', `${name} deleted!`)
+        showToast('success', t('messages.deleted', { name }))
         fetchRates()
       } else {
         await dialog.alert('Error', data.error || 'Failed to delete', 'warning')
@@ -796,7 +798,7 @@ export default function HotelsContent() {
     link.download = `hotels_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
     
-    showToast('success', `Exported ${filteredRates.length} hotels to CSV`)
+    showToast('success', t('messages.exportSuccess', { count: filteredRates.length }))
   }
 
   // Filter rates
@@ -889,11 +891,11 @@ export default function HotelsContent() {
                 <Plus className="w-4 h-4" />
                 {t('addRate')}
               </button>
-              <Link 
+              <Link
                 href="/rates"
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
               >
-                ← Rates
+                {t('backToRates')}
               </Link>
             </div>
           </div>
@@ -1001,8 +1003,8 @@ export default function HotelsContent() {
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm appearance-none pr-8"
               >
                 <option value="all">{t('allTiers')}</option>
-                {TIER_OPTIONS.map(t => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
+                {TIER_OPTIONS_CONFIG.map(tier => (
+                  <option key={tier.value} value={tier.value}>{t(`tiers.${tier.labelKey}`)}</option>
                 ))}
               </select>
               <Crown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -1024,21 +1026,21 @@ export default function HotelsContent() {
               <button
                 onClick={() => setViewMode('table')}
                 className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
-                title="Table View"
+                title={t('tableView')}
               >
                 <Table2 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('cards')}
                 className={`p-1.5 rounded ${viewMode === 'cards' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
-                title="Card View"
+                title={t('cardView')}
               >
                 <LayoutGrid className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('compact')}
                 className={`p-1.5 rounded ${viewMode === 'compact' ? 'bg-white shadow text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
-                title="Compact View"
+                title={t('compactView')}
               >
                 <List className="w-4 h-4" />
               </button>
@@ -1095,7 +1097,7 @@ export default function HotelsContent() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <TierBadge tier={rate.tier} />
+                        <TierBadge tier={rate.tier} t={t} />
                       </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
@@ -1172,6 +1174,7 @@ export default function HotelsContent() {
                 itemsPerPage={itemsPerPage}
                 onPageChange={setCurrentPage}
                 onItemsPerPageChange={setItemsPerPage}
+                t={t}
               />
             )}
           </div>
@@ -1197,7 +1200,7 @@ export default function HotelsContent() {
                     </div>
                     
                     <div className="flex items-center gap-2 mb-3">
-                      <TierBadge tier={rate.tier} />
+                      <TierBadge tier={rate.tier} t={t} />
                       <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
                         {rate.board_basis || 'BB'}
                       </span>
@@ -1294,7 +1297,7 @@ export default function HotelsContent() {
                   <div className="flex items-center gap-4 flex-1 min-w-0">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${rate.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
                     <span className="text-sm font-medium text-gray-900 truncate">{rate.property_name}</span>
-                    <TierBadge tier={rate.tier} />
+                    <TierBadge tier={rate.tier} t={t} />
                     {rate.city && (
                       <span className="hidden md:inline px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{rate.city}</span>
                     )}
@@ -1336,6 +1339,7 @@ export default function HotelsContent() {
                 itemsPerPage={itemsPerPage}
                 onPageChange={setCurrentPage}
                 onItemsPerPageChange={setItemsPerPage}
+                t={t}
               />
             )}
           </div>
@@ -1374,7 +1378,7 @@ export default function HotelsContent() {
                       value={formData.property_name}
                       onChange={handleChange}
                       required
-                      placeholder="e.g., Hilton Cairo Heliopolis"
+                      placeholder={t('placeholders.hotelName')}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     />
                   </div>
@@ -1386,7 +1390,7 @@ export default function HotelsContent() {
                       value={formData.service_code}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm bg-gray-50"
-                      placeholder="Auto-generated"
+                      placeholder={t('placeholders.autoGenerated')}
                     />
                   </div>
                   <div>
@@ -1431,12 +1435,12 @@ export default function HotelsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="hotel">🏨 Hotel</option>
-                      <option value="resort">🏖️ Resort</option>
-                      <option value="apartment">🏢 Apartment</option>
-                      <option value="guesthouse">🏠 Guesthouse</option>
-                      <option value="cruise">🚢 Cruise</option>
-                      <option value="camp">⛺ Camp</option>
+                      <option value="hotel">🏨 {t('propertyTypes.hotel')}</option>
+                      <option value="resort">🏖️ {t('propertyTypes.resort')}</option>
+                      <option value="apartment">🏢 {t('propertyTypes.apartment')}</option>
+                      <option value="guesthouse">🏠 {t('propertyTypes.guesthouse')}</option>
+                      <option value="cruise">🚢 {t('propertyTypes.cruise')}</option>
+                      <option value="camp">⛺ {t('propertyTypes.camp')}</option>
                     </select>
                   </div>
                   <div>
@@ -1447,8 +1451,8 @@ export default function HotelsContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      {BOARD_BASIS_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      {BOARD_BASIS_OPTIONS_CONFIG.map(opt => (
+                        <option key={opt.value} value={opt.value}>{t(`boardTypes.${opt.labelKey}`)}</option>
                       ))}
                     </select>
                   </div>
@@ -1473,7 +1477,7 @@ export default function HotelsContent() {
                         name="contact_name"
                         value={formData.contact_name}
                         onChange={handleChange}
-                        placeholder="e.g., Ahmed Hassan"
+                        placeholder={t('placeholders.salesContact')}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                       />
                     </div>
@@ -1487,7 +1491,7 @@ export default function HotelsContent() {
                         name="contact_email"
                         value={formData.contact_email}
                         onChange={handleChange}
-                        placeholder="sales@hotel.com"
+                        placeholder={t('placeholders.salesEmail')}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                       />
                     </div>
@@ -1501,7 +1505,7 @@ export default function HotelsContent() {
                         name="contact_phone"
                         value={formData.contact_phone}
                         onChange={handleChange}
-                        placeholder="+20 xxx xxx xxxx"
+                        placeholder={t('placeholders.phone')}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                       />
                     </div>
@@ -1515,7 +1519,7 @@ export default function HotelsContent() {
                         name="reservations_email"
                         value={formData.reservations_email}
                         onChange={handleChange}
-                        placeholder="reservations@hotel.com"
+                        placeholder={t('placeholders.reservationsEmail')}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                       />
                     </div>
@@ -1529,7 +1533,7 @@ export default function HotelsContent() {
                         name="reservations_phone"
                         value={formData.reservations_phone}
                         onChange={handleChange}
-                        placeholder="+20 xxx xxx xxxx"
+                        placeholder={t('placeholders.phone')}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                       />
                     </div>
@@ -1544,7 +1548,7 @@ export default function HotelsContent() {
                   {tCommon('tier')}
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {TIER_OPTIONS.map((tier) => (
+                  {TIER_OPTIONS_CONFIG.map((tier) => (
                     <button
                       key={tier.value}
                       type="button"
@@ -1562,7 +1566,7 @@ export default function HotelsContent() {
                       }`}
                     >
                       {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5 inline mr-1" />}
-                      {tier.label}
+                      {t(`tiers.${tier.labelKey}`)}
                     </button>
                   ))}
                 </div>
@@ -1578,58 +1582,58 @@ export default function HotelsContent() {
                   {/* Date Range */}
                   <div className="grid grid-cols-2 gap-3 mb-4 pb-3 border-b border-blue-200">
                     <div>
-                      <label className="block text-xs font-medium text-blue-700 mb-1">From</label>
+                      <label className="block text-xs font-medium text-blue-700 mb-1">{t('from')}</label>
                       <input type="date" name="low_season_from" value={formData.low_season_from} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-blue-700 mb-1">To</label>
+                      <label className="block text-xs font-medium text-blue-700 mb-1">{t('to')}</label>
                       <input type="date" name="low_season_to" value={formData.low_season_to} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white" />
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">EUR Passport Holders</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
                       <input type="number" name="single_rate_eur" value={formData.single_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
                       <input type="number" name="double_rate_eur" value={formData.double_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
                       <input type="number" name="triple_rate_eur" value={formData.triple_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
                       <input type="number" name="suite_rate_eur" value={formData.suite_rate_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">Non-EUR Passport Holders</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
                       <input type="number" name="single_rate_non_eur" value={formData.single_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
                       <input type="number" name="double_rate_non_eur" value={formData.double_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
                       <input type="number" name="triple_rate_non_eur" value={formData.triple_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
                       <input type="number" name="suite_rate_non_eur" value={formData.suite_rate_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1647,58 +1651,58 @@ export default function HotelsContent() {
                   {/* Date Range */}
                   <div className="grid grid-cols-2 gap-3 mb-4 pb-3 border-b border-orange-200">
                     <div>
-                      <label className="block text-xs font-medium text-orange-700 mb-1">From</label>
+                      <label className="block text-xs font-medium text-orange-700 mb-1">{t('from')}</label>
                       <input type="date" name="high_season_from" value={formData.high_season_from} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-orange-700 mb-1">To</label>
+                      <label className="block text-xs font-medium text-orange-700 mb-1">{t('to')}</label>
                       <input type="date" name="high_season_to" value={formData.high_season_to} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">EUR Passport Holders</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
                       <input type="number" name="high_season_single_eur" value={formData.high_season_single_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
                       <input type="number" name="high_season_double_eur" value={formData.high_season_double_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
                       <input type="number" name="high_season_triple_eur" value={formData.high_season_triple_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
                       <input type="number" name="high_season_suite_eur" value={formData.high_season_suite_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">Non-EUR Passport Holders</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
                       <input type="number" name="high_season_single_non_eur" value={formData.high_season_single_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
                       <input type="number" name="high_season_double_non_eur" value={formData.high_season_double_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
                       <input type="number" name="high_season_triple_non_eur" value={formData.high_season_triple_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
                       <input type="number" name="high_season_suite_non_eur" value={formData.high_season_suite_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1716,68 +1720,68 @@ export default function HotelsContent() {
                   {/* Date Ranges - Primary and Secondary */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 pb-3 border-b border-red-200">
                     <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">Period 1 From</label>
+                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period1From')}</label>
                       <input type="date" name="peak_season_from" value={formData.peak_season_from} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">Period 1 To</label>
+                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period1To')}</label>
                       <input type="date" name="peak_season_to" value={formData.peak_season_to} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">Period 2 From <span className="text-gray-400">(optional)</span></label>
+                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period2From')} <span className="text-gray-400">{t('optional')}</span></label>
                       <input type="date" name="peak_season_2_from" value={formData.peak_season_2_from} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">Period 2 To <span className="text-gray-400">(optional)</span></label>
+                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period2To')} <span className="text-gray-400">{t('optional')}</span></label>
                       <input type="date" name="peak_season_2_to" value={formData.peak_season_2_to} onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">EUR Passport Holders</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
                       <input type="number" name="peak_season_single_eur" value={formData.peak_season_single_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
                       <input type="number" name="peak_season_double_eur" value={formData.peak_season_double_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
                       <input type="number" name="peak_season_triple_eur" value={formData.peak_season_triple_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
                       <input type="number" name="peak_season_suite_eur" value={formData.peak_season_suite_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">Non-EUR Passport Holders</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Single</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
                       <input type="number" name="peak_season_single_non_eur" value={formData.peak_season_single_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Double</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
                       <input type="number" name="peak_season_double_non_eur" value={formData.peak_season_double_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Triple</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
                       <input type="number" name="peak_season_triple_non_eur" value={formData.peak_season_triple_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Suite</label>
+                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
                       <input type="number" name="peak_season_suite_non_eur" value={formData.peak_season_suite_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
@@ -1789,12 +1793,12 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">7</span>
-                  Rate Card Validity
-                  <span className="text-xs font-normal text-gray-500 ml-2">(When this rate sheet expires)</span>
+                  {t('rateCardValidity')}
+                  <span className="text-xs font-normal text-gray-500 ml-2">{t('rateCardValidityDesc')}</span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('validFrom')}</label>
                     <input
                       type="date"
                       name="rate_valid_from"
@@ -1804,7 +1808,7 @@ export default function HotelsContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('validTo')}</label>
                     <input
                       type="date"
                       name="rate_valid_to"
@@ -1825,7 +1829,7 @@ export default function HotelsContent() {
                   onChange={handleChange}
                   rows={2}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                  placeholder="Additional information..."
+                  placeholder={t('placeholders.notes')}
                 />
               </div>
 
