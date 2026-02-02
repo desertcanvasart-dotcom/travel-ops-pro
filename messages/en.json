@@ -4215,14 +4215,21 @@
       "emergencyPhone": "Emergency Phone",
       "specialRequests": "Special Requests",
       "operationalNotes": "Operational Notes",
-      "tier": "Tier"
+      "tier": "Tier",
+      "supplierType": "Supplier Type",
+      "supplierName": "Supplier Name",
+      "serviceDescription": "Service Description",
+      "serviceDate": "Service Date",
+      "quotedCost": "Quoted Cost"
     },
     "actions": {
       "view": "View",
       "viewItinerary": "View Itinerary",
       "markSupplierConfirmed": "Mark Confirmed",
       "recordPayment": "Record Payment",
-      "generateVouchers": "Generate Vouchers"
+      "generateVouchers": "Generate Vouchers",
+      "syncFromItinerary": "Sync from Itinerary",
+      "addSupplier": "Add Supplier"
     },
     "filters": {
       "allStatuses": "All Statuses",

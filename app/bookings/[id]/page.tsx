@@ -27,7 +27,9 @@ import {
   MoreHorizontal,
   Plus,
   DollarSign,
-  Receipt
+  Receipt,
+  RefreshCw,
+  X
 } from 'lucide-react'
 import {
   BookingWithDetails,
@@ -59,6 +61,17 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     payment_date: new Date().toISOString().split('T')[0],
     transaction_reference: '',
     notes: ''
+  })
+
+  // Supplier modal state
+  const [showSupplierModal, setShowSupplierModal] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [supplierForm, setSupplierForm] = useState({
+    supplier_type: 'hotel',
+    supplier_name: '',
+    service_description: '',
+    service_date: '',
+    quoted_cost: ''
   })
 
   useEffect(() => {
@@ -150,6 +163,62 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch (error) {
       console.error('Error updating status:', error)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  const syncSuppliers = async () => {
+    setSyncing(true)
+    try {
+      const response = await fetch(`/api/bookings/${resolvedParams.id}/sync-suppliers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        fetchBooking()
+      } else {
+        console.error('Sync error:', data.error)
+      }
+    } catch (error) {
+      console.error('Error syncing suppliers:', error)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const addSupplier = async () => {
+    if (!supplierForm.supplier_name) return
+
+    setUpdating(true)
+    try {
+      const response = await fetch(`/api/bookings/${resolvedParams.id}/suppliers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplier_type: supplierForm.supplier_type,
+          supplier_name: supplierForm.supplier_name,
+          service_description: supplierForm.service_description || null,
+          service_date: supplierForm.service_date || null,
+          quoted_cost: supplierForm.quoted_cost ? parseFloat(supplierForm.quoted_cost) : null
+        })
+      })
+
+      if (response.ok) {
+        setShowSupplierModal(false)
+        setSupplierForm({
+          supplier_type: 'hotel',
+          supplier_name: '',
+          service_description: '',
+          service_date: '',
+          quoted_cost: ''
+        })
+        fetchBooking()
+      }
+    } catch (error) {
+      console.error('Error adding supplier:', error)
     } finally {
       setUpdating(false)
     }
@@ -390,10 +459,44 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           {/* Suppliers Tab */}
           {activeTab === 'suppliers' && (
             <div>
+              {/* Action buttons */}
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-medium text-gray-900">{t('tabs.suppliers')}</h3>
+                <div className="flex gap-2">
+                  {booking.itinerary && (
+                    <button
+                      onClick={syncSuppliers}
+                      disabled={syncing}
+                      className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                      {syncing ? 'Syncing...' : t('actions.syncFromItinerary')}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowSupplierModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {t('actions.addSupplier')}
+                  </button>
+                </div>
+              </div>
+
               {!booking.suppliers || booking.suppliers.length === 0 ? (
-                <div className="text-center py-12">
+                <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg">
                   <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">{t('messages.noSuppliersYet')}</p>
+                  <p className="text-gray-500 mb-4">{t('messages.noSuppliersYet')}</p>
+                  {booking.itinerary && (
+                    <button
+                      onClick={syncSuppliers}
+                      disabled={syncing}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                      {syncing ? 'Syncing...' : t('actions.syncFromItinerary')}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <table className="w-full">
@@ -644,6 +747,97 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                 className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] disabled:opacity-50"
               >
                 {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Record Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier Modal */}
+      {showSupplierModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="text-lg font-semibold">{t('actions.addSupplier')}</h2>
+              <button onClick={() => setShowSupplierModal(false)} className="p-1 hover:bg-gray-100 rounded" title="Close">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.supplierType')}</label>
+                <select
+                  value={supplierForm.supplier_type}
+                  onChange={(e) => setSupplierForm({ ...supplierForm, supplier_type: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2"
+                >
+                  <option value="hotel">Hotel</option>
+                  <option value="guide">Guide</option>
+                  <option value="transport">Transport</option>
+                  <option value="restaurant">Restaurant</option>
+                  <option value="activity">Activity</option>
+                  <option value="entrance">Entrance/Ticket</option>
+                  <option value="cruise">Cruise</option>
+                  <option value="flight">Flight</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.supplierName')} *</label>
+                <input
+                  type="text"
+                  value={supplierForm.supplier_name}
+                  onChange={(e) => setSupplierForm({ ...supplierForm, supplier_name: e.target.value })}
+                  placeholder="e.g., Marriott Mena House"
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.serviceDescription')}</label>
+                <input
+                  type="text"
+                  value={supplierForm.service_description}
+                  onChange={(e) => setSupplierForm({ ...supplierForm, service_description: e.target.value })}
+                  placeholder="e.g., 2 nights deluxe room"
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="supplier_service_date" className="block text-sm font-medium text-gray-700 mb-1">{t('fields.serviceDate')}</label>
+                  <input
+                    id="supplier_service_date"
+                    type="date"
+                    value={supplierForm.service_date}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, service_date: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.quotedCost')}</label>
+                  <input
+                    type="number"
+                    value={supplierForm.quoted_cost}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, quoted_cost: e.target.value })}
+                    placeholder="0.00"
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t bg-gray-50 flex gap-3 justify-end rounded-b-lg">
+              <button
+                onClick={() => setShowSupplierModal(false)}
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addSupplier}
+                disabled={!supplierForm.supplier_name || updating}
+                className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] disabled:opacity-50"
+              >
+                {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : t('actions.addSupplier')}
               </button>
             </div>
           </div>

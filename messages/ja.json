@@ -5032,14 +5032,21 @@
       "emergencyPhone": "緊急電話番号",
       "specialRequests": "特別リクエスト",
       "operationalNotes": "運営メモ",
-      "tier": "ティア"
+      "tier": "ティア",
+      "supplierType": "サプライヤー種別",
+      "supplierName": "サプライヤー名",
+      "serviceDescription": "サービス内容",
+      "serviceDate": "サービス日",
+      "quotedCost": "見積費用"
     },
     "actions": {
       "view": "表示",
       "viewItinerary": "旅程を表示",
       "markSupplierConfirmed": "確認済みにする",
       "recordPayment": "支払いを記録",
-      "generateVouchers": "バウチャー生成"
+      "generateVouchers": "バウチャー生成",
+      "syncFromItinerary": "旅程から同期",
+      "addSupplier": "サプライヤー追加"
     },
     "filters": {
       "allStatuses": "すべてのステータス",
