@@ -199,7 +199,7 @@ export default function AnalyticsPage() {
 
     return {
       revenueInsight: maxRevenue > 0
-        ? t('insights.busiestPeriod', { period: maxRevenueWeek?.month, amount: formatCurrency(maxRevenue) })
+        ? t('insights.busiestPeriod', { period: maxRevenueWeek?.month || '-', amount: formatCurrency(maxRevenue) })
         : t('insights.noRevenueYet'),
       bookingInsight: displayData.bookings.total > 0
         ? t('insights.pendingPercentage', { percent: pendingPercentage })
