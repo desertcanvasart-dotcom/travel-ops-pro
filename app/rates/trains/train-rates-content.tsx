@@ -334,7 +334,7 @@ export default function TrainRatesContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading train rates...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -367,7 +367,7 @@ export default function TrainRatesContent() {
                   'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                Got it
+                {t('notifications.gotIt')}
               </button>
             </div>
           </div>
@@ -382,15 +382,15 @@ export default function TrainRatesContent() {
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
                 <Trash2 className="w-7 h-7 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Train Rate?</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteModal.title')}</h3>
               <p className="text-sm text-gray-600 mb-1">
-                Are you sure you want to delete the rate for
+                {t('deleteModal.confirmText')}
               </p>
               <p className="text-sm font-semibold text-gray-900 mb-4">
                 "{deleteModal.name}"
               </p>
               <p className="text-xs text-gray-500 mb-6">
-                This action cannot be undone. The rate will be permanently removed.
+                {t('deleteModal.warning')}
               </p>
               <div className="flex items-center gap-3 w-full">
                 <button
@@ -398,7 +398,7 @@ export default function TrainRatesContent() {
                   disabled={isDeleting}
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
-                  Cancel
+                  {t('deleteModal.cancel')}
                 </button>
                 <button
                   onClick={handleDelete}
@@ -408,12 +408,12 @@ export default function TrainRatesContent() {
                   {isDeleting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Deleting...
+                      {t('deleteModal.deleting')}
                     </>
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      {t('deleteModal.delete')}
                     </>
                   )}
                 </button>
@@ -431,10 +431,10 @@ export default function TrainRatesContent() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              Train Rates
+              {t('title')}
               <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
             </h1>
-            <p className="text-sm text-gray-600">Regular train tickets pricing</p>
+            <p className="text-sm text-gray-600">{t('subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -443,14 +443,14 @@ export default function TrainRatesContent() {
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
             <Download className="w-4 h-4" />
-            Export
+            {t('export')}
           </button>
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
           >
             <Plus className="w-4 h-4" />
-            Add Rate
+            {tCommon('addRate')}
           </button>
         </div>
       </div>
@@ -463,7 +463,7 @@ export default function TrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{rates.length}</p>
-          <p className="text-xs text-gray-600">Total Rates</p>
+          <p className="text-xs text-gray-600">{t('totalRates')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -471,7 +471,7 @@ export default function TrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{activeRates}</p>
-          <p className="text-xs text-gray-600">Active</p>
+          <p className="text-xs text-gray-600">{t('active')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -479,7 +479,7 @@ export default function TrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
-          <p className="text-xs text-gray-600">Avg. Rate</p>
+          <p className="text-xs text-gray-600">{t('avgRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -487,7 +487,7 @@ export default function TrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{uniqueRoutes}</p>
-          <p className="text-xs text-gray-600">Routes</p>
+          <p className="text-xs text-gray-600">{t('routes')}</p>
         </div>
       </div>
 
@@ -500,7 +500,7 @@ export default function TrainRatesContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search rates..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
@@ -514,7 +514,7 @@ export default function TrainRatesContent() {
             onChange={(e) => setSelectedOrigin(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Origins</option>
+            <option value="">{t('allOrigins')}</option>
             {TRAIN_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -526,7 +526,7 @@ export default function TrainRatesContent() {
             onChange={(e) => setSelectedDestination(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Destinations</option>
+            <option value="">{t('allDestinations')}</option>
             {TRAIN_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -538,7 +538,7 @@ export default function TrainRatesContent() {
             onChange={(e) => setSelectedClass(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Classes</option>
+            <option value="">{t('allClasses')}</option>
             {CLASS_TYPES.map(cls => (
               <option key={cls} value={cls}>{cls}</option>
             ))}
@@ -553,7 +553,7 @@ export default function TrainRatesContent() {
                 : 'bg-green-100 text-green-700'
             }`}
           >
-            {showInactive ? 'Show All' : 'Active Only'}
+            {showInactive ? t('showAll') : t('activeOnly')}
           </button>
 
           {/* View Mode */}
@@ -582,8 +582,8 @@ export default function TrainRatesContent() {
         {/* Results Count */}
         <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
           <p className="text-xs text-gray-600">
-            Showing <span className="font-semibold">{paginatedRates.length}</span> of{' '}
-            <span className="font-semibold">{filteredRates.length}</span> rates
+            {t('showing')} <span className="font-semibold">{paginatedRates.length}</span> {t('of')}{' '}
+            <span className="font-semibold">{filteredRates.length}</span> {t('rates')}
           </p>
           <select
             value={itemsPerPage}
@@ -591,7 +591,7 @@ export default function TrainRatesContent() {
             className="text-xs border border-gray-300 rounded px-2 py-1"
           >
             {ITEMS_PER_PAGE_OPTIONS.map(n => (
-              <option key={n} value={n}>{n} per page</option>
+              <option key={n} value={n}>{n} {t('perPage')}</option>
             ))}
           </select>
         </div>
@@ -602,18 +602,18 @@ export default function TrainRatesContent() {
         {paginatedRates.length === 0 ? (
           <div className="p-12 text-center">
             <Train className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Rates Found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('noRatesFound')}</h3>
             <p className="text-sm text-gray-600 mb-4">
               {searchTerm || selectedOrigin || selectedDestination || selectedClass
-                ? 'Try adjusting your filters'
-                : 'Get started by adding your first train rate'}
+                ? t('adjustFilters')
+                : t('noRatesDescription')}
             </p>
             <button
               onClick={handleAddNew}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               <Plus className="w-4 h-4" />
-              Add First Rate
+              {t('addFirstRate')}
             </button>
           </div>
         ) : viewMode === 'table' ? (
@@ -621,13 +621,13 @@ export default function TrainRatesContent() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Route</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Class</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Duration</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Operator</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Rate</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('route')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('class')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('duration')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('operatorName')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('rate')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -669,7 +669,7 @@ export default function TrainRatesContent() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
+                        {rate.is_active ? t('active') : t('inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -707,7 +707,7 @@ export default function TrainRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? t('active') : t('inactive')}
                   </span>
                 </div>
 
@@ -767,7 +767,7 @@ export default function TrainRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? t('active') : t('inactive')}
                   </span>
                   <div className="flex gap-1">
                     <button onClick={() => handleEdit(rate)} className="p-1 text-gray-400 hover:text-primary-600">
@@ -787,8 +787,8 @@ export default function TrainRatesContent() {
         {totalPages > 1 && (
           <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between bg-gray-50">
             <p className="text-sm text-gray-600">
-              Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
-              <span className="text-gray-400 ml-2">({filteredRates.length} total)</span>
+              {t('page')} <span className="font-semibold">{currentPage}</span> {t('of')} <span className="font-semibold">{totalPages}</span>
+              <span className="text-gray-400 ml-2">({filteredRates.length} {t('total')})</span>
             </p>
             <div className="flex items-center gap-1">
               {/* First Page */}
@@ -797,7 +797,7 @@ export default function TrainRatesContent() {
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                First
+                {t('first')}
               </button>
               
               {/* Previous */}
@@ -853,7 +853,7 @@ export default function TrainRatesContent() {
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                Last
+                {t('last')}
               </button>
             </div>
           </div>
@@ -866,7 +866,7 @@ export default function TrainRatesContent() {
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? 'Edit Train Rate' : 'Add Train Rate'}
+                {editingRate ? t('editRate') : t('addRate')}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
                 <X className="w-4 h-4" />
@@ -878,11 +878,11 @@ export default function TrainRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold">1</span>
-                  Route Details
+                  {t('form.routeDetails')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
                     <input
                       type="text"
                       name="service_code"
@@ -892,21 +892,21 @@ export default function TrainRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Operator</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.operator')}</label>
                     <select
                       name="operator_name"
                       value={formData.operator_name}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Operator</option>
+                      <option value="">{t('form.selectOperator')}</option>
                       {OPERATORS.map(op => (
                         <option key={op} value={op}>{op}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Origin City *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.originCity')} *</label>
                     <select
                       name="origin_city"
                       value={formData.origin_city}
@@ -914,14 +914,14 @@ export default function TrainRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Origin</option>
+                      <option value="">{t('form.selectOrigin')}</option>
                       {TRAIN_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Destination City *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.destinationCity')} *</label>
                     <select
                       name="destination_city"
                       value={formData.destination_city}
@@ -929,14 +929,14 @@ export default function TrainRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Destination</option>
+                      <option value="">{t('form.selectDestination')}</option>
                       {TRAIN_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Class Type *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.classType')} *</label>
                     <select
                       name="class_type"
                       value={formData.class_type}
@@ -944,14 +944,14 @@ export default function TrainRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Class</option>
+                      <option value="">{t('form.selectClass')}</option>
                       {CLASS_TYPES.map(cls => (
                         <option key={cls} value={cls}>{cls}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Duration (hours)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.duration')}</label>
                     <input
                       type="number"
                       name="duration_hours"
@@ -959,7 +959,7 @@ export default function TrainRatesContent() {
                       onChange={handleChange}
                       step="0.5"
                       min="0"
-                      placeholder="e.g., 10.5"
+                      placeholder={t('form.durationPlaceholder')}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
@@ -968,13 +968,13 @@ export default function TrainRatesContent() {
 
               {/* Departure Times */}
               <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Departure Times</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.departureTimes')}</label>
                 <input
                   type="text"
                   name="departure_times"
                   value={formData.departure_times}
                   onChange={handleChange}
-                  placeholder="e.g., 08:00, 14:00, 20:00"
+                  placeholder={t('form.departureTimesPlaceholder')}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                 />
               </div>
@@ -983,11 +983,11 @@ export default function TrainRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">2</span>
-                  Pricing
+                  {t('form.pricing')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Rate *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rate')} *</label>
                     <input
                       type="number"
                       name="rate_eur"
@@ -1006,11 +1006,11 @@ export default function TrainRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">3</span>
-                  Validity Period
+                  {t('form.validityPeriod')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
                     <input
                       type="date"
                       name="rate_valid_from"
@@ -1020,7 +1020,7 @@ export default function TrainRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
                     <input
                       type="date"
                       name="rate_valid_to"
@@ -1034,7 +1034,7 @@ export default function TrainRatesContent() {
 
               {/* Notes & Status */}
               <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
@@ -1052,7 +1052,7 @@ export default function TrainRatesContent() {
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                   />
-                  <span className="text-sm font-medium text-gray-900">Active (available for bookings)</span>
+                  <span className="text-sm font-medium text-gray-900">{t('activeRate')}</span>
                 </label>
               </div>
             </form>
@@ -1063,14 +1063,14 @@ export default function TrainRatesContent() {
                 onClick={() => setShowModal(false)}
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                {t('form.cancel')}
               </button>
               <button
                 onClick={handleSubmit}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
               >
                 <Check className="w-4 h-4" />
-                {editingRate ? 'Update Rate' : 'Create Rate'}
+                {editingRate ? t('form.update') : t('form.create')}
               </button>
             </div>
           </div>

@@ -347,7 +347,7 @@ export default function SleepingTrainRatesContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading sleeping train rates...</p>
+          <p className="text-sm text-gray-600">{t('loading')}</p>
         </div>
       </div>
     )
@@ -380,7 +380,7 @@ export default function SleepingTrainRatesContent() {
                   'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                Got it
+                {t('notifications.gotIt')}
               </button>
             </div>
           </div>
@@ -395,15 +395,15 @@ export default function SleepingTrainRatesContent() {
               <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
                 <Trash2 className="w-7 h-7 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Sleeping Train Rate?</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteModal.title')}</h3>
               <p className="text-sm text-gray-600 mb-1">
-                Are you sure you want to delete the rate for
+                {t('deleteModal.confirmText')}
               </p>
               <p className="text-sm font-semibold text-gray-900 mb-4">
                 "{deleteModal.name}"
               </p>
               <p className="text-xs text-gray-500 mb-6">
-                This action cannot be undone. The rate will be permanently removed.
+                {t('deleteModal.warning')}
               </p>
               <div className="flex items-center gap-3 w-full">
                 <button
@@ -411,7 +411,7 @@ export default function SleepingTrainRatesContent() {
                   disabled={isDeleting}
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                 >
-                  Cancel
+                  {t('deleteModal.cancel')}
                 </button>
                 <button
                   onClick={handleDelete}
@@ -421,12 +421,12 @@ export default function SleepingTrainRatesContent() {
                   {isDeleting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Deleting...
+                      {t('deleteModal.deleting')}
                     </>
                   ) : (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      Delete
+                      {t('deleteModal.delete')}
                     </>
                   )}
                 </button>
@@ -444,10 +444,10 @@ export default function SleepingTrainRatesContent() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              Sleeping Train Rates
+              {t('title')}
               <Moon className="w-4 h-4 text-indigo-400" />
             </h1>
-            <p className="text-sm text-gray-600">Overnight sleeper train cabin pricing</p>
+            <p className="text-sm text-gray-600">{t('subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -456,14 +456,14 @@ export default function SleepingTrainRatesContent() {
             className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
           >
             <Download className="w-4 h-4" />
-            Export
+            {t('export')}
           </button>
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
           >
             <Plus className="w-4 h-4" />
-            Add Rate
+            {tCommon('addRate')}
           </button>
         </div>
       </div>
@@ -476,7 +476,7 @@ export default function SleepingTrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{rates.length}</p>
-          <p className="text-xs text-gray-600">Total Rates</p>
+          <p className="text-xs text-gray-600">{t('totalRates')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -484,7 +484,7 @@ export default function SleepingTrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{activeRates}</p>
-          <p className="text-xs text-gray-600">Active</p>
+          <p className="text-xs text-gray-600">{t('active')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -492,7 +492,7 @@ export default function SleepingTrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgOneway))}</p>
-          <p className="text-xs text-gray-600">Avg. One-way</p>
+          <p className="text-xs text-gray-600">{t('avgOneway')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
@@ -500,7 +500,7 @@ export default function SleepingTrainRatesContent() {
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{uniqueRoutes}</p>
-          <p className="text-xs text-gray-600">Routes</p>
+          <p className="text-xs text-gray-600">{t('routes')}</p>
         </div>
       </div>
 
@@ -513,7 +513,7 @@ export default function SleepingTrainRatesContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search rates..."
+                placeholder={t('searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
@@ -527,7 +527,7 @@ export default function SleepingTrainRatesContent() {
             onChange={(e) => setSelectedOrigin(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Origins</option>
+            <option value="">{t('allOrigins')}</option>
             {SLEEPER_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -539,7 +539,7 @@ export default function SleepingTrainRatesContent() {
             onChange={(e) => setSelectedDestination(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Destinations</option>
+            <option value="">{t('allDestinations')}</option>
             {SLEEPER_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -551,7 +551,7 @@ export default function SleepingTrainRatesContent() {
             onChange={(e) => setSelectedCabin(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
-            <option value="">All Cabins</option>
+            <option value="">{t('allCabins')}</option>
             {CABIN_TYPES.map(cabin => (
               <option key={cabin} value={cabin}>{cabin}</option>
             ))}
@@ -566,7 +566,7 @@ export default function SleepingTrainRatesContent() {
                 : 'bg-green-100 text-green-700'
             }`}
           >
-            {showInactive ? 'Show All' : 'Active Only'}
+            {showInactive ? t('showAll') : t('activeOnly')}
           </button>
 
           {/* View Mode */}
@@ -595,8 +595,8 @@ export default function SleepingTrainRatesContent() {
         {/* Results Count */}
         <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
           <p className="text-xs text-gray-600">
-            Showing <span className="font-semibold">{paginatedRates.length}</span> of{' '}
-            <span className="font-semibold">{filteredRates.length}</span> rates
+            {t('showing')} <span className="font-semibold">{paginatedRates.length}</span> {t('of')}{' '}
+            <span className="font-semibold">{filteredRates.length}</span> {t('rates')}
           </p>
           <select
             value={itemsPerPage}
@@ -604,7 +604,7 @@ export default function SleepingTrainRatesContent() {
             className="text-xs border border-gray-300 rounded px-2 py-1"
           >
             {ITEMS_PER_PAGE_OPTIONS.map(n => (
-              <option key={n} value={n}>{n} per page</option>
+              <option key={n} value={n}>{n} {t('perPage')}</option>
             ))}
           </select>
         </div>
@@ -615,18 +615,18 @@ export default function SleepingTrainRatesContent() {
         {paginatedRates.length === 0 ? (
           <div className="p-12 text-center">
             <BedDouble className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Rates Found</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('noRatesFound')}</h3>
             <p className="text-sm text-gray-600 mb-4">
               {searchTerm || selectedOrigin || selectedDestination || selectedCabin
-                ? 'Try adjusting your filters'
-                : 'Get started by adding your first sleeping train rate'}
+                ? t('adjustFilters')
+                : t('noRatesDescription')}
             </p>
             <button
               onClick={handleAddNew}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
               <Plus className="w-4 h-4" />
-              Add First Rate
+              {t('addFirstRate')}
             </button>
           </div>
         ) : viewMode === 'table' ? (
@@ -634,13 +634,13 @@ export default function SleepingTrainRatesContent() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Route</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Cabin</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Schedule</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">One-way</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Roundtrip</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('route')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('cabin')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('schedule')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('oneWay')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('roundTrip')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('status')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -686,7 +686,7 @@ export default function SleepingTrainRatesContent() {
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
+                        {rate.is_active ? t('active') : t('inactive')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -724,7 +724,7 @@ export default function SleepingTrainRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? t('active') : t('inactive')}
                   </span>
                 </div>
 
@@ -792,7 +792,7 @@ export default function SleepingTrainRatesContent() {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {rate.is_active ? 'Active' : 'Inactive'}
+                    {rate.is_active ? t('active') : t('inactive')}
                   </span>
                   <div className="flex gap-1">
                     <button onClick={() => handleEdit(rate)} className="p-1 text-gray-400 hover:text-primary-600">
@@ -812,8 +812,8 @@ export default function SleepingTrainRatesContent() {
         {totalPages > 1 && (
           <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between bg-gray-50">
             <p className="text-sm text-gray-600">
-              Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span>
-              <span className="text-gray-400 ml-2">({filteredRates.length} total)</span>
+              {t('page')} <span className="font-semibold">{currentPage}</span> {t('of')} <span className="font-semibold">{totalPages}</span>
+              <span className="text-gray-400 ml-2">({filteredRates.length} {t('total')})</span>
             </p>
             <div className="flex items-center gap-1">
               {/* First Page */}
@@ -822,7 +822,7 @@ export default function SleepingTrainRatesContent() {
                 disabled={currentPage === 1}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                First
+                {t('first')}
               </button>
               
               {/* Previous */}
@@ -878,7 +878,7 @@ export default function SleepingTrainRatesContent() {
                 disabled={currentPage === totalPages}
                 className="px-2 py-1 text-xs rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
               >
-                Last
+                {t('last')}
               </button>
             </div>
           </div>
@@ -891,7 +891,7 @@ export default function SleepingTrainRatesContent() {
           <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? 'Edit Sleeping Train Rate' : 'Add Sleeping Train Rate'}
+                {editingRate ? t('editRate') : t('addRate')}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
                 <X className="w-4 h-4" />
@@ -903,11 +903,11 @@ export default function SleepingTrainRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">1</span>
-                  Route & Cabin Details
+                  {t('form.routeCabinDetails')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Service Code</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
                     <input
                       type="text"
                       name="service_code"
@@ -917,21 +917,21 @@ export default function SleepingTrainRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Operator</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.operator')}</label>
                     <select
                       name="operator_name"
                       value={formData.operator_name}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Operator</option>
+                      <option value="">{t('form.selectOperator')}</option>
                       {OPERATORS.map(op => (
                         <option key={op} value={op}>{op}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Origin City *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.originCity')} *</label>
                     <select
                       name="origin_city"
                       value={formData.origin_city}
@@ -939,14 +939,14 @@ export default function SleepingTrainRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Origin</option>
+                      <option value="">{t('form.selectOrigin')}</option>
                       {SLEEPER_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Destination City *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.destinationCity')} *</label>
                     <select
                       name="destination_city"
                       value={formData.destination_city}
@@ -954,14 +954,14 @@ export default function SleepingTrainRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Destination</option>
+                      <option value="">{t('form.selectDestination')}</option>
                       {SLEEPER_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Cabin Type *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.cabinType')} *</label>
                     <select
                       name="cabin_type"
                       value={formData.cabin_type}
@@ -969,21 +969,21 @@ export default function SleepingTrainRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Cabin</option>
+                      <option value="">{t('form.selectCabin')}</option>
                       {CABIN_TYPES.map(cabin => (
                         <option key={cabin} value={cabin}>{cabin}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Season</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.season')}</label>
                     <select
                       name="season"
                       value={formData.season}
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">Select Season</option>
+                      <option value="">{t('form.selectSeason')}</option>
                       {SEASONS.map(s => (
                         <option key={s} value={s}>{s}</option>
                       ))}
@@ -996,11 +996,11 @@ export default function SleepingTrainRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  Schedule
+                  {t('form.schedule')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Departure Time</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.departureTime')}</label>
                     <input
                       type="text"
                       name="departure_time"
@@ -1011,7 +1011,7 @@ export default function SleepingTrainRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Arrival Time</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.arrivalTime')}</label>
                     <input
                       type="text"
                       name="arrival_time"
@@ -1028,11 +1028,11 @@ export default function SleepingTrainRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
-                  Pricing
+                  {t('form.pricing')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">One-way Rate *</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.onewayRate')} *</label>
                     <input
                       type="number"
                       name="rate_oneway_eur"
@@ -1045,7 +1045,7 @@ export default function SleepingTrainRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Roundtrip Rate</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.roundtripRate')}</label>
                     <input
                       type="number"
                       name="rate_roundtrip_eur"
@@ -1063,11 +1063,11 @@ export default function SleepingTrainRatesContent() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">4</span>
-                  Validity Period
+                  {t('form.validityPeriod')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid From</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
                     <input
                       type="date"
                       name="rate_valid_from"
@@ -1077,7 +1077,7 @@ export default function SleepingTrainRatesContent() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Valid To</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
                     <input
                       type="date"
                       name="rate_valid_to"
@@ -1091,7 +1091,7 @@ export default function SleepingTrainRatesContent() {
 
               {/* Notes & Status */}
               <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
@@ -1109,7 +1109,7 @@ export default function SleepingTrainRatesContent() {
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded"
                   />
-                  <span className="text-sm font-medium text-gray-900">Active (available for bookings)</span>
+                  <span className="text-sm font-medium text-gray-900">{t('activeRate')}</span>
                 </label>
               </div>
             </form>
@@ -1120,14 +1120,14 @@ export default function SleepingTrainRatesContent() {
                 onClick={() => setShowModal(false)}
                 className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                {t('form.cancel')}
               </button>
               <button
                 onClick={handleSubmit}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
               >
                 <Check className="w-4 h-4" />
-                {editingRate ? 'Update Rate' : 'Create Rate'}
+                {editingRate ? t('form.update') : t('form.create')}
               </button>
             </div>
           </div>
