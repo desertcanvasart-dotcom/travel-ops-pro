@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { LanguageIndicator } from '@/components/multilingual'
+import type { Language } from '@/types/multilingual'
 
 // Updated interface to match the new API response structure
 interface TourTemplate {
@@ -30,6 +32,7 @@ interface TourTemplate {
   currency: string
   uses_day_builder: boolean
   pricing_mode: string
+  available_languages: Language[]
 }
 
 export default function ToursBrowsePage() {
@@ -339,7 +342,10 @@ export default function ToursBrowsePage() {
 
             {/* Card Footer */}
             <div className="bg-gray-50 px-4 py-2 border-t border-gray-100 flex items-center justify-between">
-              <p className="text-[10px] text-gray-400 font-mono uppercase">{tour.template_code}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] text-gray-400 font-mono uppercase">{tour.template_code}</p>
+                <LanguageIndicator availableLanguages={tour.available_languages || []} size="sm" />
+              </div>
               <p className="text-[10px] text-gray-400">
                 {tour.variations_count || 0} {tour.variations_count !== 1 ? t('card.variations') : t('card.variation')}
               </p>

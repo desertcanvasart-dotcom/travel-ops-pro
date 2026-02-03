@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase } from 'lucide-react'
@@ -15,6 +15,8 @@ import ItineraryPL from '@/app/components/ItineraryPL'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
+import type { Language, ItineraryVersion } from '@/types/multilingual'
 
 interface Itinerary {
   id: string
@@ -41,6 +43,8 @@ interface Itinerary {
   pickup_time: string
   cost_mode?: 'auto' | 'manual'
   tier?: string
+  available_languages?: Language[]
+  versions?: Record<string, ItineraryVersion>
 }
 
 interface ItineraryDay {
@@ -81,12 +85,17 @@ export default function ViewItineraryPage() {
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
+  const currentLocale = useLocale() as Language
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
+
+  // Multilingual state
+  const [activeLanguage, setActiveLanguage] = useState<Language>(currentLocale)
+  const [creatingVersion, setCreatingVersion] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [showSendModal, setShowSendModal] = useState(false)
@@ -612,6 +621,71 @@ export default function ViewItineraryPage() {
     return icons[type] || '📋'
   }
 
+  // Get content for active language version
+  const getVersionedContent = () => {
+    if (!itinerary?.versions) {
+      return {
+        trip_name: itinerary?.trip_name || '',
+        notes: itinerary?.notes || '',
+        pickup_location: itinerary?.pickup_location || '',
+        guide_notes: itinerary?.guide_notes || '',
+        vehicle_notes: itinerary?.vehicle_notes || ''
+      }
+    }
+    const version = itinerary.versions[activeLanguage] || itinerary.versions['en']
+    if (version) {
+      return {
+        trip_name: version.trip_name || itinerary.trip_name,
+        notes: version.notes || itinerary.notes,
+        pickup_location: version.pickup_location || itinerary.pickup_location,
+        guide_notes: version.guide_notes || itinerary.guide_notes,
+        vehicle_notes: version.vehicle_notes || itinerary.vehicle_notes
+      }
+    }
+    return {
+      trip_name: itinerary.trip_name,
+      notes: itinerary.notes,
+      pickup_location: itinerary.pickup_location,
+      guide_notes: itinerary.guide_notes,
+      vehicle_notes: itinerary.vehicle_notes
+    }
+  }
+
+  const handleCreateVersion = async (language: Language) => {
+    setCreatingVersion(true)
+    try {
+      const response = await fetch(`/api/itineraries/${params.id}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language,
+          trip_name: itinerary?.trip_name,
+          notes: itinerary?.notes,
+          pickup_location: itinerary?.pickup_location,
+          guide_notes: itinerary?.guide_notes,
+          vehicle_notes: itinerary?.vehicle_notes
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Refresh itinerary to get updated versions
+        await fetchItinerary()
+        setActiveLanguage(language)
+      } else {
+        await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error creating version:', error)
+      await dialog.alert(tCommon('error'), t('failedToCreateVersion'), 'warning')
+    } finally {
+      setCreatingVersion(false)
+    }
+  }
+
+  const versionedContent = getVersionedContent()
+  const availableLanguages = itinerary?.available_languages || []
+  const hasActiveVersion = availableLanguages.includes(activeLanguage)
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -656,7 +730,7 @@ export default function ViewItineraryPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">{itinerary.trip_name}</h1>
+                <h1 className="text-xl font-semibold text-gray-900">{versionedContent.trip_name}</h1>
                 <p className="text-sm text-gray-500">
                   <span className="font-mono text-primary-600">{itinerary.itinerary_code}</span>
                   <span className="mx-2">•</span>
@@ -802,6 +876,29 @@ export default function ViewItineraryPage() {
           </div>
         </div>
       </header>
+
+      {/* Language Tabs */}
+      <div className="container mx-auto px-4 pt-4">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+          <LanguageTabs
+            availableLanguages={availableLanguages}
+            activeLanguage={activeLanguage}
+            onLanguageChange={setActiveLanguage}
+            onCreateVersion={handleCreateVersion}
+            disabled={creatingVersion}
+          />
+          {!hasActiveVersion && (
+            <div className="p-6">
+              <CreateVersionPrompt
+                entityType="itinerary"
+                language={activeLanguage}
+                onCreateFromScratch={() => handleCreateVersion(activeLanguage)}
+                isLoading={creatingVersion}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Success Messages */}
       {sendSuccess && (

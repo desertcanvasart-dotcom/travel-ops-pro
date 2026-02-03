@@ -16,7 +16,7 @@ import {
   ChevronDown,
   MessageSquare,
   FileText,
-  Calendar, 
+  Calendar,
   CheckSquare,
   Menu,
   X,
@@ -50,8 +50,10 @@ import {
   Route,
   Package,
   Briefcase,
-  Tags
+  Tags,
+  Globe
 } from 'lucide-react'
+import { LanguageSelector } from '@/components/LanguageSelector'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -593,7 +595,27 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               </div>
             )}
           </div>
-          
+
+          {/* Language Switcher */}
+          <div
+            className={`
+              flex items-center gap-2.5 w-full px-2 py-1.5 rounded-md
+              text-gray-600 hover:bg-gray-50 transition-colors
+              ${isCollapsed ? 'justify-center' : ''}
+            `}
+          >
+            {isCollapsed ? (
+              <LanguageSelector variant="compact" />
+            ) : (
+              <>
+                <Globe className="w-[18px] h-[18px] flex-shrink-0 text-gray-500" />
+                <div className="flex-1">
+                  <LanguageSelector variant="compact" />
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Sign Out Button */}
           <button
             onClick={handleSignOut}

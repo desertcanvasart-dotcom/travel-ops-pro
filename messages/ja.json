@@ -1146,6 +1146,7 @@
     "trip": "旅行",
     "dates": "日程",
     "cost": "費用",
+    "lang": "言語",
     "actions": "操作",
     "view": "表示",
     "edit": {
@@ -1357,7 +1358,8 @@
       "viewBooking": "予約を表示",
       "createBooking": "予約を作成",
       "bookingCreatedSuccessfully": "予約が正常に作成されました",
-      "failedToCreateBooking": "予約の作成に失敗しました"
+      "failedToCreateBooking": "予約の作成に失敗しました",
+      "failedToCreateVersion": "言語バージョンの作成に失敗しました"
     }
   },
   "payments": {
@@ -5152,6 +5154,7 @@
       "duration": "期間",
       "cities": "都市",
       "variations": "バリエーション",
+      "lang": "言語",
       "status": "ステータス",
       "actions": "アクション"
     },

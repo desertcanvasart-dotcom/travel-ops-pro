@@ -45,27 +45,46 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get all variations for these templates
+    // Get all variations and language versions for these templates
     if (templates && templates.length > 0) {
       const templateIds = templates.map(t => t.id)
-      
+
+      // Fetch variations
       const { data: variations, error: variationsError } = await supabaseAdmin
         .from('tour_variations')
         .select('*')
         .in('template_id', templateIds)
         .order('tier', { ascending: true })
 
+      // Fetch language versions
+      let versionsMap: Record<string, string[]> = {}
+      const { data: versions, error: versionsError } = await supabaseAdmin
+        .from('tour_template_versions')
+        .select('template_id, language')
+        .in('template_id', templateIds)
+
+      if (!versionsError && versions) {
+        versionsMap = versions.reduce((acc, v) => {
+          if (!acc[v.template_id]) {
+            acc[v.template_id] = []
+          }
+          acc[v.template_id].push(v.language)
+          return acc
+        }, {} as Record<string, string[]>)
+      }
+
       if (!variationsError && variations) {
-        // Attach variations to their templates
-        const templatesWithVariations = templates.map(template => ({
+        // Attach variations and available_languages to their templates
+        const templatesWithData = templates.map(template => ({
           ...template,
-          variations: variations.filter(v => v.template_id === template.id)
+          variations: variations.filter(v => v.template_id === template.id),
+          available_languages: versionsMap[template.id] || []
         }))
 
         return NextResponse.json({
           success: true,
-          data: templatesWithVariations,
-          count: templatesWithVariations.length
+          data: templatesWithData,
+          count: templatesWithData.length
         })
       }
     }
@@ -147,9 +166,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Create English version automatically
+    if (data) {
+      const { error: versionError } = await supabaseAdmin
+        .from('tour_template_versions')
+        .insert({
+          template_id: data.id,
+          language: 'en',
+          template_name: body.template_name,
+          short_description: body.short_description || null,
+          long_description: body.long_description || null,
+          highlights: body.highlights || [],
+          main_attractions: body.main_attractions || [],
+          best_for: body.best_for || [],
+          inclusions: body.inclusions || [],
+          exclusions: body.exclusions || [],
+          itinerary: body.itinerary || null
+        })
+
+      if (versionError) {
+        console.warn('Warning: Could not create English version:', versionError)
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: data,
+      data: {
+        ...data,
+        available_languages: ['en']
+      },
       message: 'Template created successfully'
     }, { status: 201 })
 

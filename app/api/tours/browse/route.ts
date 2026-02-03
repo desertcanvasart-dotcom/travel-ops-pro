@@ -105,7 +105,28 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Transform templates - NO additional DB calls!
+    // Fetch language versions for templates
+    const templateIds = (templates || []).map(t => t.id)
+    let versionsMap: Record<string, string[]> = {}
+
+    if (templateIds.length > 0) {
+      const { data: versions, error: versionsError } = await supabaseAdmin
+        .from('tour_template_versions')
+        .select('template_id, language')
+        .in('template_id', templateIds)
+
+      if (!versionsError && versions) {
+        versionsMap = versions.reduce((acc, v) => {
+          if (!acc[v.template_id]) {
+            acc[v.template_id] = []
+          }
+          acc[v.template_id].push(v.language)
+          return acc
+        }, {} as Record<string, string[]>)
+      }
+    }
+
+    // Transform templates
     const templatesWithPricing = (templates || []).map((template) => {
       // Filter variations by tier if specified
       let variations = template.tour_variations?.filter((v: any) => v.is_active) || []
@@ -151,7 +172,10 @@ export async function GET(request: NextRequest) {
 
         // Flags
         uses_day_builder: template.uses_day_builder,
-        pricing_mode: template.pricing_mode || 'manual'
+        pricing_mode: template.pricing_mode || 'manual',
+
+        // Language versions
+        available_languages: versionsMap[template.id] || []
       }
     })
 

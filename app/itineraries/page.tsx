@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Search, Plus, FileText, Eye, Edit2, Trash2, CheckCircle2, AlertCircle, X } from 'lucide-react'
+import { LanguageIndicator } from '@/components/multilingual'
+import type { Language } from '@/types/multilingual'
 
 interface Itinerary {
   id: string
@@ -19,6 +21,7 @@ interface Itinerary {
   total_cost: number
   currency: string
   status: string
+  available_languages: Language[]
 }
 interface Toast {
   id: string
@@ -318,6 +321,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                 <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('days')}</th>
                 <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('pax')}</th>
                 <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-600 whitespace-nowrap">{t('cost')}</th>
+                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('lang')}</th>
                 <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('status')}</th>
                 <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap sticky right-0 bg-gray-50">{t('actions')}</th>
               </tr>
@@ -360,6 +364,9 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                     <div className="text-sm font-semibold text-gray-900">
                       {itinerary.currency} {itinerary.total_cost.toFixed(0)}
                     </div>
+                  </td>
+                  <td className="px-3 py-3 text-center whitespace-nowrap">
+                    <LanguageIndicator availableLanguages={itinerary.available_languages || []} />
                   </td>
                   <td className="px-3 py-3 text-center whitespace-nowrap">
                     <select

@@ -713,6 +713,7 @@
     "trip": "Trip",
     "dates": "Dates",
     "cost": "Cost",
+    "lang": "Lang",
     "actions": "Actions",
     "view": "View",
     "edit": {
@@ -858,6 +859,7 @@
       "createBooking": "Create Booking",
       "bookingCreatedSuccessfully": "Booking created successfully",
       "failedToCreateBooking": "Failed to create booking",
+      "failedToCreateVersion": "Failed to create language version",
       "itineraryNotFound": "Itinerary not found",
       "client": "Client",
       "dates": "Dates",
@@ -4805,6 +4807,7 @@
       "duration": "Duration",
       "cities": "Cities",
       "variations": "Variations",
+      "lang": "Lang",
       "status": "Status",
       "actions": "Actions"
     },

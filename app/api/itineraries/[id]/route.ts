@@ -17,7 +17,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    
+
     const { data, error } = await supabase
       .from('itineraries')
       .select('*')
@@ -33,15 +33,35 @@ export async function GET(
       )
     }
 
+    // Fetch language versions
+    const { data: versions, error: versionsError } = await supabase
+      .from('itinerary_versions')
+      .select('*')
+      .eq('itinerary_id', id)
+
+    // Build versions object keyed by language
+    const versionsMap: Record<string, any> = {}
+    if (!versionsError && versions) {
+      versions.forEach(v => {
+        versionsMap[v.language] = v
+      })
+    }
+
+    const availableLanguages = Object.keys(versionsMap)
+
     return NextResponse.json({
       success: true,
-      data
+      data: {
+        ...data,
+        available_languages: availableLanguages,
+        versions: versionsMap
+      }
     })
   } catch (error) {
     console.error('Error fetching itinerary:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Failed to fetch itinerary',
         message: error instanceof Error ? error.message : 'Unknown error'
       },

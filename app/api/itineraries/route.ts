@@ -21,8 +21,9 @@ function calculateTotalDays(startDate: string, endDate: string): number {
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient()
-    
-    const { data, error } = await supabase
+
+    // Fetch itineraries with their language versions
+    const { data: itineraries, error } = await supabase
       .from('itineraries')
       .select('*')
       .order('created_at', { ascending: false })
@@ -32,11 +33,40 @@ export async function GET(request: NextRequest) {
       throw error
     }
 
-    console.log('✅ Found itineraries:', data?.length || 0)
+    // Fetch available languages for each itinerary
+    const itineraryIds = itineraries?.map(i => i.id) || []
+
+    let versionsMap: Record<string, string[]> = {}
+
+    if (itineraryIds.length > 0) {
+      const { data: versions, error: versionsError } = await supabase
+        .from('itinerary_versions')
+        .select('itinerary_id, language')
+        .in('itinerary_id', itineraryIds)
+
+      if (!versionsError && versions) {
+        // Group languages by itinerary_id
+        versionsMap = versions.reduce((acc, v) => {
+          if (!acc[v.itinerary_id]) {
+            acc[v.itinerary_id] = []
+          }
+          acc[v.itinerary_id].push(v.language)
+          return acc
+        }, {} as Record<string, string[]>)
+      }
+    }
+
+    // Add available_languages to each itinerary
+    const dataWithLanguages = itineraries?.map(itinerary => ({
+      ...itinerary,
+      available_languages: versionsMap[itinerary.id] || []
+    })) || []
+
+    console.log('✅ Found itineraries:', dataWithLanguages.length)
 
     return NextResponse.json({
       success: true,
-      data: data || []
+      data: dataWithLanguages
     })
   } catch (error: any) {
     console.error('❌ API error:', error)
@@ -91,9 +121,31 @@ export async function POST(request: NextRequest) {
       throw error
     }
 
+    // Create English version automatically
+    if (data) {
+      const { error: versionError } = await supabase
+        .from('itinerary_versions')
+        .insert({
+          itinerary_id: data.id,
+          language: 'en',
+          trip_name: body.trip_name || 'Untitled Trip',
+          notes: body.notes || null,
+          pickup_location: body.pickup_location || null,
+          guide_notes: body.guide_notes || null,
+          vehicle_notes: body.vehicle_notes || null
+        })
+
+      if (versionError) {
+        console.warn('Warning: Could not create English version:', versionError)
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data
+      data: {
+        ...data,
+        available_languages: ['en']
+      }
     })
   } catch (error: any) {
     console.error('API error:', error)

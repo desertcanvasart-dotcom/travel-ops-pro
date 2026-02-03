@@ -33,6 +33,8 @@ import {
 
 // Import DayBuilder component
 import DayBuilder from './DayBuilder'
+import { LanguageIndicator } from '@/components/multilingual'
+import type { Language } from '@/types/multilingual'
 
 // ============================================
 // INTERFACES
@@ -91,6 +93,7 @@ interface TourTemplate {
   itinerary?: ItineraryDay[]
   inclusions?: string[]   // NEW: What's included
   exclusions?: string[]   // NEW: What's not included
+  available_languages?: Language[]
 }
 
 // NEW: Itinerary Day interface
@@ -1460,6 +1463,7 @@ export default function TourManagerContent() {
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.duration')}</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.cities')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.variations')}</th>
+                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.lang')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.status')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.actions')}</th>
                   </tr>
@@ -1518,6 +1522,9 @@ export default function TourManagerContent() {
                               {t('actions.add')}
                             </button>
                           )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <LanguageIndicator availableLanguages={template.available_languages || []} size="sm" />
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1649,7 +1656,10 @@ export default function TourManagerContent() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h3 className="text-base font-semibold text-gray-900">{template.template_name}</h3>
-                      <p className="text-xs text-gray-500 font-mono">{template.template_code}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-gray-500 font-mono">{template.template_code}</p>
+                        <LanguageIndicator availableLanguages={template.available_languages || []} size="sm" />
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       {template.is_featured && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
@@ -1755,6 +1765,9 @@ export default function TourManagerContent() {
                   </div>
                   <div className="hidden md:block">
                     <span className="text-xs text-gray-500 font-mono">{template.template_code}</span>
+                  </div>
+                  <div className="hidden md:block">
+                    <LanguageIndicator availableLanguages={template.available_languages || []} size="sm" />
                   </div>
                   <div className="hidden md:block">
                     <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{template.duration_days}D</span>
