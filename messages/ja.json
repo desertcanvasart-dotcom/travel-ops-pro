@@ -2586,7 +2586,13 @@
       "success": "成功",
       "messageSent": "メッセージを送信しました！",
       "error": "エラー",
-      "failedToSend": "メッセージの送信に失敗しました"
+      "failedToSend": "メッセージの送信に失敗しました",
+      "prefillFromItinerary": "旅程から自動入力（任意）",
+      "selectItinerary": "旅程を選択",
+      "noItinerary": "なし（手動入力）",
+      "loadingItineraries": "旅程を読み込み中...",
+      "loadingItineraryData": "旅程データを読み込み中...",
+      "itineraryHelp": "旅程を選択して、プレースホルダーを旅行データで自動入力"
     }
   },
   "settings": {

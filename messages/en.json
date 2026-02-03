@@ -1698,7 +1698,13 @@
       "success": "Success",
       "messageSent": "Message sent successfully!",
       "error": "Error",
-      "failedToSend": "Failed to send message"
+      "failedToSend": "Failed to send message",
+      "prefillFromItinerary": "Pre-fill from Itinerary (optional)",
+      "selectItinerary": "Select itinerary",
+      "noItinerary": "None (manual entry)",
+      "loadingItineraries": "Loading itineraries...",
+      "loadingItineraryData": "Loading itinerary data...",
+      "itineraryHelp": "Select an itinerary to auto-fill placeholders with trip data"
     }
   },
   "settings": {

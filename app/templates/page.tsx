@@ -24,7 +24,8 @@ import {
   Ship,
   Car,
   Hotel,
-  User
+  User,
+  Calendar
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -62,6 +63,14 @@ interface Recipient {
   email?: string
   phone?: string
   type: 'client' | 'hotel' | 'cruise' | 'transport' | 'guide'
+}
+
+interface ItineraryOption {
+  id: string
+  itinerary_code: string
+  trip_name: string
+  client_name: string
+  start_date: string
 }
 
 // ============================================
@@ -769,6 +778,12 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     template.channel === 'both' ? 'whatsapp' : template.channel
   )
 
+  // Itinerary selector state
+  const [itineraries, setItineraries] = useState<ItineraryOption[]>([])
+  const [selectedItineraryId, setSelectedItineraryId] = useState<string>('')
+  const [loadingItineraries, setLoadingItineraries] = useState(false)
+  const [loadingItineraryData, setLoadingItineraryData] = useState(false)
+
   // Determine recipient type based on template
   const isPartnerTemplate = template.category === 'partner'  // B2B partners (travel agencies)
   const isSupplierTemplate = template.category === 'supplier'  // Service providers (hotels, transport, guides)
@@ -800,7 +815,61 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
 
   useEffect(() => {
     fetchRecipients()
+    fetchItineraries()
   }, [])
+
+  // Fetch itineraries list
+  const fetchItineraries = async () => {
+    setLoadingItineraries(true)
+    try {
+      const response = await fetch('/api/itineraries?limit=50')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && Array.isArray(data.data)) {
+          setItineraries(data.data.map((it: any) => ({
+            id: it.id,
+            itinerary_code: it.itinerary_code,
+            trip_name: it.trip_name,
+            client_name: it.client_name,
+            start_date: it.start_date
+          })))
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching itineraries:', error)
+    } finally {
+      setLoadingItineraries(false)
+    }
+  }
+
+  // Handle itinerary selection - auto-fill placeholders
+  useEffect(() => {
+    if (!selectedItineraryId) return
+
+    const fetchItineraryData = async () => {
+      setLoadingItineraryData(true)
+      try {
+        const response = await fetch(`/api/itineraries/${selectedItineraryId}/template-data`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.placeholderData) {
+            // Convert placeholder data to {{key}} format and merge with existing values
+            const values: Record<string, string> = {}
+            Object.entries(data.placeholderData).forEach(([key, value]) => {
+              values[`{{${key}}}`] = value as string
+            })
+            setFilledValues(prev => ({ ...values, ...prev }))
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching itinerary data:', error)
+      } finally {
+        setLoadingItineraryData(false)
+      }
+    }
+
+    fetchItineraryData()
+  }, [selectedItineraryId])
 
   useEffect(() => {
     // Auto-fill from selected recipient
@@ -1043,6 +1112,41 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
                   <p className="text-xs text-amber-600 mt-1">
                     {t('send.noRecipientsFound', { type: isSupplierTemplate ? t('categories.supplier').toLowerCase() : isPartnerTemplate ? t('categories.partner').toLowerCase() : t('categories.customer').toLowerCase() })}
                   </p>
+                )}
+              </div>
+
+              {/* Itinerary Selector (Optional) */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+                  <Calendar className="w-4 h-4" />
+                  {t('send.prefillFromItinerary')}
+                </label>
+                <p className="text-xs text-gray-500 mb-2">{t('send.itineraryHelp')}</p>
+                {loadingItineraries ? (
+                  <div className="flex items-center gap-2 px-3 py-2 text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {t('send.loadingItineraries')}
+                  </div>
+                ) : (
+                  <select
+                    value={selectedItineraryId}
+                    onChange={(e) => setSelectedItineraryId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                    aria-label={t('send.selectItinerary')}
+                  >
+                    <option value="">{t('send.noItinerary')}</option>
+                    {itineraries.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.itinerary_code} - {it.trip_name} ({it.client_name}) - {new Date(it.start_date).toLocaleDateString()}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {loadingItineraryData && (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {t('send.loadingItineraryData')}
+                  </div>
                 )}
               </div>
 
