@@ -123,6 +123,25 @@ export default function ViewItineraryPage() {
     }
   }, [params.id])
 
+  // Fetch days when language changes
+  useEffect(() => {
+    if (params.id) {
+      fetchDays(activeLanguage)
+    }
+  }, [params.id, activeLanguage])
+
+  const fetchDays = async (language: Language) => {
+    try {
+      const daysResponse = await fetch(`/api/itineraries/${params.id}/days?language=${language}`)
+      const daysData = await daysResponse.json()
+      if (daysData.success) {
+        setDays(daysData.data)
+      }
+    } catch (err) {
+      console.error('Error fetching days:', err)
+    }
+  }
+
   const fetchItinerary = async () => {
     try {
       const itinResponse = await fetch(`/api/itineraries/${params.id}`)
@@ -137,13 +156,7 @@ export default function ViewItineraryPage() {
       setItinerary(itinData.data)
       setCostMode(itinData.data.cost_mode || 'auto')
 
-      const daysResponse = await fetch(`/api/itineraries/${params.id}/days`)
-      const daysData = await daysResponse.json()
-
-      if (daysData.success) {
-        setDays(daysData.data)
-      }
-
+      // Fetch days will be done separately when activeLanguage changes
       setLoading(false)
     } catch (err) {
       setError(t('errorLoadingItinerary'))

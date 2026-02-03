@@ -1,9 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/app/supabase'
-import { translateFields, ITINERARY_TRANSLATION_FIELDS } from '@/lib/translation-utils'
+import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS } from '@/lib/translation-utils'
 import type { Language } from '@/types/multilingual'
 
 const supabase = createClient()
+
+// Helper function to translate itinerary days
+async function translateItineraryDays(
+  itineraryId: string,
+  sourceLanguage: Language,
+  targetLanguage: Language
+) {
+  // Fetch all days for this itinerary
+  const { data: days, error: daysError } = await supabase
+    .from('itinerary_days')
+    .select('id, title, description, city, overnight_city')
+    .eq('itinerary_id', itineraryId)
+    .order('day_number', { ascending: true })
+
+  if (daysError || !days || days.length === 0) {
+    console.log('No days found for itinerary:', itineraryId)
+    return []
+  }
+
+  const translatedDays = []
+
+  for (const day of days) {
+    // Check if target version already exists for this day
+    const { data: existingDayVersion } = await supabase
+      .from('itinerary_day_versions')
+      .select('id')
+      .eq('itinerary_day_id', day.id)
+      .eq('language', targetLanguage)
+      .single()
+
+    if (existingDayVersion) {
+      console.log(`Day version already exists for day ${day.id} in ${targetLanguage}`)
+      continue
+    }
+
+    // Try to get source day version first
+    const { data: sourceDayVersion } = await supabase
+      .from('itinerary_day_versions')
+      .select('*')
+      .eq('itinerary_day_id', day.id)
+      .eq('language', sourceLanguage)
+      .single()
+
+    // Use source version if available, otherwise use main day content
+    const sourceContent = sourceDayVersion || day
+
+    // Translate the day content
+    const translatedContent = await translateFields(
+      sourceContent,
+      ITINERARY_DAY_TRANSLATION_FIELDS,
+      sourceLanguage,
+      targetLanguage
+    )
+
+    // Create the day version
+    const { data: newDayVersion, error: createDayError } = await supabase
+      .from('itinerary_day_versions')
+      .insert({
+        itinerary_day_id: day.id,
+        language: targetLanguage,
+        title: translatedContent.title || sourceContent.title || null,
+        description: translatedContent.description || sourceContent.description || null,
+        city: translatedContent.city || sourceContent.city || null,
+        overnight_city: translatedContent.overnight_city || sourceContent.overnight_city || null
+      })
+      .select()
+      .single()
+
+    if (createDayError) {
+      console.error('Error creating day version:', createDayError)
+    } else {
+      translatedDays.push(newDayVersion)
+    }
+  }
+
+  return translatedDays
+}
 
 // POST - Copy existing version and translate to target language
 export async function POST(
@@ -87,9 +164,17 @@ export async function POST(
 
       if (createError) throw createError
 
+      // Also translate itinerary days
+      const translatedDays = await translateItineraryDays(
+        id,
+        'en' as Language,
+        targetLanguage as Language
+      )
+
       return NextResponse.json({
         success: true,
         data: newVersion,
+        translatedDays,
         translated: true,
         sourceLanguage: 'en',
         targetLanguage
@@ -121,9 +206,17 @@ export async function POST(
 
     if (createError) throw createError
 
+    // Also translate itinerary days
+    const translatedDays = await translateItineraryDays(
+      id,
+      sourceLanguage,
+      targetLanguage as Language
+    )
+
     return NextResponse.json({
       success: true,
       data: newVersion,
+      translatedDays,
       translated: true,
       sourceLanguage,
       targetLanguage

@@ -125,6 +125,16 @@ export const ITINERARY_TRANSLATION_FIELDS: TranslationFieldConfig[] = [
 ]
 
 /**
+ * Field configurations for itinerary day versions
+ */
+export const ITINERARY_DAY_TRANSLATION_FIELDS: TranslationFieldConfig[] = [
+  { key: 'title', type: 'string' },
+  { key: 'description', type: 'string' },
+  { key: 'city', type: 'string' },
+  { key: 'overnight_city', type: 'string' }
+]
+
+/**
  * Field configurations for quote versions
  */
 export const QUOTE_TRANSLATION_FIELDS: TranslationFieldConfig[] = [

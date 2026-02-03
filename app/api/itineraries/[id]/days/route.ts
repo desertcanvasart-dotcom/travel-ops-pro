@@ -10,20 +10,25 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params  // ← ADD THIS LINE
-    
+    const { id } = await params
+
+    // Get language from query params (default to 'en')
+    const { searchParams } = new URL(request.url)
+    const language = searchParams.get('language') || 'en'
+
     // Fetch all days for this itinerary
     const { data: days, error: daysError } = await supabase
       .from('itinerary_days')
       .select('*')
-      .eq('itinerary_id', id)  // ← CHANGE: params.id → id
+      .eq('itinerary_id', id)
       .order('day_number', { ascending: true })
 
     if (daysError) throw daysError
 
-    // Fetch services for each day
+    // Fetch services and language versions for each day
     const daysWithServices = await Promise.all(
       (days || []).map(async (day) => {
+        // Fetch services
         const { data: services, error: servicesError } = await supabase
           .from('itinerary_services')
           .select('*')
@@ -34,8 +39,21 @@ export async function GET(
           console.error('Error fetching services for day:', servicesError)
         }
 
+        // Fetch language version for this day
+        const { data: dayVersion } = await supabase
+          .from('itinerary_day_versions')
+          .select('title, description, city, overnight_city')
+          .eq('itinerary_day_id', day.id)
+          .eq('language', language)
+          .single()
+
+        // Merge version content with main day (version takes precedence)
         return {
           ...day,
+          title: dayVersion?.title || day.title,
+          description: dayVersion?.description || day.description,
+          city: dayVersion?.city || day.city,
+          overnight_city: dayVersion?.overnight_city || day.overnight_city,
           services: services || []
         }
       })
@@ -43,13 +61,14 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: daysWithServices
+      data: daysWithServices,
+      language
     })
   } catch (error) {
     console.error('Error fetching itinerary days:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Failed to fetch itinerary days',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
