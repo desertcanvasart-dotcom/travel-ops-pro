@@ -5093,7 +5093,10 @@
       "private": "プライベート",
       "shared": "シェア",
       "pax": "人数",
-      "vehicle": "車両"
+      "vehicle": "車両",
+      "showing": "表示中",
+      "ofTemplates": "{total}件中",
+      "attractionsLoaded": "{count}件のアトラクションを読み込み済み"
     },
     "form": {
       "basic": "基本",
@@ -5158,7 +5161,12 @@
       "delete": "削除",
       "addVariation": "バリエーションを追加",
       "openDayBuilder": "日程ビルダーを開く",
-      "view": "表示"
+      "view": "表示",
+      "add": "追加"
+    },
+    "status": {
+      "active": "有効",
+      "inactive": "無効"
     },
     "delete": {
       "confirmTitle": "ツアーを削除しますか？",

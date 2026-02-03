@@ -4746,7 +4746,10 @@
       "private": "Private",
       "shared": "Shared",
       "pax": "Pax",
-      "vehicle": "Vehicle"
+      "vehicle": "Vehicle",
+      "showing": "Showing",
+      "ofTemplates": "of {total} templates",
+      "attractionsLoaded": "{count} attractions loaded"
     },
     "form": {
       "basic": "Basic",
@@ -4811,7 +4814,12 @@
       "delete": "Delete",
       "addVariation": "Add Variation",
       "openDayBuilder": "Open Day Builder",
-      "view": "View"
+      "view": "View",
+      "add": "Add"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
     },
     "delete": {
       "confirmTitle": "Delete tour?",
