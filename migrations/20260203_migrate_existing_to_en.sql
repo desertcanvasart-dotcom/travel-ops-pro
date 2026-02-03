@@ -57,8 +57,8 @@ SELECT
   description,
   city,
   overnight_city,
-  created_at,
-  COALESCE(updated_at, NOW())
+  NOW(),
+  NOW()
 FROM itinerary_days
 WHERE NOT EXISTS (
   SELECT 1 FROM itinerary_day_versions idv
@@ -125,8 +125,8 @@ SELECT
   inclusions,
   exclusions,
   optional_extras,
-  created_at,
-  COALESCE(updated_at, NOW())
+  COALESCE(created_at, NOW()),
+  NOW()
 FROM tour_variations
 WHERE NOT EXISTS (
   SELECT 1 FROM tour_variation_versions tvv
