@@ -180,7 +180,7 @@ interface RatesData {
 type TabType = 'transportation' | 'guides' | 'entrances' | 'accommodation' | 'meals' | 'cruises' | 'sleepingTrains' | 'trains' | 'airportStaff' | 'hotelStaff' | 'tipping'
 
 export default function RatesPage() {
-  const t = useTranslations('rates')
+  const t = useTranslations('rates.overview')
   const { formatWithConversion } = useCurrency()
   const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
