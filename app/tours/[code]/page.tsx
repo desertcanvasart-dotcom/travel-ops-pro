@@ -237,8 +237,12 @@ export default function TourDetailPage() {
 
   // Handle copy & translate
   const handleCopyTranslate = useCallback(async () => {
-    if (!params.code) return
+    if (!params.code) {
+      console.error('No tour code available')
+      return
+    }
 
+    console.log('Starting copy-translate for language:', activeLanguage)
     setTranslating(true)
     try {
       const response = await fetch(`/api/tours/${params.code}/versions/copy-translate`, {
@@ -248,17 +252,20 @@ export default function TourDetailPage() {
       })
 
       const data = await response.json()
+      console.log('Copy-translate response:', data)
 
       if (data.success) {
         // Refresh versions
         await fetchVersions(params.code as string)
+        // Show success message
+        alert(activeLanguage === 'ja' ? '翻訳が完了しました' : 'Translation completed successfully')
       } else {
         console.error('Translation failed:', data.error)
-        alert(data.error || 'Failed to translate')
+        alert(data.error || (activeLanguage === 'ja' ? '翻訳に失敗しました' : 'Failed to translate'))
       }
     } catch (err) {
       console.error('Error in copy-translate:', err)
-      alert('Error during translation')
+      alert(activeLanguage === 'ja' ? '翻訳中にエラーが発生しました' : 'Error during translation')
     } finally {
       setTranslating(false)
     }
@@ -348,7 +355,7 @@ export default function TourDetailPage() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <Loader2 className="w-8 h-8 text-[#647C47] animate-spin mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Loading tour details...</p>
+            <p className="text-gray-500 text-sm">{t('detail.loading')}</p>
           </div>
         </div>
       </div>
@@ -363,10 +370,10 @@ export default function TourDetailPage() {
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span>Back to Tours</span>
+          <span>{t('detail.backToTours')}</span>
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <p className="text-sm font-medium text-red-800 mb-1">Tour Not Found</p>
+          <p className="text-sm font-medium text-red-800 mb-1">{t('detail.tourNotFound')}</p>
           <p className="text-sm text-red-600">{error}</p>
         </div>
       </div>
@@ -410,6 +417,7 @@ export default function TourDetailPage() {
           activeLanguage={activeLanguage}
           onLanguageChange={setActiveLanguage}
           availableLanguages={versions?.available_languages || ['en']}
+          onCreateVersion={(lang) => setActiveLanguage(lang)}
         />
 
         {/* Create Version Prompt */}
@@ -433,7 +441,7 @@ export default function TourDetailPage() {
             <Calendar className="h-4 w-4 text-[#647C47]" />
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Duration</p>
+          <p className="text-xs text-gray-500 mb-1">{t('detail.duration')}</p>
           <p className="text-lg font-semibold text-gray-900">
             {tour.duration_days}D{tour.duration_nights > 0 && `/${tour.duration_nights}N`}
           </p>
@@ -443,23 +451,23 @@ export default function TourDetailPage() {
             <Users className="h-4 w-4 text-[#647C47]" />
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Group Size</p>
-          <p className="text-lg font-semibold text-gray-900">{tour.min_pax}-{tour.max_pax} pax</p>
+          <p className="text-xs text-gray-500 mb-1">{t('detail.groupSize')}</p>
+          <p className="text-lg font-semibold text-gray-900">{tour.min_pax}-{tour.max_pax} {t('detail.pax')}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <Tag className="h-4 w-4 text-[#647C47]" />
             <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Category</p>
-          <p className="text-lg font-semibold text-gray-900 truncate">{tour.category_name || 'Uncategorized'}</p>
+          <p className="text-xs text-gray-500 mb-1">{t('detail.category')}</p>
+          <p className="text-lg font-semibold text-gray-900 truncate">{tour.category_name || t('detail.uncategorized')}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <Globe className="h-4 w-4 text-[#647C47]" />
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Languages</p>
+          <p className="text-xs text-gray-500 mb-1">{t('detail.languages')}</p>
           <p className="text-lg font-semibold text-gray-900 truncate">
             {tour.guide_languages?.length > 0 ? tour.guide_languages.join(', ') : 'English, Arabic'}
           </p>
@@ -469,7 +477,7 @@ export default function TourDetailPage() {
             <span className="text-[#647C47]">€</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">From</p>
+          <p className="text-xs text-gray-500 mb-1">{t('detail.from')}</p>
           <p className="text-lg font-semibold text-[#647C47]">
             {pricingLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -487,7 +495,7 @@ export default function TourDetailPage() {
         <div className="lg:col-span-2 space-y-6">
           {/* Description */}
           <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">About This Tour</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('detail.aboutThisTour')}</h2>
             <p className="text-gray-600 text-sm leading-relaxed">
               {versionedTour.long_description || versionedTour.short_description}
             </p>
@@ -496,7 +504,7 @@ export default function TourDetailPage() {
               <div className="mt-6 pt-6 border-t border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <Star className="h-4 w-4 text-amber-500" />
-                  Highlights
+                  {t('detail.highlights')}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {versionedTour.highlights.map((highlight, idx) => (
@@ -515,7 +523,7 @@ export default function TourDetailPage() {
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-[#647C47]" />
-                Daily Itinerary
+                {t('detail.dailyItinerary')}
               </h2>
               <div className="space-y-3">
                 {tour.daily_itinerary.map((day) => (
@@ -524,6 +532,7 @@ export default function TourDetailPage() {
                     className="border border-gray-200 rounded-lg overflow-hidden"
                   >
                     <button
+                      type="button"
                       onClick={() => toggleDay(day.day_number)}
                       className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
                     >
@@ -555,13 +564,13 @@ export default function TourDetailPage() {
                           <p className="text-sm text-gray-600">{day.day_description}</p>
                           <div className="flex flex-wrap items-center gap-3 mt-3 text-xs">
                             {day.breakfast_included && (
-                              <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded">🍳 Breakfast</span>
+                              <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded">🍳 {t('detail.breakfast')}</span>
                             )}
                             {day.lunch_included && (
-                              <span className="px-2 py-1 bg-orange-50 text-orange-700 rounded">🍽️ Lunch</span>
+                              <span className="px-2 py-1 bg-orange-50 text-orange-700 rounded">🍽️ {t('detail.lunch')}</span>
                             )}
                             {day.dinner_included && (
-                              <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded">🌙 Dinner</span>
+                              <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded">🌙 {t('detail.dinner')}</span>
                             )}
                             {day.overnight_city && (
                               <span className="px-2 py-1 bg-slate-50 text-slate-700 rounded">🏨 {day.overnight_city}</span>
@@ -584,7 +593,7 @@ export default function TourDetailPage() {
                   <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
                     <Check className="h-3.5 w-3.5 text-green-600" />
                   </div>
-                  What's Included
+                  {t('detail.whatsIncluded')}
                 </h3>
                 <ul className="space-y-2">
                   {versionedTour.inclusions.map((item, idx) => (
@@ -603,7 +612,7 @@ export default function TourDetailPage() {
                   <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
                     <X className="h-3.5 w-3.5 text-red-600" />
                   </div>
-                  Not Included
+                  {t('detail.notIncluded')}
                 </h3>
                 <ul className="space-y-2">
                   {versionedTour.exclusions.map((item, idx) => (
@@ -624,7 +633,7 @@ export default function TourDetailPage() {
                 <div className="w-6 h-6 bg-[#647C47]/10 rounded-full flex items-center justify-center">
                   <Plus className="h-3.5 w-3.5 text-[#647C47]" />
                 </div>
-                Optional Extras
+                {t('detail.optionalExtras')}
               </h3>
               <ul className="space-y-2">
                 {versionedTour.optional_extras.map((item, idx) => (
@@ -643,22 +652,23 @@ export default function TourDetailPage() {
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Calculator className="h-5 w-5 text-[#647C47]" />
-              Calculate Your Price
+              {t('detail.calculateYourPrice')}
             </h3>
 
             {/* Number of Travelers */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Number of Travelers
+                {t('detail.numberOfTravelers')}
               </label>
               <select
                 value={selectedPax}
                 onChange={(e) => setSelectedPax(Number(e.target.value))}
+                title={t('detail.numberOfTravelers')}
                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white"
               >
                 {Array.from({ length: tour.max_pax }, (_, i) => i + 1).map(num => (
                   <option key={num} value={num}>
-                    {num} {num === 1 ? 'person' : 'people'}
+                    {num} {num === 1 ? t('detail.person') : t('detail.people')}
                   </option>
                 ))}
               </select>
@@ -667,13 +677,14 @@ export default function TourDetailPage() {
             {/* Travel Date */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Travel Date
+                {t('detail.travelDate')}
               </label>
               <input
                 type="date"
                 value={travelDate}
                 onChange={(e) => setTravelDate(e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
+                title={t('detail.travelDate')}
                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none"
               />
             </div>
@@ -681,24 +692,25 @@ export default function TourDetailPage() {
             {/* Passport Type */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Passport Type
+                {t('detail.passportType')}
               </label>
               <select
                 value={isEurPassport ? 'eur' : 'non-eur'}
                 onChange={(e) => setIsEurPassport(e.target.value === 'eur')}
+                title={t('detail.passportType')}
                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white"
               >
-                <option value="eur">European Passport</option>
-                <option value="non-eur">Non-European Passport</option>
+                <option value="eur">{t('detail.europeanPassport')}</option>
+                <option value="non-eur">{t('detail.nonEuropeanPassport')}</option>
               </select>
-              <p className="text-xs text-gray-500 mt-1">Affects entrance fees at some sites</p>
+              <p className="text-xs text-gray-500 mt-1">{t('detail.affectsEntranceFees')}</p>
             </div>
 
             {/* Pricing Result */}
             {pricingLoading ? (
               <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex items-center justify-center">
                 <Loader2 className="w-5 h-5 animate-spin text-[#647C47] mr-2" />
-                <span className="text-sm text-gray-600">Calculating...</span>
+                <span className="text-sm text-gray-600">{t('detail.calculating')}</span>
               </div>
             ) : pricingError ? (
               <div className="bg-red-50 border border-red-200 p-4 rounded-lg mb-4">
@@ -711,28 +723,29 @@ export default function TourDetailPage() {
               <>
                 <div className="bg-[#647C47]/5 border border-[#647C47]/20 p-4 rounded-lg mb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs text-gray-500">Price per person</p>
+                    <p className="text-xs text-gray-500">{t('detail.pricePerPerson')}</p>
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${getSeasonBadge(pricing.season)}`}>
-                      {pricing.season.charAt(0).toUpperCase() + pricing.season.slice(1)} Season
+                      {t(`detail.${pricing.season}Season`)}
                     </span>
                   </div>
                   <p className="text-3xl font-bold text-[#647C47]">
                     €{pricing.price_per_person.toFixed(0)}
                   </p>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#647C47]/20">
-                    <span className="text-sm text-gray-600">Total for {selectedPax} {selectedPax === 1 ? 'person' : 'people'}</span>
+                    <span className="text-sm text-gray-600">{t('detail.totalFor')} {selectedPax} {selectedPax === 1 ? t('detail.person') : t('detail.people')}</span>
                     <span className="text-lg font-semibold text-gray-900">€{pricing.selling_price.toFixed(0)}</span>
                   </div>
                 </div>
 
                 {/* Toggle Breakdown */}
                 <button
+                  type="button"
                   onClick={() => setShowBreakdown(!showBreakdown)}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg mb-4"
                 >
                   <span className="flex items-center gap-2">
                     <TrendingUp className="w-4 h-4" />
-                    View Price Breakdown
+                    {t('detail.viewPriceBreakdown')}
                   </span>
                   {showBreakdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
@@ -740,7 +753,7 @@ export default function TourDetailPage() {
                 {/* Price Breakdown */}
                 {showBreakdown && pricing.services.length > 0 && (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                    <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">Services Included</h4>
+                    <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">{t('detail.servicesIncluded')}</h4>
                     <div className="space-y-2">
                       {pricing.services.map((service, idx) => (
                         <div key={idx} className="flex items-center justify-between text-sm">
@@ -753,7 +766,7 @@ export default function TourDetailPage() {
                       ))}
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-medium">
-                      <span className="text-gray-700">Subtotal</span>
+                      <span className="text-gray-700">{t('detail.subtotal')}</span>
                       <span className="text-gray-900">€{pricing.subtotal_cost.toFixed(0)}</span>
                     </div>
                   </div>
@@ -762,7 +775,7 @@ export default function TourDetailPage() {
                 {/* Optional Services */}
                 {showBreakdown && pricing.optional_services && pricing.optional_services.length > 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                    <h4 className="text-xs font-semibold text-amber-700 mb-3 uppercase tracking-wide">Available Add-ons</h4>
+                    <h4 className="text-xs font-semibold text-amber-700 mb-3 uppercase tracking-wide">{t('detail.availableAddOns')}</h4>
                     <div className="space-y-2">
                       {pricing.optional_services.map((service, idx) => (
                         <div key={idx} className="flex items-center justify-between text-sm">
@@ -776,50 +789,50 @@ export default function TourDetailPage() {
               </>
             ) : (
               <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 text-center">
-                <p className="text-sm text-gray-500">Select options above to calculate price</p>
+                <p className="text-sm text-gray-500">{t('detail.selectOptionsToCalculate')}</p>
               </div>
             )}
 
-            <button className="w-full bg-[#647C47] text-white py-3 rounded-lg hover:bg-[#4a5c35] transition-colors font-medium text-sm">
-              Request This Tour
+            <button type="button" className="w-full bg-[#647C47] text-white py-3 rounded-lg hover:bg-[#4a5c35] transition-colors font-medium text-sm">
+              {t('detail.requestThisTour')}
             </button>
 
             <p className="text-xs text-gray-400 text-center mt-3">
-              Prices calculated dynamically based on current rates
+              {t('detail.pricesCalculatedDynamically')}
             </p>
           </div>
 
           {/* Tour Info */}
           <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Tour Information</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('detail.tourInformation')}</h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500">Code</span>
+                <span className="text-gray-500">{t('detail.code')}</span>
                 <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{tour.variation_code}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Category</span>
-                <span className="text-gray-900">{tour.category_name || 'Uncategorized'}</span>
+                <span className="text-gray-500">{t('detail.category')}</span>
+                <span className="text-gray-900">{tour.category_name || t('detail.uncategorized')}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Duration</span>
+                <span className="text-gray-500">{t('detail.duration')}</span>
                 <span className="text-gray-900">
-                  {tour.duration_days} days
-                  {tour.duration_nights > 0 && ` / ${tour.duration_nights} nights`}
+                  {tour.duration_days} {t('detail.days')}
+                  {tour.duration_nights > 0 && ` / ${tour.duration_nights} N`}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Type</span>
+                <span className="text-gray-500">{t('detail.type')}</span>
                 <span className="text-gray-900">
-                  {tour.group_type === 'private' ? '🔒 Private' : '👥 Shared'}
+                  {tour.group_type === 'private' ? `🔒 ${t('detail.private')}` : `👥 ${t('detail.shared')}`}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Guide</span>
+                <span className="text-gray-500">{t('detail.guide')}</span>
                 <span className="text-gray-900 capitalize">{tour.guide_type?.replace('_', ' ') || 'Specialist'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Languages</span>
+                <span className="text-gray-500">{t('detail.languages')}</span>
                 <span className="text-gray-900">{tour.guide_languages?.join(', ') || 'English, Arabic'}</span>
               </div>
             </div>
@@ -827,9 +840,9 @@ export default function TourDetailPage() {
 
           {/* Contact Card */}
           <div className="bg-[#647C47]/5 border border-[#647C47]/20 rounded-lg p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">Need Help?</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-2">{t('detail.needHelp')}</h3>
             <p className="text-xs text-gray-500 mb-4">
-              Contact us for custom arrangements or questions
+              {t('detail.contactUsForCustom')}
             </p>
             <div className="space-y-2 text-sm">
               <a href="mailto:info@travel2egypt.org" className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
@@ -840,7 +853,7 @@ export default function TourDetailPage() {
                 <Phone className="h-4 w-4" />
                 +20 115 801 1600
               </a>
-              <a href="https://travel2egypt.org" target="_blank" className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
+              <a href="https://travel2egypt.org" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
                 <ExternalLink className="h-4 w-4" />
                 travel2egypt.org
               </a>
