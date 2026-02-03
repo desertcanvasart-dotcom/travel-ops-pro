@@ -144,6 +144,25 @@ export default function QuoteDetailPage() {
     }
   }
 
+  const handleCopyAndTranslate = async (lang: Language) => {
+    if (!quote) return
+    try {
+      const res = await fetch(`/api/b2b/quotes/${quoteId}/versions/copy-translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLanguage: lang })
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh quote to get the new version
+        fetchQuote()
+        setActiveLanguage(lang)
+      }
+    } catch (err) {
+      console.error('Failed to copy and translate:', err)
+    }
+  }
+
   // Get versioned content helper
   const getVersionedNotes = () => {
     if (!quote) return null
@@ -343,6 +362,7 @@ export default function QuoteDetailPage() {
                 entityType="quote"
                 language={activeLanguage}
                 onCreateFromScratch={() => handleCreateVersion(activeLanguage)}
+                onCopyAndTranslate={() => handleCopyAndTranslate(activeLanguage)}
               />
             )}
           </div>

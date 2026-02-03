@@ -682,6 +682,30 @@ export default function ViewItineraryPage() {
     }
   }
 
+  const handleCopyAndTranslate = async (language: Language) => {
+    setCreatingVersion(true)
+    try {
+      const response = await fetch(`/api/itineraries/${params.id}/versions/copy-translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLanguage: language })
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Refresh itinerary to get updated versions
+        await fetchItinerary()
+        setActiveLanguage(language)
+      } else {
+        await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error copying and translating:', error)
+      await dialog.alert(tCommon('error'), t('failedToCreateVersion'), 'warning')
+    } finally {
+      setCreatingVersion(false)
+    }
+  }
+
   const versionedContent = getVersionedContent()
   const availableLanguages = itinerary?.available_languages || []
   const hasActiveVersion = availableLanguages.includes(activeLanguage)
@@ -893,6 +917,7 @@ export default function ViewItineraryPage() {
                 entityType="itinerary"
                 language={activeLanguage}
                 onCreateFromScratch={() => handleCreateVersion(activeLanguage)}
+                onCopyAndTranslate={() => handleCopyAndTranslate(activeLanguage)}
                 isLoading={creatingVersion}
               />
             </div>
