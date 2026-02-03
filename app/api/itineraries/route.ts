@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch available languages for each itinerary
-    const itineraryIds = itineraries?.map(i => i.id) || []
+    const itineraryIds = itineraries?.map((i: { id: string }) => i.id) || []
 
     let versionsMap: Record<string, string[]> = {}
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 
       if (!versionsError && versions) {
         // Group languages by itinerary_id
-        versionsMap = versions.reduce((acc, v) => {
+        versionsMap = versions.reduce((acc: Record<string, string[]>, v: { itinerary_id: string; language: string }) => {
           if (!acc[v.itinerary_id]) {
             acc[v.itinerary_id] = []
           }
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Add available_languages to each itinerary
-    const dataWithLanguages = itineraries?.map(itinerary => ({
+    const dataWithLanguages = itineraries?.map((itinerary: { id: string; [key: string]: any }) => ({
       ...itinerary,
       available_languages: versionsMap[itinerary.id] || []
     })) || []
