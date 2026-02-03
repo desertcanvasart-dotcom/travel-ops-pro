@@ -387,7 +387,7 @@ export default function ContentLibraryPage() {
                               className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-semibold ${
                                 hasTier ? `${config.activeBg} ${config.activeText}` : `${config.bg} ${config.text}`
                               }`}
-                              title={`${config.label}: ${hasTier ? 'Available' : 'Not available'}`}
+                              title={`${t(`tiers.${tier}`)}: ${hasTier ? t('tierAvailable') : t('tierNotAvailable')}`}
                             >
                               {config.letter}
                             </div>

@@ -4500,7 +4500,15 @@
     "deleteContentTitle": "Delete content?",
     "deleteContentConfirmation": "This content and all tier variations will be permanently deleted. This action cannot be undone.",
     "cancel": "Cancel",
-    "delete": "Delete"
+    "delete": "Delete",
+    "tierAvailable": "Available",
+    "tierNotAvailable": "Not available",
+    "tiers": {
+      "budget": "Budget",
+      "standard": "Standard",
+      "deluxe": "Deluxe",
+      "luxury": "Luxury"
+    }
   },
   "contentEditor": {
     "select": "Select...",

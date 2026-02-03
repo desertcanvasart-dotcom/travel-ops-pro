@@ -4847,7 +4847,15 @@
     "deleteContentTitle": "コンテンツを削除しますか？",
     "deleteContentConfirmation": "このコンテンツとすべてのティアバリエーションが完全に削除されます。この操作は元に戻せません。",
     "cancel": "キャンセル",
-    "delete": "削除"
+    "delete": "削除",
+    "tierAvailable": "利用可能",
+    "tierNotAvailable": "利用不可",
+    "tiers": {
+      "budget": "バジェット",
+      "standard": "スタンダード",
+      "deluxe": "デラックス",
+      "luxury": "ラグジュアリー"
+    }
   },
   "contentEditor": {
     "select": "選択...",
