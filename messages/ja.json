@@ -5022,6 +5022,185 @@
       "whatsapp": "WhatsApp"
     }
   },
+  "tours": {
+    "title": "既製パッケージ",
+    "subtitle": "利用可能なツアーと料金を閲覧",
+    "manageTours": "ツアー管理",
+    "managerTitle": "ツアープログラム管理",
+    "addTemplate": "テンプレートを追加",
+    "browseTours": "ツアーを閲覧",
+    "resources": "リソース",
+    "loading": "ツアーを読み込み中...",
+    "loadingTemplates": "ツアーテンプレートを読み込み中...",
+    "errorLoading": "ツアーの読み込みエラー",
+    "tryAgain": "再試行",
+    "stats": {
+      "tourPackages": "ツアーパッケージ",
+      "withAutoPricing": "自動料金設定あり",
+      "categories": "カテゴリー",
+      "startingFrom": "最低価格",
+      "templates": "テンプレート",
+      "variations": "バリエーション",
+      "active": "有効",
+      "featured": "おすすめ"
+    },
+    "filters": {
+      "searchPlaceholder": "名前、説明、または都市で検索...",
+      "searchByNameCodeCity": "名前、コード、または都市で検索...",
+      "allTiers": "すべてのティア",
+      "allCategories": "すべてのカテゴリー",
+      "allThemes": "すべてのテーマ",
+      "allTypes": "すべてのタイプ",
+      "showInactive": "非アクティブを表示",
+      "clearFilters": "フィルターをクリア"
+    },
+    "tiers": {
+      "budget": "バジェット",
+      "standard": "スタンダード",
+      "deluxe": "デラックス",
+      "luxury": "ラグジュアリー"
+    },
+    "results": {
+      "showing": "表示中",
+      "of": "/",
+      "tours": "件のツアー"
+    },
+    "card": {
+      "day": "日",
+      "days": "日間",
+      "passengers": "名",
+      "autoPricing": "自動料金設定",
+      "startingFrom": "から",
+      "perPerson": "/ 人",
+      "viewDetails": "詳細を見る",
+      "noVariationsYet": "バリエーションなし",
+      "variation": "バリエーション",
+      "variations": "バリエーション"
+    },
+    "empty": {
+      "noToursFound": "ツアーが見つかりません",
+      "adjustFilters": "フィルターや検索条件を調整してください",
+      "createNewTour": "新しいツアーを作成 →"
+    },
+    "manager": {
+      "dayBuilder": "日程ビルダー",
+      "addVariations": "バリエーションを追加",
+      "selectPricingTiers": "このツアーに提供する料金ティアを選択してください：",
+      "tiersSelected": "{count}件のティアを選択",
+      "cancel": "キャンセル",
+      "createVariations": "バリエーションを作成",
+      "creating": "作成中...",
+      "private": "プライベート",
+      "shared": "シェア",
+      "pax": "人数",
+      "vehicle": "車両"
+    },
+    "form": {
+      "basic": "基本",
+      "details": "詳細",
+      "variations": "バリエーション",
+      "templateCode": "テンプレートコード",
+      "templateName": "テンプレート名",
+      "theme": "テーマ",
+      "selectTheme": "テーマを選択...",
+      "tourType": "ツアータイプ",
+      "duration": "期間",
+      "durationDays": "期間（日数）",
+      "nights": "泊",
+      "citiesCovered": "訪問都市",
+      "shortDescription": "簡単な説明",
+      "longDescription": "詳細な説明",
+      "highlights": "ハイライト",
+      "addHighlight": "ハイライトを追加",
+      "mainAttractions": "主な観光地",
+      "searchAttractions": "追加する観光地を検索...",
+      "noAttractionsFound": "観光地が見つかりません",
+      "noAttractionsSelected": "観光地が選択されていません",
+      "bestFor": "おすすめ対象",
+      "physicalLevel": "体力レベル",
+      "imageUrl": "画像URL",
+      "featured": "おすすめ",
+      "active": "有効",
+      "useDayBuilder": "日程ビルダーを使用",
+      "pricingMode": "料金モード",
+      "save": "保存",
+      "saving": "保存中...",
+      "itinerary": "日程表",
+      "daysAdded": "{count}日追加済み",
+      "dayTitle": "日のタイトル（例：カイロ - ピラミッドとスフィンクス）",
+      "dayDescription": "日の説明（任意）",
+      "meals": "食事",
+      "breakfast": "朝食",
+      "lunch": "昼食",
+      "dinner": "夕食",
+      "addDay": "{number}日目を追加",
+      "noDaysAdded": "まだ日程が追加されていません。上から最初の日を追加してください。",
+      "removeDay": "日を削除",
+      "inclusions": "含まれるもの",
+      "addInclusion": "含まれるものを追加",
+      "exclusions": "含まれないもの",
+      "addExclusion": "含まれないものを追加",
+      "createWithVariations": "バリエーション付きで作成",
+      "selectVariationTiers": "このテンプレートと一緒に作成するティアバリエーションを選択"
+    },
+    "table": {
+      "template": "テンプレート",
+      "type": "タイプ",
+      "duration": "期間",
+      "cities": "都市",
+      "variations": "バリエーション",
+      "status": "ステータス",
+      "actions": "アクション"
+    },
+    "actions": {
+      "edit": "編集",
+      "duplicate": "複製",
+      "delete": "削除",
+      "addVariation": "バリエーションを追加",
+      "openDayBuilder": "日程ビルダーを開く",
+      "view": "表示"
+    },
+    "delete": {
+      "confirmTitle": "ツアーを削除しますか？",
+      "confirmMessage": "「{name}」を削除しますか？すべてのバリエーションと日程も削除されます。",
+      "deleted": "{name}を削除しました！"
+    },
+    "success": {
+      "duplicated": "複製しました：{name}",
+      "created": "{name}を作成しました！",
+      "createdWithVariations": "{name}を{count}個のバリエーションで作成しました！",
+      "updated": "{name}を更新しました！",
+      "variationsCreated": "{name}に{count}個のバリエーションを作成しました"
+    },
+    "error": {
+      "failedToLoad": "ツアーテンプレートの読み込みに失敗しました",
+      "failedToSave": "テンプレートの保存に失敗しました",
+      "failedToDelete": "テンプレートの削除に失敗しました",
+      "failedToDuplicate": "テンプレートの複製に失敗しました",
+      "selectAtLeastOneTier": "少なくとも1つのティアを選択してください",
+      "failedToCreateVariations": "バリエーションの作成に失敗しました"
+    },
+    "prompt": {
+      "addActivitiesNow": "今すぐこのツアーにアクティビティを追加しますか？"
+    },
+    "tourTypes": {
+      "day_tour": "日帰りツアー",
+      "multi_day": "複数日ツアー",
+      "stopover": "ストップオーバーツアー"
+    },
+    "physicalLevels": {
+      "easy": "簡単 - 誰でも参加可能",
+      "moderate": "中程度 - 多少の歩行あり",
+      "challenging": "やや難しい - アクティブな旅行者向け",
+      "demanding": "難しい - 体力のある旅行者向け"
+    },
+    "tierDescriptions": {
+      "budget": "最もお得な基本体験",
+      "standard": "質の高いサービスで快適な体験",
+      "deluxe": "プレミアムなタッチで強化された体験",
+      "luxury": "独占特典付きのプレミアム体験"
+    }
+  },
   "contacts": {
     "title": "連絡先",
     "clients": "顧客",

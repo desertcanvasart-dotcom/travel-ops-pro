@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import React, { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import {
   Map,
   Plus,
@@ -774,6 +775,7 @@ function DayBuilderModal({ template, onClose, onSave }: DayBuilderModalProps) {
 // ============================================
 
 export default function TourManagerContent() {
+  const t = useTranslations('tours')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [templates, setTemplates] = useState<TourTemplate[]>([])
   const [themes, setThemes] = useState<TourTheme[]>([])  // Renamed from categories
@@ -1283,7 +1285,7 @@ export default function TourManagerContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading tour templates...</p>
+          <p className="text-sm text-gray-600">{t('loadingTemplates')}</p>
         </div>
       </div>
     )
@@ -1306,20 +1308,20 @@ export default function TourManagerContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Map className="w-5 h-5 text-green-600" />
-              <h1 className="text-xl font-bold text-gray-900">Tour Programs Manager</h1>
+              <h1 className="text-xl font-bold text-gray-900">{t('managerTitle')}</h1>
               <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
             </div>
             <div className="flex items-center gap-2">
               <button onClick={handleAddNew} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
                 <Plus className="w-4 h-4" />
-                Add Template
+                {t('addTemplate')}
               </button>
               <Link href="/tours" className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
                 <Eye className="w-4 h-4" />
-                Browse Tours
+                {t('browseTours')}
               </Link>
               <Link href="/rates" className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
-                ← Resources
+                ← {t('resources')}
               </Link>
             </div>
           </div>
@@ -1334,7 +1336,7 @@ export default function TourManagerContent() {
               <Map className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
             </div>
-            <p className="text-xs text-gray-600">Templates</p>
+            <p className="text-xs text-gray-600">{t('stats.templates')}</p>
             <p className="text-2xl font-bold text-gray-900">{templates.length}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
@@ -1342,7 +1344,7 @@ export default function TourManagerContent() {
               <Layers className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
-            <p className="text-xs text-gray-600">Variations</p>
+            <p className="text-xs text-gray-600">{t('stats.variations')}</p>
             <p className="text-2xl font-bold text-gray-900">{totalVariations}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
@@ -1350,7 +1352,7 @@ export default function TourManagerContent() {
               <Check className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
             </div>
-            <p className="text-xs text-gray-600">Active</p>
+            <p className="text-xs text-gray-600">{t('stats.active')}</p>
             <p className="text-2xl font-bold text-gray-900">{activeTemplates}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
@@ -1358,7 +1360,7 @@ export default function TourManagerContent() {
               <Star className="w-4 h-4 text-gray-400" />
               <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
             </div>
-            <p className="text-xs text-gray-600">Featured</p>
+            <p className="text-xs text-gray-600">{t('stats.featured')}</p>
             <p className="text-2xl font-bold text-gray-900">{featuredCount}</p>
           </div>
         </div>
@@ -1370,7 +1372,7 @@ export default function TourManagerContent() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by name, code, or city..."
+                placeholder={t('filters.searchByNameCodeCity')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm"
@@ -1382,7 +1384,7 @@ export default function TourManagerContent() {
                 onChange={(e) => setSelectedTheme(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm appearance-none"
               >
-                <option value="all">All Themes</option>
+                <option value="all">{t('filters.allThemes')}</option>
                 {themes.map(theme => (
                   <option key={theme.id} value={theme.id}>{theme.category_name}</option>
                 ))}
@@ -1395,9 +1397,9 @@ export default function TourManagerContent() {
                 onChange={(e) => setSelectedType(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm appearance-none"
               >
-                <option value="all">All Types</option>
+                <option value="all">{t('filters.allTypes')}</option>
                 {TOUR_TYPES.map(type => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
+                  <option key={type.value} value={type.value}>{t(`tourTypes.${type.value}`)}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -1410,7 +1412,7 @@ export default function TourManagerContent() {
                   : 'bg-white border border-green-300 text-green-700'
               }`}
             >
-              {showInactive ? 'Show All' : 'Active Only'}
+              {showInactive ? t('filters.showInactive') : t('stats.active')}
             </button>
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
               <button

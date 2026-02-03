@@ -4675,6 +4675,185 @@
       "whatsapp": "WhatsApp"
     }
   },
+  "tours": {
+    "title": "Ready Made Packages",
+    "subtitle": "Browse available tours and pricing",
+    "manageTours": "Manage Tours",
+    "managerTitle": "Tour Programs Manager",
+    "addTemplate": "Add Template",
+    "browseTours": "Browse Tours",
+    "resources": "Resources",
+    "loading": "Loading tours...",
+    "loadingTemplates": "Loading tour templates...",
+    "errorLoading": "Error Loading Tours",
+    "tryAgain": "Try again",
+    "stats": {
+      "tourPackages": "Tour Packages",
+      "withAutoPricing": "With Auto-Pricing",
+      "categories": "Categories",
+      "startingFrom": "Starting From",
+      "templates": "Templates",
+      "variations": "Variations",
+      "active": "Active",
+      "featured": "Featured"
+    },
+    "filters": {
+      "searchPlaceholder": "Search by name, description, or city...",
+      "searchByNameCodeCity": "Search by name, code, or city...",
+      "allTiers": "All Tiers",
+      "allCategories": "All Categories",
+      "allThemes": "All Themes",
+      "allTypes": "All Types",
+      "showInactive": "Show inactive",
+      "clearFilters": "Clear Filters"
+    },
+    "tiers": {
+      "budget": "Budget",
+      "standard": "Standard",
+      "deluxe": "Deluxe",
+      "luxury": "Luxury"
+    },
+    "results": {
+      "showing": "Showing",
+      "of": "of",
+      "tours": "tours"
+    },
+    "card": {
+      "day": "day",
+      "days": "days",
+      "passengers": "passengers",
+      "autoPricing": "Auto-Pricing",
+      "startingFrom": "Starting from",
+      "perPerson": "per person",
+      "viewDetails": "View Details",
+      "noVariationsYet": "No variations yet",
+      "variation": "variation",
+      "variations": "variations"
+    },
+    "empty": {
+      "noToursFound": "No tours found",
+      "adjustFilters": "Try adjusting your filters or search terms",
+      "createNewTour": "Create a new tour →"
+    },
+    "manager": {
+      "dayBuilder": "Day Builder",
+      "addVariations": "Add Variations",
+      "selectPricingTiers": "Select the pricing tiers you want to offer for this tour:",
+      "tiersSelected": "{count} tier(s) selected",
+      "cancel": "Cancel",
+      "createVariations": "Create Variations",
+      "creating": "Creating...",
+      "private": "Private",
+      "shared": "Shared",
+      "pax": "Pax",
+      "vehicle": "Vehicle"
+    },
+    "form": {
+      "basic": "Basic",
+      "details": "Details",
+      "variations": "Variations",
+      "templateCode": "Template Code",
+      "templateName": "Template Name",
+      "theme": "Theme",
+      "selectTheme": "Select theme...",
+      "tourType": "Tour Type",
+      "duration": "Duration",
+      "durationDays": "Duration (Days)",
+      "nights": "Nights",
+      "citiesCovered": "Cities Covered",
+      "shortDescription": "Short Description",
+      "longDescription": "Long Description",
+      "highlights": "Highlights",
+      "addHighlight": "Add highlight",
+      "mainAttractions": "Main Attractions",
+      "searchAttractions": "Search attractions to add...",
+      "noAttractionsFound": "No attractions found",
+      "noAttractionsSelected": "No attractions selected",
+      "bestFor": "Best For",
+      "physicalLevel": "Physical Level",
+      "imageUrl": "Image URL",
+      "featured": "Featured",
+      "active": "Active",
+      "useDayBuilder": "Use Day Builder",
+      "pricingMode": "Pricing Mode",
+      "save": "Save",
+      "saving": "Saving...",
+      "itinerary": "Day-by-Day Itinerary",
+      "daysAdded": "{count} day(s) added",
+      "dayTitle": "Day title (e.g., Cairo - Pyramids & Sphinx)",
+      "dayDescription": "Day description (optional)",
+      "meals": "Meals",
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "dinner": "Dinner",
+      "addDay": "Add Day {number}",
+      "noDaysAdded": "No days added yet. Add your first day above.",
+      "removeDay": "Remove day",
+      "inclusions": "Inclusions",
+      "addInclusion": "Add inclusion",
+      "exclusions": "Exclusions",
+      "addExclusion": "Add exclusion",
+      "createWithVariations": "Create with variations",
+      "selectVariationTiers": "Select tier variations to create with this template"
+    },
+    "table": {
+      "template": "Template",
+      "type": "Type",
+      "duration": "Duration",
+      "cities": "Cities",
+      "variations": "Variations",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "actions": {
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "addVariation": "Add Variation",
+      "openDayBuilder": "Open Day Builder",
+      "view": "View"
+    },
+    "delete": {
+      "confirmTitle": "Delete tour?",
+      "confirmMessage": "Delete \"{name}\"? This will also delete all variations and days.",
+      "deleted": "{name} deleted!"
+    },
+    "success": {
+      "duplicated": "Duplicated: {name}",
+      "created": "{name} created!",
+      "createdWithVariations": "{name} created with {count} variation(s)!",
+      "updated": "{name} updated!",
+      "variationsCreated": "Created {count} variation(s) for {name}"
+    },
+    "error": {
+      "failedToLoad": "Failed to load tour templates",
+      "failedToSave": "Failed to save template",
+      "failedToDelete": "Failed to delete template",
+      "failedToDuplicate": "Failed to duplicate template",
+      "selectAtLeastOneTier": "Please select at least one tier",
+      "failedToCreateVariations": "Failed to create variations"
+    },
+    "prompt": {
+      "addActivitiesNow": "Would you like to add activities to this tour now?"
+    },
+    "tourTypes": {
+      "day_tour": "Day Tour",
+      "multi_day": "Multi-Day Tour",
+      "stopover": "Stopover Tour"
+    },
+    "physicalLevels": {
+      "easy": "Easy - Suitable for all",
+      "moderate": "Moderate - Some walking",
+      "challenging": "Challenging - Active travelers",
+      "demanding": "Demanding - Fit travelers only"
+    },
+    "tierDescriptions": {
+      "budget": "Essential experience at best value",
+      "standard": "Comfortable experience with quality services",
+      "deluxe": "Enhanced experience with premium touches",
+      "luxury": "Premium experience with exclusive perks"
+    }
+  },
   "b2bQuotes": {
     "title": "B2B Quotes",
     "subtitle": "Manage saved quotations",

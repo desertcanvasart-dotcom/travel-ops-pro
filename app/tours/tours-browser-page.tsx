@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 
 // Updated interface to match the new API response structure
 interface TourTemplate {
@@ -32,6 +33,7 @@ interface TourTemplate {
 }
 
 export default function ToursBrowsePage() {
+  const t = useTranslations('tours')
   const [tours, setTours] = useState<TourTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -65,17 +67,17 @@ export default function ToursBrowsePage() {
   const filteredTours = tours.filter(tour => {
     // Filter by tier - check if the tour has the selected tier available
     const matchesTier = filterTier === 'all' || tour.available_tiers?.includes(filterTier)
-    
+
     // Filter by category
     const matchesCategory = filterCategory === 'all' || tour.category?.category_name === filterCategory
-    
+
     // Search by name, description, or cities
     const searchLower = searchQuery.toLowerCase()
-    const matchesSearch = 
+    const matchesSearch =
       tour.template_name.toLowerCase().includes(searchLower) ||
       (tour.short_description?.toLowerCase().includes(searchLower)) ||
       (tour.cities_covered?.some(city => city.toLowerCase().includes(searchLower)))
-    
+
     return matchesTier && matchesCategory && matchesSearch
   })
 
@@ -108,7 +110,7 @@ export default function ToursBrowsePage() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="w-8 h-8 border-2 border-[#647C47] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-gray-500 text-sm">Loading tours...</p>
+            <p className="text-gray-500 text-sm">{t('loading')}</p>
           </div>
         </div>
       </div>
@@ -119,13 +121,13 @@ export default function ToursBrowsePage() {
     return (
       <div className="p-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-md">
-          <p className="text-sm font-medium text-red-800 mb-1">Error Loading Tours</p>
+          <p className="text-sm font-medium text-red-800 mb-1">{t('errorLoading')}</p>
           <p className="text-sm text-red-600">{error}</p>
-          <button 
+          <button
             onClick={() => { setError(null); fetchTours(); }}
             className="mt-3 text-sm text-red-700 underline hover:no-underline"
           >
-            Try again
+            {t('tryAgain')}
           </button>
         </div>
       </div>
@@ -141,15 +143,15 @@ export default function ToursBrowsePage() {
             🗺️
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Ready Made Packages</h1>
-            <p className="text-sm text-gray-500">Browse available tours and pricing</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
+            <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
-        <Link 
+        <Link
           href="/tours/manage"
           className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] transition-colors font-medium"
         >
-          Manage Tours
+          {t('manageTours')}
         </Link>
       </div>
 
@@ -160,7 +162,7 @@ export default function ToursBrowsePage() {
             <span className="text-lg">🎯</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Tour Packages</p>
+          <p className="text-xs text-gray-500 mb-1">{t('stats.tourPackages')}</p>
           <p className="text-2xl font-semibold text-gray-900">{tours.length}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -168,7 +170,7 @@ export default function ToursBrowsePage() {
             <span className="text-lg">📋</span>
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">With Auto-Pricing</p>
+          <p className="text-xs text-gray-500 mb-1">{t('stats.withAutoPricing')}</p>
           <p className="text-2xl font-semibold text-gray-900">
             {tours.filter(t => t.uses_day_builder || t.pricing_mode === 'auto').length}
           </p>
@@ -178,7 +180,7 @@ export default function ToursBrowsePage() {
             <span className="text-lg">🏷️</span>
             <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Categories</p>
+          <p className="text-xs text-gray-500 mb-1">{t('stats.categories')}</p>
           <p className="text-2xl font-semibold text-gray-900">{uniqueCategories.length}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -186,7 +188,7 @@ export default function ToursBrowsePage() {
             <span className="text-lg">💶</span>
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
           </div>
-          <p className="text-xs text-gray-500 mb-1">Starting From</p>
+          <p className="text-xs text-gray-500 mb-1">{t('stats.startingFrom')}</p>
           <p className="text-2xl font-semibold text-gray-900">
             €{tours.length > 0 ? Math.min(...tours.map(t => t.starting_from || 9999)).toLocaleString() : '—'}
           </p>
@@ -200,7 +202,7 @@ export default function ToursBrowsePage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, description, or city..."
+            placeholder={t('filters.searchPlaceholder')}
             className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none"
           />
         </div>
@@ -209,18 +211,18 @@ export default function ToursBrowsePage() {
           onChange={(e) => setFilterTier(e.target.value)}
           className="px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white min-w-[150px]"
         >
-          <option value="all">All Tiers</option>
-          <option value="budget">💰 Budget</option>
-          <option value="standard">💎 Standard</option>
-          <option value="deluxe">✨ Deluxe</option>
-          <option value="luxury">👑 Luxury</option>
+          <option value="all">{t('filters.allTiers')}</option>
+          <option value="budget">💰 {t('tiers.budget')}</option>
+          <option value="standard">💎 {t('tiers.standard')}</option>
+          <option value="deluxe">✨ {t('tiers.deluxe')}</option>
+          <option value="luxury">👑 {t('tiers.luxury')}</option>
         </select>
         <select
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
           className="px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white min-w-[180px]"
         >
-          <option value="all">All Categories</option>
+          <option value="all">{t('filters.allCategories')}</option>
           {uniqueCategories.map(cat => (
             <option key={cat} value={cat}>{cat}</option>
           ))}
@@ -230,7 +232,7 @@ export default function ToursBrowsePage() {
       {/* Results Info */}
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-gray-500">
-          Showing <span className="font-medium text-gray-900">{filteredTours.length}</span> of {tours.length} tours
+          {t('results.showing')} <span className="font-medium text-gray-900">{filteredTours.length}</span> {t('results.of')} {tours.length} {t('results.tours')}
         </p>
         <button
           onClick={() => {
@@ -240,15 +242,15 @@ export default function ToursBrowsePage() {
           }}
           className="text-sm text-[#647C47] hover:text-[#4a5c35] font-medium"
         >
-          Clear Filters
+          {t('filters.clearFilters')}
         </button>
       </div>
 
       {/* Tour Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredTours.map((tour) => (
-          <div 
-            key={tour.id} 
+          <div
+            key={tour.id}
             className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-[#647C47] transition-colors"
           >
             {/* Card Header */}
@@ -270,16 +272,16 @@ export default function ToursBrowsePage() {
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {tour.available_tiers?.length > 0 ? (
                   tour.available_tiers.map(tier => (
-                    <span 
+                    <span
                       key={tier}
                       className={`px-2 py-1 rounded text-xs font-medium ${getTierBadge(tier)}`}
                     >
-                      {getTierIcon(tier)} {tier.charAt(0).toUpperCase() + tier.slice(1)}
+                      {getTierIcon(tier)} {t(`tiers.${tier}`)}
                     </span>
                   ))
                 ) : (
                   <span className="px-2 py-1 bg-gray-50 text-gray-600 border border-gray-200 rounded text-xs">
-                    No variations yet
+                    {t('card.noVariationsYet')}
                   </span>
                 )}
               </div>
@@ -288,11 +290,11 @@ export default function ToursBrowsePage() {
               <div className="space-y-2 text-sm text-gray-600 mb-4">
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400">📅</span>
-                  <span>{tour.duration_days} {tour.duration_days === 1 ? 'day' : 'days'}</span>
+                  <span>{tour.duration_days} {tour.duration_days === 1 ? t('card.day') : t('card.days')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400">👥</span>
-                  <span>{tour.min_pax || 1}-{tour.max_pax || 15} passengers</span>
+                  <span>{tour.min_pax || 1}-{tour.max_pax || 15} {t('card.passengers')}</span>
                 </div>
                 {tour.category && (
                   <div className="flex items-center gap-2">
@@ -303,7 +305,7 @@ export default function ToursBrowsePage() {
                 {tour.uses_day_builder && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">⚡</span>
-                    <span className="text-[#647C47] text-xs font-medium">Auto-Pricing</span>
+                    <span className="text-[#647C47] text-xs font-medium">{t('card.autoPricing')}</span>
                   </div>
                 )}
               </div>
@@ -318,19 +320,19 @@ export default function ToursBrowsePage() {
               {/* Price & Action */}
               <div className="flex items-end justify-between pt-3 border-t border-gray-100">
                 <div>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-wide">Starting from</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide">{t('card.startingFrom')}</p>
                   <p className="text-xl font-semibold text-[#647C47]">
                     €{tour.starting_from ? tour.starting_from.toLocaleString() : 'N/A'}
                   </p>
                   <p className="text-[10px] text-gray-400">
-                    per person • {tour.starting_from_tier || 'standard'}
+                    {t('card.perPerson')} • {tour.starting_from_tier || 'standard'}
                   </p>
                 </div>
-                <Link 
+                <Link
                   href={`/tours/${tour.id}`}
                   className="bg-[#647C47] text-white px-4 py-2 rounded-lg hover:bg-[#4a5c35] transition-colors text-xs font-medium"
                 >
-                  View Details
+                  {t('card.viewDetails')}
                 </Link>
               </div>
             </div>
@@ -339,7 +341,7 @@ export default function ToursBrowsePage() {
             <div className="bg-gray-50 px-4 py-2 border-t border-gray-100 flex items-center justify-between">
               <p className="text-[10px] text-gray-400 font-mono uppercase">{tour.template_code}</p>
               <p className="text-[10px] text-gray-400">
-                {tour.variations_count || 0} variation{tour.variations_count !== 1 ? 's' : ''}
+                {tour.variations_count || 0} {tour.variations_count !== 1 ? t('card.variations') : t('card.variation')}
               </p>
             </div>
           </div>
@@ -350,13 +352,13 @@ export default function ToursBrowsePage() {
       {filteredTours.length === 0 && (
         <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
           <div className="text-4xl mb-3">🔍</div>
-          <h3 className="text-sm font-medium text-gray-900 mb-1">No tours found</h3>
-          <p className="text-xs text-gray-500 mb-4">Try adjusting your filters or search terms</p>
-          <Link 
+          <h3 className="text-sm font-medium text-gray-900 mb-1">{t('empty.noToursFound')}</h3>
+          <p className="text-xs text-gray-500 mb-4">{t('empty.adjustFilters')}</p>
+          <Link
             href="/tours/manage"
             className="text-sm text-[#647C47] hover:text-[#4a5c35] font-medium"
           >
-            Create a new tour →
+            {t('empty.createNewTour')}
           </Link>
         </div>
       )}
