@@ -8,6 +8,8 @@ import {
   Building2, Loader2, Plus, RefreshCw,
   CheckCircle2, Clock, XCircle, Send
 } from 'lucide-react'
+import { LanguageIndicator } from '@/components/multilingual'
+import type { Language } from '@/types/multilingual'
 
 // ============================================
 // B2B QUOTES LIST PAGE
@@ -35,6 +37,7 @@ interface Quote {
     company_name: string
     partner_code: string
   } | null
+  available_languages: Language[]
 }
 
 export default function QuotesListPage() {
@@ -204,6 +207,7 @@ export default function QuotesListPage() {
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tablePax')}</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableTravelDate')}</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-600">{t('tablePrice')}</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableLang')}</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableStatus')}</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableActions')}</th>
               </tr>
@@ -228,6 +232,9 @@ export default function QuotesListPage() {
                   <td className="px-4 py-3 text-right">
                     <p className="text-sm font-bold text-[#647C47]">€{quote.selling_price?.toFixed(2)}</p>
                     <p className="text-xs text-gray-500">€{quote.price_per_person?.toFixed(2)}{t('perPerson')}</p>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <LanguageIndicator availableLanguages={quote.available_languages || []} size="sm" />
                   </td>
                   <td className="px-4 py-3 text-center">{getStatusBadge(quote.status)}</td>
                   <td className="px-4 py-3">

@@ -41,7 +41,28 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, data })
+    // Fetch language versions
+    const { data: versions, error: versionsError } = await supabaseAdmin
+      .from('quote_versions')
+      .select('*')
+      .eq('quote_id', id)
+
+    // Build versions object keyed by language
+    const versionsMap: Record<string, any> = {}
+    if (!versionsError && versions) {
+      versions.forEach(v => {
+        versionsMap[v.language] = v
+      })
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...data,
+        available_languages: Object.keys(versionsMap),
+        versions: versionsMap
+      }
+    })
 
   } catch (error: any) {
     console.error('Error in GET /api/b2b/quotes/[id]:', error)

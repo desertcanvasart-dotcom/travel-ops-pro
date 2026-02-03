@@ -32,7 +32,29 @@ export async function GET(request: NextRequest) {
         .single()
 
       if (error) throw error
-      return NextResponse.json({ success: true, data })
+
+      // Fetch language versions
+      const { data: versions, error: versionsError } = await supabaseAdmin
+        .from('quote_versions')
+        .select('*')
+        .eq('quote_id', id)
+
+      // Build versions object keyed by language
+      const versionsMap: Record<string, any> = {}
+      if (!versionsError && versions) {
+        versions.forEach(v => {
+          versionsMap[v.language] = v
+        })
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...data,
+          available_languages: Object.keys(versionsMap),
+          versions: versionsMap
+        }
+      })
     }
 
     // List quotes
@@ -52,7 +74,35 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) throw error
-    return NextResponse.json({ success: true, data: data || [] })
+
+    // Fetch language versions for all quotes
+    const quoteIds = (data || []).map(q => q.id)
+    let versionsMap: Record<string, string[]> = {}
+
+    if (quoteIds.length > 0) {
+      const { data: versions, error: versionsError } = await supabaseAdmin
+        .from('quote_versions')
+        .select('quote_id, language')
+        .in('quote_id', quoteIds)
+
+      if (!versionsError && versions) {
+        versionsMap = versions.reduce((acc, v) => {
+          if (!acc[v.quote_id]) {
+            acc[v.quote_id] = []
+          }
+          acc[v.quote_id].push(v.language)
+          return acc
+        }, {} as Record<string, string[]>)
+      }
+    }
+
+    // Attach available_languages to each quote
+    const quotesWithLanguages = (data || []).map(quote => ({
+      ...quote,
+      available_languages: versionsMap[quote.id] || []
+    }))
+
+    return NextResponse.json({ success: true, data: quotesWithLanguages })
 
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
@@ -142,8 +192,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
+    // Auto-create English version
+    if (quote) {
+      const { error: versionError } = await supabaseAdmin
+        .from('quote_versions')
+        .insert({
+          quote_id: quote.id,
+          language: 'en',
+          title: `Quote ${quote.quote_number}`,
+          notes: notes || null
+        })
+
+      if (versionError) {
+        console.warn('Warning: Could not create English version:', versionError)
+      }
+    }
+
     console.log('✅ Quote created:', quote.quote_number)
-    return NextResponse.json({ success: true, data: quote }, { status: 201 })
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...quote,
+        available_languages: ['en']
+      }
+    }, { status: 201 })
 
   } catch (error: any) {
     console.error('Error in POST /api/b2b/quotes:', error)

@@ -9,6 +9,8 @@ import {
   Building2, Loader2, Globe, Mail, Phone, User, Clock, CheckCircle2,
   XCircle, TrendingUp
 } from 'lucide-react'
+import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
+import type { Language } from '@/types/multilingual'
 
 // ============================================
 // B2B QUOTE DETAIL PAGE
@@ -63,6 +65,14 @@ interface Quote {
     contact_name: string | null
     email: string | null
   } | null
+  available_languages: Language[]
+  versions: Record<string, {
+    id: string
+    title: string
+    notes: string | null
+    terms_conditions: string | null
+    special_requests: string | null
+  }>
 }
 
 export default function QuoteDetailPage() {
@@ -74,6 +84,7 @@ export default function QuoteDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [activeLanguage, setActiveLanguage] = useState<Language>('en')
 
   useEffect(() => {
     if (quoteId) fetchQuote()
@@ -113,6 +124,31 @@ export default function QuoteDetailPage() {
     } finally {
       setUpdating(false)
     }
+  }
+
+  const handleCreateVersion = async (lang: Language) => {
+    if (!quote) return
+    try {
+      const res = await fetch(`/api/b2b/quotes/${quoteId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language: lang })
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh quote to get the new version
+        fetchQuote()
+      }
+    } catch (err) {
+      console.error('Failed to create version:', err)
+    }
+  }
+
+  // Get versioned content helper
+  const getVersionedNotes = () => {
+    if (!quote) return null
+    const version = quote.versions?.[activeLanguage]
+    return version?.notes || quote.notes
   }
 
   const formatDate = (dateStr: string, format: 'short' | 'long' = 'short') => {
@@ -288,13 +324,27 @@ export default function QuoteDetailPage() {
             </div>
           )}
 
-          {/* Notes */}
-          {quote.notes && (
-            <div className="bg-white rounded-lg border p-6">
-              <h3 className="text-base font-semibold mb-2">{t('notes')}</h3>
-              <p className="text-sm text-gray-600">{quote.notes}</p>
+          {/* Notes with Language Tabs */}
+          <div className="bg-white rounded-lg border p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold">{t('notes')}</h3>
+              <LanguageTabs
+                availableLanguages={quote.available_languages || []}
+                activeLanguage={activeLanguage}
+                onLanguageChange={setActiveLanguage}
+              />
             </div>
-          )}
+            {quote.versions?.[activeLanguage] ? (
+              <div className="text-sm text-gray-600">
+                {getVersionedNotes() || <span className="text-gray-400 italic">{t('noNotes')}</span>}
+              </div>
+            ) : (
+              <CreateVersionPrompt
+                language={activeLanguage}
+                onCreateVersion={() => handleCreateVersion(activeLanguage)}
+              />
+            )}
+          </div>
         </div>
 
         {/* Sidebar */}
