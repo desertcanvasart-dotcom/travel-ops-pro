@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS itinerary_versions (
   vehicle_notes TEXT,
 
   -- Metadata
-  created_by UUID REFERENCES users(id),
+  created_by UUID,  -- User who created this version
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS tour_template_versions (
   itinerary JSONB,  -- Day-by-day descriptions: [{day: 1, title: "", description: "", meals: []}]
 
   -- Metadata
-  created_by UUID REFERENCES users(id),
+  created_by UUID,  -- User who created this version
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS quote_versions (
   special_requests TEXT,
 
   -- Metadata
-  created_by UUID REFERENCES users(id),
+  created_by UUID,  -- User who created this version
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
