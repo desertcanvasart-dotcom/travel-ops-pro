@@ -1007,7 +1007,7 @@ function WhatsAppParserContent() {
               id: p.id,
               company_name: p.company_name,
               partner_code: p.partner_code,
-              commission_percent: p.commission_percent || 10
+              commission_percent: p.default_margin_percent || 10
             })))
           }
         } catch (err) {
