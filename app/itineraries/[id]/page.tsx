@@ -30,7 +30,8 @@ interface Itinerary {
   end_date: string
   total_days: number
   num_adults: number
-  num_children: number
+  num_children: number   // Ages 4-12: 50% discount
+  num_infants: number    // Ages 0-3: FREE except flights
   currency: string
   total_cost: number
   status: string
@@ -1051,7 +1052,10 @@ export default function ViewItineraryPage() {
                 {t('adultsCount', { count: itinerary.num_adults })}
               </p>
               {itinerary.num_children > 0 && (
-                <p className="text-xs text-gray-600">{t('childrenCount', { count: itinerary.num_children })}</p>
+                <p className="text-xs text-gray-600">{t('childrenCount', { count: itinerary.num_children })} (4-12)</p>
+              )}
+              {itinerary.num_infants > 0 && (
+                <p className="text-xs text-gray-600">{t('infantsCount', { count: itinerary.num_infants })} (0-3)</p>
               )}
             </div>
             <div>
@@ -1134,7 +1138,7 @@ export default function ViewItineraryPage() {
         {/* Resource Cards */}
         <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />
         <div id="resource-assignment">
-          <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={fetchItinerary} />
+          <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults + itinerary.num_children + (itinerary.num_infants || 0)} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={fetchItinerary} />
         </div>
 
         {/* DAY CONTROLS */}

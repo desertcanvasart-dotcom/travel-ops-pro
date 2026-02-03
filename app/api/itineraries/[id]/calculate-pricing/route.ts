@@ -44,10 +44,15 @@ interface PricingRequest {
   package_type: string
   days: DayInput[]
   num_adults: number
-  num_children: number
+  num_children: number    // Ages 4-12: 50% discount
+  num_infants: number     // Ages 0-3: FREE except flights
   nationality_type: 'eur' | 'non-eur'
-  include_addons?: boolean // NEW: Whether to include add-on attractions
+  include_addons?: boolean // Whether to include add-on attractions
 }
+
+// Child discount constants (matches auto-pricing-service.ts)
+const CHILD_DISCOUNT_PERCENT = 50  // Children (4-12) get 50% off
+const INFANT_RATE_PERCENT = 0      // Infants (0-3) are FREE except flights
 
 interface UserPreferences {
   default_cost_mode: 'auto' | 'manual'
@@ -474,22 +479,38 @@ export async function POST(
     const { id: itineraryId } = await params
     const body: PricingRequest = await request.json()
     
-    const { 
-      tier, 
-      package_type, 
-      days, 
-      num_adults, 
-      num_children, 
+    const {
+      tier,
+      package_type,
+      days,
+      num_adults,
+      num_children = 0,   // Ages 4-12: 50% discount
+      num_infants = 0,    // Ages 0-3: FREE except flights
       nationality_type,
-      include_addons = false  // NEW: Default to NOT including add-ons
+      include_addons = false  // Default to NOT including add-ons
     } = body
-    
-    const totalPax = num_adults + num_children
+
+    const totalPax = num_adults + num_children + num_infants
     const isEuroPassport = nationality_type === 'eur'
 
     console.log(`[Pricing] Starting for itinerary ${itineraryId}`)
-    console.log(`[Pricing] ${days.length} days, ${totalPax} pax, tier: ${tier}, package: ${package_type}`)
+    console.log(`[Pricing] ${days.length} days, ${totalPax} pax (${num_adults} adults, ${num_children} children, ${num_infants} infants), tier: ${tier}, package: ${package_type}`)
     console.log(`[Pricing] Include add-ons: ${include_addons}`)
+
+    // Helper function to calculate cost with age-based discounts for per-pax services
+    const calculatePerPaxCost = (ratePerPerson: number) => {
+      const adultsCost = ratePerPerson * num_adults
+      const childrenCost = ratePerPerson * (1 - CHILD_DISCOUNT_PERCENT / 100) * num_children
+      const infantsCost = 0  // Infants are FREE (except flights)
+      return adultsCost + childrenCost + infantsCost
+    }
+
+    // Helper to calculate total count for pricing display
+    const getEffectivePax = () => {
+      // For per-pax services, effective count considers discounts
+      // Adults = 1x, Children = 0.5x, Infants = 0x
+      return num_adults + (num_children * (1 - CHILD_DISCOUNT_PERCENT / 100)) + 0
+    }
 
     // ============================================
     // GET USER PREFERENCES
@@ -616,18 +637,19 @@ export async function POST(
         totalClientPrice += guideClient
       }
 
-      // ENTRANCE FEES - NOW WITH ADD-ON CHECK
+      // ENTRANCE FEES - WITH ADD-ON CHECK AND CHILD/INFANT DISCOUNTS
       for (const attraction of attractions) {
         const entrance = await getEntranceFee(attraction, isEuroPassport)
-        
-        // NEW: Skip add-ons if not explicitly included
+
+        // Skip add-ons if not explicitly included
         if (entrance.isAddon && !include_addons) {
           console.log(`[Pricing] ⏭️ Skipping add-on: ${entrance.name} (${entrance.addonNote || 'optional extra'})`)
           skippedAddons.push(entrance.name)
           continue
         }
-        
-        const entranceTotal = entrance.rate * totalPax
+
+        // Apply child/infant discounts to entrance fees
+        const entranceTotal = calculatePerPaxCost(entrance.rate)
         // No markup on entrance fees typically
         allServices.push({
           itinerary_day_id: dayId,
@@ -639,18 +661,18 @@ export async function POST(
           rate_non_eur: entrance.rateNonEur,
           total_cost: entranceTotal,
           client_price: entranceTotal,
-          notes: entrance.isAddon 
-            ? `${isEuroPassport ? 'EUR' : 'non-EUR'} rate (Optional Add-on)` 
-            : `${isEuroPassport ? 'EUR' : 'non-EUR'} rate`
+          notes: entrance.isAddon
+            ? `${isEuroPassport ? 'EUR' : 'non-EUR'} rate (Optional Add-on)`
+            : `${isEuroPassport ? 'EUR' : 'non-EUR'} rate${num_children > 0 ? ' (children 50% off)' : ''}${num_infants > 0 ? ' (infants free)' : ''}`
         })
         totalSupplierCost += entranceTotal
         totalClientPrice += entranceTotal
       }
 
-      // LUNCH
+      // LUNCH - WITH CHILD/INFANT DISCOUNTS
       if (services.lunch) {
         const meal = await getMealRate(city, 'lunch', tier)
-        const mealTotal = meal.rate * totalPax
+        const mealTotal = calculatePerPaxCost(meal.rate)
         const mealClient = applyMarkup(mealTotal, marginPercent)
         allServices.push({
           itinerary_day_id: dayId,
@@ -663,16 +685,16 @@ export async function POST(
           rate_non_eur: meal.rate,
           total_cost: mealTotal,
           client_price: mealClient,
-          notes: 'Lunch'
+          notes: `Lunch${num_children > 0 ? ' (children 50% off)' : ''}${num_infants > 0 ? ' (infants free)' : ''}`
         })
         totalSupplierCost += mealTotal
         totalClientPrice += mealClient
       }
 
-      // DINNER
+      // DINNER - WITH CHILD/INFANT DISCOUNTS
       if (services.dinner) {
         const meal = await getMealRate(city, 'dinner', tier)
-        const mealTotal = meal.rate * totalPax
+        const mealTotal = calculatePerPaxCost(meal.rate)
         const mealClient = applyMarkup(mealTotal, marginPercent)
         allServices.push({
           itinerary_day_id: dayId,
@@ -685,14 +707,14 @@ export async function POST(
           rate_non_eur: meal.rate,
           total_cost: mealTotal,
           client_price: mealClient,
-          notes: 'Dinner'
+          notes: `Dinner${num_children > 0 ? ' (children 50% off)' : ''}${num_infants > 0 ? ' (infants free)' : ''}`
         })
         totalSupplierCost += mealTotal
         totalClientPrice += mealClient
       }
 
-      // WATER (standard inclusion)
-      const waterTotal = waterRate * totalPax
+      // WATER (standard inclusion) - WITH CHILD/INFANT DISCOUNTS
+      const waterTotal = calculatePerPaxCost(waterRate)
       allServices.push({
         itinerary_day_id: dayId,
         service_type: 'supplies',
@@ -703,7 +725,7 @@ export async function POST(
         rate_non_eur: waterRate,
         total_cost: waterTotal,
         client_price: waterTotal,
-        notes: 'Bottled water'
+        notes: `Bottled water${num_children > 0 ? ' (children 50% off)' : ''}${num_infants > 0 ? ' (infants free)' : ''}`
       })
       totalSupplierCost += waterTotal
       totalClientPrice += waterTotal
@@ -803,9 +825,18 @@ export async function POST(
       services_count: allServices.length,
       per_person: Math.round(totalClientPrice / totalPax * 100) / 100,
       preferences_used: !!userPrefs,
-      // NEW: Report skipped add-ons
+      // Report skipped add-ons
       skipped_addons: skippedAddons,
-      skipped_addons_count: skippedAddons.length
+      skipped_addons_count: skippedAddons.length,
+      // Passenger breakdown with discounts applied
+      passenger_breakdown: {
+        num_adults,
+        num_children,
+        num_infants,
+        total_pax: totalPax,
+        child_discount_percent: CHILD_DISCOUNT_PERCENT,
+        effective_pax: getEffectivePax()  // For cost calculation purposes
+      }
     })
 
   } catch (error: any) {

@@ -23,7 +23,8 @@ export default function NewItineraryPage() {
     start_date: '',
     end_date: '',
     num_adults: 2,
-    num_children: 0,
+    num_children: 0,  // Ages 4-12: 50% discount
+    num_infants: 0,   // Ages 0-3: FREE except flights
     currency: 'USD',
     notes: ''
   })
@@ -42,7 +43,7 @@ export default function NewItineraryPage() {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'num_adults' || name === 'num_children' ? parseInt(value) || 0 : value
+      [name]: name === 'num_adults' || name === 'num_children' || name === 'num_infants' ? parseInt(value) || 0 : value
     }))
   }
 
@@ -237,7 +238,7 @@ export default function NewItineraryPage() {
               <Users className="w-5 h-5 text-primary-600" />
               {t('passengers')}
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t('numberOfAdults')}
@@ -255,6 +256,7 @@ export default function NewItineraryPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t('numberOfChildren')}
+                  <span className="text-xs text-gray-500 ml-1">(4-12)</span>
                 </label>
                 <input
                   type="number"
@@ -263,6 +265,21 @@ export default function NewItineraryPage() {
                   onChange={handleChange}
                   min="0"
                   max="50"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {t('numberOfInfants')}
+                  <span className="text-xs text-gray-500 ml-1">(0-3)</span>
+                </label>
+                <input
+                  type="number"
+                  name="num_infants"
+                  value={formData.num_infants}
+                  onChange={handleChange}
+                  min="0"
+                  max="20"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
@@ -286,10 +303,16 @@ export default function NewItineraryPage() {
             <div className="mt-4 p-4 bg-gray-50 rounded-lg">
               <p className="text-gray-700">
                 <span className="font-medium">{t('totalPassengers')}:</span>{' '}
-                {formData.num_adults + formData.num_children}
+                {formData.num_adults + formData.num_children + formData.num_infants}
                 {' '}({formData.num_adults} {formData.num_adults === 1 ? t('adult') : t('adults')}
-                {formData.num_children > 0 && `, ${formData.num_children} ${formData.num_children === 1 ? t('child') : t('children')}`})
+                {formData.num_children > 0 && `, ${formData.num_children} ${formData.num_children === 1 ? t('child') : t('children')}`}
+                {formData.num_infants > 0 && `, ${formData.num_infants} ${formData.num_infants === 1 ? t('infant') : t('infants')}`})
               </p>
+              {(formData.num_children > 0 || formData.num_infants > 0) && (
+                <p className="text-sm text-gray-500 mt-2">
+                  {t('childDiscountNote')}
+                </p>
+              )}
             </div>
           </div>
 

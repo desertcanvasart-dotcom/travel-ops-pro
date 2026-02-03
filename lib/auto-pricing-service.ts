@@ -1940,7 +1940,8 @@ export interface PricingParams {
   tier: ServiceTier
   numPax: number
   numAdults?: number
-  numChildren?: number
+  numChildren?: number  // Ages 4-12: 50% discount
+  numInfants?: number   // Ages 0-3: FREE except flights
   isEurPassport: boolean
   language?: string
   travelDate?: string
@@ -1948,6 +1949,60 @@ export interface PricingParams {
   mealPlan?: 'none' | 'breakfast_only' | 'lunch_only' | 'dinner_only' | 'half_board' | 'full_board'
   includeAccommodation?: boolean
   tourLeaderIncluded?: boolean
+}
+
+// ============================================
+// CHILD/INFANT DISCOUNT CONSTANTS
+// ============================================
+export const CHILD_DISCOUNT_PERCENT = 50  // Children (4-12) get 50% off adult rate
+export const INFANT_RATE_PERCENT = 0      // Infants (0-3) are FREE except flights
+
+// Passenger breakdown for pricing
+export interface PassengerBreakdown {
+  numAdults: number      // Full adult rate
+  numChildren: number    // 50% of adult rate (ages 4-12)
+  numInfants: number     // FREE except flights (ages 0-3)
+}
+
+// Detailed pricing result with age breakdown
+export interface AgeBasedPricingResult {
+  success: boolean
+  // Passenger counts
+  numAdults: number
+  numChildren: number
+  numInfants: number
+  totalPassengers: number
+
+  // Per-person rates
+  adultRate: number
+  childRate: number
+  infantRate: number
+
+  // Subtotals by category
+  adultsSubtotal: number
+  childrenSubtotal: number
+  infantsSubtotal: number
+
+  // Flight costs (everyone pays, even infants)
+  flightCostPerPerson?: number
+  flightTotal?: number
+
+  // Totals
+  totalCost: number
+  marginAmount: number
+  sellingPrice: number
+
+  // Currency
+  currency: string
+
+  // Breakdown for display
+  breakdown: {
+    category: string
+    count: number
+    rate: number
+    subtotal: number
+    note: string
+  }[]
 }
 
 export interface PricingResult {
@@ -2185,3 +2240,264 @@ export async function getTemplatePriceRange(
 }
 
 export type MealPlan = 'none' | 'breakfast_only' | 'lunch_only' | 'dinner_only' | 'half_board' | 'full_board'
+
+// ============================================
+// AGE-BASED PRICING CALCULATION
+// ============================================
+
+/**
+ * Calculate pricing with age-based discounts
+ * - Adults (13+): Full rate
+ * - Children (4-12): 50% of adult rate (except flights = full)
+ * - Infants (0-3): FREE (except flights = may apply infant fare)
+ *
+ * @param baseAdultRate - The full adult per-person rate (from standard pricing)
+ * @param passengers - Breakdown of adults, children, infants
+ * @param marginPercent - Margin percentage (default 25%)
+ * @param flightCostPerPerson - Optional flight cost per person (everyone pays full flight cost)
+ */
+export function calculateAgeBasedPricing(
+  baseAdultRate: number,
+  passengers: PassengerBreakdown,
+  marginPercent: number = 25,
+  flightCostPerPerson: number = 0
+): AgeBasedPricingResult {
+  const { numAdults, numChildren, numInfants } = passengers
+  const totalPassengers = numAdults + numChildren + numInfants
+
+  // Calculate rates
+  const adultRate = baseAdultRate
+  const childRate = baseAdultRate * (1 - CHILD_DISCOUNT_PERCENT / 100) // 50% discount
+  const infantRate = baseAdultRate * (INFANT_RATE_PERCENT / 100)        // FREE (0%)
+
+  // Calculate subtotals (tour costs)
+  const adultsSubtotal = adultRate * numAdults
+  const childrenSubtotal = childRate * numChildren
+  const infantsSubtotal = infantRate * numInfants
+
+  // Flight costs: everyone pays (infants might pay 10% of adult fare in real scenarios)
+  // For simplicity, we'll use full fare for all. This can be customized.
+  const flightTotal = flightCostPerPerson * totalPassengers
+
+  // Total cost before margin
+  const tourSubtotal = adultsSubtotal + childrenSubtotal + infantsSubtotal
+  const totalCost = tourSubtotal + flightTotal
+
+  // Apply margin
+  const marginAmount = totalCost * (marginPercent / 100)
+  const sellingPrice = totalCost + marginAmount
+
+  // Build breakdown for display
+  const breakdown: AgeBasedPricingResult['breakdown'] = []
+
+  if (numAdults > 0) {
+    breakdown.push({
+      category: 'Adults',
+      count: numAdults,
+      rate: Math.round(adultRate * 100) / 100,
+      subtotal: Math.round(adultsSubtotal * 100) / 100,
+      note: 'Full rate'
+    })
+  }
+
+  if (numChildren > 0) {
+    breakdown.push({
+      category: 'Children (4-12)',
+      count: numChildren,
+      rate: Math.round(childRate * 100) / 100,
+      subtotal: Math.round(childrenSubtotal * 100) / 100,
+      note: `${CHILD_DISCOUNT_PERCENT}% discount`
+    })
+  }
+
+  if (numInfants > 0) {
+    breakdown.push({
+      category: 'Infants (0-3)',
+      count: numInfants,
+      rate: 0,
+      subtotal: 0,
+      note: 'FREE (except flights)'
+    })
+  }
+
+  if (flightTotal > 0) {
+    breakdown.push({
+      category: 'Flights',
+      count: totalPassengers,
+      rate: Math.round(flightCostPerPerson * 100) / 100,
+      subtotal: Math.round(flightTotal * 100) / 100,
+      note: 'Per person'
+    })
+  }
+
+  return {
+    success: true,
+    numAdults,
+    numChildren,
+    numInfants,
+    totalPassengers,
+    adultRate: Math.round(adultRate * 100) / 100,
+    childRate: Math.round(childRate * 100) / 100,
+    infantRate: 0,
+    adultsSubtotal: Math.round(adultsSubtotal * 100) / 100,
+    childrenSubtotal: Math.round(childrenSubtotal * 100) / 100,
+    infantsSubtotal: 0,
+    flightCostPerPerson: flightCostPerPerson > 0 ? Math.round(flightCostPerPerson * 100) / 100 : undefined,
+    flightTotal: flightTotal > 0 ? Math.round(flightTotal * 100) / 100 : undefined,
+    totalCost: Math.round(totalCost * 100) / 100,
+    marginAmount: Math.round(marginAmount * 100) / 100,
+    sellingPrice: Math.round(sellingPrice * 100) / 100,
+    currency: 'EUR',
+    breakdown
+  }
+}
+
+/**
+ * Calculate full tour pricing with age-based discounts
+ * Combines the day-based pricing with passenger breakdown
+ */
+export async function calculatePricingWithPassengerBreakdown(
+  params: PricingParams & { passengers: PassengerBreakdown; flightCostPerPerson?: number }
+): Promise<PricingResult & { ageBasedPricing?: AgeBasedPricingResult }> {
+  const {
+    templateId,
+    tier,
+    passengers,
+    isEurPassport,
+    language = 'English',
+    marginPercent = 25,
+    tourLeaderIncluded = false,
+    flightCostPerPerson = 0
+  } = params
+
+  const totalPax = passengers.numAdults + passengers.numChildren + passengers.numInfants
+
+  console.log('🧒 Calculating with passenger breakdown:')
+  console.log(`   Adults: ${passengers.numAdults}`)
+  console.log(`   Children (4-12): ${passengers.numChildren}`)
+  console.log(`   Infants (0-3): ${passengers.numInfants}`)
+  console.log(`   Total: ${totalPax}`)
+
+  // First get the day-based pricing to get the base adult rate
+  const dayResult = await calculateDayBasedPricing({
+    templateId,
+    tier,
+    isEurPassport,
+    language,
+    marginPercent
+  })
+
+  if (!dayResult.success) {
+    return {
+      success: false,
+      templateId,
+      templateName: 'Unknown',
+      tier,
+      numPax: totalPax,
+      numPayingPax: passengers.numAdults + passengers.numChildren, // Infants don't pay
+      tourLeaderIncluded,
+      totalDays: 0,
+      services: [],
+      optionalServices: [],
+      subtotalCost: 0,
+      optionalTotal: 0,
+      totalCost: 0,
+      tourLeaderCost: 0,
+      marginPercent,
+      marginAmount: 0,
+      sellingPrice: 0,
+      pricePerPerson: 0,
+      currency: 'EUR',
+      ratesUsed: {},
+      warnings: dayResult.warnings
+    }
+  }
+
+  // Get the base adult rate from 2-pax pricing (standard reference)
+  const basePaxResult = dayResult.paxPricing.find(p => p.numPax === 2) || dayResult.paxPricing[1]
+  const baseAdultRate = tourLeaderIncluded
+    ? basePaxResult.withLeader.pricePerPerson
+    : basePaxResult.withoutLeader.pricePerPerson
+
+  // Calculate age-based pricing
+  const ageBasedPricing = calculateAgeBasedPricing(
+    baseAdultRate,
+    passengers,
+    marginPercent,
+    flightCostPerPerson
+  )
+
+  // Calculate tour leader cost if included
+  let tourLeaderCost = 0
+  if (tourLeaderIncluded) {
+    // Tour leader gets accommodation + single supplement + their own per-pax costs
+    tourLeaderCost = basePaxResult.withLeader.tourLeaderCost
+  }
+
+  // Calculate effective price per paying person
+  const payingPassengers = passengers.numAdults + passengers.numChildren
+  const pricePerPerson = payingPassengers > 0
+    ? ageBasedPricing.sellingPrice / payingPassengers
+    : 0
+
+  // Prepare ratesUsed
+  const ratesUsed: PricingResult['ratesUsed'] = {}
+
+  const vehicleService = dayResult.services.find(s => s.serviceType === 'transportation')
+  if (vehicleService) {
+    ratesUsed.vehicle = {
+      type: vehicleService.serviceName.split(' - ')[0] || 'Vehicle',
+      route: vehicleService.serviceName.split(' - ')[1] || '',
+      rate: vehicleService.unitCost
+    }
+  }
+
+  const guideService = dayResult.services.find(s => s.serviceType === 'guide')
+  if (guideService) {
+    ratesUsed.guide = {
+      name: guideService.serviceName,
+      rate: guideService.unitCost
+    }
+  }
+
+  const hotelService = dayResult.services.find(s => s.serviceType === 'accommodation' && s.serviceName.toLowerCase().includes('hotel'))
+  if (hotelService) {
+    ratesUsed.hotel = {
+      name: hotelService.serviceName,
+      rate: hotelService.unitCost
+    }
+  }
+
+  console.log('✅ Age-based pricing calculated:')
+  console.log(`   Adult rate: €${ageBasedPricing.adultRate}`)
+  console.log(`   Child rate: €${ageBasedPricing.childRate} (${CHILD_DISCOUNT_PERCENT}% off)`)
+  console.log(`   Infant rate: FREE`)
+  console.log(`   Selling price: €${ageBasedPricing.sellingPrice}`)
+
+  return {
+    success: true,
+    templateId: dayResult.templateId,
+    templateName: dayResult.templateName,
+    tier: dayResult.tier,
+    numPax: totalPax,
+    numPayingPax: payingPassengers,
+    tourLeaderIncluded,
+    totalDays: dayResult.totalDays,
+    services: dayResult.services.filter(s => !s.notes?.includes('optional')),
+    optionalServices: dayResult.services.filter(s => s.notes?.includes('optional')),
+    subtotalCost: ageBasedPricing.totalCost,
+    optionalTotal: 0,
+    totalCost: ageBasedPricing.totalCost + tourLeaderCost,
+    tourLeaderCost,
+    marginPercent,
+    marginAmount: ageBasedPricing.marginAmount,
+    sellingPrice: ageBasedPricing.sellingPrice + (tourLeaderCost * (1 + marginPercent / 100)),
+    pricePerPerson: Math.round(pricePerPerson * 100) / 100,
+    currency: 'EUR',
+    ratesUsed,
+    warnings: dayResult.warnings,
+    paxPricingTable: dayResult.paxPricing,
+    singleSupplement: dayResult.singleSupplement,
+    ageBasedPricing
+  }
+}

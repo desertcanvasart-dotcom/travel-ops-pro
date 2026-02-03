@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { calculateAutoPricing, ServiceTier } from '@/lib/auto-pricing-service'
+import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT } from '@/lib/auto-pricing-service'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -47,23 +47,43 @@ interface PriceCalculationResult {
   variation_name: string
   template_name: string
   num_pax: number
+  num_adults?: number        // NEW: Passenger breakdown
+  num_children?: number      // NEW: Ages 4-12 (50% discount)
+  num_infants?: number       // NEW: Ages 0-3 (FREE except flights)
   travel_date: string
   season: string
   is_eur_passport: boolean
-  tour_leader_included: boolean  // NEW
+  tour_leader_included: boolean
   services: CalculatedService[]
   optional_services: CalculatedService[]
   subtotal_cost: number
   optional_total: number
   total_cost: number
-  tour_leader_cost: number  // NEW
+  tour_leader_cost: number
   margin_percent: number
   margin_amount: number
   selling_price: number
   price_per_person: number
-  single_supplement: number  // NEW
+  single_supplement: number
   currency: string
-  pax_pricing_table?: any[]  // NEW - for rate sheet
+  pax_pricing_table?: any[]
+  // NEW: Age-based pricing breakdown
+  age_based_pricing?: {
+    adult_rate: number
+    child_rate: number
+    infant_rate: number
+    adults_subtotal: number
+    children_subtotal: number
+    infants_subtotal: number
+    child_discount_percent: number
+    breakdown: {
+      category: string
+      count: number
+      rate: number
+      subtotal: number
+      note: string
+    }[]
+  }
 }
 
 function getSeason(date: Date): 'low' | 'high' | 'peak' {
@@ -332,6 +352,11 @@ export async function POST(request: NextRequest) {
     const {
       variation_id,
       num_pax = 2,
+      // NEW: Passenger breakdown for child discounts
+      num_adults,
+      num_children = 0,    // Ages 4-12: 50% discount
+      num_infants = 0,     // Ages 0-3: FREE except flights
+      flight_cost_per_person = 0,  // Optional flight cost
       travel_date = new Date().toISOString().split('T')[0],
       is_eur_passport = true,
       margin_percent = 25,
@@ -339,13 +364,24 @@ export async function POST(request: NextRequest) {
       include_optionals = false,
       language = 'English',
       tier = 'standard',
-      tour_leader_included = false  // NEW: Added tour leader parameter
+      tour_leader_included = false
     } = body
+
+    // Determine if using passenger breakdown or simple num_pax
+    const usePassengerBreakdown = num_adults !== undefined && num_adults !== null
+    const effectiveNumAdults = usePassengerBreakdown ? num_adults : num_pax
+    const effectiveNumChildren = usePassengerBreakdown ? (num_children || 0) : 0
+    const effectiveNumInfants = usePassengerBreakdown ? (num_infants || 0) : 0
+    const effectiveTotalPax = effectiveNumAdults + effectiveNumChildren + effectiveNumInfants
 
     console.log('📥 B2B Calculate Price Request:', {
       variation_id,
-      num_pax,
-      tour_leader_included,  // Log this
+      num_pax: effectiveTotalPax,
+      num_adults: effectiveNumAdults,
+      num_children: effectiveNumChildren,
+      num_infants: effectiveNumInfants,
+      usePassengerBreakdown,
+      tour_leader_included,
       is_eur_passport,
       margin_percent
     })
@@ -392,7 +428,8 @@ export async function POST(request: NextRequest) {
     if ((!services || services.length === 0) && templateId) {
       console.log('📊 No variation services found, using auto-pricing fallback')
       console.log(`   tourLeaderIncluded: ${tour_leader_included}`)
-      
+      console.log(`   usePassengerBreakdown: ${usePassengerBreakdown}`)
+
       // Determine effective margin (partner override)
       let effectiveMargin = margin_percent
       if (partner_id) {
@@ -401,24 +438,47 @@ export async function POST(request: NextRequest) {
           .select('default_margin_percent')
           .eq('id', partner_id)
           .single()
-        
+
         if (partner?.default_margin_percent) {
           effectiveMargin = partner.default_margin_percent
         }
       }
 
-      // Call auto-pricing service with tour leader parameter
-      const autoPriceResult = await calculateAutoPricing({
-        templateId,
-        tier: effectiveTier,
-        numPax: num_pax,
-        isEurPassport: is_eur_passport,
-        language,
-        marginPercent: effectiveMargin,
-        mealPlan: 'lunch_only',
-        includeAccommodation: (template?.duration_days || 1) > 1,
-        tourLeaderIncluded: tour_leader_included  // NEW: Pass tour leader flag
-      })
+      // Use passenger breakdown pricing if breakdown is provided
+      let autoPriceResult
+      if (usePassengerBreakdown && (effectiveNumChildren > 0 || effectiveNumInfants > 0)) {
+        console.log('🧒 Using age-based pricing with child/infant discounts')
+        autoPriceResult = await calculatePricingWithPassengerBreakdown({
+          templateId,
+          tier: effectiveTier,
+          numPax: effectiveTotalPax,
+          passengers: {
+            numAdults: effectiveNumAdults,
+            numChildren: effectiveNumChildren,
+            numInfants: effectiveNumInfants
+          },
+          isEurPassport: is_eur_passport,
+          language,
+          marginPercent: effectiveMargin,
+          mealPlan: 'lunch_only',
+          includeAccommodation: (template?.duration_days || 1) > 1,
+          tourLeaderIncluded: tour_leader_included,
+          flightCostPerPerson: flight_cost_per_person
+        })
+      } else {
+        // Call standard auto-pricing service
+        autoPriceResult = await calculateAutoPricing({
+          templateId,
+          tier: effectiveTier,
+          numPax: effectiveTotalPax,
+          isEurPassport: is_eur_passport,
+          language,
+          marginPercent: effectiveMargin,
+          mealPlan: 'lunch_only',
+          includeAccommodation: (template?.duration_days || 1) > 1,
+          tourLeaderIncluded: tour_leader_included
+        })
+      }
 
       if (!autoPriceResult.success) {
         return NextResponse.json({ 
@@ -461,40 +521,61 @@ export async function POST(request: NextRequest) {
         pricing_note: s.notes
       }))
 
+      // Extract age-based pricing if available
+      const ageBasedPricingData = (autoPriceResult as any).ageBasedPricing
+
       const result: PriceCalculationResult = {
         variation_id: variation.id,
         variation_name: variation.variation_name,
         template_name: template?.template_name || '',
-        num_pax,
+        num_pax: effectiveTotalPax,
+        num_adults: usePassengerBreakdown ? effectiveNumAdults : undefined,
+        num_children: usePassengerBreakdown ? effectiveNumChildren : undefined,
+        num_infants: usePassengerBreakdown ? effectiveNumInfants : undefined,
         travel_date,
         season,
         is_eur_passport,
-        tour_leader_included,  // NEW
+        tour_leader_included,
         services: convertedServices,
         optional_services: convertedOptional,
         subtotal_cost: autoPriceResult.subtotalCost,
         optional_total: autoPriceResult.optionalTotal,
         total_cost: autoPriceResult.totalCost,
-        tour_leader_cost: autoPriceResult.tourLeaderCost,  // NEW
+        tour_leader_cost: autoPriceResult.tourLeaderCost,
         margin_percent: autoPriceResult.marginPercent,
         margin_amount: autoPriceResult.marginAmount,
         selling_price: autoPriceResult.sellingPrice,
         price_per_person: autoPriceResult.pricePerPerson,
-        single_supplement: autoPriceResult.singleSupplement || 0,  // NEW
+        single_supplement: autoPriceResult.singleSupplement || 0,
         currency: autoPriceResult.currency,
-        pax_pricing_table: autoPriceResult.paxPricingTable  // NEW - for rate sheet
+        pax_pricing_table: autoPriceResult.paxPricingTable,
+        // Include age-based pricing breakdown if available
+        age_based_pricing: ageBasedPricingData ? {
+          adult_rate: ageBasedPricingData.adultRate,
+          child_rate: ageBasedPricingData.childRate,
+          infant_rate: ageBasedPricingData.infantRate,
+          adults_subtotal: ageBasedPricingData.adultsSubtotal,
+          children_subtotal: ageBasedPricingData.childrenSubtotal,
+          infants_subtotal: ageBasedPricingData.infantsSubtotal,
+          child_discount_percent: CHILD_DISCOUNT_PERCENT,
+          breakdown: ageBasedPricingData.breakdown
+        } : undefined
       }
 
       console.log('🎉 B2B Price calculated via auto-pricing:', {
         variation: variation.variation_name,
-        numPax: num_pax,
+        numPax: effectiveTotalPax,
+        numAdults: effectiveNumAdults,
+        numChildren: effectiveNumChildren,
+        numInfants: effectiveNumInfants,
         tourLeader: tour_leader_included,
         cost: result.total_cost,
         tourLeaderCost: result.tour_leader_cost,
         margin: effectiveMargin + '%',
         selling: result.selling_price,
         perPerson: result.price_per_person,
-        singleSupplement: result.single_supplement
+        singleSupplement: result.single_supplement,
+        hasAgeBasedPricing: !!result.age_based_pricing
       })
 
       return NextResponse.json({ success: true, data: result })
@@ -821,10 +902,15 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const variation_id = searchParams.get('variation_id')
   const num_pax = parseInt(searchParams.get('num_pax') || '2')
+  // NEW: Support passenger breakdown in GET params
+  const num_adults = searchParams.get('num_adults') ? parseInt(searchParams.get('num_adults')!) : undefined
+  const num_children = parseInt(searchParams.get('num_children') || '0')
+  const num_infants = parseInt(searchParams.get('num_infants') || '0')
+  const flight_cost = parseFloat(searchParams.get('flight_cost_per_person') || '0')
   const travel_date = searchParams.get('travel_date') || new Date().toISOString().split('T')[0]
   const is_eur = searchParams.get('is_eur') !== 'false'
   const margin = parseFloat(searchParams.get('margin') || '25')
-  const tour_leader = searchParams.get('tour_leader') === 'true'  // NEW
+  const tour_leader = searchParams.get('tour_leader') === 'true'
 
   if (!variation_id) {
     return NextResponse.json({ error: 'variation_id is required' }, { status: 400 })
@@ -832,13 +918,17 @@ export async function GET(request: NextRequest) {
 
   const mockRequest = new NextRequest(request.url, {
     method: 'POST',
-    body: JSON.stringify({ 
-      variation_id, 
-      num_pax, 
-      travel_date, 
-      is_eur_passport: is_eur, 
+    body: JSON.stringify({
+      variation_id,
+      num_pax,
+      num_adults,
+      num_children,
+      num_infants,
+      flight_cost_per_person: flight_cost,
+      travel_date,
+      is_eur_passport: is_eur,
       margin_percent: margin,
-      tour_leader_included: tour_leader  // NEW
+      tour_leader_included: tour_leader
     })
   })
 
