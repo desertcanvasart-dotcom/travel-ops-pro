@@ -340,8 +340,9 @@ export default function QuoteDetailPage() {
               </div>
             ) : (
               <CreateVersionPrompt
+                entityType="quote"
                 language={activeLanguage}
-                onCreateVersion={() => handleCreateVersion(activeLanguage)}
+                onCreateFromScratch={() => handleCreateVersion(activeLanguage)}
               />
             )}
           </div>
