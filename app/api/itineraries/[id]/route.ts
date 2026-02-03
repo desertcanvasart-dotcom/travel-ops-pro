@@ -42,7 +42,7 @@ export async function GET(
     // Build versions object keyed by language
     const versionsMap: Record<string, any> = {}
     if (!versionsError && versions) {
-      versions.forEach(v => {
+      versions.forEach((v: { language: string; [key: string]: any }) => {
         versionsMap[v.language] = v
       })
     }

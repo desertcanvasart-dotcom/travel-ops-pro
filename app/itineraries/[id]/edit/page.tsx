@@ -804,25 +804,28 @@ export default function ItineraryEditorPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-5">
-      {/* HEADER - Compact single row */}
+      {/* HEADER - Responsive design */}
       <div className="bg-white rounded-xl p-4 mb-5 shadow-sm">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           {/* Left: Back, Status, Code, Client */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
+              type="button"
               onClick={() => router.push(`/itineraries/${itineraryId}`)}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
               title={t('backToView')}
             >
               <ArrowLeft size={18} className="text-gray-600" />
             </button>
-            
+
             {/* Status Dropdown */}
             <select
               value={itinerary.status || 'draft'}
               onChange={(e) => updateStatus(e.target.value)}
               disabled={updatingStatus}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#647C47] flex-shrink-0 ${
+              title={tCommon('status')}
+              aria-label={tCommon('status')}
+              className={`px-2 py-1 rounded-md text-xs font-semibold border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#647C47] flex-shrink-0 ${
                 STATUS_OPTIONS.find(s => s.value === itinerary.status)?.color || 'bg-gray-100 text-gray-700'
               }`}
             >
@@ -830,29 +833,30 @@ export default function ItineraryEditorPage() {
                 <option key={status.value} value={status.value}>{t(`status.${status.value}`)}</option>
               ))}
             </select>
-            
+
             {/* Itinerary Code */}
-            <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">{itinerary.itinerary_code}</h1>
-            
-            {/* Separator */}
-            <span className="text-gray-300">|</span>
-            
-            {/* Client Info */}
-            <span className="text-gray-600 text-sm whitespace-nowrap">
+            <h1 className="text-base lg:text-lg font-bold text-gray-900 whitespace-nowrap">{itinerary.itinerary_code}</h1>
+
+            {/* Separator - hidden on small screens */}
+            <span className="text-gray-300 hidden lg:inline">|</span>
+
+            {/* Client Info - hidden on small screens, truncated on medium */}
+            <span className="text-gray-600 text-sm hidden lg:inline truncate">
               {itinerary.client_name} • {t('daysCount', { count: days.length })} • {t('adultsCount', { count: itinerary.num_adults })}
               {itinerary.num_children > 0 && ` • ${t('childrenCount', { count: itinerary.num_children })}`}
             </span>
           </div>
 
-          {/* Right: Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Right: Action Buttons - wraps on smaller screens */}
+          <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
             {/* View Mode Button */}
             <Link
               href={`/itineraries/${itineraryId}`}
-              className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 flex items-center gap-1.5"
+              className="p-2 xl:px-3 xl:py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 flex items-center gap-1.5"
+              title={tCommon('view')}
             >
               <Eye size={14} />
-              {tCommon('view')}
+              <span className="hidden xl:inline">{tCommon('view')}</span>
             </Link>
 
             {/* Operational buttons - hidden when confirmed (use booking page instead) */}
@@ -862,10 +866,11 @@ export default function ItineraryEditorPage() {
                 {existingInvoice ? (
                   <Link
                     href={`/invoices/${existingInvoice.id}`}
-                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-1.5"
+                    className="p-2 xl:px-3 xl:py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-1.5"
+                    title={existingInvoice.invoice_number}
                   >
                     <Receipt size={14} />
-                    {existingInvoice.invoice_number}
+                    <span className="hidden 2xl:inline">{existingInvoice.invoice_number}</span>
                   </Link>
                 ) : (
                   <button
@@ -896,10 +901,11 @@ export default function ItineraryEditorPage() {
                         router.push(`/invoices/${invoice.id}`)
                       }
                     }}
-                    className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 flex items-center gap-1.5"
+                    className="p-2 xl:px-3 xl:py-1.5 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 flex items-center gap-1.5"
+                    title={t('invoice')}
                   >
                     <Receipt size={14} />
-                    {t('invoice')}
+                    <span className="hidden 2xl:inline">{t('invoice')}</span>
                   </button>
                 )}
 
@@ -912,10 +918,11 @@ export default function ItineraryEditorPage() {
                 {/* Contract Link */}
                 <Link
                   href={`/documents/contract/${itinerary.id}`}
-                  className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5"
+                  className="p-2 xl:px-3 xl:py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5"
+                  title={t('contract')}
                 >
                   <FileText size={14} />
-                  {t('contract')}
+                  <span className="hidden 2xl:inline">{t('contract')}</span>
                 </Link>
 
                 {/* Add Expense */}
@@ -929,12 +936,13 @@ export default function ItineraryEditorPage() {
 
             {/* Calculate Pricing */}
             <button
+              type="button"
               onClick={calculatePricing}
               disabled={calculating || saving}
-              className="px-3 py-1.5 bg-[#647C47] text-white rounded-lg text-sm font-semibold hover:bg-[#4a5c35] flex items-center gap-1.5 disabled:opacity-50"
+              className="px-2.5 py-1.5 xl:px-3 bg-[#647C47] text-white rounded-lg text-sm font-semibold hover:bg-[#4a5c35] flex items-center gap-1.5 disabled:opacity-50"
             >
               <Calculator size={14} />
-              {calculating ? t('calculating') : t('calculate')}
+              <span className="hidden sm:inline">{calculating ? t('calculating') : t('calculate')}</span>
             </button>
           </div>
         </div>
