@@ -1,13 +1,16 @@
 'use client'
 
 // ============================================
-// TOUR DETAIL PAGE WITH DYNAMIC PRICING
+// TOUR DETAIL PAGE WITH DYNAMIC PRICING & MULTILINGUAL
 // File: app/tours/[code]/page.tsx
 // ============================================
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
+import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
+import type { Language } from '@/types/multilingual'
 import {
   ArrowLeft,
   Calendar,
@@ -31,6 +34,7 @@ import {
 
 interface TourDetail {
   variation_id: string
+  template_id: string
   template_name: string
   template_code: string
   category_name: string
@@ -99,18 +103,50 @@ interface PricingResult {
   currency: string
 }
 
+interface VersionData {
+  variation_id: string
+  template_id: string
+  variation_versions: Array<{
+    id: string
+    language: Language
+    variation_name: string
+    inclusions: string[]
+    exclusions: string[]
+    optional_extras: string[]
+  }>
+  template_versions: Array<{
+    id: string
+    language: Language
+    template_name: string
+    short_description: string
+    long_description: string
+    highlights: string[]
+    main_attractions: string[]
+    best_for: string[]
+    inclusions: string[]
+    exclusions: string[]
+  }>
+  available_languages: Language[]
+}
+
 export default function TourDetailPage() {
   const params = useParams()
+  const t = useTranslations('tours')
   const [tour, setTour] = useState<TourDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<number[]>([1])
-  
+
+  // Multilingual state
+  const [activeLanguage, setActiveLanguage] = useState<Language>('en')
+  const [versions, setVersions] = useState<VersionData | null>(null)
+  const [translating, setTranslating] = useState(false)
+
   // Pricing state
   const [selectedPax, setSelectedPax] = useState(2)
   const [travelDate, setTravelDate] = useState(() => {
     const date = new Date()
-    date.setDate(date.getDate() + 14) // Default 2 weeks from now
+    date.setDate(date.getDate() + 14)
     return date.toISOString().split('T')[0]
   })
   const [isEurPassport, setIsEurPassport] = useState(true)
@@ -119,9 +155,11 @@ export default function TourDetailPage() {
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
 
+  // Fetch tour and versions on load
   useEffect(() => {
     if (params.code) {
       fetchTourDetail(params.code as string)
+      fetchVersions(params.code as string)
     }
   }, [params.code])
 
@@ -150,12 +188,24 @@ export default function TourDetailPage() {
     }
   }
 
+  const fetchVersions = async (code: string) => {
+    try {
+      const response = await fetch(`/api/tours/${code}/versions`)
+      const data = await response.json()
+      if (data.success) {
+        setVersions(data.data)
+      }
+    } catch (err) {
+      console.error('Error fetching versions:', err)
+    }
+  }
+
   const calculatePrice = async () => {
     if (!tour?.variation_id) return
-    
+
     setPricingLoading(true)
     setPricingError(null)
-    
+
     try {
       const response = await fetch('/api/b2b/calculate-price', {
         method: 'POST',
@@ -165,13 +215,13 @@ export default function TourDetailPage() {
           num_pax: selectedPax,
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
-          margin_percent: 0, // Show net price to customers, margin handled elsewhere
+          margin_percent: 0,
           include_optionals: false
         })
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         setPricing(data.data)
       } else {
@@ -185,13 +235,74 @@ export default function TourDetailPage() {
     }
   }
 
+  // Handle copy & translate
+  const handleCopyTranslate = useCallback(async () => {
+    if (!params.code) return
+
+    setTranslating(true)
+    try {
+      const response = await fetch(`/api/tours/${params.code}/versions/copy-translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLanguage: activeLanguage })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh versions
+        await fetchVersions(params.code as string)
+      } else {
+        console.error('Translation failed:', data.error)
+        alert(data.error || 'Failed to translate')
+      }
+    } catch (err) {
+      console.error('Error in copy-translate:', err)
+      alert('Error during translation')
+    } finally {
+      setTranslating(false)
+    }
+  }, [params.code, activeLanguage])
+
   const toggleDay = (dayNumber: number) => {
-    setExpandedDays(prev => 
-      prev.includes(dayNumber) 
+    setExpandedDays(prev =>
+      prev.includes(dayNumber)
         ? prev.filter(d => d !== dayNumber)
         : [...prev, dayNumber]
     )
   }
+
+  // Get versioned content based on active language
+  const getVersionedContent = useCallback(() => {
+    if (!tour || !versions) return tour
+
+    // Find variation version for active language
+    const varVersion = versions.variation_versions?.find(v => v.language === activeLanguage)
+    // Find template version for active language
+    const tmpVersion = versions.template_versions?.find(v => v.language === activeLanguage)
+
+    return {
+      ...tour,
+      // Template content (from version if available)
+      template_name: tmpVersion?.template_name || tour.template_name,
+      short_description: tmpVersion?.short_description || tour.short_description,
+      long_description: tmpVersion?.long_description || tour.long_description,
+      highlights: tmpVersion?.highlights || tour.highlights,
+      // Variation content (from version if available, with fallback to template version)
+      variation_name: varVersion?.variation_name || tour.variation_name,
+      inclusions: varVersion?.inclusions?.length ? varVersion.inclusions : (tmpVersion?.inclusions?.length ? tmpVersion.inclusions : tour.inclusions),
+      exclusions: varVersion?.exclusions?.length ? varVersion.exclusions : (tmpVersion?.exclusions?.length ? tmpVersion.exclusions : tour.exclusions),
+      optional_extras: varVersion?.optional_extras || tour.optional_extras
+    }
+  }, [tour, versions, activeLanguage])
+
+  // Check if current language has a version
+  const hasVersionForLanguage = useCallback((lang: Language) => {
+    if (!versions) return false
+    const hasVarVersion = versions.variation_versions?.some(v => v.language === lang)
+    const hasTmpVersion = versions.template_versions?.some(v => v.language === lang)
+    return hasVarVersion || hasTmpVersion
+  }, [versions])
 
   const getTierStyle = (tier: string) => {
     const styles: Record<string, { bg: string; text: string; icon: string }> = {
@@ -203,7 +314,7 @@ export default function TourDetailPage() {
   }
 
   const getGroupTypeStyle = (type: string) => {
-    return type === 'private' 
+    return type === 'private'
       ? { bg: 'bg-slate-50 border-slate-200', text: 'text-slate-700', icon: '🔒', label: 'Private' }
       : { bg: 'bg-sky-50 border-sky-200', text: 'text-sky-700', icon: '👥', label: 'Shared' }
   }
@@ -247,8 +358,8 @@ export default function TourDetailPage() {
   if (error || !tour) {
     return (
       <div className="p-6">
-        <Link 
-          href="/tours" 
+        <Link
+          href="/tours"
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -262,22 +373,24 @@ export default function TourDetailPage() {
     )
   }
 
+  const versionedTour = getVersionedContent() || tour
   const tierStyle = getTierStyle(tour.tier)
   const groupStyle = getGroupTypeStyle(tour.group_type)
+  const showCreatePrompt = !hasVersionForLanguage(activeLanguage)
 
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
-          <Link 
-            href="/tours" 
+          <Link
+            href="/tours"
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="h-5 w-5 text-gray-600" />
           </Link>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">{tour.template_name}</h1>
+            <h1 className="text-xl font-semibold text-gray-900">{versionedTour.template_name}</h1>
             <p className="text-sm text-gray-500">{tour.destination_name} • {tour.duration_days} {tour.duration_days === 1 ? 'day' : 'days'}</p>
           </div>
         </div>
@@ -289,6 +402,28 @@ export default function TourDetailPage() {
             {groupStyle.icon} {groupStyle.label}
           </span>
         </div>
+      </div>
+
+      {/* Language Tabs */}
+      <div className="mb-6">
+        <LanguageTabs
+          activeLanguage={activeLanguage}
+          onLanguageChange={setActiveLanguage}
+          availableLanguages={versions?.available_languages || ['en']}
+        />
+
+        {/* Create Version Prompt */}
+        {showCreatePrompt && (
+          <div className="mt-4">
+            <CreateVersionPrompt
+              entityType="tour"
+              language={activeLanguage}
+              onCreateFromScratch={handleCopyTranslate}
+              onCopyAndTranslate={handleCopyTranslate}
+              isLoading={translating}
+            />
+          </div>
+        )}
       </div>
 
       {/* Stats Row */}
@@ -354,17 +489,17 @@ export default function TourDetailPage() {
           <div className="bg-white border border-gray-200 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">About This Tour</h2>
             <p className="text-gray-600 text-sm leading-relaxed">
-              {tour.long_description || tour.short_description}
+              {versionedTour.long_description || versionedTour.short_description}
             </p>
-            
-            {tour.highlights && tour.highlights.length > 0 && (
+
+            {versionedTour.highlights && versionedTour.highlights.length > 0 && (
               <div className="mt-6 pt-6 border-t border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <Star className="h-4 w-4 text-amber-500" />
                   Highlights
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {tour.highlights.map((highlight, idx) => (
+                  {versionedTour.highlights.map((highlight, idx) => (
                     <div key={idx} className="flex items-start gap-2">
                       <Check className="h-4 w-4 text-[#647C47] mt-0.5 flex-shrink-0" />
                       <span className="text-sm text-gray-600">{highlight}</span>
@@ -384,8 +519,8 @@ export default function TourDetailPage() {
               </h2>
               <div className="space-y-3">
                 {tour.daily_itinerary.map((day) => (
-                  <div 
-                    key={day.day_number} 
+                  <div
+                    key={day.day_number}
                     className="border border-gray-200 rounded-lg overflow-hidden"
                   >
                     <button
@@ -443,7 +578,7 @@ export default function TourDetailPage() {
 
           {/* Inclusions & Exclusions */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {tour.inclusions && tour.inclusions.length > 0 && (
+            {versionedTour.inclusions && versionedTour.inclusions.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-lg p-6">
                 <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
@@ -452,7 +587,7 @@ export default function TourDetailPage() {
                   What's Included
                 </h3>
                 <ul className="space-y-2">
-                  {tour.inclusions.map((item, idx) => (
+                  {versionedTour.inclusions.map((item, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
                       <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
                       <span>{item}</span>
@@ -462,7 +597,7 @@ export default function TourDetailPage() {
               </div>
             )}
 
-            {tour.exclusions && tour.exclusions.length > 0 && (
+            {versionedTour.exclusions && versionedTour.exclusions.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-lg p-6">
                 <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
@@ -471,7 +606,7 @@ export default function TourDetailPage() {
                   Not Included
                 </h3>
                 <ul className="space-y-2">
-                  {tour.exclusions.map((item, idx) => (
+                  {versionedTour.exclusions.map((item, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
                       <X className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
                       <span>{item}</span>
@@ -483,7 +618,7 @@ export default function TourDetailPage() {
           </div>
 
           {/* Optional Extras */}
-          {tour.optional_extras && tour.optional_extras.length > 0 && (
+          {versionedTour.optional_extras && versionedTour.optional_extras.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-lg p-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <div className="w-6 h-6 bg-[#647C47]/10 rounded-full flex items-center justify-center">
@@ -492,7 +627,7 @@ export default function TourDetailPage() {
                 Optional Extras
               </h3>
               <ul className="space-y-2">
-                {tour.optional_extras.map((item, idx) => (
+                {versionedTour.optional_extras.map((item, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm text-gray-600">
                     <Plus className="h-4 w-4 text-[#647C47] mt-0.5 flex-shrink-0" />
                     <span>{item}</span>
@@ -510,7 +645,7 @@ export default function TourDetailPage() {
               <Calculator className="h-5 w-5 text-[#647C47]" />
               Calculate Your Price
             </h3>
-            
+
             {/* Number of Travelers */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -648,7 +783,7 @@ export default function TourDetailPage() {
             <button className="w-full bg-[#647C47] text-white py-3 rounded-lg hover:bg-[#4a5c35] transition-colors font-medium text-sm">
               Request This Tour
             </button>
-            
+
             <p className="text-xs text-gray-400 text-center mt-3">
               Prices calculated dynamically based on current rates
             </p>

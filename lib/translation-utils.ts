@@ -157,3 +157,23 @@ export const TOUR_TEMPLATE_TRANSLATION_FIELDS: TranslationFieldConfig[] = [
   { key: 'inclusions', type: 'string[]' },
   { key: 'exclusions', type: 'string[]' }
 ]
+
+/**
+ * Field configurations for tour variation versions
+ */
+export const TOUR_VARIATION_TRANSLATION_FIELDS: TranslationFieldConfig[] = [
+  { key: 'variation_name', type: 'string' },
+  { key: 'inclusions', type: 'string[]' },
+  { key: 'exclusions', type: 'string[]' },
+  { key: 'optional_extras', type: 'string[]' }
+]
+
+/**
+ * Field configurations for variation daily itinerary
+ */
+export const VARIATION_DAILY_ITINERARY_TRANSLATION_FIELDS: TranslationFieldConfig[] = [
+  { key: 'day_title', type: 'string' },
+  { key: 'day_description', type: 'string' },
+  { key: 'city', type: 'string' },
+  { key: 'overnight_city', type: 'string' }
+]
