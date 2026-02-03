@@ -134,7 +134,7 @@ WHERE NOT EXISTS (
 );
 
 -- ============================================
--- 5. MIGRATE B2B QUOTES TO EN VERSIONS
+-- 5. MIGRATE TOUR QUOTES TO EN VERSIONS
 -- ============================================
 
 INSERT INTO quote_versions (
@@ -142,8 +142,6 @@ INSERT INTO quote_versions (
   language,
   title,
   notes,
-  terms_conditions,
-  special_requests,
   created_at,
   updated_at
 )
@@ -158,11 +156,9 @@ SELECT
     'Quote ' || quote_number
   ) AS title,
   notes,
-  terms_and_conditions AS terms_conditions,
-  special_requests,
   created_at,
   COALESCE(updated_at, NOW())
-FROM b2b_quotes q
+FROM tour_quotes q
 WHERE NOT EXISTS (
   SELECT 1 FROM quote_versions qv
   WHERE qv.quote_id = q.id AND qv.language = 'en'

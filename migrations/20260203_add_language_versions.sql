@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS tour_variation_versions (
 
 CREATE TABLE IF NOT EXISTS quote_versions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  quote_id UUID NOT NULL REFERENCES b2b_quotes(id) ON DELETE CASCADE,
+  quote_id UUID NOT NULL REFERENCES tour_quotes(id) ON DELETE CASCADE,
   language VARCHAR(2) NOT NULL CHECK (language IN ('en', 'ja')),
 
   -- Translatable content
@@ -234,7 +234,7 @@ SELECT
   q.*,
   COALESCE(ARRAY_AGG(DISTINCT qv.language) FILTER (WHERE qv.language IS NOT NULL), ARRAY[]::VARCHAR[]) AS available_languages,
   COUNT(DISTINCT qv.language) AS version_count
-FROM b2b_quotes q
+FROM tour_quotes q
 LEFT JOIN quote_versions qv ON q.id = qv.quote_id
 GROUP BY q.id;
 
