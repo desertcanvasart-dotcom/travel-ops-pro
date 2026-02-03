@@ -17,8 +17,10 @@ export async function GET(
   try {
     const { code } = await params
 
-    // Fetch variation with all related data (removed tour_days - doesn't exist)
-    const { data: variation, error: varError } = await supabase
+    let variation = null
+
+    // First, try to find by variation_code
+    const { data: varByCode, error: varCodeError } = await supabase
       .from('tour_variations')
       .select(`
         *,
@@ -39,11 +41,79 @@ export async function GET(
       .eq('variation_code', code)
       .single()
 
-    if (varError) {
-      console.error('Variation fetch error:', varError)
-      throw varError
+    if (varByCode) {
+      variation = varByCode
+    } else {
+      // Check if it's a UUID (template_id) - UUIDs are 36 chars with dashes
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
+
+      if (isUUID) {
+        // Try to find by template_id and get the first variation
+        const { data: varByTemplateId } = await supabase
+          .from('tour_variations')
+          .select(`
+            *,
+            tour_templates (
+              id,
+              template_code,
+              template_name,
+              short_description,
+              long_description,
+              highlights,
+              main_attractions,
+              duration_days,
+              duration_nights,
+              tour_categories (category_name),
+              destinations (destination_name)
+            )
+          `)
+          .eq('template_id', code)
+          .order('tier', { ascending: true })
+          .limit(1)
+          .single()
+
+        if (varByTemplateId) {
+          variation = varByTemplateId
+        }
+      } else {
+        // Try to find by template_code and get the first variation
+        const { data: template } = await supabase
+          .from('tour_templates')
+          .select('id')
+          .eq('template_code', code)
+          .single()
+
+        if (template) {
+          const { data: varByTemplate } = await supabase
+            .from('tour_variations')
+            .select(`
+              *,
+              tour_templates (
+                id,
+                template_code,
+                template_name,
+                short_description,
+                long_description,
+                highlights,
+                main_attractions,
+                duration_days,
+                duration_nights,
+                tour_categories (category_name),
+                destinations (destination_name)
+              )
+            `)
+            .eq('template_id', template.id)
+            .order('tier', { ascending: true })
+            .limit(1)
+            .single()
+
+          if (varByTemplate) {
+            variation = varByTemplate
+          }
+        }
+      }
     }
-    
+
     if (!variation) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },

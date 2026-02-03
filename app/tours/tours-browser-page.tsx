@@ -331,12 +331,18 @@ export default function ToursBrowsePage() {
                     {t('card.perPerson')} • {tour.starting_from_tier || 'standard'}
                   </p>
                 </div>
-                <Link
-                  href={`/tours/${tour.id}`}
-                  className="bg-[#647C47] text-white px-4 py-2 rounded-lg hover:bg-[#4a5c35] transition-colors text-xs font-medium"
-                >
-                  {t('card.viewDetails')}
-                </Link>
+                {tour.variations_count > 0 ? (
+                  <Link
+                    href={`/tours/${tour.id}`}
+                    className="bg-[#647C47] text-white px-4 py-2 rounded-lg hover:bg-[#4a5c35] transition-colors text-xs font-medium"
+                  >
+                    {t('card.viewDetails')}
+                  </Link>
+                ) : (
+                  <span className="bg-gray-200 text-gray-500 px-4 py-2 rounded-lg text-xs font-medium cursor-not-allowed">
+                    {t('card.viewDetails')}
+                  </span>
+                )}
               </div>
             </div>
 
