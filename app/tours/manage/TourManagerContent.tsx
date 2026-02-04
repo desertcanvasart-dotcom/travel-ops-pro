@@ -31,8 +31,6 @@ import {
   Loader2
 } from 'lucide-react'
 
-// Import DayBuilder component
-import DayBuilder from './DayBuilder'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 
@@ -102,6 +100,8 @@ interface ItineraryDay {
   title: string
   description: string
   meals: string[]
+  city?: string
+  is_cruise_day?: boolean // Uses bundled cruise transport package
 }
 
 interface Toast {
@@ -393,31 +393,37 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
   const [dayTitle, setDayTitle] = useState('')
   const [dayDescription, setDayDescription] = useState('')
   const [dayMeals, setDayMeals] = useState<string[]>([])
+  const [dayCity, setDayCity] = useState('')
+  const [isCruiseDay, setIsCruiseDay] = useState(false)
 
   const toggleMeal = (meal: string) => {
-    setDayMeals(prev => 
-      prev.includes(meal) 
-        ? prev.filter(m => m !== meal) 
+    setDayMeals(prev =>
+      prev.includes(meal)
+        ? prev.filter(m => m !== meal)
         : [...prev, meal]
     )
   }
 
   const addDay = () => {
     if (!dayTitle.trim()) return
-    
+
     const newDay: ItineraryDay = {
       day: itinerary.length + 1,
       title: dayTitle.trim(),
       description: dayDescription.trim(),
-      meals: dayMeals
+      meals: dayMeals,
+      city: dayCity.trim() || undefined,
+      is_cruise_day: isCruiseDay || undefined
     }
-    
+
     onChange([...itinerary, newDay])
-    
+
     // Reset form
     setDayTitle('')
     setDayDescription('')
     setDayMeals([])
+    setDayCity('')
+    setIsCruiseDay(false)
   }
 
   const removeDay = (index: number) => {
@@ -462,6 +468,17 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
           />
         </div>
 
+        {/* City */}
+        <div>
+          <input
+            type="text"
+            value={dayCity}
+            onChange={(e) => setDayCity(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+            placeholder="City (e.g., Luxor, Aswan)"
+          />
+        </div>
+
         {/* Description */}
         <div>
           <textarea
@@ -473,8 +490,8 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
           />
         </div>
 
-        {/* Meals */}
-        <div className="flex items-center gap-4">
+        {/* Meals & Cruise Day */}
+        <div className="flex flex-wrap items-center gap-4">
           <span className="text-xs text-gray-500">Meals:</span>
           {['Breakfast', 'Lunch', 'Dinner'].map(meal => (
             <label key={meal} className="flex items-center gap-1.5 cursor-pointer">
@@ -487,6 +504,16 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
               <span className="text-xs text-gray-700">{meal}</span>
             </label>
           ))}
+          <span className="mx-2 text-gray-300">|</span>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isCruiseDay}
+              onChange={() => setIsCruiseDay(!isCruiseDay)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+            />
+            <span className="text-xs text-blue-700 font-medium">🚢 Cruise Transport Package</span>
+          </label>
         </div>
 
         {/* Add Button */}
@@ -512,7 +539,15 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                 {day.day}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">{day.title}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-900">{day.title}</p>
+                  {day.is_cruise_day && (
+                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">🚢 Cruise</span>
+                  )}
+                </div>
+                {day.city && (
+                  <p className="text-xs text-gray-500 mt-0.5">📍 {day.city}</p>
+                )}
                 {day.description && (
                   <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{day.description}</p>
                 )}
@@ -738,42 +773,6 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
 }
 
 // ============================================
-// DAY BUILDER MODAL COMPONENT
-// ============================================
-interface DayBuilderModalProps {
-  template: TourTemplate
-  onClose: () => void
-  onSave?: () => void
-}
-
-function DayBuilderModal({ template, onClose, onSave }: DayBuilderModalProps) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-lg max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="px-4 py-3 border-b flex items-center justify-between bg-white">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Day Builder</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{template.template_name} • {template.duration_days} days</p>
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-          <DayBuilder
-            templateId={template.id}
-            templateName={template.template_name}
-            durationDays={template.duration_days}
-            onClose={onClose}
-            onSave={onSave}
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -797,10 +796,7 @@ export default function TourManagerContent() {
   
   // ADD VARIATION MODAL STATE
   const [addVariationTemplate, setAddVariationTemplate] = useState<TourTemplate | null>(null)
-  
-  // DAY BUILDER MODAL STATE
-  const [dayBuilderTemplate, setDayBuilderTemplate] = useState<TourTemplate | null>(null)
-  
+
   // NEW TEMPLATE VARIATIONS STATE (for creating with template)
   const [newTemplateVariations, setNewTemplateVariations] = useState<Set<string>>(new Set(['standard']))
   const [newTemplateGroupTypes, setNewTemplateGroupTypes] = useState<Record<string, 'private' | 'shared'>>({
@@ -1198,15 +1194,6 @@ export default function TourManagerContent() {
           
           if (varData.success) {
             showToast('success', `${formData.template_name} created with ${varData.data.length} variation(s)!`)
-            // Ask to open Day Builder
-            if (data.data) {
-              const newTemplate = { ...data.data, duration_days: formData.duration_days }
-              setTimeout(() => {
-                if (confirm('Would you like to add activities to this tour now?')) {
-                  setDayBuilderTemplate(newTemplate)
-                }
-              }, 500)
-            }
           } else {
             showToast('info', `Template created, but failed to create variations: ${varData.error}`)
           }
@@ -1536,13 +1523,6 @@ export default function TourManagerContent() {
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1">
                             <button
-                              onClick={() => setDayBuilderTemplate(template)}
-                              className="p-1.5 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                              title="Day Builder"
-                            >
-                              <Calendar className="w-4 h-4" />
-                            </button>
-                            <button
                               onClick={() => handleEdit(template)}
                               className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                               title="Edit"
@@ -1579,13 +1559,6 @@ export default function TourManagerContent() {
                               >
                                 <Plus className="w-3 h-3" />
                                 Add Variation
-                              </button>
-                              <button
-                                onClick={() => setDayBuilderTemplate(template)}
-                                className="ml-2 text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"
-                              >
-                                <Calendar className="w-3 h-3" />
-                                Edit Days
                               </button>
                             </div>
                             {template.variations && template.variations.length > 0 ? (
@@ -1713,12 +1686,6 @@ export default function TourManagerContent() {
                 </div>
                 <div className="flex border-t border-gray-200 divide-x divide-gray-200">
                   <button
-                    onClick={() => setDayBuilderTemplate(template)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-purple-600 hover:bg-purple-50 transition-colors"
-                  >
-                    <Calendar className="w-4 h-4" />Days
-                  </button>
-                  <button
                     onClick={() => handleEdit(template)}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                   >
@@ -1787,9 +1754,6 @@ export default function TourManagerContent() {
                   {template.is_featured && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
                 </div>
                 <div className="flex items-center gap-1 ml-4">
-                  <button onClick={() => setDayBuilderTemplate(template)} className="p-1 text-gray-400 hover:text-purple-600 transition-colors">
-                    <Calendar className="w-4 h-4" />
-                  </button>
                   <button onClick={() => handleEdit(template)} className="p-1 text-gray-400 hover:text-green-600 transition-colors">
                     <Edit className="w-4 h-4" />
                   </button>
@@ -2020,7 +1984,7 @@ export default function TourManagerContent() {
                         onChange={handleCheckboxChange}
                         className="w-4 h-4 text-purple-600 border-gray-300 rounded"
                       />
-                      <span className="text-xs text-gray-700">⚡ Auto-Pricing (Day Builder)</span>
+                      <span className="text-xs text-gray-700">⚡ Auto-Pricing</span>
                     </label>
                   </div>
                 </div>
@@ -2172,7 +2136,7 @@ export default function TourManagerContent() {
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                     <p className="text-sm text-blue-800">
-                      <strong>💡 Tip:</strong> Select the pricing tiers you want to offer. After creating the template, use the Day Builder to add activities and enable auto-pricing.
+                      <strong>💡 Tip:</strong> Select the pricing tiers you want to offer. After creating the template, you can edit the itinerary and add activities for auto-pricing.
                     </p>
                   </div>
 
@@ -2297,15 +2261,6 @@ export default function TourManagerContent() {
           onClose={() => setAddVariationTemplate(null)}
           onSuccess={fetchTemplates}
           showToast={showToast}
-        />
-      )}
-
-      {/* DAY BUILDER MODAL */}
-      {dayBuilderTemplate && (
-        <DayBuilderModal
-          template={dayBuilderTemplate}
-          onClose={() => setDayBuilderTemplate(null)}
-          onSave={fetchTemplates}
         />
       )}
 

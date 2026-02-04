@@ -5208,7 +5208,6 @@
       "createNewTour": "新しいツアーを作成 →"
     },
     "manager": {
-      "dayBuilder": "日程ビルダー",
       "addVariations": "バリエーションを追加",
       "selectPricingTiers": "このツアーに提供する料金ティアを選択してください：",
       "tiersSelected": "{count}件のティアを選択",
@@ -5249,7 +5248,7 @@
       "imageUrl": "画像URL",
       "featured": "おすすめ",
       "active": "有効",
-      "useDayBuilder": "日程ビルダーを使用",
+      "autoPricing": "自動料金計算",
       "pricingMode": "料金モード",
       "save": "保存",
       "saving": "保存中...",
@@ -5286,7 +5285,6 @@
       "duplicate": "複製",
       "delete": "削除",
       "addVariation": "バリエーションを追加",
-      "openDayBuilder": "日程ビルダーを開く",
       "view": "表示",
       "add": "追加"
     },

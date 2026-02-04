@@ -61,6 +61,9 @@ export type TransportArea =
   | 'nubian_village'
   | null
 
+// Cruise package type
+export type CruisePackageType = 'cruise_only' | 'cruise_plus_hotels' | null
+
 // Enhanced Itinerary Day Structure
 export interface ItineraryDay {
   day: number
@@ -88,6 +91,9 @@ export interface ItineraryDay {
     area?: TransportArea
     vehicle_type?: string // e.g., 'Horse Carriage' for Edfu
   }
+  // NEW: Nile Cruise package flag - when true, uses bundled transport package
+  // instead of calculating individual transport costs for this day
+  is_cruise_day?: boolean
 }
 
 // Pricing parameters
@@ -178,6 +184,43 @@ interface TransportRate {
   capacity_min: number | null
   capacity_max: number | null
   is_active: boolean
+}
+
+// Cruise transport pricing rule from b2b_pricing_rules
+interface CruiseTransportPricingRule {
+  id: string
+  service_name: string
+  service_category: string
+  pricing_model: string
+  unit_type: string | null
+  tier1_min_pax: number | null
+  tier1_max_pax: number | null
+  tier1_rate_eur: number | null
+  tier1_label: string | null
+  tier2_min_pax: number | null
+  tier2_max_pax: number | null
+  tier2_rate_eur: number | null
+  tier2_label: string | null
+  tier3_min_pax: number | null
+  tier3_max_pax: number | null
+  tier3_rate_eur: number | null
+  tier3_label: string | null
+  tier4_min_pax: number | null
+  tier4_max_pax: number | null
+  tier4_rate_eur: number | null
+  tier4_label: string | null
+  notes: string | null
+  is_active: boolean
+}
+
+// Cruise package pricing info (used during calculation)
+export interface CruisePackageInfo {
+  packageFound: boolean
+  packageName: string
+  durationDays: number
+  packageRate: number
+  vehicleType: VehicleType
+  includes: string | null
 }
 
 // ============================================
@@ -533,7 +576,9 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
       attractions,
       services,
       // Parse transport overrides if present
-      transport: day.transport || undefined
+      transport: day.transport || undefined,
+      // Nile Cruise package flag - uses bundled transport instead of individual vehicle costs
+      is_cruise_day: day.is_cruise_day || false
     }
   })
 }
@@ -1184,6 +1229,172 @@ export function findTransportRate(
 }
 
 // ============================================
+// CRUISE TRANSPORT PRICING (via b2b_pricing_rules)
+// ============================================
+
+/**
+ * Fetch cruise transport pricing rules from b2b_pricing_rules
+ * Looks for rules with service_category = 'cruise_transport'
+ */
+export async function fetchCruiseTransportPricingRules(): Promise<CruiseTransportPricingRule[]> {
+  const { data, error } = await supabaseAdmin
+    .from('b2b_pricing_rules')
+    .select('*')
+    .eq('is_active', true)
+    .eq('service_category', 'cruise_transport')
+
+  if (error) {
+    console.error('Error fetching cruise transport pricing rules:', error)
+    return []
+  }
+
+  console.log(`📦 Fetched ${data?.length || 0} cruise transport pricing rules`)
+  return data || []
+}
+
+/**
+ * Find matching cruise transport pricing rule based on duration
+ * Service names should follow pattern like "Nile Cruise 3D Transport", "Nile Cruise 4D Transport"
+ */
+export function findCruiseTransportRule(
+  rules: CruiseTransportPricingRule[],
+  durationDays: number
+): CruiseTransportPricingRule | null {
+  // Try to find exact match by looking for duration in service name
+  const exactMatch = rules.find(
+    r => r.service_name.toLowerCase().includes(`${durationDays}d`) ||
+         r.service_name.toLowerCase().includes(`${durationDays} day`)
+  )
+
+  if (exactMatch) {
+    console.log(`✅ Found cruise transport rule: ${exactMatch.service_name} (${durationDays}D)`)
+    return exactMatch
+  }
+
+  // Fallback: try to find any cruise transport rule and use it
+  if (rules.length > 0) {
+    // Sort by extracting duration from name if possible, find closest
+    const withDuration = rules.map(r => {
+      const match = r.service_name.match(/(\d+)d/i) || r.service_name.match(/(\d+)\s*day/i)
+      return {
+        rule: r,
+        duration: match ? parseInt(match[1]) : 0
+      }
+    }).filter(r => r.duration > 0)
+
+    if (withDuration.length > 0) {
+      const sorted = withDuration.sort((a, b) =>
+        Math.abs(a.duration - durationDays) - Math.abs(b.duration - durationDays)
+      )
+      console.log(`⚠️ Using fallback cruise transport rule: ${sorted[0].rule.service_name} for ${durationDays}D`)
+      return sorted[0].rule
+    }
+
+    // If no duration found in names, just use first rule
+    console.log(`⚠️ Using first available cruise transport rule: ${rules[0].service_name}`)
+    return rules[0]
+  }
+
+  console.log(`❌ No cruise transport rule found for ${durationDays}D`)
+  return null
+}
+
+/**
+ * Get cruise transport rate from pricing rule based on pax count
+ * Uses tiered pricing: tier1 (1-2 pax), tier2 (3-7 pax), tier3 (8-14 pax), tier4 (15-20 pax)
+ */
+export function getCruiseTransportRate(
+  rule: CruiseTransportPricingRule,
+  numPax: number
+): { vehicleType: VehicleType; rate: number } {
+  // Check tier 1 (typically Sedan: 1-2 pax)
+  if (rule.tier1_min_pax !== null && rule.tier1_max_pax !== null && rule.tier1_rate_eur !== null) {
+    if (numPax >= rule.tier1_min_pax && numPax <= rule.tier1_max_pax) {
+      return { vehicleType: 'Sedan', rate: rule.tier1_rate_eur }
+    }
+  }
+
+  // Check tier 2 (typically Minivan: 3-7 pax)
+  if (rule.tier2_min_pax !== null && rule.tier2_max_pax !== null && rule.tier2_rate_eur !== null) {
+    if (numPax >= rule.tier2_min_pax && numPax <= rule.tier2_max_pax) {
+      return { vehicleType: 'Minivan', rate: rule.tier2_rate_eur }
+    }
+  }
+
+  // Check tier 3 (typically Van: 8-14 pax)
+  if (rule.tier3_min_pax !== null && rule.tier3_max_pax !== null && rule.tier3_rate_eur !== null) {
+    if (numPax >= rule.tier3_min_pax && numPax <= rule.tier3_max_pax) {
+      return { vehicleType: 'Van', rate: rule.tier3_rate_eur }
+    }
+  }
+
+  // Check tier 4 (typically Minibus: 15-20 pax)
+  if (rule.tier4_min_pax !== null && rule.tier4_max_pax !== null && rule.tier4_rate_eur !== null) {
+    if (numPax >= rule.tier4_min_pax && numPax <= rule.tier4_max_pax) {
+      return { vehicleType: 'Minibus', rate: rule.tier4_rate_eur }
+    }
+  }
+
+  // Fallback: if pax exceeds all tiers, use highest tier
+  if (rule.tier4_rate_eur !== null) {
+    return { vehicleType: 'Bus', rate: rule.tier4_rate_eur }
+  }
+  if (rule.tier3_rate_eur !== null) {
+    return { vehicleType: 'Minibus', rate: rule.tier3_rate_eur }
+  }
+  if (rule.tier2_rate_eur !== null) {
+    return { vehicleType: 'Van', rate: rule.tier2_rate_eur }
+  }
+
+  // Last fallback
+  return { vehicleType: 'Minivan', rate: rule.tier1_rate_eur || 0 }
+}
+
+/**
+ * Calculate cruise transport info for an itinerary
+ * Returns null if no cruise days found
+ */
+export function calculateCruisePackageInfo(
+  itinerary: ItineraryDay[],
+  pricingRules: CruiseTransportPricingRule[],
+  numPax: number
+): CruisePackageInfo | null {
+  // Count cruise days (days marked with is_cruise_day)
+  const cruiseDays = itinerary.filter(day => day.is_cruise_day === true)
+
+  if (cruiseDays.length === 0) {
+    return null
+  }
+
+  console.log(`🚢 Found ${cruiseDays.length} cruise days in itinerary`)
+
+  // Find matching pricing rule
+  const rule = findCruiseTransportRule(pricingRules, cruiseDays.length)
+
+  if (!rule) {
+    return {
+      packageFound: false,
+      packageName: 'No pricing rule found',
+      durationDays: cruiseDays.length,
+      packageRate: 0,
+      vehicleType: 'Minivan',
+      includes: null
+    }
+  }
+
+  const { vehicleType, rate } = getCruiseTransportRate(rule, numPax)
+
+  return {
+    packageFound: true,
+    packageName: rule.service_name,
+    durationDays: cruiseDays.length,
+    packageRate: rate,
+    vehicleType,
+    includes: rule.notes // Using notes field for includes description
+  }
+}
+
+// ============================================
 // MAIN PRICING CALCULATION
 // ============================================
 
@@ -1271,10 +1482,21 @@ export async function calculateDayBasedPricing(
   console.log(`🏨 Hotel nights: ${hotelNights} | 🚢 Cruise nights: ${cruiseNights}`)
 
   // ============================================
-  // STEP 3: Build transport cache
+  // STEP 3: Build transport cache & fetch cruise pricing rules
   // ============================================
 
   const transportCache = await buildTransportCache()
+
+  // Fetch cruise transport pricing rules from b2b_pricing_rules
+  const cruiseTransportPricingRules = await fetchCruiseTransportPricingRules()
+
+  // Count cruise package days (days marked as is_cruise_day for bundled transport)
+  const cruisePackageDays = itinerary.filter(d => d.is_cruise_day === true)
+  const hasCruisePackage = cruisePackageDays.length > 0
+
+  if (hasCruisePackage) {
+    console.log(`🚢 Found ${cruisePackageDays.length} cruise package days - will use bundled transport pricing`)
+  }
 
   // ============================================
   // STEP 4: Fetch all required rates
@@ -1601,6 +1823,7 @@ export async function calculateDayBasedPricing(
     city: string
     needs: ReturnType<typeof determineTransportNeeds>
     requiresTransport: boolean
+    isCruisePackageDay: boolean // Part of cruise transport package
   }
 
   const transportInfoByDay: DayTransportInfo[] = []
@@ -1609,16 +1832,19 @@ export async function calculateDayBasedPricing(
     const day = itinerary[i]
     const previousDay = i > 0 ? itinerary[i - 1] : null
     const nextDay = i < itinerary.length - 1 ? itinerary[i + 1] : null
-    
+
     const hasSightseeing = day.services.guide_required || day.attractions.length > 0
     const hasAirportService = day.services.airport_arrival || day.services.airport_departure
-    const isIntercityDay = previousDay && 
+    const isIntercityDay = previousDay &&
                            previousDay.city.toLowerCase() !== day.city.toLowerCase() &&
                            day.accommodation_type !== 'cruise' &&
                            previousDay.accommodation_type !== 'cruise'
-    
-    // Determine if this day requires transport
-    const requiresTransport = hasSightseeing || hasAirportService || isIntercityDay
+
+    // Check if this day is part of a cruise transport package
+    const isCruisePackageDay = day.is_cruise_day === true
+
+    // Determine if this day requires individual transport (non-cruise package days only)
+    const requiresTransport = !isCruisePackageDay && (hasSightseeing || hasAirportService || isIntercityDay)
 
     if (requiresTransport) {
       const needs = determineTransportNeeds(day, previousDay, nextDay)
@@ -1626,16 +1852,27 @@ export async function calculateDayBasedPricing(
         day: day.day,
         city: day.city,
         needs,
-        requiresTransport: true
+        requiresTransport: true,
+        isCruisePackageDay: false
       })
 
       console.log(`🚗 Day ${day.day} (${day.city}): ${needs.serviceType} | ${needs.duration} | area: ${needs.area || 'none'} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
+    } else if (isCruisePackageDay) {
+      transportInfoByDay.push({
+        day: day.day,
+        city: day.city,
+        needs: determineTransportNeeds(day, previousDay, nextDay),
+        requiresTransport: false,
+        isCruisePackageDay: true
+      })
+      console.log(`🚢 Day ${day.day} (${day.city}): Cruise package day - bundled transport`)
     } else {
       transportInfoByDay.push({
         day: day.day,
         city: day.city,
         needs: determineTransportNeeds(day, previousDay, nextDay),
-        requiresTransport: false
+        requiresTransport: false,
+        isCruisePackageDay: false
       })
     }
   }
@@ -1705,7 +1942,33 @@ export async function calculateDayBasedPricing(
     }
   }
 
-  console.log(`🚗 Base transport cost (2 pax): €${baseTransportCost.toFixed(2)}`)
+  // Add cruise transport package if applicable (for 2 pax baseline)
+  let baseCruisePackageCost = 0
+  if (hasCruisePackage) {
+    const cruisePackageInfo = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, 2)
+    if (cruisePackageInfo?.packageFound) {
+      baseCruisePackageCost = cruisePackageInfo.packageRate
+      services.push({
+        id: 'cruise-transport-package',
+        dayNumber: cruisePackageDays[0]?.day || 1,
+        serviceType: 'transportation',
+        serviceName: `🚢 ${cruisePackageInfo.packageName}`,
+        quantity: 1,
+        quantityMode: 'fixed',
+        unitCost: cruisePackageInfo.packageRate,
+        lineTotal: cruisePackageInfo.packageRate,
+        rateSource: 'b2b_pricing_rules',
+        isPerPax: false,
+        isOptional: false,
+        notes: `${cruisePackageInfo.durationDays}D cruise transport package (${cruisePackageInfo.vehicleType}) - includes: ${cruisePackageInfo.includes || 'car, carriage, felucca, motorboat'}`
+      })
+      console.log(`🚢 Cruise package cost (2 pax): €${baseCruisePackageCost.toFixed(2)} (${cruisePackageInfo.packageName})`)
+    } else {
+      warnings.push(`No cruise transport package found for ${cruisePackageDays.length}D cruise`)
+    }
+  }
+
+  console.log(`🚗 Base transport cost (2 pax): €${baseTransportCost.toFixed(2)}${hasCruisePackage ? ` + €${baseCruisePackageCost.toFixed(2)} cruise package` : ''}`)
 
   // ============================================
   // STEP 10: Calculate for each pax count
@@ -1714,14 +1977,15 @@ export async function calculateDayBasedPricing(
   const paxPricing: PaxPricingResult[] = []
 
   for (const numPax of PAX_COUNTS) {
-    // ----- Transport cost (varies with vehicle size) -----
+    // ----- Regular transport cost (varies with vehicle size) -----
+    // Only for non-cruise-package days
     let transportCost = 0
-    
+
     for (const info of transportInfoByDay) {
       if (!info.requiresTransport) continue
 
       const { needs } = info
-      
+
       // Determine vehicle type for this pax count
       let vehicleType: VehicleType
       if (needs.useSpecialVehicle && needs.specialVehicleType) {
@@ -1739,7 +2003,7 @@ export async function calculateDayBasedPricing(
         originCity: itinerary[info.day - 2]?.city,
         destinationCity: info.city
       })
-      
+
       if (rate) {
         transportCost += rate.base_rate_eur
       } else {
@@ -1747,20 +2011,32 @@ export async function calculateDayBasedPricing(
       }
     }
 
+    // ----- Cruise transport package cost (varies with pax count / vehicle) -----
+    let cruisePackageCost = 0
+    if (hasCruisePackage) {
+      const cruisePackageInfo = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, numPax)
+      if (cruisePackageInfo?.packageFound) {
+        cruisePackageCost = cruisePackageInfo.packageRate
+      }
+    }
+
+    // Total transport = regular transport + cruise package
+    const totalTransportCost = transportCost + cruisePackageCost
+
     // ----- WITHOUT Tour Leader (+0) -----
-    const totalCostWithoutLeader = fixedCosts + transportCost + (perPaxCosts * numPax)
+    const totalCostWithoutLeader = fixedCosts + totalTransportCost + (perPaxCosts * numPax)
     const marginWithoutLeader = totalCostWithoutLeader * (marginPercent / 100)
     const sellingWithoutLeader = totalCostWithoutLeader + marginWithoutLeader
     const perPersonWithoutLeader = sellingWithoutLeader / numPax
 
     // ----- WITH Tour Leader (+1) -----
     let transportCostWithLeader = 0
-    
+
     for (const info of transportInfoByDay) {
       if (!info.requiresTransport) continue
 
       const { needs } = info
-      
+
       let vehicleType: VehicleType
       if (needs.useSpecialVehicle && needs.specialVehicleType) {
         vehicleType = needs.specialVehicleType
@@ -1777,7 +2053,7 @@ export async function calculateDayBasedPricing(
         originCity: itinerary[info.day - 2]?.city,
         destinationCity: info.city
       })
-      
+
       if (rate) {
         transportCostWithLeader += rate.base_rate_eur
       } else {
@@ -1785,10 +2061,22 @@ export async function calculateDayBasedPricing(
       }
     }
 
+    // ----- Cruise transport package cost for +1 (varies with pax count / vehicle) -----
+    let cruisePackageCostWithLeader = 0
+    if (hasCruisePackage) {
+      const cruisePackageInfo = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, numPax + 1)
+      if (cruisePackageInfo?.packageFound) {
+        cruisePackageCostWithLeader = cruisePackageInfo.packageRate
+      }
+    }
+
+    // Total transport with leader = regular transport + cruise package
+    const totalTransportCostWithLeader = transportCostWithLeader + cruisePackageCostWithLeader
+
     // Tour leader costs: single room (PPD + single supplement) + their own per-pax costs
     const tourLeaderCost = accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax
 
-    const totalCostWithLeader = fixedCosts + transportCostWithLeader + (perPaxCosts * numPax) + tourLeaderCost
+    const totalCostWithLeader = fixedCosts + totalTransportCostWithLeader + (perPaxCosts * numPax) + tourLeaderCost
     const marginWithLeader = totalCostWithLeader * (marginPercent / 100)
     const sellingWithLeader = totalCostWithLeader + marginWithLeader
     const perPersonWithLeader = sellingWithLeader / numPax

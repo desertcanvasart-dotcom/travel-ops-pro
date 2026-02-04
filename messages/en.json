@@ -4861,7 +4861,6 @@
       "createNewTour": "Create a new tour →"
     },
     "manager": {
-      "dayBuilder": "Day Builder",
       "addVariations": "Add Variations",
       "selectPricingTiers": "Select the pricing tiers you want to offer for this tour:",
       "tiersSelected": "{count} tier(s) selected",
@@ -4902,7 +4901,7 @@
       "imageUrl": "Image URL",
       "featured": "Featured",
       "active": "Active",
-      "useDayBuilder": "Use Day Builder",
+      "autoPricing": "Auto-Pricing",
       "pricingMode": "Pricing Mode",
       "save": "Save",
       "saving": "Saving...",
@@ -4939,7 +4938,6 @@
       "duplicate": "Duplicate",
       "delete": "Delete",
       "addVariation": "Add Variation",
-      "openDayBuilder": "Open Day Builder",
       "view": "View",
       "add": "Add"
     },

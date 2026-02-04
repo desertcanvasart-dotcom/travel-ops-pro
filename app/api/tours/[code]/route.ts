@@ -151,7 +151,9 @@ export async function GET(
       overnight_city: day.overnight_city,
       breakfast_included: day.breakfast_included,
       lunch_included: day.lunch_included,
-      dinner_included: day.dinner_included
+      dinner_included: day.dinner_included,
+      // Cruise package day flag - uses bundled transport package
+      is_cruise_day: day.is_cruise_day || false
     }))
 
     // Combine services - prefer new system, fall back to legacy

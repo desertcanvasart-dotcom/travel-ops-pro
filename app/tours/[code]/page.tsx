@@ -65,6 +65,7 @@ interface TourDetail {
     breakfast_included: boolean
     lunch_included: boolean
     dinner_included: boolean
+    is_cruise_day?: boolean
   }>
 }
 
@@ -547,6 +548,9 @@ export default function TourDetailPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
+                          {day.is_cruise_day && (
+                            <span title="Cruise transport package day">🚢</span>
+                          )}
                           {day.breakfast_included && <span>🍳</span>}
                           {day.lunch_included && <span>🍽️</span>}
                           {day.dinner_included && <span>🌙</span>}
@@ -574,6 +578,9 @@ export default function TourDetailPage() {
                             )}
                             {day.overnight_city && (
                               <span className="px-2 py-1 bg-slate-50 text-slate-700 rounded">🏨 {day.overnight_city}</span>
+                            )}
+                            {day.is_cruise_day && (
+                              <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">🚢 Cruise Transport Package</span>
                             )}
                           </div>
                         </div>
