@@ -113,13 +113,21 @@ function detectStructuredItinerary(text: string): StructureDetectionResult {
   }
 
   // ============================================
-  // PATTERN 4: CRZ (Cruise) mentions
+  // PATTERN 4: Nile Cruise mentions (CRITICAL)
   // ============================================
-  const cruisePattern = /\b(CRZ|C\/IN|C\/OUT|check\s*in\s*crz|check\s*out\s*crz)\b/gi
+  const cruisePattern = /\b(CRZ|C\/IN|C\/OUT|check\s*in\s*crz|check\s*out\s*crz|nile\s*cruise|\d+\s*night[s]?\s*cruise|cruise\s*from|cruise\s*to)\b/gi
   const cruiseMatches = text.match(cruisePattern)
-  
+
   if (cruiseMatches && cruiseMatches.length >= 1) {
-    signals.push(`Found cruise indicators (CRZ, C/IN, C/OUT)`)
+    signals.push(`🚢 NILE CRUISE DETECTED: ${cruiseMatches.join(', ')}`)
+    confidence += 20
+  }
+
+  // Also check for simple "cruise" mention
+  const simpleCruisePattern = /\bcruise\b/gi
+  const simpleCruiseMatches = text.match(simpleCruisePattern)
+  if (simpleCruiseMatches && !cruiseMatches) {
+    signals.push(`🚢 Cruise keyword found`)
     confidence += 15
   }
 
@@ -461,6 +469,10 @@ export async function POST(request: Request) {
       return !isNaN(date.getTime())
     }
 
+    // Detect Nile Cruise from input
+    const hasCruise = /\b(CRZ|cruise|nile\s*cruise|\d+\s*night\s*cruise)\b/i.test(conversation)
+    const detectedTourType = extracted.tour_type || (hasCruise ? 'nile_cruise' : 'classic_tour')
+
     // Build final response with fallbacks
     const data = {
       // Client info
@@ -469,24 +481,26 @@ export async function POST(request: Request) {
       client_phone: extracted.client_phone || regexPhone || '',
       company_name: extracted.company_name || '',
       nationality: extracted.nationality || '',
-      
+
       // Trip info
       trip_name: extracted.trip_name || extracted.tour_requested || 'Egypt Tour',
       tour_requested: extracted.tour_requested || '',
       tour_name: extracted.tour_name || extracted.trip_name || 'Egypt Tour',
+      tour_type: detectedTourType,
       start_date: isValidDate(extracted.start_date) ? extracted.start_date : '',
       end_date: isValidDate(extracted.end_date) ? extracted.end_date : '',
       duration_days: parseInt(extracted.duration_days) || structureDetection.detectedDays || 1,
       num_adults: parseInt(extracted.num_adults) || 2,
       num_children: parseInt(extracted.num_children) || 0,
-      
+
       // Preferences
       language: extracted.language || 'English',
       interests: Array.isArray(extracted.interests) ? extracted.interests : [],
       cities: Array.isArray(extracted.cities) ? extracted.cities : [],
       special_requests: Array.isArray(extracted.special_requests) ? extracted.special_requests : [],
       budget_level: extracted.budget_level || 'standard',
-      
+      meal_plan: extracted.meal_plan || '',
+
       // Accommodation
       hotel_name: extracted.hotel_name || '',
       hotel_location: extracted.hotel_location || '',
@@ -511,6 +525,8 @@ export async function POST(request: Request) {
 
     console.log('✅ Parsed result:', {
       client: data.client_name,
+      tourType: data.tour_type,
+      mealPlan: data.meal_plan,
       isStructured: data.is_structured_input,
       structureConfidence: data.structure_confidence,
       days: data.extracted_days?.length || 0,
@@ -550,35 +566,110 @@ EGYPTIAN TRAVEL ABBREVIATIONS - YOU MUST DECODE THESE
 =================================================================
 
 CITY CODES (IATA):
-CAI = Cairo, ALX/ALY = Alexandria, ASW = Aswan, LXR = Luxor
-HRG = Hurghada, SSH = Sharm El Sheikh, RMF = Marsa Alam
-ABS = Abu Simbel, GZA = Giza, KOM = Kom Ombo, EDU/EDFU = Edfu
+CAI = Cairo
+ALX / ALY = Alexandria
+ASW = Aswan
+LXR = Luxor
+HRG = Hurghada (Red Sea)
+SSH = Sharm El Sheikh (Red Sea)
+RMF = Marsa Alam (Red Sea)
+ABS = Abu Simbel
+GZA = Giza
+KOM = Kom Ombo
+EDU / EDFU = Edfu
+ESN = Esna
+DEN = Dendera
+ABY = Abydos
+SAQ = Saqqara
+MEM = Memphis
+FAY = Fayoum
+SIW = Siwa Oasis
+DHB = Dahab
+NWB = Nuweiba
+EL-G = El Gouna
 
-ACCOMMODATION:
-NTS = Nights (e.g., "3NTS CAI" = 3 nights in Cairo)
-CRZ = Cruise / Nile Cruise
+ACCOMMODATION TYPES:
+NTS / N / NT = Nights (e.g., "3NTS CAI" = 3 nights in Cairo, "4N LXR" = 4 nights Luxor)
+CRZ = Nile Cruise (THIS IS CRITICAL - NOT a hotel!)
 HTL = Hotel
-C/IN = Check-in, C/OUT = Check-out
+OVN = Overnight
+C/IN = Check-in
+C/OUT = Check-out
+
+=================================================================
+NILE CRUISE DETECTION (CRITICAL!)
+=================================================================
+When you see ANY of these, it's a NILE CRUISE itinerary (NOT hotels):
+- "CRZ" = Nile Cruise
+- "cruise" (case insensitive) = Nile Cruise
+- "Nile cruise" = Nile Cruise
+- "4 night cruise" / "3 night cruise" = Nile Cruise
+- "cruise from Luxor" / "cruise from Aswan" = Nile Cruise
+- "3NTS CRZ" / "4N CRZ" = 3 or 4 nights on Nile Cruise
+- Days mentioning Kom Ombo + Edfu + Aswan in sequence = Nile Cruise route
+
+IMPORTANT: Nile Cruise is a BOAT, not a hotel. When cruise is mentioned:
+- Set tour_type or accommodation_type to "Nile Cruise"
+- Do NOT suggest hotels for cruise nights
+- Cruise typically sails between Luxor and Aswan
 
 AIRLINE CODES:
-MS = EgyptAir, BA = British Airways, TK = Turkish Airlines
-QR = Qatar Airways, EK = Emirates, LH = Lufthansa
+MS = EgyptAir (Egypt's national carrier)
+TK = Turkish Airlines
+BA = British Airways
+QR = Qatar Airways
+EK = Emirates
+EY = Etihad Airways
+LH = Lufthansa
+AF = Air France
+KL = KLM
+FZ = Flydubai
+G9 = Air Arabia
+SV = Saudia
+RJ = Royal Jordanian
+NP = Nile Air (domestic Egypt)
+SM = Air Cairo (domestic Egypt)
+
+MEAL PLANS (Hotel Abbreviations):
+RO / ROB = Room Only (no meals)
+BB / B&B = Bed & Breakfast
+HB = Half Board (breakfast + dinner)
+FB = Full Board (breakfast + lunch + dinner)
+AI / ALL = All Inclusive
+UAI = Ultra All Inclusive
+SC = Self Catering
+
+MEALS IN ITINERARY:
+B = Breakfast
+L = Lunch
+D = Dinner
+L/R = Lunch at Local Restaurant
+LR = Local Restaurant
+"Chinese Dinner" = Dinner at Chinese restaurant
+"Seafood Lunch" = Lunch at seafood restaurant
 
 DAY MARKERS:
 D1, D2, D3... = Day 1, Day 2, Day 3...
 "D1 CAI/ALX/CAI" = Day 1: Cairo to Alexandria and back to Cairo
+"D3 CRZ" = Day 3: On Nile Cruise (sailing day)
 
-ENTRANCE MARKERS:
-(INSIDE) = Entrance fee required, guests go inside
-(OUTSIDE) = Photo stop only, no entrance fee
+ENTRANCE MARKERS (CRITICAL FOR PRICING):
+(INSIDE) = Entrance fee INCLUDED, guests go inside
+(OUTSIDE) / (FROM OUTSIDE) = Photo stop only, NO entrance fee
+"from outside" = Same as (OUTSIDE) - no entrance included
+"photo stop" = Same as (OUTSIDE) - no entrance included
 
-MEALS:
-L = Lunch, D = Dinner, B = Breakfast
-"Chinese Dinner" = Dinner at Chinese restaurant
+TRANSPORT:
+TRF = Transfer
+A/C = Air Conditioned vehicle
+VIP = VIP/Luxury vehicle
+DOM FLT = Domestic Flight
+INT FLT = International Flight
 
 CALCULATION:
 Number of DAYS = Number of NIGHTS + 1
 Example: "2NTS CAI + 3NTS CRZ + 3NTS HRG" = 8 nights = 9 days
+Example: "4 night cruise from Luxor" = 5 days on the Nile
 
 =================================================================
 CRITICAL RULES
@@ -624,23 +715,25 @@ Return ONLY valid JSON:
   "client_phone": "sender's phone from signature or body, or empty string",
   "company_name": "sender's company (B2B partner) or empty string",
   "nationality": "nationality of TRAVELERS (not sender) if mentioned or empty string",
-  
+
   "trip_name": "Descriptive trip name based on itinerary",
   "tour_requested": "original request summary",
   "tour_name": "Descriptive tour name",
+  "tour_type": "classic_tour|nile_cruise|beach_holiday|combined - MUST be 'nile_cruise' if CRZ or cruise mentioned!",
   "start_date": "YYYY-MM-DD format if mentioned",
   "end_date": "YYYY-MM-DD format if mentioned",
   "duration_days": number (calculate from NTS if not explicit),
   "num_adults": number (default 2),
   "num_children": number (default 0),
-  
+
   "language": "guide language preference",
   "interests": ["decoded interests/attractions"],
   "cities": ["Cairo", "Alexandria", "Aswan", "Luxor", "Hurghada"],
   "special_requests": ["any special requests"],
   "budget_level": "budget|standard|deluxe|luxury",
-  
-  "hotel_name": "hotel if mentioned",
+  "meal_plan": "RO|BB|HB|FB|AI if mentioned",
+
+  "hotel_name": "hotel if mentioned (NOT for cruise nights!)",
   "hotel_location": "location if mentioned",
   
   "conversation_language": "English",
@@ -693,6 +786,40 @@ function buildGeneralExtractionPrompt(): string {
   return `You are an expert travel agent assistant that analyzes WhatsApp conversations and emails to extract booking information.
 
 This appears to be a GENERAL REQUEST (not a structured day-by-day itinerary). Extract the key information to help create a custom itinerary.
+
+=================================================================
+EGYPTIAN TRAVEL ABBREVIATIONS
+=================================================================
+
+CITY CODES:
+CAI = Cairo, ALX/ALY = Alexandria, ASW = Aswan, LXR = Luxor
+HRG = Hurghada, SSH = Sharm El Sheikh, ABS = Abu Simbel
+KOM = Kom Ombo, EDU/EDFU = Edfu, DEN = Dendera
+
+ACCOMMODATION:
+NTS/N/NT = Nights (e.g., "3NTS CAI" = 3 nights in Cairo)
+CRZ = Nile Cruise (THIS IS A BOAT, NOT A HOTEL!)
+BB = Bed & Breakfast, HB = Half Board, FB = Full Board, AI = All Inclusive
+
+NILE CRUISE DETECTION (CRITICAL!):
+When you see ANY of these, set tour_type to "Nile Cruise":
+- "CRZ" or "cruise" = Nile Cruise
+- "4 night cruise" / "3 night cruise" = Nile Cruise
+- "cruise from Luxor/Aswan" = Nile Cruise
+- Itinerary with Luxor + Kom Ombo + Edfu + Aswan = Classic Nile Cruise route
+
+AIRLINE CODES:
+MS = EgyptAir, TK = Turkish Airlines, BA = British Airways
+QR = Qatar Airways, EK = Emirates
+
+MEALS:
+L = Lunch, D = Dinner, B = Breakfast, L/R or LR = Local Restaurant
+
+DAY MARKERS:
+D1, D2, D3... = Day 1, Day 2, Day 3...
+
+ENTRANCE MARKERS:
+(INSIDE) = Entrance included, (OUTSIDE)/(from outside) = Photo stop only, no entrance
 
 =================================================================
 CRITICAL: EMAIL FORMAT DETECTION
@@ -752,6 +879,7 @@ Extract the following and return as JSON:
   "trip_name": "Descriptive trip name",
   "tour_requested": "What they're asking for",
   "tour_name": "Tour name",
+  "tour_type": "classic_tour|nile_cruise|beach_holiday|combined - USE 'nile_cruise' if cruise/CRZ mentioned!",
   "start_date": "YYYY-MM-DD format",
   "end_date": "YYYY-MM-DD format if mentioned",
   "duration_days": number,
@@ -763,8 +891,9 @@ Extract the following and return as JSON:
   "cities": ["cities mentioned"],
   "special_requests": ["any special requests"],
   "budget_level": "budget|standard|deluxe|luxury",
+  "meal_plan": "RO|BB|HB|FB|AI - if mentioned",
 
-  "hotel_name": "Hotel if mentioned",
+  "hotel_name": "Hotel if mentioned (NOT for cruise itineraries)",
   "hotel_location": "Location if mentioned",
 
   "conversation_language": "Language of the conversation",
