@@ -469,9 +469,21 @@ export async function POST(request: Request) {
       return !isNaN(date.getTime())
     }
 
-    // Detect Nile Cruise from input
+    // Detect Nile Cruise and determine package type
     const hasCruise = /\b(CRZ|cruise|nile\s*cruise|\d+\s*night\s*cruise)\b/i.test(conversation)
-    const detectedTourType = extracted.tour_type || (hasCruise ? 'nile_cruise' : 'classic_tour')
+    const hasHotelsOrCairo = /\b(CAI|Cairo|hotel|HTL|\d+\s*NTS?\s*CAI|\d+\s*NTS?\s*HRG)\b/i.test(conversation)
+
+    // Determine package_type based on content
+    let detectedPackageType = extracted.package_type
+    if (!detectedPackageType) {
+      if (hasCruise && hasHotelsOrCairo) {
+        detectedPackageType = 'cruise-land'  // Cruise + Hotels
+      } else if (hasCruise) {
+        detectedPackageType = 'cruise-package'  // Cruise only
+      } else {
+        detectedPackageType = 'land-package'  // Default: Hotels + Tours
+      }
+    }
 
     // Build final response with fallbacks
     const data = {
@@ -486,7 +498,7 @@ export async function POST(request: Request) {
       trip_name: extracted.trip_name || extracted.tour_requested || 'Egypt Tour',
       tour_requested: extracted.tour_requested || '',
       tour_name: extracted.tour_name || extracted.trip_name || 'Egypt Tour',
-      tour_type: detectedTourType,
+      package_type: detectedPackageType,
       start_date: isValidDate(extracted.start_date) ? extracted.start_date : '',
       end_date: isValidDate(extracted.end_date) ? extracted.end_date : '',
       duration_days: parseInt(extracted.duration_days) || structureDetection.detectedDays || 1,
@@ -525,7 +537,7 @@ export async function POST(request: Request) {
 
     console.log('✅ Parsed result:', {
       client: data.client_name,
-      tourType: data.tour_type,
+      packageType: data.package_type,
       mealPlan: data.meal_plan,
       isStructured: data.is_structured_input,
       structureConfidence: data.structure_confidence,
@@ -597,7 +609,7 @@ C/IN = Check-in
 C/OUT = Check-out
 
 =================================================================
-NILE CRUISE DETECTION (CRITICAL!)
+NILE CRUISE DETECTION & PACKAGE TYPE (CRITICAL!)
 =================================================================
 When you see ANY of these, it's a NILE CRUISE itinerary (NOT hotels):
 - "CRZ" = Nile Cruise
@@ -608,8 +620,16 @@ When you see ANY of these, it's a NILE CRUISE itinerary (NOT hotels):
 - "3NTS CRZ" / "4N CRZ" = 3 or 4 nights on Nile Cruise
 - Days mentioning Kom Ombo + Edfu + Aswan in sequence = Nile Cruise route
 
+PACKAGE TYPE MAPPING:
+- "cruise-package" = ONLY Nile Cruise (no hotels, no Cairo)
+- "cruise-land" = Cruise + Hotels/Land tours (e.g., Cairo + Cruise)
+- "land-package" = Hotels + Tours (no cruise)
+- "tours-only" = Client has own hotel, we provide tours only
+- "day-trips" = Single day excursions
+
 IMPORTANT: Nile Cruise is a BOAT, not a hotel. When cruise is mentioned:
-- Set tour_type or accommodation_type to "Nile Cruise"
+- If ONLY cruise nights = package_type: "cruise-package"
+- If cruise + Cairo/hotels = package_type: "cruise-land"
 - Do NOT suggest hotels for cruise nights
 - Cruise typically sails between Luxor and Aswan
 
@@ -719,7 +739,7 @@ Return ONLY valid JSON:
   "trip_name": "Descriptive trip name based on itinerary",
   "tour_requested": "original request summary",
   "tour_name": "Descriptive tour name",
-  "tour_type": "classic_tour|nile_cruise|beach_holiday|combined - MUST be 'nile_cruise' if CRZ or cruise mentioned!",
+  "package_type": "day-trips|tours-only|land-package|cruise-package|cruise-land - CRITICAL: Use 'cruise-package' for Nile Cruise only, 'cruise-land' if cruise + hotels!",
   "start_date": "YYYY-MM-DD format if mentioned",
   "end_date": "YYYY-MM-DD format if mentioned",
   "duration_days": number (calculate from NTS if not explicit),
@@ -801,12 +821,18 @@ NTS/N/NT = Nights (e.g., "3NTS CAI" = 3 nights in Cairo)
 CRZ = Nile Cruise (THIS IS A BOAT, NOT A HOTEL!)
 BB = Bed & Breakfast, HB = Half Board, FB = Full Board, AI = All Inclusive
 
-NILE CRUISE DETECTION (CRITICAL!):
-When you see ANY of these, set tour_type to "Nile Cruise":
+NILE CRUISE DETECTION & PACKAGE TYPE (CRITICAL!):
+When you see ANY of these, it's a Nile Cruise:
 - "CRZ" or "cruise" = Nile Cruise
 - "4 night cruise" / "3 night cruise" = Nile Cruise
 - "cruise from Luxor/Aswan" = Nile Cruise
 - Itinerary with Luxor + Kom Ombo + Edfu + Aswan = Classic Nile Cruise route
+
+PACKAGE TYPE:
+- "cruise-package" = ONLY cruise (no hotels)
+- "cruise-land" = Cruise + Hotels (e.g., Cairo + Cruise)
+- "land-package" = Hotels + Tours (no cruise)
+- "tours-only" = Tours only, client has own hotel
 
 AIRLINE CODES:
 MS = EgyptAir, TK = Turkish Airlines, BA = British Airways

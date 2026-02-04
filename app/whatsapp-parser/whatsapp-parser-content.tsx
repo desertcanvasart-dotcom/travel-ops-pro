@@ -1130,6 +1130,25 @@ function WhatsAppParserContent() {
 
       result.data.tier = finalTier
       setSelectedTier(finalTier)
+
+      // Set package type from AI detection
+      if (result.data.package_type) {
+        // Map AI package_type to UI PackageType
+        const packageTypeMap: Record<string, PackageType> = {
+          'day-trips': 'day-trips',
+          'tours-only': 'tours-only',
+          'land-package': 'land-package',
+          'cruise-package': 'full-package',  // AI says cruise-package, UI uses full-package
+          'cruise-land': 'cruise-land',
+          'full-package': 'full-package',
+          'shore-excursions': 'shore-excursions'
+        }
+        const mappedType = packageTypeMap[result.data.package_type]
+        if (mappedType) {
+          setPackageType(mappedType)
+        }
+      }
+
       setExtractedData(result.data)
 
       // NEW: Set input mode based on detection
