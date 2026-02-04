@@ -598,13 +598,14 @@ EMAIL FORMAT DETECTION (CRITICAL)
 =================================================================
 
 If the input contains email headers like "From:", "Subject:", "Date:":
-1. "From: X" = X is the RECIPIENT (travel agent), NOT the client
-2. "Dear Mr. X" = X is the RECIPIENT, NOT the sender
-3. The CLIENT is the person MAKING THE REQUEST:
+1. **[Sender Email: xxx]** at the start = THIS IS THE CLIENT'S EMAIL (from headers). Use directly as client_email.
+2. "From: X" = X is the RECIPIENT (travel agent), NOT the client
+3. "Dear Mr. X" = X is the RECIPIENT, NOT the sender
+4. The CLIENT is the person MAKING THE REQUEST:
    - Look for names with phone numbers at the END of the message
    - Look for signatures like "Name + Company + Phone"
    - Look for company names (B2B partners)
-4. Extract the sender's email from signatures or message body
+5. Extract sender's email from (priority): [Sender Email] tag > signatures > message body
 
 =================================================================
 DAY SEGMENTS DETECTED
@@ -700,14 +701,16 @@ CRITICAL: EMAIL FORMAT DETECTION
 If the input contains email-style headers like "From:", "Subject:", "Date:", treat this as an EMAIL:
 
 EMAIL PARSING RULES (VERY IMPORTANT):
-1. "From: X" or "From Islam Mohamed" in the header = This is who RECEIVED the email (the travel agent), NOT the client
-2. "Dear Mr. X" or "Dear X" = X is the RECIPIENT, NOT the sender
-3. The CLIENT/SENDER is the person MAKING THE REQUEST:
+1. **[Sender Email: xxx]** at the start = THIS IS THE CLIENT'S EMAIL ADDRESS (from email headers). Use this directly as client_email.
+2. "From: X" or "From Islam Mohamed" in the header = This is who RECEIVED the email (the travel agent), NOT the client
+3. "Dear Mr. X" or "Dear X" = X is the RECIPIENT, NOT the sender
+4. The CLIENT/SENDER is the person MAKING THE REQUEST:
    - Look for signatures at the END of the message
    - Look for names followed by phone numbers or company names
    - Look for patterns like "Best regards, [Name]" or "[Name] + phone"
    - Look for company names (e.g., "Green Tours", "Travel Agency", etc.)
-4. The sender's email should be found in:
+5. The sender's email should be found in (priority order):
+   - [Sender Email: xxx] tag at the top (HIGHEST PRIORITY)
    - Email signatures at the bottom
    - Reply-to addresses
    - Embedded in the message body

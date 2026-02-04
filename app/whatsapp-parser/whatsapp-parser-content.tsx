@@ -849,6 +849,7 @@ function WhatsAppParserContent() {
   const preSelectedClientId = searchParams?.get('clientId')
   const conversationParam = searchParams?.get('conversation')
   const phoneParam = searchParams?.get('phone')
+  const emailParam = searchParams?.get('email')
 
   // ============================================
   // STATE
@@ -885,6 +886,7 @@ function WhatsAppParserContent() {
 
   const [fromInbox, setFromInbox] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
+  const [senderEmail, setSenderEmail] = useState<string | null>(null)
 
   // B2B Partner state
   const [b2bPartners, setB2bPartners] = useState<B2BPartner[]>([])
@@ -956,8 +958,9 @@ function WhatsAppParserContent() {
     if (conversationParam) {
       try {
         const isBase64 = new URLSearchParams(window.location.search).get("encoded") === "base64"
+        const currentEmailParam = new URLSearchParams(window.location.search).get("email")
         let decoded: string
-        
+
         if (isBase64) {
           // Convert URL-safe base64 back to standard base64
           let base64 = conversationParam.replace(/-/g, '+').replace(/_/g, '/')
@@ -975,7 +978,13 @@ function WhatsAppParserContent() {
         } else {
           decoded = decodeURIComponent(conversationParam)
         }
-        
+
+        // If we have sender email from headers, prepend it to the conversation
+        // so the AI can see it explicitly
+        if (currentEmailParam) {
+          decoded = `[Sender Email: ${currentEmailParam}]\n\n${decoded}`
+        }
+
         setConversation(decoded)
         setParsedMessages(parseConversation(decoded))
         setFromInbox(true)
@@ -987,7 +996,8 @@ function WhatsAppParserContent() {
       }
     }
     if (phoneParam) setPhoneNumber(phoneParam)
-  }, [conversationParam, phoneParam])
+    if (emailParam) setSenderEmail(emailParam)
+  }, [conversationParam, phoneParam, emailParam])
 
   useEffect(() => {
     if (preSelectedClientId && !selectedClientId) {
@@ -1105,6 +1115,12 @@ function WhatsAppParserContent() {
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Failed to analyze conversation')
 
+      // Use email from headers if AI didn't extract one
+      if (senderEmail && !result.data.client_email) {
+        result.data.client_email = senderEmail
+      }
+
+      // Use phone from params if AI didn't extract one
       if (phoneNumber && !result.data.client_phone) {
         result.data.client_phone = phoneNumber
       }
