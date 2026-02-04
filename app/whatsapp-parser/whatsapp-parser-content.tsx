@@ -13,7 +13,7 @@ import {
   Crown, Star, Settings, Check, X, Hotel, Plane, Car, Ship,
   Sun, Map, Building2, Package, Anchor, Clock, BadgeCheck,
   Percent, Languages, ChevronDown, ChevronUp, Info, Edit3, Save,
-  Zap, Pencil, FileText, Wand2, ListChecks, AlertTriangle
+  Zap, Pencil, FileText, Wand2, ListChecks, AlertTriangle, Plus
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -891,6 +891,13 @@ function WhatsAppParserContent() {
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null)
   const [isB2BMode, setIsB2BMode] = useState(false)
 
+  // Add New Partner state
+  const [showAddPartner, setShowAddPartner] = useState(false)
+  const [newPartnerName, setNewPartnerName] = useState('')
+  const [newPartnerCode, setNewPartnerCode] = useState('')
+  const [newPartnerCommission, setNewPartnerCommission] = useState('10')
+  const [isCreatingPartner, setIsCreatingPartner] = useState(false)
+
   const itinerarySuccessRef = useRef<HTMLDivElement>(null)
 
   // ============================================
@@ -1021,6 +1028,45 @@ function WhatsAppParserContent() {
   // ============================================
   // HANDLERS
   // ============================================
+
+  // Create new B2B partner
+  const handleCreatePartner = async () => {
+    if (!newPartnerName.trim()) return
+
+    setIsCreatingPartner(true)
+    try {
+      const response = await fetch('/api/b2b/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_name: newPartnerName.trim(),
+          partner_code: newPartnerCode.trim() || newPartnerName.trim().substring(0, 3).toUpperCase(),
+          default_margin_percent: parseFloat(newPartnerCommission) || 10,
+          is_active: true
+        })
+      })
+
+      const data = await response.json()
+      if (data.success && data.data) {
+        const newPartner: B2BPartner = {
+          id: data.data.id,
+          company_name: data.data.company_name,
+          partner_code: data.data.partner_code,
+          commission_percent: data.data.default_margin_percent || 10
+        }
+        setB2bPartners(prev => [...prev, newPartner])
+        setSelectedPartnerId(newPartner.id)
+        setShowAddPartner(false)
+        setNewPartnerName('')
+        setNewPartnerCode('')
+        setNewPartnerCommission('10')
+      }
+    } catch (err) {
+      console.error('Error creating partner:', err)
+    } finally {
+      setIsCreatingPartner(false)
+    }
+  }
 
   const loadSample = () => {
     setConversation(SAMPLE_CONVERSATION)
@@ -1677,28 +1723,90 @@ function WhatsAppParserContent() {
                         {t('b2bPartnerDesc') || 'Select a B2B partner (travel agency) to link this itinerary for commission tracking.'}
                       </p>
 
-                      {b2bPartners.length > 0 ? (
-                        <select
-                          value={selectedPartnerId || ''}
-                          onChange={(e) => setSelectedPartnerId(e.target.value || null)}
-                          aria-label="Select B2B Partner"
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        >
-                          <option value="">{t('selectPartner') || '-- Select Partner --'}</option>
-                          {b2bPartners.map((partner) => (
-                            <option key={partner.id} value={partner.id}>
-                              {partner.company_name} ({partner.partner_code}) - {partner.commission_percent}%
-                            </option>
-                          ))}
-                        </select>
+                      {!showAddPartner ? (
+                        <>
+                          <select
+                            value={selectedPartnerId || ''}
+                            onChange={(e) => setSelectedPartnerId(e.target.value || null)}
+                            aria-label="Select B2B Partner"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          >
+                            <option value="">{t('selectPartner') || '-- Select Partner --'}</option>
+                            {b2bPartners.map((partner) => (
+                              <option key={partner.id} value={partner.id}>
+                                {partner.company_name} ({partner.partner_code}) - {partner.commission_percent}%
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => setShowAddPartner(true)}
+                            className="w-full px-3 py-2 text-sm text-indigo-600 border border-dashed border-indigo-300 rounded-lg hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            {t('addNewPartner') || '+ Add New Partner'}
+                          </button>
+                        </>
                       ) : (
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          {t('loadingPartners') || 'Loading partners...'}
+                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                          <input
+                            type="text"
+                            value={newPartnerName}
+                            onChange={(e) => setNewPartnerName(e.target.value)}
+                            placeholder={t('newPartnerName') || 'Company Name'}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={newPartnerCode}
+                              onChange={(e) => setNewPartnerCode(e.target.value.toUpperCase())}
+                              placeholder={t('newPartnerCode') || 'Code (e.g., ABC)'}
+                              maxLength={10}
+                              className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent uppercase"
+                            />
+                            <input
+                              type="number"
+                              value={newPartnerCommission}
+                              onChange={(e) => setNewPartnerCommission(e.target.value)}
+                              placeholder={t('newPartnerCommission') || 'Commission %'}
+                              min="0"
+                              max="100"
+                              className="w-24 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAddPartner(false)
+                                setNewPartnerName('')
+                                setNewPartnerCode('')
+                                setNewPartnerCommission('10')
+                              }}
+                              className="flex-1 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                            >
+                              {t('cancelAddPartner') || 'Cancel'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCreatePartner}
+                              disabled={!newPartnerName.trim() || isCreatingPartner}
+                              className="flex-1 px-3 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                              {isCreatingPartner ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
+                              {t('createPartner') || 'Create Partner'}
+                            </button>
+                          </div>
                         </div>
                       )}
 
-                      {selectedPartnerId && (
+                      {selectedPartnerId && !showAddPartner && (
                         <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
                           <div className="flex items-center gap-2 text-sm text-indigo-700">
                             <Building2 className="w-4 h-4" />

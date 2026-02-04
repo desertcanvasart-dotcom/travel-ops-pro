@@ -1425,7 +1425,17 @@
     "linkToPartner": "Link to partner",
     "directClientMode": "Direct client mode - no B2B partner linked",
     "b2bPartnerDesc": "Select a B2B partner (travel agency) to link this itinerary for commission tracking.",
-    "commissionRate": "Commission"
+    "commissionRate": "Commission",
+    "selectPartner": "-- Select Partner --",
+    "loadingPartners": "Loading partners...",
+    "addNewPartner": "+ Add New Partner",
+    "newPartnerName": "Company Name",
+    "newPartnerCode": "Partner Code",
+    "newPartnerCommission": "Commission %",
+    "createPartner": "Create Partner",
+    "cancelAddPartner": "Cancel",
+    "partnerCreated": "Partner created successfully",
+    "noPartnersYet": "No partners yet"
   },
   "suppliers": {
     "title": "Suppliers",
