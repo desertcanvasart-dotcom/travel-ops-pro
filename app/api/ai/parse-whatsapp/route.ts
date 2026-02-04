@@ -594,6 +594,19 @@ CRITICAL RULES
 8. Count total days from NTS pattern: 2+3+3 = 8 nights = 9 days
 
 =================================================================
+EMAIL FORMAT DETECTION (CRITICAL)
+=================================================================
+
+If the input contains email headers like "From:", "Subject:", "Date:":
+1. "From: X" = X is the RECIPIENT (travel agent), NOT the client
+2. "Dear Mr. X" = X is the RECIPIENT, NOT the sender
+3. The CLIENT is the person MAKING THE REQUEST:
+   - Look for names with phone numbers at the END of the message
+   - Look for signatures like "Name + Company + Phone"
+   - Look for company names (B2B partners)
+4. Extract the sender's email from signatures or message body
+
+=================================================================
 DAY SEGMENTS DETECTED
 =================================================================
 ${rawDaySegments.length > 0 ? rawDaySegments.map((seg, i) => `Segment ${i + 1}: ${seg}`).join('\n') : 'Parse from raw input'}
@@ -605,11 +618,11 @@ OUTPUT FORMAT
 Return ONLY valid JSON:
 
 {
-  "client_name": "extracted name or empty string",
-  "client_email": "extracted email or empty string",
-  "client_phone": "extracted phone or empty string",
-  "company_name": "company if B2B or empty string",
-  "nationality": "nationality if mentioned or empty string",
+  "client_name": "name of SENDER/REQUESTER (NOT the 'Dear X' recipient) or empty string",
+  "client_email": "sender's email from signature or body, or empty string",
+  "client_phone": "sender's phone from signature or body, or empty string",
+  "company_name": "sender's company (B2B partner) or empty string",
+  "nationality": "nationality of TRAVELERS (not sender) if mentioned or empty string",
   
   "trip_name": "Descriptive trip name based on itinerary",
   "tour_requested": "original request summary",
@@ -680,17 +693,59 @@ function buildGeneralExtractionPrompt(): string {
 
 This appears to be a GENERAL REQUEST (not a structured day-by-day itinerary). Extract the key information to help create a custom itinerary.
 
-IMPORTANT: Carefully scan the ENTIRE message including email signatures at the bottom.
+=================================================================
+CRITICAL: EMAIL FORMAT DETECTION
+=================================================================
+
+If the input contains email-style headers like "From:", "Subject:", "Date:", treat this as an EMAIL:
+
+EMAIL PARSING RULES (VERY IMPORTANT):
+1. "From: X" or "From Islam Mohamed" in the header = This is who RECEIVED the email (the travel agent), NOT the client
+2. "Dear Mr. X" or "Dear X" = X is the RECIPIENT, NOT the sender
+3. The CLIENT/SENDER is the person MAKING THE REQUEST:
+   - Look for signatures at the END of the message
+   - Look for names followed by phone numbers or company names
+   - Look for patterns like "Best regards, [Name]" or "[Name] + phone"
+   - Look for company names (e.g., "Green Tours", "Travel Agency", etc.)
+4. The sender's email should be found in:
+   - Email signatures at the bottom
+   - Reply-to addresses
+   - Embedded in the message body
+
+EXAMPLE EMAIL:
+"From: Islam Mohamed
+Subject: Tour request
+Dear Mr. Islam, Please advise... Best regards, John Smith, ABC Tours, john@abctours.com, +1234567890"
+
+In this example:
+- client_name = "John Smith" (the person making the request at the end)
+- company_name = "ABC Tours" (B2B partner)
+- client_email = "john@abctours.com"
+- client_phone = "+1234567890"
+- "Islam Mohamed" is the RECIPIENT, not the client!
+
+=================================================================
+WHATSAPP PARSING RULES
+=================================================================
+
+For WhatsApp messages:
+1. Messages labeled "Agent" = messages from OUR travel agent
+2. Messages labeled "Client" = messages from the customer
+3. The CLIENT is the person asking for travel services
+
+=================================================================
+OUTPUT FORMAT
+=================================================================
 
 Extract the following and return as JSON:
 
 {
-  "client_name": "Full name of the client/sender",
-  "client_email": "Email address",
-  "client_phone": "Phone number",
-  "company_name": "Company name if B2B",
-  "nationality": "Client nationality if mentioned",
-  
+  "client_name": "Full name of the SENDER/REQUESTER (NOT the recipient)",
+  "client_email": "Email address of the sender",
+  "client_phone": "Phone number of the sender",
+  "company_name": "Company/agency name if B2B request",
+  "nationality": "Nationality of travelers if mentioned",
+
   "trip_name": "Descriptive trip name",
   "tour_requested": "What they're asking for",
   "tour_name": "Tour name",
@@ -699,27 +754,29 @@ Extract the following and return as JSON:
   "duration_days": number,
   "num_adults": number,
   "num_children": number,
-  
+
   "language": "Preferred guide language",
   "interests": ["places they want to visit", "activities"],
   "cities": ["cities mentioned"],
   "special_requests": ["any special requests"],
   "budget_level": "budget|standard|deluxe|luxury",
-  
+
   "hotel_name": "Hotel if mentioned",
   "hotel_location": "Location if mentioned",
-  
+
   "conversation_language": "Language of the conversation",
   "confidence_score": 0.0 to 1.0
 }
 
 EXTRACTION RULES:
-1. EMAIL: Search for pattern xxx@xxx.xxx anywhere
-2. PHONE: Look for "TEL:", "Tel:", "Phone:", followed by numbers
-3. For signatures, look for company info, address, contact person
-4. Use empty string "" for missing text
-5. Use 0 for missing numbers
-6. Use [] for missing arrays
-7. Default num_adults to 2 if not specified
-8. Default duration_days to 1 if not clear`
+1. EMAIL: Search for pattern xxx@xxx.xxx in signatures and body
+2. PHONE: Look for phone numbers at end of messages, signatures, or after names
+3. For signatures, look for: name, company, email, phone (in that order)
+4. If "Dear Mr/Mrs X" appears, X is NOT the client - look elsewhere for client name
+5. Use empty string "" for missing text
+6. Use 0 for missing numbers
+7. Use [] for missing arrays
+8. Default num_adults to 2 if not specified
+9. Default duration_days to 1 if not clear
+10. ALWAYS prioritize sender info from message body/signature over email headers`
 }
