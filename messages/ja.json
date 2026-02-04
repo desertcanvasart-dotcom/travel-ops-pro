@@ -2368,7 +2368,12 @@
     "loadingParser": "WhatsAppパーサーを読み込み中...",
     "error": "エラー",
     "chatClient": "顧客",
-    "chatAgent": "担当者"
+    "chatAgent": "担当者",
+    "b2bPartner": "B2Bパートナー",
+    "linkToPartner": "パートナーにリンク",
+    "directClientMode": "直接顧客モード - B2Bパートナーなし",
+    "b2bPartnerDesc": "コミッション追跡のため、この旅程をリンクするB2Bパートナー（旅行代理店）を選択してください。",
+    "commissionRate": "コミッション"
   },
   "suppliers": {
     "title": "サプライヤー",

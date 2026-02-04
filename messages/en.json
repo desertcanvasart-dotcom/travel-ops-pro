@@ -1420,7 +1420,12 @@
     "loadingParser": "Loading WhatsApp Parser...",
     "error": "Error",
     "chatClient": "Client",
-    "chatAgent": "Agent"
+    "chatAgent": "Agent",
+    "b2bPartner": "B2B Partner",
+    "linkToPartner": "Link to partner",
+    "directClientMode": "Direct client mode - no B2B partner linked",
+    "b2bPartnerDesc": "Select a B2B partner (travel agency) to link this itinerary for commission tracking.",
+    "commissionRate": "Commission"
   },
   "suppliers": {
     "title": "Suppliers",
