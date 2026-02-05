@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --no-turbopack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -41,6 +41,9 @@
     "recharts": "^3.4.1",
     "twilio": "^5.10.5",
     "zod": "^4.1.13"
+  },
+  "optionalDependencies": {
+    "@next/swc-linux-x64-gnu": "16.0.10"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
