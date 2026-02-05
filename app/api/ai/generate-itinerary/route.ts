@@ -48,6 +48,80 @@ const TIER_DESCRIPTIONS: Record<ServiceTier, string> = {
 }
 
 // ============================================
+// LANGUAGE CODE MAPPING
+// ============================================
+
+type VersionLanguage = 'en' | 'ja'
+
+function getVersionLanguageCode(language: string): VersionLanguage {
+  const lower = (language || '').toLowerCase()
+  if (lower.includes('japanese') || lower === 'ja' || lower === '日本語') return 'ja'
+  // Default to English for all other languages
+  return 'en'
+}
+
+/**
+ * Auto-create itinerary_version and itinerary_day_versions after generation.
+ * This ensures the language tab is populated immediately.
+ */
+async function createLanguageVersions(
+  supabase: any,
+  itineraryId: string,
+  tripName: string,
+  language: string,
+  dayIds: { id: string; title: string; description: string; city: string; overnight_city: string }[]
+) {
+  const langCode = getVersionLanguageCode(language)
+
+  try {
+    // Create itinerary_version
+    const { error: versionError } = await supabase
+      .from('itinerary_versions')
+      .insert({
+        itinerary_id: itineraryId,
+        language: langCode,
+        trip_name: tripName
+      })
+
+    if (versionError) {
+      // Unique constraint violation = version already exists, skip
+      if (!versionError.message?.includes('duplicate') && !versionError.message?.includes('unique')) {
+        console.error('Error creating itinerary version:', versionError)
+      }
+    } else {
+      console.log(`✅ Auto-created ${langCode} itinerary version`)
+    }
+
+    // Create itinerary_day_versions for each day
+    if (dayIds.length > 0) {
+      const dayVersions = dayIds.map(day => ({
+        itinerary_day_id: day.id,
+        language: langCode,
+        title: day.title,
+        description: day.description,
+        city: day.city,
+        overnight_city: day.overnight_city
+      }))
+
+      const { error: dayVersionError } = await supabase
+        .from('itinerary_day_versions')
+        .insert(dayVersions)
+
+      if (dayVersionError) {
+        if (!dayVersionError.message?.includes('duplicate') && !dayVersionError.message?.includes('unique')) {
+          console.error('Error creating day versions:', dayVersionError)
+        }
+      } else {
+        console.log(`✅ Auto-created ${langCode} day versions for ${dayIds.length} days`)
+      }
+    }
+  } catch (err) {
+    // Non-critical - don't fail the whole generation
+    console.error('Error in createLanguageVersions:', err)
+  }
+}
+
+// ============================================
 // COMPREHENSIVE EGYPT TRAVEL ABBREVIATIONS
 // ============================================
 
@@ -494,7 +568,8 @@ function detectCruiseRequest(
     landCities.some(lc => city.includes(lc))
   ) || landCities.some(lc => allText.includes(lc + ' hotel') || allText.includes('nts ' + lc))
   
-  const includesLand = hasLandCities || landNights > 0 || (durationDays > (cruiseNights + 1))
+  // Only use cruiseNights comparison when we actually detected cruise nights from NTS pattern
+  const includesLand = hasLandCities || landNights > 0 || (cruiseNights > 0 && durationDays > (cruiseNights + 1))
 
   console.log(`🚢 CRUISE DETECTION:`, {
     isCruise: true,
@@ -1133,7 +1208,15 @@ TIER: ${tier.toUpperCase()}
 TRAVELERS: ${totalPax}
 LANGUAGE: ${language}
 PACKAGE: ${packageType || 'cruise-land'}
-
+${language !== 'English' ? `
+⚠️ LANGUAGE REQUIREMENT (CRITICAL):
+Write ALL content (trip_name, title, description) in ${language}.
+- trip_name must be in ${language}
+- Each day's title must be in ${language}
+- Each day's description must be in ${language}
+- City names should remain in English for internal use
+- Attraction names must remain EXACT as provided (in English) for database matching
+` : ''}
 ═══════════════════════════════════════════════════════════════
 📤 OUTPUT FORMAT (Return ONLY valid JSON)
 ═══════════════════════════════════════════════════════════════
@@ -1308,7 +1391,15 @@ PLANNING GUIDELINES:
 4. Group nearby attractions on the same day
 5. Include realistic driving times
 6. For ${tier} tier: ${TIER_DESCRIPTIONS[tier]}
-
+${language !== 'English' ? `
+LANGUAGE REQUIREMENT (CRITICAL):
+Write ALL content (trip_name, title, description) in ${language}.
+- trip_name must be in ${language}
+- Each day's title must be in ${language} (e.g., "1日目: カイロ到着とギザのピラミッド" for Japanese)
+- Each day's description must be in ${language}
+- City names should remain in their original English form for internal use
+- Attraction names must remain EXACT as provided (in English) for database matching
+` : ''}
 Return ONLY valid JSON:
 {
   "trip_name": "Descriptive Trip Name",
@@ -1506,10 +1597,15 @@ export async function POST(request: NextRequest) {
       raw_itinerary || '' // Pass raw itinerary for better detection
     )
 
-    // Adjust duration for cruise if needed
-    if (cruiseDetection.isCruise && duration_days === 1) {
-      duration_days = cruiseDetection.detectedDuration || (cruiseDetection.cruiseType === 'lake-nasser' ? 4 : 5)
-      console.log(`🚢 Adjusted cruise duration to ${duration_days} days`)
+    // Adjust duration for cruise if needed:
+    // - Apply when duration is 1 (undetected) OR when cruise detection found a more accurate duration
+    if (cruiseDetection.isCruise) {
+      const defaultCruiseDuration = cruiseDetection.cruiseType === 'lake-nasser' ? 4 : 5
+      const bestDuration = cruiseDetection.detectedDuration || defaultCruiseDuration
+      if (duration_days === 1 || (cruiseDetection.detectedDuration && cruiseDetection.detectedDuration > duration_days)) {
+        duration_days = bestDuration
+        console.log(`🚢 Adjusted cruise duration to ${duration_days} days`)
+      }
     }
 
     // UPDATED: Determine effective package type
@@ -1557,10 +1653,10 @@ export async function POST(request: NextRequest) {
     const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
 
     // ============================================
-    // CRUISE-ONLY PATH (creative mode, pure cruise)
+    // CRUISE PATH (creative mode, cruise-package or cruise-land)
     // ============================================
-    if (cruiseDetection.isCruise && inputMode === 'creative' && effectivePackageType === 'cruise-package') {
-      console.log('🚢 Processing as PURE CRUISE itinerary (creative mode)...')
+    if (cruiseDetection.isCruise && inputMode === 'creative' && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
+      console.log(`🚢 Processing as ${effectivePackageType} itinerary (creative mode)...`)
       
       const cruiseContent = await findCruiseContent(cruiseDetection, tier, duration_days)
       
@@ -1615,11 +1711,17 @@ export async function POST(request: NextRequest) {
 
         let totalSupplierCost = 0
         let totalClientPrice = 0
+        const createdCruiseDays: { id: string; title: string; description: string; city: string; overnight_city: string }[] = []
 
         // Create days from Content Library
         for (const dayData of cruiseContent.dayByDay) {
           const dayDate = new Date(startDateObj)
           dayDate.setDate(startDateObj.getDate() + dayData.day_number - 1)
+
+          const dayTitle = dayData.title
+          const dayDescription = dayData.description
+          const dayCity = dayData.city || effectiveCity
+          const dayOvernight = dayData.overnight || `On board - ${dayData.city}`
 
           const { data: day, error: dayError } = await supabase
             .from('itinerary_days')
@@ -1627,10 +1729,10 @@ export async function POST(request: NextRequest) {
               itinerary_id: itinerary.id,
               day_number: dayData.day_number,
               date: dayDate.toISOString().split('T')[0],
-              title: dayData.title,
-              description: dayData.description,
-              city: dayData.city || effectiveCity,
-              overnight_city: dayData.overnight || `On board - ${dayData.city}`,
+              title: dayTitle,
+              description: dayDescription,
+              city: dayCity,
+              overnight_city: dayOvernight,
               attractions: dayData.attractions || [],
               guide_required: true,
               lunch_included: dayData.meals?.includes('lunch') ?? true,
@@ -1644,6 +1746,8 @@ export async function POST(request: NextRequest) {
             console.error(`❌ Error creating day ${dayData.day_number}:`, dayError)
             continue
           }
+
+          createdCruiseDays.push({ id: day.id, title: dayTitle, description: dayDescription, city: dayCity, overnight_city: dayOvernight })
 
           if (skip_pricing) continue
 
@@ -1723,13 +1827,17 @@ export async function POST(request: NextRequest) {
 
         console.log('🎉 Cruise itinerary complete!')
 
+        // Auto-create language version
+        const cruiseTripName = cruiseContent.variation.title || cruiseContent.content.name
+        await createLanguageVersions(supabase, itinerary.id, cruiseTripName, finalLanguage, createdCruiseDays)
+
         return NextResponse.json({
           success: true,
           data: {
             id: itinerary.id,
             itinerary_id: itinerary.id,
             itinerary_code: itinerary.itinerary_code,
-            trip_name: cruiseContent.variation.title || cruiseContent.content.name,
+            trip_name: cruiseTripName,
             tier,
             package_type: effectivePackageType,
             is_cruise: true,
@@ -1919,6 +2027,7 @@ export async function POST(request: NextRequest) {
     // Create days and services
     let totalSupplierCost = 0
     let totalClientPrice = 0
+    const createdLandDays: { id: string; title: string; description: string; city: string; overnight_city: string }[] = []
 
     for (const dayData of itineraryData.days || []) {
       const dayNumber = dayData.day_number || 1
@@ -1967,6 +2076,14 @@ export async function POST(request: NextRequest) {
         console.error(`❌ Error creating day ${dayNumber}:`, dayError)
         continue
       }
+
+      createdLandDays.push({
+        id: day.id,
+        title: dayTitle,
+        description: dayData.description || '',
+        city: dayData.city || effectiveCity,
+        overnight_city: dayData.overnight_city || dayData.city || effectiveCity
+      })
 
       if (skip_pricing) continue
 
@@ -2256,6 +2373,9 @@ export async function POST(request: NextRequest) {
       supplierCost: totalSupplierCost,
       clientPrice: totalClientPrice
     })
+
+    // Auto-create language version
+    await createLanguageVersions(supabase, itinerary.id, itineraryData.trip_name, finalLanguage, createdLandDays)
 
     return NextResponse.json({
       success: true,

@@ -887,6 +887,7 @@ function WhatsAppParserContent() {
   const [fromInbox, setFromInbox] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
   const [senderEmail, setSenderEmail] = useState<string | null>(null)
+  const [isEditingConversation, setIsEditingConversation] = useState(false)
 
   // B2B Partner state
   const [b2bPartners, setB2bPartners] = useState<B2BPartner[]>([])
@@ -1475,14 +1476,28 @@ function WhatsAppParserContent() {
                   <MessageSquare className="w-4 h-4 text-[#25D366]" />
                   <h2 className="text-sm font-semibold text-gray-900">{t('conversation')}</h2>
                 </div>
-                {!fromInbox && (
-                  <button onClick={loadSample} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                    {t('loadSample')}
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {parsedMessages.length > 0 && !isAnalyzing && (
+                    <button
+                      onClick={() => setIsEditingConversation(!isEditingConversation)}
+                      className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                    >
+                      {isEditingConversation ? (
+                        <><MessageSquare className="w-3 h-3" /> {t('preview') || 'Preview'}</>
+                      ) : (
+                        <><Pencil className="w-3 h-3" /> {t('editText') || 'Edit'}</>
+                      )}
+                    </button>
+                  )}
+                  {!fromInbox && (
+                    <button onClick={loadSample} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
+                      {t('loadSample')}
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {parsedMessages.length > 0 && !isAnalyzing ? (
+              {parsedMessages.length > 0 && !isAnalyzing && !isEditingConversation ? (
                 <div className="p-4 bg-[#E5DDD5] max-h-[400px] overflow-y-auto">
                   {parsedMessages.map((msg, idx) => (
                     <ChatBubble key={idx} sender={msg.sender} message={msg.message} highlight={msg.highlight} />
