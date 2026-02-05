@@ -19,32 +19,61 @@ import {
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
+// ============================================
+// TYPES
+// ============================================
+
 interface TransportationRate {
   id: string
   service_code: string
   service_type: string
-  vehicle_type: string
-  capacity_min: number
-  capacity_max: number
   city: string
+  origin_city?: string | null
   destination_city?: string | null
-  base_rate_eur: number
-  base_rate_non: number
-  base_rate_non_eur?: number
+  duration?: string | null
+  area?: string | null
+  route_name?: string | null
+  includes?: string | null
+  // Tiered vehicle rates
+  sedan_rate_eur: number | null
+  sedan_rate_non_eur: number | null
+  sedan_capacity_min: number
+  sedan_capacity_max: number
+  minivan_rate_eur: number | null
+  minivan_rate_non_eur: number | null
+  minivan_capacity_min: number
+  minivan_capacity_max: number
+  van_rate_eur: number | null
+  van_rate_non_eur: number | null
+  van_capacity_min: number
+  van_capacity_max: number
+  minibus_rate_eur: number | null
+  minibus_rate_non_eur: number | null
+  minibus_capacity_min: number
+  minibus_capacity_max: number
+  bus_rate_eur: number | null
+  bus_rate_non_eur: number | null
+  bus_capacity_min: number
+  bus_capacity_max: number
+  // Legacy fields (kept for backward compat)
+  vehicle_type?: string | null
+  base_rate_eur?: number | null
+  base_rate_non_eur?: number | null
+  capacity_min?: number | null
+  capacity_max?: number | null
+  // Metadata
   season: string | null
   rate_valid_from: string
   rate_valid_to: string
-  supplier_id: string | null  // NEW: linked to suppliers table
+  supplier_id: string | null
   supplier_name: string | null
   notes: string | null
   is_active: boolean
   created_at: string
   updated_at: string
-  // Joined supplier data
-  suppliers?: { id: string; name: string; city?: string } | null
+  supplier?: { id: string; name: string; city?: string } | null
 }
 
-// NEW: Supplier interface for dropdown
 interface Supplier {
   id: string
   name: string
@@ -53,42 +82,63 @@ interface Supplier {
   status?: string
 }
 
+const VEHICLE_TIERS = [
+  { key: 'sedan', label: 'Sedan', defaultMin: 1, defaultMax: 3 },
+  { key: 'minivan', label: 'Minivan', defaultMin: 4, defaultMax: 7 },
+  { key: 'van', label: 'Van', defaultMin: 8, defaultMax: 12 },
+  { key: 'minibus', label: 'Minibus', defaultMin: 13, defaultMax: 20 },
+  { key: 'bus', label: 'Bus', defaultMin: 21, defaultMax: 45 },
+] as const
+
 interface FormData {
   service_code: string
   service_type: string
-  vehicle_type: string
-  capacity_min: number
-  capacity_max: number
   city: string
   destination_city: string
-  base_rate_eur: number
-  base_rate_non: number
+  includes: string
   season: string
   rate_valid_from: string
   rate_valid_to: string
-  supplier_id: string  // NEW: linked supplier
+  supplier_id: string
   supplier_name: string
   notes: string
   is_active: boolean
+  // Tiered rates
+  sedan_rate_eur: string
+  sedan_rate_non_eur: string
+  minivan_rate_eur: string
+  minivan_rate_non_eur: string
+  van_rate_eur: string
+  van_rate_non_eur: string
+  minibus_rate_eur: string
+  minibus_rate_non_eur: string
+  bus_rate_eur: string
+  bus_rate_non_eur: string
 }
 
 const initialFormData: FormData = {
   service_code: '',
   service_type: 'airport_transfer',
-  vehicle_type: 'Sedan',
-  capacity_min: 1,
-  capacity_max: 2,
   city: '',
   destination_city: '',
-  base_rate_eur: 0,
-  base_rate_non: 0,
+  includes: '',
   season: '',
   rate_valid_from: new Date().toISOString().split('T')[0],
   rate_valid_to: '2099-12-31',
-  supplier_id: '',  // NEW
+  supplier_id: '',
   supplier_name: '',
   notes: '',
-  is_active: true
+  is_active: true,
+  sedan_rate_eur: '',
+  sedan_rate_non_eur: '',
+  minivan_rate_eur: '',
+  minivan_rate_non_eur: '',
+  van_rate_eur: '',
+  van_rate_non_eur: '',
+  minibus_rate_eur: '',
+  minibus_rate_non_eur: '',
+  bus_rate_eur: '',
+  bus_rate_non_eur: '',
 }
 
 const SERVICE_TYPES = [
@@ -97,41 +147,54 @@ const SERVICE_TYPES = [
   { value: 'multi_day', label: 'Multi-Day', needsDestination: false },
   { value: 'city_transfer', label: 'City Transfer', needsDestination: true },
   { value: 'intercity', label: 'Intercity', needsDestination: true },
+  { value: 'intercity_transfer', label: 'Intercity Transfer', needsDestination: true },
   { value: 'half_day', label: 'Half Day', needsDestination: false },
   { value: 'sound_light', label: 'Sound & Light Transfer', needsDestination: false },
-]
-
-const VEHICLE_TYPES = [
-  { value: 'Sedan', label: 'Sedan', minPax: 1, maxPax: 2 },
-  { value: 'Minivan', label: 'Minivan', minPax: 3, maxPax: 8 },
-  { value: 'Van', label: 'Van', minPax: 9, maxPax: 14 },
-  { value: 'Minibus', label: 'Minibus', minPax: 15, maxPax: 24 },
-  { value: 'Bus', label: 'Bus', minPax: 15, maxPax: 45 },
-  { value: 'SUV', label: 'SUV', minPax: 1, maxPax: 4 },
-  { value: '4x4', label: '4x4', minPax: 1, maxPax: 6 },
+  { value: 'dinner_transfer', label: 'Dinner Transfer', needsDestination: false },
+  { value: 'sound_light_transfer', label: 'Sound & Light Transfer', needsDestination: false },
 ]
 
 const CITIES = ['Cairo', 'Giza', 'Luxor', 'Aswan', 'Alexandria', 'Hurghada', 'Sharm El Sheikh', 'Dahab', 'Siwa', 'Marsa Alam']
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
+// ============================================
+// HELPERS
+// ============================================
+
+function getActiveTiers(rate: TransportationRate) {
+  return VEHICLE_TIERS.filter(t => {
+    const eurRate = rate[`${t.key}_rate_eur` as keyof TransportationRate] as number | null
+    return eurRate != null && eurRate > 0
+  })
+}
+
+function getMinRate(rate: TransportationRate): number {
+  const rates = VEHICLE_TIERS
+    .map(t => rate[`${t.key}_rate_eur` as keyof TransportationRate] as number | null)
+    .filter((r): r is number => r != null && r > 0)
+  return rates.length > 0 ? Math.min(...rates) : 0
+}
+
+// ============================================
+// COMPONENT
+// ============================================
+
 export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
 
-  // Currency conversion
   const { formatWithConversion } = useCurrency()
   const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
 
   const [rates, setRates] = useState<TransportationRate[]>([])
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])  // NEW: suppliers list
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [cityFilter, setCityFilter] = useState('')
   const [serviceTypeFilter, setServiceTypeFilter] = useState('')
-  const [vehicleTypeFilter, setVehicleTypeFilter] = useState('')
-  const [supplierFilter, setSupplierFilter] = useState('')  // NEW: filter by supplier
+  const [supplierFilter, setSupplierFilter] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingRate, setEditingRate] = useState<TransportationRate | null>(null)
@@ -143,14 +206,16 @@ export default function TransportationContent() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
 
-  // NEW: Fetch suppliers for dropdown
+  // ============================================
+  // DATA FETCHING
+  // ============================================
+
   const fetchSuppliers = useCallback(async () => {
     try {
       const response = await fetch('/api/suppliers?status=active')
       if (response.ok) {
         const result = await response.json()
-        // Filter to only transport-related suppliers
-        const transportSuppliers = (result.data || []).filter((s: Supplier) => 
+        const transportSuppliers = (result.data || []).filter((s: Supplier) =>
           ['transport_company', 'transport', 'driver'].includes(s.type)
         )
         setSuppliers(transportSuppliers)
@@ -165,10 +230,9 @@ export default function TransportationContent() {
       const params = new URLSearchParams()
       if (cityFilter) params.append('city', cityFilter)
       if (serviceTypeFilter) params.append('serviceType', serviceTypeFilter)
-      if (vehicleTypeFilter) params.append('vehicleType', vehicleTypeFilter)
-      if (supplierFilter) params.append('supplier_id', supplierFilter)  // NEW
+      if (supplierFilter) params.append('supplier_id', supplierFilter)
       if (!showInactive) params.append('activeOnly', 'true')
-      
+
       const response = await fetch(`/api/resources/transportation?${params}`)
       if (response.ok) {
         const data = await response.json()
@@ -179,55 +243,44 @@ export default function TransportationContent() {
     } finally {
       setLoading(false)
     }
-  }, [cityFilter, serviceTypeFilter, vehicleTypeFilter, supplierFilter, showInactive])
+  }, [cityFilter, serviceTypeFilter, supplierFilter, showInactive])
 
   useEffect(() => {
     fetchRates()
-    fetchSuppliers()  // NEW: fetch suppliers on mount
+    fetchSuppliers()
   }, [fetchRates, fetchSuppliers])
 
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, cityFilter, serviceTypeFilter, vehicleTypeFilter, supplierFilter, showInactive, itemsPerPage])
+  }, [searchTerm, cityFilter, serviceTypeFilter, supplierFilter, showInactive, itemsPerPage])
 
-  // Check if service type needs destination city
+  // ============================================
+  // FORM HELPERS
+  // ============================================
+
   const needsDestinationCity = (serviceType: string) => {
     const type = SERVICE_TYPES.find(t => t.value === serviceType)
     return type?.needsDestination || false
   }
 
-  const generateServiceCode = (city: string, serviceType: string, vehicleType: string, destinationCity?: string) => {
+  const generateServiceCode = (city: string, serviceType: string, destinationCity?: string) => {
     if (!city) return ''
     const cityCode = city.toUpperCase().replace(/\s+/g, '-')
     const typeCode = serviceType.toUpperCase().replace(/_/g, '-')
-    const vehicleCode = vehicleType.toUpperCase()
-    
-    // For intercity, include destination
+
     if (needsDestinationCity(serviceType) && destinationCity) {
       const destCode = destinationCity.toUpperCase().replace(/\s+/g, '-')
-      return `${cityCode}-TO-${destCode}-${vehicleCode}`
+      return `${cityCode}-TO-${destCode}-${typeCode}`
     }
-    
-    return `${cityCode}-${typeCode}-${vehicleCode}`
-  }
 
-  const handleVehicleTypeChange = (vehicleType: string) => {
-    const vehicle = VEHICLE_TYPES.find(v => v.value === vehicleType)
-    setFormData(prev => ({
-      ...prev,
-      vehicle_type: vehicleType,
-      capacity_min: vehicle?.minPax || 1,
-      capacity_max: vehicle?.maxPax || 2,
-      service_code: generateServiceCode(prev.city, prev.service_type, vehicleType, prev.destination_city)
-    }))
+    return `${cityCode}-${typeCode}`
   }
 
   const handleCityChange = (city: string) => {
     setFormData(prev => ({
       ...prev,
       city,
-      service_code: generateServiceCode(city, prev.service_type, prev.vehicle_type, prev.destination_city)
+      service_code: generateServiceCode(city, prev.service_type, prev.destination_city)
     }))
   }
 
@@ -235,7 +288,7 @@ export default function TransportationContent() {
     setFormData(prev => ({
       ...prev,
       destination_city: destinationCity,
-      service_code: generateServiceCode(prev.city, prev.service_type, prev.vehicle_type, destinationCity)
+      service_code: generateServiceCode(prev.city, prev.service_type, destinationCity)
     }))
   }
 
@@ -245,11 +298,10 @@ export default function TransportationContent() {
       ...prev,
       service_type: serviceType,
       destination_city: needsDest ? prev.destination_city : '',
-      service_code: generateServiceCode(prev.city, serviceType, prev.vehicle_type, needsDest ? prev.destination_city : '')
+      service_code: generateServiceCode(prev.city, serviceType, needsDest ? prev.destination_city : '')
     }))
   }
 
-  // NEW: Handle supplier selection - auto-fill supplier_name
   const handleSupplierChange = (supplierId: string) => {
     const supplier = suppliers.find(s => s.id === supplierId)
     setFormData(prev => ({
@@ -258,6 +310,10 @@ export default function TransportationContent() {
       supplier_name: supplier?.name || ''
     }))
   }
+
+  // ============================================
+  // MODAL HANDLERS
+  // ============================================
 
   const openAddModal = () => {
     setEditingRate(null)
@@ -272,20 +328,26 @@ export default function TransportationContent() {
     setFormData({
       service_code: rate.service_code,
       service_type: rate.service_type,
-      vehicle_type: rate.vehicle_type,
-      capacity_min: rate.capacity_min,
-      capacity_max: rate.capacity_max,
       city: rate.city,
       destination_city: rate.destination_city || '',
-      base_rate_eur: rate.base_rate_eur,
-      base_rate_non: rate.base_rate_non || rate.base_rate_non_eur || 0,
+      includes: rate.includes || '',
       season: rate.season || '',
       rate_valid_from: rate.rate_valid_from,
       rate_valid_to: rate.rate_valid_to,
-      supplier_id: rate.supplier_id || '',  // NEW
-      supplier_name: rate.supplier_name || rate.suppliers?.name || '',
+      supplier_id: rate.supplier_id || '',
+      supplier_name: rate.supplier_name || rate.supplier?.name || '',
       notes: rate.notes || '',
-      is_active: rate.is_active
+      is_active: rate.is_active,
+      sedan_rate_eur: rate.sedan_rate_eur?.toString() || '',
+      sedan_rate_non_eur: rate.sedan_rate_non_eur?.toString() || '',
+      minivan_rate_eur: rate.minivan_rate_eur?.toString() || '',
+      minivan_rate_non_eur: rate.minivan_rate_non_eur?.toString() || '',
+      van_rate_eur: rate.van_rate_eur?.toString() || '',
+      van_rate_non_eur: rate.van_rate_non_eur?.toString() || '',
+      minibus_rate_eur: rate.minibus_rate_eur?.toString() || '',
+      minibus_rate_non_eur: rate.minibus_rate_non_eur?.toString() || '',
+      bus_rate_eur: rate.bus_rate_eur?.toString() || '',
+      bus_rate_non_eur: rate.bus_rate_non_eur?.toString() || '',
     })
     setIsModalOpen(true)
   }
@@ -295,43 +357,58 @@ export default function TransportationContent() {
     setSaving(true)
     setError(null)
 
-    // Validation
     if (!formData.city) {
-      setError('Please select a departure city')
+      setError('Please select a city')
       setSaving(false)
       return
     }
 
-    // Validate destination city for intercity services
     if (needsDestinationCity(formData.service_type) && !formData.destination_city) {
       setError('Please select a destination city for intercity/city transfer services')
       setSaving(false)
       return
     }
 
-    if (needsDestinationCity(formData.service_type) && formData.city === formData.destination_city) {
-      setError('Departure and destination cities must be different')
-      setSaving(false)
-      return
-    }
-
-    if (!formData.base_rate_eur || formData.base_rate_eur <= 0) {
-      setError('Please enter a valid EUR rate')
+    // Check at least one tier has a rate
+    const hasAnyRate = VEHICLE_TIERS.some(t => {
+      const val = formData[`${t.key}_rate_eur` as keyof FormData] as string
+      return val && parseFloat(val) > 0
+    })
+    if (!hasAnyRate) {
+      setError('Please enter at least one vehicle tier rate')
       setSaving(false)
       return
     }
 
     try {
-      const url = editingRate 
+      const url = editingRate
         ? `/api/resources/transportation/${editingRate.id}`
         : '/api/resources/transportation'
-      
-      // NEW: Include supplier_id in submission, set to null if empty
-      const submitData = {
-        ...formData,
-        supplier_id: formData.supplier_id || null
+
+      // Build submission with parsed numeric rates
+      const submitData: Record<string, any> = {
+        service_code: formData.service_code,
+        service_type: formData.service_type,
+        city: formData.city,
+        destination_city: formData.destination_city || null,
+        includes: formData.includes || null,
+        season: formData.season || null,
+        rate_valid_from: formData.rate_valid_from,
+        rate_valid_to: formData.rate_valid_to,
+        supplier_id: formData.supplier_id || null,
+        supplier_name: formData.supplier_name || null,
+        notes: formData.notes || null,
+        is_active: formData.is_active,
       }
-      
+
+      // Add tiered rates
+      for (const tier of VEHICLE_TIERS) {
+        const eurVal = formData[`${tier.key}_rate_eur` as keyof FormData] as string
+        const nonEurVal = formData[`${tier.key}_rate_non_eur` as keyof FormData] as string
+        submitData[`${tier.key}_rate_eur`] = eurVal ? parseFloat(eurVal) : null
+        submitData[`${tier.key}_rate_non_eur`] = nonEurVal ? parseFloat(nonEurVal) : null
+      }
+
       const response = await fetch(url, {
         method: editingRate ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -355,10 +432,10 @@ export default function TransportationContent() {
   }
 
   const handleDelete = async (rate: TransportationRate) => {
-    const confirmed = await dialog.confirmDelete('Transportation Rate', 
+    const confirmed = await dialog.confirmDelete('Transportation Rate',
       `Are you sure you want to delete "${rate.service_code}"? This action cannot be undone.`
     )
-    
+
     if (!confirmed) return
 
     try {
@@ -378,30 +455,31 @@ export default function TransportationContent() {
     }
   }
 
-  // Filter rates
+  // ============================================
+  // FILTERING & PAGINATION
+  // ============================================
+
   const filteredRates = rates.filter(rate => {
-    const matchesSearch = 
-      rate.service_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rate.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rate.vehicle_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (rate.destination_city && rate.destination_city.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (rate.supplier_name && rate.supplier_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (rate.suppliers?.name && rate.suppliers.name.toLowerCase().includes(searchTerm.toLowerCase()))  // NEW: search joined supplier
-    return matchesSearch
+    if (!searchTerm) return true
+    const search = searchTerm.toLowerCase()
+    return (
+      rate.service_code?.toLowerCase().includes(search) ||
+      rate.city?.toLowerCase().includes(search) ||
+      rate.route_name?.toLowerCase().includes(search) ||
+      rate.service_type?.toLowerCase().includes(search) ||
+      (rate.destination_city && rate.destination_city.toLowerCase().includes(search)) ||
+      (rate.supplier_name && rate.supplier_name.toLowerCase().includes(search)) ||
+      (rate.supplier?.name && rate.supplier.name.toLowerCase().includes(search))
+    )
   })
 
-  // Pagination calculations
   const totalItems = filteredRates.length
   const totalPages = Math.ceil(totalItems / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
   const paginatedRates = filteredRates.slice(startIndex, endIndex)
 
-  // Pagination handlers
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
-  }
-
+  const goToPage = (page: number) => setCurrentPage(Math.max(1, Math.min(page, totalPages)))
   const goToFirstPage = () => goToPage(1)
   const goToLastPage = () => goToPage(totalPages)
   const goToPrevPage = () => goToPage(currentPage - 1)
@@ -412,8 +490,7 @@ export default function TransportationContent() {
   const activeRates = rates.filter(r => r.is_active).length
   const inactiveRates = totalRates - activeRates
   const uniqueCities = [...new Set(rates.map(r => r.city))].length
-  const uniqueVehicleTypes = [...new Set(rates.map(r => r.vehicle_type))].length
-  const linkedToSuppliers = rates.filter(r => r.supplier_id).length  // NEW: stat
+  const linkedToSuppliers = rates.filter(r => r.supplier_id).length
 
   if (loading) {
     return (
@@ -441,8 +518,8 @@ export default function TransportationContent() {
         </button>
       </div>
 
-      {/* Stats Cards - UPDATED: added linked suppliers stat */}
-      <div className="grid grid-cols-6 gap-3">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-5 gap-3">
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
@@ -473,14 +550,6 @@ export default function TransportationContent() {
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-            <span className="text-xs text-gray-500">{t('vehicles')}</span>
-          </div>
-          <p className="text-xl font-semibold text-gray-900 mt-1">{uniqueVehicleTypes}</p>
-        </div>
-        {/* NEW: Linked to Suppliers stat */}
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
             <span className="text-xs text-gray-500">{t('linked')}</span>
           </div>
@@ -488,7 +557,7 @@ export default function TransportationContent() {
         </div>
       </div>
 
-      {/* Search and Filters - UPDATED: added supplier filter */}
+      {/* Search and Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -533,22 +602,6 @@ export default function TransportationContent() {
 
         <div className="relative">
           <select
-            value={vehicleTypeFilter}
-            onChange={(e) => setVehicleTypeFilter(e.target.value)}
-            title={t('allVehicleTypes')}
-            className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
-          >
-            <option value="">{t('allVehicleTypes')}</option>
-            {VEHICLE_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{type.label}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-        </div>
-
-        {/* NEW: Supplier filter dropdown */}
-        <div className="relative">
-          <select
             value={supplierFilter}
             onChange={(e) => setSupplierFilter(e.target.value)}
             title={t('allSuppliers')}
@@ -575,269 +628,244 @@ export default function TransportationContent() {
         </button>
       </div>
 
-      {/* Table - UPDATED: added Supplier column */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('serviceType')}</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('supplier')}</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('serviceType')}</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('vehicleType')}</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('capacity')}</th>
-              <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('city')}</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('eurRate')}</th>
-              <th className="text-center text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{tCommon('status')}</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{tCommon('actions')}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {paginatedRates.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
-                  {t('noRatesFound')}
-                </td>
-              </tr>
-            ) : (
-              paginatedRates.map((rate) => {
-                const isIntercity = needsDestinationCity(rate.service_type)
-                const supplierName = rate.suppliers?.name || rate.supplier_name
-                return (
-                  <tr key={rate.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2">
-                      <span className="text-sm font-mono text-gray-900">{rate.service_code}</span>
-                    </td>
-                    {/* NEW: Supplier column */}
-                    <td className="px-4 py-2">
-                      {supplierName ? (
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="h-3.5 w-3.5 text-gray-400" />
-                          <span className="text-sm text-gray-700">{supplierName}</span>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-sm text-gray-600">
-                        {SERVICE_TYPES.find(t => t.value === rate.service_type)?.label || rate.service_type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-sm font-medium text-gray-900">{rate.vehicle_type}</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="text-sm text-gray-600">{rate.capacity_min || 1}-{rate.capacity_max} pax</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      {isIntercity && rate.destination_city ? (
-                        <div className="flex items-center gap-1 text-sm">
-                          <span className="text-gray-900">{rate.city}</span>
-                          <span className="text-gray-400">→</span>
-                          <span className="text-gray-900">{rate.destination_city}</span>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-600">{rate.city}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <span className="text-sm font-medium text-gray-900">{formatRate(Number(rate.base_rate_eur))}</span>
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        rate.is_active 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {rate.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEditModal(rate)}
-                          className="p-1 text-gray-400 hover:text-[#647C47] transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(rate)}
-                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+      {/* Card Grid */}
+      {paginatedRates.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-sm text-gray-500">
+          {t('noRatesFound')}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {paginatedRates.map((rate) => {
+            const activeTiers = getActiveTiers(rate)
+            const isIntercity = needsDestinationCity(rate.service_type)
+            const supplierName = rate.supplier?.name || rate.supplier_name
+            const serviceLabel = SERVICE_TYPES.find(t => t.value === rate.service_type)?.label || rate.service_type
+
+            return (
+              <div
+                key={rate.id}
+                className={`bg-white rounded-lg border ${rate.is_active ? 'border-gray-200' : 'border-gray-100 opacity-60'} hover:shadow-md transition-shadow`}
+              >
+                {/* Card Header */}
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-gray-400">{rate.service_code}</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {rate.is_active ? 'Active' : 'Inactive'}
+                        </span>
                       </div>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
+                      <h3 className="text-sm font-medium text-gray-900 mt-1 truncate">
+                        {rate.route_name || serviceLabel}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">
+                          {serviceLabel}
+                        </span>
+                        {isIntercity && rate.destination_city ? (
+                          <span className="text-xs text-gray-500">
+                            {rate.city} → {rate.destination_city}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">{rate.city}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      <button
+                        onClick={() => openEditModal(rate)}
+                        className="p-1 text-gray-400 hover:text-[#647C47] transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(rate)}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  {supplierName && (
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <Building2 className="h-3 w-3 text-gray-400" />
+                      <span className="text-xs text-gray-500">{supplierName}</span>
+                    </div>
+                  )}
+                </div>
 
-        {/* Pagination */}
-        {totalItems > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">Show</span>
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                  className="px-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] bg-white"
-                >
-                  {ITEMS_PER_PAGE_OPTIONS.map(option => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-                <span className="text-sm text-gray-500">per page</span>
+                {/* Vehicle Tiers Table */}
+                <div className="px-4 py-2">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-[10px] uppercase tracking-wider text-gray-400">
+                        <th className="text-left py-1 font-medium">Vehicle</th>
+                        <th className="text-center py-1 font-medium">Pax</th>
+                        <th className="text-right py-1 font-medium">EUR Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeTiers.length > 0 ? (
+                        activeTiers.map(tier => {
+                          const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number
+                          const capMin = rate[`${tier.key}_capacity_min` as keyof TransportationRate] as number
+                          const capMax = rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number
+                          return (
+                            <tr key={tier.key} className="border-t border-gray-50">
+                              <td className="py-1.5 text-xs font-medium text-gray-700">{tier.label}</td>
+                              <td className="py-1.5 text-xs text-center text-gray-500">{capMin}-{capMax}</td>
+                              <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRate(eurRate)}</td>
+                            </tr>
+                          )
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={3} className="py-2 text-xs text-center text-gray-400">No rates configured</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Card Footer */}
+                {rate.includes && (
+                  <div className="px-4 py-2 border-t border-gray-50">
+                    <p className="text-xs text-gray-500 truncate" title={rate.includes}>
+                      Includes: {rate.includes}
+                    </p>
+                  </div>
+                )}
               </div>
-              <span className="text-sm text-gray-500">
-                Showing {startIndex + 1}-{endIndex} of {totalItems} rates
-              </span>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalItems > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-lg">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Show</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                title="Items per page"
+                className="px-2 py-1 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] bg-white"
+              >
+                {ITEMS_PER_PAGE_OPTIONS.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+              <span className="text-sm text-gray-500">per page</span>
             </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                onClick={goToFirstPage}
-                disabled={currentPage === 1}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                title="First page"
-              >
-                <ChevronsLeft className="h-4 w-4" />
-              </button>
-              <button
-                onClick={goToPrevPage}
-                disabled={currentPage === 1}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                title="Previous page"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-
-              {/* Page numbers */}
-              <div className="flex items-center gap-1 mx-2">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum: number
-                  if (totalPages <= 5) {
-                    pageNum = i + 1
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i
-                  } else {
-                    pageNum = currentPage - 2 + i
-                  }
-                  
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => goToPage(pageNum)}
-                      className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
-                        currentPage === pageNum
-                          ? 'bg-[#647C47] text-white'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <button
-                onClick={goToNextPage}
-                disabled={currentPage === totalPages}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                title="Next page"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-              <button
-                onClick={goToLastPage}
-                disabled={currentPage === totalPages}
-                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                title="Last page"
-              >
-                <ChevronsRight className="h-4 w-4" />
-              </button>
-            </div>
+            <span className="text-sm text-gray-500">
+              Showing {startIndex + 1}-{endIndex} of {totalItems} services
+            </span>
           </div>
-        )}
-      </div>
 
-      {/* Add/Edit Modal - UPDATED: added supplier dropdown */}
+          <div className="flex items-center gap-1">
+            <button onClick={goToFirstPage} disabled={currentPage === 1} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed" title="First page">
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button onClick={goToPrevPage} disabled={currentPage === 1} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed" title="Previous page">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-1 mx-2">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => goToPage(pageNum)}
+                    className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
+                      currentPage === pageNum
+                        ? 'bg-[#647C47] text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                )
+              })}
+            </div>
+
+            <button onClick={goToNextPage} disabled={currentPage === totalPages} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed" title="Next page">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button onClick={goToLastPage} disabled={currentPage === totalPages} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded disabled:opacity-40 disabled:cursor-not-allowed" title="Last page">
+              <ChevronsRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <div className="sticky top-0 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-200 z-10">
               <h2 className="text-lg font-semibold text-gray-900">
-                {editingRate ? 'Edit Transportation Rate' : 'Add Transportation Rate'}
+                {editingRate ? 'Edit Transportation Service' : 'Add Transportation Service'}
               </h2>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600 p-1"
+                title="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              {/* Error Message */}
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
                   {error}
                 </div>
               )}
 
-              {/* NEW: Supplier Selection - at the top for prominence */}
-              <div className="space-y-4">
+              {/* Supplier Selection */}
+              <div className="space-y-3">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-cyan-600" />
                   Transport Company (Supplier)
                 </h3>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                    Link to Supplier
-                  </label>
-                  <select
-                    value={formData.supplier_id}
-                    onChange={(e) => handleSupplierChange(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                  >
-                    <option value="">Select supplier (optional)</option>
-                    {suppliers.map(supplier => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.name}{supplier.city ? ` (${supplier.city})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Link this rate to a transport company for better tracking. 
-                    <a href="/suppliers?type=transport_company" className="text-[#647C47] hover:underline ml-1">
-                      Manage suppliers →
-                    </a>
-                  </p>
-                </div>
-
-                {/* Show selected supplier info */}
-                {formData.supplier_id && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-cyan-50 border border-cyan-100 rounded-md">
-                    <Building2 className="h-4 w-4 text-cyan-600" />
-                    <span className="text-sm text-cyan-800">
-                      Linked to: <strong>{formData.supplier_name}</strong>
-                    </span>
-                  </div>
-                )}
+                <select
+                  value={formData.supplier_id}
+                  onChange={(e) => handleSupplierChange(e.target.value)}
+                  title="Select supplier"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                >
+                  <option value="">Select supplier (optional)</option>
+                  {suppliers.map(supplier => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}{supplier.city ? ` (${supplier.city})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Basic Info */}
+              {/* Service Info */}
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Basic Information</h3>
-                
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Service Information</h3>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
@@ -857,22 +885,19 @@ export default function TransportationContent() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Vehicle Type <span className="text-red-500">*</span>
+                      Service Code
                     </label>
-                    <select
-                      value={formData.vehicle_type}
-                      onChange={(e) => handleVehicleTypeChange(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      {VEHICLE_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>{type.label}</option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={formData.service_code}
+                      onChange={(e) => setFormData(prev => ({ ...prev, service_code: e.target.value }))}
+                      placeholder="Auto-generated"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
+                    />
                   </div>
                 </div>
 
-                {/* Route - Departure & Destination */}
+                {/* City / Route */}
                 <div className={`grid gap-4 ${needsDestinationCity(formData.service_type) ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">
@@ -911,108 +936,83 @@ export default function TransportationContent() {
                   )}
                 </div>
 
-                {/* Show route preview for intercity */}
-                {needsDestinationCity(formData.service_type) && formData.city && formData.destination_city && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-md">
-                    <span className="text-sm text-blue-700">Route:</span>
-                    <span className="text-sm font-medium text-blue-900">{formData.city}</span>
-                    <span className="text-blue-400">→</span>
-                    <span className="text-sm font-medium text-blue-900">{formData.destination_city}</span>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Service Code
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.service_code}
-                      onChange={(e) => setFormData(prev => ({ ...prev, service_code: e.target.value }))}
-                      placeholder="Auto-generated"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                        Min Pax
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.capacity_min}
-                        onChange={(e) => setFormData(prev => ({ ...prev, capacity_min: parseInt(e.target.value) || 1 }))}
-                        min="1"
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                        Max Pax
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.capacity_max}
-                        onChange={(e) => setFormData(prev => ({ ...prev, capacity_max: parseInt(e.target.value) || 2 }))}
-                        min="1"
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      />
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                    Includes (description)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.includes}
+                    onChange={(e) => setFormData(prev => ({ ...prev, includes: e.target.value }))}
+                    placeholder="e.g., Driver + AC vehicle + fuel + tolls"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                  />
                 </div>
               </div>
 
-              {/* Pricing */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Pricing</h3>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="base_rate_eur" className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Rate <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        id="base_rate_eur"
-                        type="number"
-                        value={formData.base_rate_eur}
-                        onChange={(e) => setFormData(prev => ({ ...prev, base_rate_eur: parseFloat(e.target.value) || 0 }))}
-                        step="0.01"
-                        min="0"
-                        required
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      />
-                  </div>
+              {/* Vehicle Tier Rates */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">
+                  Vehicle Rates <span className="text-xs font-normal text-gray-400">(at least one required)</span>
+                </h3>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Rate
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">$</span>
-                      <input
-                        type="number"
-                        value={formData.base_rate_non}
-                        onChange={(e) => setFormData(prev => ({ ...prev, base_rate_non: parseFloat(e.target.value) || 0 }))}
-                        step="0.01"
-                        min="0"
-                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      />
-                    </div>
-                  </div>
+                <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-100 text-[10px] uppercase tracking-wider text-gray-500">
+                        <th className="text-left px-3 py-2 font-medium">Vehicle</th>
+                        <th className="text-center px-3 py-2 font-medium">Capacity</th>
+                        <th className="text-center px-3 py-2 font-medium">EUR Rate</th>
+                        <th className="text-center px-3 py-2 font-medium">Non-EUR Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {VEHICLE_TIERS.map(tier => (
+                        <tr key={tier.key} className="border-t border-gray-200">
+                          <td className="px-3 py-2">
+                            <span className="text-sm font-medium text-gray-700">{tier.label}</span>
+                            <span className="text-xs text-gray-400 ml-1">({tier.defaultMin}-{tier.defaultMax} pax)</span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="text-xs text-gray-500">{tier.defaultMin}-{tier.defaultMax}</span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={formData[`${tier.key}_rate_eur` as keyof FormData] as string}
+                              onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_rate_eur`]: e.target.value }))}
+                              step="0.01"
+                              min="0"
+                              placeholder="—"
+                              className="w-full px-2 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={formData[`${tier.key}_rate_non_eur` as keyof FormData] as string}
+                              onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_rate_non_eur`]: e.target.value }))}
+                              step="0.01"
+                              min="0"
+                              placeholder="—"
+                              className="w-full px-2 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+                <p className="text-xs text-gray-400">Leave empty for vehicle types not available for this service.</p>
               </div>
 
-              {/* Validity */}
+              {/* Validity & Notes */}
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Validity Period</h3>
-                
+                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Additional</h3>
+
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Season
-                    </label>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Season</label>
                     <select
                       value={formData.season}
                       onChange={(e) => setFormData(prev => ({ ...prev, season: e.target.value }))}
@@ -1024,11 +1024,8 @@ export default function TransportationContent() {
                       <option value="peak">Peak</option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Valid From
-                    </label>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Valid From</label>
                     <input
                       type="date"
                       value={formData.rate_valid_from}
@@ -1036,11 +1033,8 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Valid To
-                    </label>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Valid To</label>
                     <input
                       type="date"
                       value={formData.rate_valid_to}
@@ -1049,39 +1043,13 @@ export default function TransportationContent() {
                     />
                   </div>
                 </div>
-              </div>
-
-              {/* Additional Info */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Additional Information</h3>
-                
-                {/* Legacy supplier name field - hidden if supplier_id is set */}
-                {!formData.supplier_id && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Supplier Name (Legacy)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.supplier_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
-                      placeholder="e.g., Cairo Cars Co. (prefer using dropdown above)"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">
-                      For backwards compatibility. Prefer using the supplier dropdown above.
-                    </p>
-                  </div>
-                )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                    Notes
-                  </label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">Notes</label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={3}
+                    rows={2}
                     placeholder="Any additional notes..."
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] resize-none"
                   />
@@ -1115,7 +1083,7 @@ export default function TransportationContent() {
                   disabled={saving}
                   className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-md hover:bg-[#4f6238] transition-colors disabled:opacity-50 min-w-[100px]"
                 >
-                  {saving ? 'Saving...' : editingRate ? 'Update Rate' : 'Add Rate'}
+                  {saving ? 'Saving...' : editingRate ? 'Update Service' : 'Add Service'}
                 </button>
               </div>
             </form>

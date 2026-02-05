@@ -617,20 +617,23 @@ export async function lookupRates(
       if (suitableVehicle) {
         console.log(`✅ Selected vehicle: ${suitableVehicle.vehicle_type} (tier: ${suitableVehicle.tier}, preferred: ${suitableVehicle.is_preferred})`)
         
-        // Now get the rate from transportation_rates
+        // Now get the rate from transportation_rates (restructured: one row per service with all vehicle tiers)
         const { data: vehicleRates } = await supabase
           .from('transportation_rates')
           .select('*')
           .eq('is_active', true)
           .eq('service_type', serviceType)
-          .eq('city', params.city || 'Cairo')
-          .gte('capacity_max', params.pax)
-          .order('capacity_min', { ascending: true })
+          .ilike('city', params.city || 'Cairo')
           .limit(1)
 
-        const ratePerDay = vehicleRates && vehicleRates.length > 0 
-          ? toNumber(vehicleRates[0].base_rate_eur, 50)
-          : toNumber(suitableVehicle.daily_rate_eur, 50)
+        let ratePerDay = toNumber(suitableVehicle.daily_rate_eur, 50)
+        if (vehicleRates && vehicleRates.length > 0) {
+          const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
+          const tierResult = getTransportRateForPax(vehicleRates[0], params.pax)
+          if (tierResult) {
+            ratePerDay = tierResult.rateEur
+          }
+        }
 
         result.vehicle = {
           id: suitableVehicle.id,

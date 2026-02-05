@@ -18,17 +18,19 @@ async function getRateDetails(rateType: string, rateId: string) {
     case 'transportation':
       const { data: transport } = await supabaseAdmin
         .from('transportation_rates')
-        .select('id, service_type, vehicle_type, origin_city, destination_city, base_rate_eur, base_rate_non_eur, capacity')
+        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur')
         .eq('id', rateId)
         .single()
       if (transport) {
+        const tRates = [transport.sedan_rate_eur, transport.minivan_rate_eur, transport.van_rate_eur, transport.minibus_rate_eur, transport.bus_rate_eur].filter(Boolean) as number[]
+        const minTRate = tRates.length > 0 ? Math.min(...tRates) : 0
         result = {
           id: transport.id,
-          name: transport.service_type || transport.vehicle_type,
-          rate_eur: transport.base_rate_eur,
-          rate_non_eur: transport.base_rate_non_eur,
-          city: transport.origin_city,
-          details: `${transport.vehicle_type} (${transport.capacity} pax)`
+          name: transport.route_name || transport.service_type || transport.service_code,
+          rate_eur: minTRate,
+          rate_non_eur: minTRate,
+          city: transport.city || transport.origin_city,
+          details: `${tRates.length} vehicle tier${tRates.length !== 1 ? 's' : ''} | from €${minTRate}`
         }
       }
       break

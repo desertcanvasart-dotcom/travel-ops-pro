@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     if (override_transportation) {
       // Manual override - use specific service code
       console.log('🔧 Using override:', override_transportation)
-      
+
       const { data: overrideVehicle } = await supabase
         .from('transportation_rates')
         .select('*')
@@ -79,32 +79,39 @@ export async function POST(request: NextRequest) {
         throw new Error(`Override vehicle not found: ${override_transportation}`)
       }
 
-      // Verify capacity
-      if (total_travelers < overrideVehicle.capacity_min || total_travelers > overrideVehicle.capacity_max) {
-        throw new Error(`Vehicle ${overrideVehicle.vehicle_type} cannot accommodate ${total_travelers} passengers (capacity: ${overrideVehicle.capacity_min}-${overrideVehicle.capacity_max})`)
-      }
-
       vehicle = overrideVehicle
     } else {
-      // Auto-select based on city, service type, and group size
+      // Auto-select based on city and service type (one row per service with all vehicle tiers)
       console.log('🤖 Auto-selecting vehicle...')
-      
+
       const { data: vehicles } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('city', city)
         .eq('service_type', transportation_service)
-        .lte('capacity_min', total_travelers)
-        .gte('capacity_max', total_travelers)
         .eq('is_active', true)
-        .order('base_rate_eur', { ascending: true })
+        .limit(1)
 
       if (!vehicles || vehicles.length === 0) {
         throw new Error(`No vehicle available for ${total_travelers} passengers in ${city} (${transportation_service})`)
       }
 
-      vehicle = vehicles[0] // Pick cheapest option that fits
+      vehicle = vehicles[0]
     }
+
+    // Resolve vehicle tier for pax count
+    const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
+    const tierResult = getTransportRateForPax(vehicle, total_travelers)
+
+    if (!tierResult) {
+      throw new Error(`No suitable vehicle tier for ${total_travelers} passengers in ${city}`)
+    }
+
+    // Set resolved values for downstream use
+    vehicle.base_rate_eur = tierResult.rateEur
+    vehicle.vehicle_type = tierResult.vehicleType
+    vehicle.capacity_min = tierResult.capacityMin
+    vehicle.capacity_max = tierResult.capacityMax
 
     console.log('✅ Selected vehicle:', vehicle.vehicle_type, '€', vehicle.base_rate_eur)
 

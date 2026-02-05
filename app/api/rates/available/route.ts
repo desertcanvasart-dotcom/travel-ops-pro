@@ -33,27 +33,33 @@ export async function GET(request: NextRequest) {
 
     const rates: AvailableRate[] = []
 
-    // Transportation rates
+    // Transportation rates (one row per service with tiered vehicle rates)
     if (!rate_type || rate_type === 'transportation') {
       const { data } = await supabaseAdmin
         .from('transportation_rates')
-        .select('id, service_type, vehicle_type, origin_city, destination_city, base_rate_eur, base_rate_non_eur, capacity, supplier_id, suppliers (name)')
+        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur, supplier_id, suppliers (name)')
         .eq('is_active', true)
-        .order('origin_city')
+        .order('city')
+        .order('service_type')
 
       if (data) {
         for (const r of data) {
+          // Find the cheapest available tier rate for display
+          const tierRates = [r.sedan_rate_eur, r.minivan_rate_eur, r.van_rate_eur, r.minibus_rate_eur, r.bus_rate_eur].filter(Boolean) as number[]
+          const minRate = tierRates.length > 0 ? Math.min(...tierRates) : 0
+          const tierCount = tierRates.length
+
           rates.push({
             rate_type: 'transportation',
             rate_id: r.id,
-            rate_name: r.service_type || `${r.vehicle_type} - ${r.origin_city} to ${r.destination_city}`,
-            rate_eur: r.base_rate_eur,
-            rate_non_eur: r.base_rate_non_eur,
-            city: r.origin_city,
+            rate_name: r.route_name || r.service_type || `${r.origin_city} to ${r.destination_city}`,
+            rate_eur: minRate,
+            rate_non_eur: minRate,
+            city: r.city || r.origin_city,
             default_quantity_mode: 'per_group',
             supplier_id: r.supplier_id,
             supplier_name: (r.suppliers as any)?.name,
-            details: `${r.vehicle_type} (${r.capacity} pax)`
+            details: `${tierCount} vehicle tier${tierCount !== 1 ? 's' : ''} | from €${minRate}`
           })
         }
       }

@@ -11,6 +11,28 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const VEHICLE_TIERS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
+
+// Helper to parse tiered rate fields from request body
+function parseTieredRates(body: any) {
+  const rates: Record<string, any> = {}
+  for (const tier of VEHICLE_TIERS) {
+    if (body[`${tier}_rate_eur`] !== undefined) {
+      rates[`${tier}_rate_eur`] = body[`${tier}_rate_eur`] !== null ? parseFloat(body[`${tier}_rate_eur`]) || null : null
+    }
+    if (body[`${tier}_rate_non_eur`] !== undefined) {
+      rates[`${tier}_rate_non_eur`] = body[`${tier}_rate_non_eur`] !== null ? parseFloat(body[`${tier}_rate_non_eur`]) || null : null
+    }
+    if (body[`${tier}_capacity_min`] !== undefined) {
+      rates[`${tier}_capacity_min`] = body[`${tier}_capacity_min`] !== null ? parseInt(body[`${tier}_capacity_min`]) : null
+    }
+    if (body[`${tier}_capacity_max`] !== undefined) {
+      rates[`${tier}_capacity_max`] = body[`${tier}_capacity_max`] !== null ? parseInt(body[`${tier}_capacity_max`]) : null
+    }
+  }
+  return rates
+}
+
 // GET - Single transportation rate by ID
 export async function GET(
   request: NextRequest,
@@ -40,7 +62,7 @@ export async function GET(
   }
 }
 
-// PUT - Update single transportation rate
+// PUT - Update single transportation rate (tiered vehicle rates)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -50,27 +72,24 @@ export async function PUT(
     const body = await request.json()
 
     // Remove id from body to avoid conflicts
-    const { id: _, ...updates } = body
+    const { id: _, ...rawUpdates } = body
 
-    // Parse numeric fields
-    if (updates.base_rate_eur !== undefined) {
-      updates.base_rate_eur = parseFloat(updates.base_rate_eur) || 0
-    }
-    if (updates.base_rate_non_eur !== undefined) {
-      updates.base_rate_non_eur = parseFloat(updates.base_rate_non_eur) || 0
-    }
-    if (updates.capacity_min !== undefined) {
-      updates.capacity_min = updates.capacity_min ? parseInt(updates.capacity_min) : null
-    }
-    if (updates.capacity_max !== undefined) {
-      updates.capacity_max = updates.capacity_max ? parseInt(updates.capacity_max) : null
+    // Parse tiered rates
+    const tieredRates = parseTieredRates(rawUpdates)
+
+    // Build non-tier updates
+    const updates: Record<string, any> = {}
+    for (const [key, val] of Object.entries(rawUpdates)) {
+      if (!VEHICLE_TIERS.some(t => key.startsWith(`${t}_`))) {
+        updates[key] = val
+      }
     }
 
     updates.updated_at = new Date().toISOString()
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .update(updates)
+      .update({ ...updates, ...tieredRates })
       .eq('id', id)
       .select('*')
       .single()

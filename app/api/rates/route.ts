@@ -99,33 +99,37 @@ export async function GET(request: NextRequest) {
         break
 
       case 'transportation':
-        // ✅ Pull from transportation_rates table
+        // ✅ Pull from transportation_rates table (one row per service with tiered vehicle rates)
         const transportQuery = supabase
           .from('transportation_rates')
           .select('*')
           .eq('is_active', true)
-        
+
         if (city) {
           transportQuery.eq('city', city)
         }
-        
+
         const transportResult = await transportQuery.order('city').order('service_type')
-        
-        data = (transportResult.data || []).map(rate => ({
+
+        data = (transportResult.data || []).map((rate: any) => ({
           service_code: rate.service_code || rate.id,
           service_type: rate.service_type,
-          vehicle_type: rate.vehicle_type,
           city: rate.city,
           origin_city: rate.origin_city,
           destination_city: rate.destination_city,
-          capacity_min: rate.capacity_min,
-          capacity_max: rate.capacity_max,
           supplier_name: rate.supplier_name,
           notes: rate.notes,
-          base_rate_eur: rate.base_rate_eur || 0,
-          base_rate_non_eur: rate.base_rate_non_eur || rate.base_rate_eur || 0,
-          eur_rate: rate.base_rate_eur || 0,
-          non_eur_rate: rate.base_rate_non_eur || rate.base_rate_eur || 0
+          includes: rate.includes,
+          sedan_rate_eur: rate.sedan_rate_eur,
+          minivan_rate_eur: rate.minivan_rate_eur,
+          van_rate_eur: rate.van_rate_eur,
+          minibus_rate_eur: rate.minibus_rate_eur,
+          bus_rate_eur: rate.bus_rate_eur,
+          sedan_rate_non_eur: rate.sedan_rate_non_eur,
+          minivan_rate_non_eur: rate.minivan_rate_non_eur,
+          van_rate_non_eur: rate.van_rate_non_eur,
+          minibus_rate_non_eur: rate.minibus_rate_non_eur,
+          bus_rate_non_eur: rate.bus_rate_non_eur
         }))
         error = transportResult.error
         break

@@ -150,29 +150,27 @@ function applyMarkup(cost: number, marginPercent: number): number {
 // ============================================
 
 async function getTransportationRate(city: string, tier: string, pax: number) {
-  let vehicleType = 'sedan'
-  if (pax > 3) vehicleType = 'minivan'
-  if (pax > 7) vehicleType = 'minibus'
-  if (pax > 15) vehicleType = 'bus'
-
-  // Try transportation_rates table first
+  // Try transportation_rates table first (restructured: one row per service with all vehicle tiers)
   const { data: rate } = await supabaseAdmin
     .from('transportation_rates')
     .select('*')
     .eq('is_active', true)
     .ilike('city', `%${city}%`)
-    .gte('capacity_max', pax)
-    .order('capacity_min', { ascending: true })
     .limit(1)
     .single()
 
   if (rate) {
-    return {
-      rate: rate.base_rate_eur || 50,
-      supplier_id: rate.supplier_id || null,
-      supplier_name: rate.supplier_name || null,
-      name: `${rate.vehicle_type || vehicleType} - ${city}`,
-      code: rate.service_code || `TRANS-${city.substring(0,3).toUpperCase()}`
+    const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
+    const tierResult = getTransportRateForPax(rate, pax)
+
+    if (tierResult) {
+      return {
+        rate: tierResult.rateEur || 50,
+        supplier_id: rate.supplier_id || null,
+        supplier_name: rate.supplier_name || null,
+        name: `${tierResult.vehicleType} - ${city}`,
+        code: rate.service_code || `TRANS-${city.substring(0,3).toUpperCase()}`
+      }
     }
   }
 
@@ -206,7 +204,7 @@ async function getTransportationRate(city: string, tier: string, pax: number) {
     rate: fallback[city] || 50,
     supplier_id: null,
     supplier_name: null,
-    name: `${vehicleType} - ${city}`,
+    name: `Vehicle - ${city}`,
     code: `TRANS-${city.substring(0,3).toUpperCase()}`
   }
 }

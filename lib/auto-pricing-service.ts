@@ -26,6 +26,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -172,7 +173,7 @@ interface TransportRate {
   id: string
   service_code: string
   service_type: string
-  vehicle_type: string
+  vehicle_type: string | null
   city: string | null
   origin_city: string | null
   destination_city: string | null
@@ -184,6 +185,27 @@ interface TransportRate {
   capacity_min: number | null
   capacity_max: number | null
   is_active: boolean
+  // Tiered vehicle rates (from restructured table)
+  sedan_rate_eur?: number | null
+  sedan_rate_non_eur?: number | null
+  minivan_rate_eur?: number | null
+  minivan_rate_non_eur?: number | null
+  van_rate_eur?: number | null
+  van_rate_non_eur?: number | null
+  minibus_rate_eur?: number | null
+  minibus_rate_non_eur?: number | null
+  bus_rate_eur?: number | null
+  bus_rate_non_eur?: number | null
+  sedan_capacity_min?: number
+  sedan_capacity_max?: number
+  minivan_capacity_min?: number
+  minivan_capacity_max?: number
+  van_capacity_min?: number
+  van_capacity_max?: number
+  minibus_capacity_min?: number
+  minibus_capacity_max?: number
+  bus_capacity_min?: number
+  bus_capacity_max?: number
 }
 
 // Cruise transport pricing rule from b2b_pricing_rules
@@ -1111,7 +1133,7 @@ export async function getTippingRate(tier: ServiceTier): Promise<number> {
 
 /**
  * Build transport cache from database
- * Key format: "service_type|city|duration|area|vehicle_type"
+ * Key format: "service_type|city|duration|area" (one entry per service, all vehicle rates in one row)
  */
 export async function buildTransportCache(): Promise<Map<string, TransportRate>> {
   const { data: allRates } = await supabaseAdmin
@@ -1120,41 +1142,38 @@ export async function buildTransportCache(): Promise<Map<string, TransportRate>>
     .eq('is_active', true)
 
   const cache = new Map<string, TransportRate>()
-  
+
   if (!allRates) return cache
 
   for (const rate of allRates) {
-    // Build multiple keys for flexible lookup
+    // Build multiple keys for flexible lookup (no vehicle_type — one row has all tiers)
     const baseKey = [
       rate.service_type || '',
       (rate.city || '').toLowerCase(),
       rate.duration || '',
-      rate.area || '',
-      rate.vehicle_type || ''
+      rate.area || ''
     ].join('|')
-    
+
     cache.set(baseKey, rate)
-    
+
     // Also cache without area for fallback
     const keyNoArea = [
       rate.service_type || '',
       (rate.city || '').toLowerCase(),
       rate.duration || '',
-      '',
-      rate.vehicle_type || ''
+      ''
     ].join('|')
-    
+
     if (!cache.has(keyNoArea)) {
       cache.set(keyNoArea, rate)
     }
-    
+
     // For intercity, also cache by origin-destination
     if (rate.service_type === 'intercity_transfer' && rate.origin_city && rate.destination_city) {
       const intercityKey = [
         'intercity_transfer',
         (rate.origin_city || '').toLowerCase(),
-        (rate.destination_city || '').toLowerCase(),
-        rate.vehicle_type || ''
+        (rate.destination_city || '').toLowerCase()
       ].join('|')
       cache.set(intercityKey, rate)
     }
@@ -1165,7 +1184,9 @@ export async function buildTransportCache(): Promise<Map<string, TransportRate>>
 }
 
 /**
- * Smart transport rate lookup with fallbacks
+ * Smart transport rate lookup with fallbacks.
+ * Finds the service record, then resolves the vehicle tier for the given pax count.
+ * Returns a TransportRate with base_rate_eur populated from the matched tier.
  */
 export function findTransportRate(
   cache: Map<string, TransportRate>,
@@ -1174,58 +1195,87 @@ export function findTransportRate(
     city: string
     duration: TransportDuration
     area: TransportArea
-    vehicleType: VehicleType
+    pax: number
+    vehicleType?: VehicleType  // Optional override for special vehicles
     originCity?: string
     destinationCity?: string
   }
 ): TransportRate | null {
-  const { serviceType, city, duration, area, vehicleType, originCity, destinationCity } = params
+  const { serviceType, city, duration, area, pax, vehicleType, originCity, destinationCity } = params
   const cityLower = city.toLowerCase()
 
-  // Priority 1: Exact match (service_type + city + duration + area + vehicle)
-  const exactKey = [serviceType, cityLower, duration, area || '', vehicleType].join('|')
+  let record: TransportRate | undefined
+
+  // Priority 1: Exact match (service_type + city + duration + area)
+  const exactKey = [serviceType, cityLower, duration, area || ''].join('|')
   if (cache.has(exactKey)) {
+    record = cache.get(exactKey)!
     console.log(`✅ Transport exact match: ${exactKey}`)
-    return cache.get(exactKey)!
   }
 
   // Priority 2: Match without area
-  const noAreaKey = [serviceType, cityLower, duration, '', vehicleType].join('|')
-  if (cache.has(noAreaKey)) {
-    console.log(`✅ Transport match (no area): ${noAreaKey}`)
-    return cache.get(noAreaKey)!
+  if (!record) {
+    const noAreaKey = [serviceType, cityLower, duration, ''].join('|')
+    if (cache.has(noAreaKey)) {
+      record = cache.get(noAreaKey)!
+      console.log(`✅ Transport match (no area): ${noAreaKey}`)
+    }
   }
 
-  // Priority 3: Match without duration (for cities with only one duration option)
-  const noDurationKey = [serviceType, cityLower, '', '', vehicleType].join('|')
-  if (cache.has(noDurationKey)) {
-    console.log(`⚠️ Transport fallback (no duration): ${noDurationKey}`)
-    return cache.get(noDurationKey)!
+  // Priority 3: Match without duration
+  if (!record) {
+    const noDurationKey = [serviceType, cityLower, '', ''].join('|')
+    if (cache.has(noDurationKey)) {
+      record = cache.get(noDurationKey)!
+      console.log(`⚠️ Transport fallback (no duration): ${noDurationKey}`)
+    }
   }
 
   // Priority 4: Intercity lookup
-  if (serviceType === 'intercity_transfer' && originCity && destinationCity) {
-    const intercityKey = ['intercity_transfer', originCity.toLowerCase(), destinationCity.toLowerCase(), vehicleType].join('|')
+  if (!record && serviceType === 'intercity_transfer' && originCity && destinationCity) {
+    const intercityKey = ['intercity_transfer', originCity.toLowerCase(), destinationCity.toLowerCase()].join('|')
     if (cache.has(intercityKey)) {
+      record = cache.get(intercityKey)!
       console.log(`✅ Transport intercity match: ${intercityKey}`)
-      return cache.get(intercityKey)!
     }
   }
 
-  // Priority 5: Fallback to nearby cities (Luxor for Edfu/Kom Ombo)
-  const fallbackCities = ['luxor', 'aswan', 'cairo']
-  for (const fallbackCity of fallbackCities) {
-    if (fallbackCity === cityLower) continue
-    
-    const fallbackKey = [serviceType, fallbackCity, duration, '', vehicleType].join('|')
-    if (cache.has(fallbackKey)) {
-      console.log(`⚠️ Transport fallback city: ${fallbackCity} for ${city}`)
-      return cache.get(fallbackKey)!
+  // Priority 5: Fallback to nearby cities
+  if (!record) {
+    const fallbackCities = ['luxor', 'aswan', 'cairo']
+    for (const fallbackCity of fallbackCities) {
+      if (fallbackCity === cityLower) continue
+      const fallbackKey = [serviceType, fallbackCity, duration, ''].join('|')
+      if (cache.has(fallbackKey)) {
+        record = cache.get(fallbackKey)!
+        console.log(`⚠️ Transport fallback city: ${fallbackCity} for ${city}`)
+        break
+      }
     }
   }
 
-  console.log(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | ${area} | ${vehicleType}`)
-  return null
+  if (!record) {
+    console.log(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | ${area} | pax=${pax}`)
+    return null
+  }
+
+  // Resolve the right vehicle tier for the pax count
+  const tierResult = getTransportRateForPax(record, pax)
+
+  if (tierResult) {
+    // Return a copy with base_rate_eur/non_eur set to the matched tier's rate
+    return {
+      ...record,
+      base_rate_eur: tierResult.rateEur,
+      base_rate_non_eur: tierResult.rateNonEur,
+      vehicle_type: vehicleType || tierResult.vehicleType,
+      capacity_min: tierResult.capacityMin,
+      capacity_max: tierResult.capacityMax
+    }
+  }
+
+  // Fallback: return record as-is (uses old base_rate_eur if still populated)
+  return record
 }
 
 // ============================================
@@ -1889,19 +1939,14 @@ export async function calculateDayBasedPricing(
 
     const { needs } = info
     
-    // Determine vehicle type
-    let vehicleType: VehicleType = baseVehicleType
-    if (needs.useSpecialVehicle && needs.specialVehicleType) {
-      vehicleType = needs.specialVehicleType
-    }
-
-    // Find transport rate
+    // Find transport rate (resolves vehicle tier for 2 pax base)
     const rate = findTransportRate(transportCache, {
       serviceType: needs.serviceType,
       city: info.city,
       duration: needs.duration,
       area: needs.area,
-      vehicleType,
+      pax: 2,
+      vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
       originCity: itinerary[info.day - 2]?.city, // Previous day city for intercity
       destinationCity: info.city
     })
@@ -1912,7 +1957,7 @@ export async function calculateDayBasedPricing(
         id: `day${info.day}-transport`,
         dayNumber: info.day,
         serviceType: 'transportation',
-        serviceName: rate.route_name || `${vehicleType} - ${info.city}`,
+        serviceName: rate.route_name || `${rate.vehicle_type || baseVehicleType} - ${info.city}`,
         quantity: 1,
         quantityMode: 'fixed',
         unitCost: rate.base_rate_eur,
@@ -1928,7 +1973,7 @@ export async function calculateDayBasedPricing(
         id: `day${info.day}-transport`,
         dayNumber: info.day,
         serviceType: 'transportation',
-        serviceName: `${vehicleType} - ${info.city}`,
+        serviceName: `${baseVehicleType} - ${info.city}`,
         quantity: 1,
         quantityMode: 'fixed',
         unitCost: DEFAULT_RATES[tier].vehicle,
@@ -1938,7 +1983,7 @@ export async function calculateDayBasedPricing(
         isOptional: false,
         notes: `Default rate (no match found)`
       })
-      warnings.push(`No transport rate for ${vehicleType} in ${info.city} (${needs.serviceType}/${needs.duration})`)
+      warnings.push(`No transport rate in ${info.city} (${needs.serviceType}/${needs.duration})`)
     }
   }
 
@@ -1986,20 +2031,13 @@ export async function calculateDayBasedPricing(
 
       const { needs } = info
 
-      // Determine vehicle type for this pax count
-      let vehicleType: VehicleType
-      if (needs.useSpecialVehicle && needs.specialVehicleType) {
-        vehicleType = needs.specialVehicleType
-      } else {
-        vehicleType = getVehicleTypeByPax(numPax, info.city)
-      }
-
       const rate = findTransportRate(transportCache, {
         serviceType: needs.serviceType,
         city: info.city,
         duration: needs.duration,
         area: needs.area,
-        vehicleType,
+        pax: numPax,
+        vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
         originCity: itinerary[info.day - 2]?.city,
         destinationCity: info.city
       })
@@ -2037,19 +2075,13 @@ export async function calculateDayBasedPricing(
 
       const { needs } = info
 
-      let vehicleType: VehicleType
-      if (needs.useSpecialVehicle && needs.specialVehicleType) {
-        vehicleType = needs.specialVehicleType
-      } else {
-        vehicleType = getVehicleTypeByPax(numPax + 1, info.city) // +1 for tour leader
-      }
-
       const rate = findTransportRate(transportCache, {
         serviceType: needs.serviceType,
         city: info.city,
         duration: needs.duration,
         area: needs.area,
-        vehicleType,
+        pax: numPax + 1,  // +1 for tour leader
+        vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
         originCity: itinerary[info.day - 2]?.city,
         destinationCity: info.city
       })

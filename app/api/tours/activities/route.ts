@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         entrance:attractions(id, name, city, entrance_fee_eur, entrance_fee_non_eur),
-        transportation:transportation_rates(id, vehicle_type, city, rate_per_day)
+        transportation:transportation_rates(id, service_code, service_type, city, sedan_rate_eur, minivan_rate_eur, van_rate_eur)
       `)
       .order('activity_order', { ascending: true })
 

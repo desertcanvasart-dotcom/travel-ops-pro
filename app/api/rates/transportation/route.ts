@@ -14,7 +14,7 @@ const supabaseAdmin = createClient(
 // Valid enum values
 const SERVICE_TYPES = [
   'airport_transfer',
-  'city_transfer', 
+  'city_transfer',
   'day_tour',
   'dinner_transfer',
   'intercity_transfer',
@@ -23,17 +23,37 @@ const SERVICE_TYPES = [
 
 const DURATIONS = ['full_day', 'half_day', 'one_way'] as const
 
-const VEHICLE_TYPES = ['Sedan', 'Minivan', 'Van', 'Minibus', 'Bus', 'Horse Carriage'] as const
+const VEHICLE_TIERS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
 
 const AREAS = [
   'east_bank',
-  'west_bank', 
+  'west_bank',
   'pyramids',
   'islamic_cairo',
   'old_cairo',
   'temple_visit',
   'nubian_village'
 ] as const
+
+// Helper to parse tiered rate fields from request body
+function parseTieredRates(body: any) {
+  const rates: Record<string, any> = {}
+  for (const tier of VEHICLE_TIERS) {
+    if (body[`${tier}_rate_eur`] !== undefined) {
+      rates[`${tier}_rate_eur`] = body[`${tier}_rate_eur`] !== null ? parseFloat(body[`${tier}_rate_eur`]) || null : null
+    }
+    if (body[`${tier}_rate_non_eur`] !== undefined) {
+      rates[`${tier}_rate_non_eur`] = body[`${tier}_rate_non_eur`] !== null ? parseFloat(body[`${tier}_rate_non_eur`]) || null : null
+    }
+    if (body[`${tier}_capacity_min`] !== undefined) {
+      rates[`${tier}_capacity_min`] = body[`${tier}_capacity_min`] !== null ? parseInt(body[`${tier}_capacity_min`]) : null
+    }
+    if (body[`${tier}_capacity_max`] !== undefined) {
+      rates[`${tier}_capacity_max`] = body[`${tier}_capacity_max`] !== null ? parseInt(body[`${tier}_capacity_max`]) : null
+    }
+  }
+  return rates
+}
 
 // GET - List transportation rates with filters
 export async function GET(request: NextRequest) {
@@ -43,7 +63,6 @@ export async function GET(request: NextRequest) {
     const serviceType = searchParams.get('service_type')
     const duration = searchParams.get('duration')
     const area = searchParams.get('area')
-    const vehicleType = searchParams.get('vehicle_type')
     const originCity = searchParams.get('origin_city')
     const destinationCity = searchParams.get('destination_city')
     const supplierId = searchParams.get('supplier_id')
@@ -59,14 +78,12 @@ export async function GET(request: NextRequest) {
       .order('service_type')
       .order('duration')
       .order('area')
-      .order('vehicle_type')
 
     // Apply filters
     if (city) query = query.ilike('city', `%${city}%`)
     if (serviceType) query = query.eq('service_type', serviceType)
     if (duration) query = query.eq('duration', duration)
     if (area) query = query.eq('area', area)
-    if (vehicleType) query = query.eq('vehicle_type', vehicleType)
     if (originCity) query = query.ilike('origin_city', `%${originCity}%`)
     if (destinationCity) query = query.ilike('destination_city', `%${destinationCity}%`)
     if (supplierId) query = query.eq('supplier_id', supplierId)
@@ -80,13 +97,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Also return enum options for UI dropdowns
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: data || [],
       options: {
         serviceTypes: SERVICE_TYPES,
         durations: DURATIONS,
-        vehicleTypes: VEHICLE_TYPES,
+        vehicleTiers: VEHICLE_TIERS,
         areas: AREAS
       }
     })
@@ -96,7 +113,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new transportation rate
+// POST - Create new transportation rate (one row per service with tiered vehicle rates)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -107,45 +124,48 @@ export async function POST(request: NextRequest) {
     // Generate route name if not provided
     const routeName = body.route_name || generateRouteName(body)
 
-    const newRate = {
+    // Parse tiered vehicle rates from body
+    const tieredRates = parseTieredRates(body)
+
+    const newRate: Record<string, any> = {
       service_code: serviceCode,
       service_type: body.service_type,
-      vehicle_type: body.vehicle_type,
       city: body.city || null,
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
       duration: body.duration || null,
       area: body.area || null,
       route_name: routeName,
-      base_rate_eur: parseFloat(body.base_rate_eur) || 0,
-      base_rate_non_eur: parseFloat(body.base_rate_non_eur) || parseFloat(body.base_rate_eur) || 0,
-      capacity_min: body.capacity_min ? parseInt(body.capacity_min) : null,
-      capacity_max: body.capacity_max ? parseInt(body.capacity_max) : null,
+      includes: body.includes || null,
       season: body.season || null,
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
       supplier_id: body.supplier_id || null,
       supplier_name: body.supplier_name || null,
       notes: body.notes || null,
-      is_active: body.is_active !== false
+      is_active: body.is_active !== false,
+      ...tieredRates
     }
 
     // Validate required fields
     if (!newRate.service_type) {
       return NextResponse.json({ success: false, error: 'service_type is required' }, { status: 400 })
     }
-    if (!newRate.vehicle_type) {
-      return NextResponse.json({ success: false, error: 'vehicle_type is required' }, { status: 400 })
-    }
     if (newRate.service_type === 'intercity_transfer') {
       if (!newRate.origin_city || !newRate.destination_city) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'origin_city and destination_city are required for intercity transfers' 
+        return NextResponse.json({
+          success: false,
+          error: 'origin_city and destination_city are required for intercity transfers'
         }, { status: 400 })
       }
     } else if (!newRate.city) {
       return NextResponse.json({ success: false, error: 'city is required' }, { status: 400 })
+    }
+
+    // Must have at least one vehicle tier rate
+    const hasAnyRate = VEHICLE_TIERS.some(t => tieredRates[`${t}_rate_eur`] != null && tieredRates[`${t}_rate_eur`] > 0)
+    if (!hasAnyRate) {
+      return NextResponse.json({ success: false, error: 'At least one vehicle tier rate is required' }, { status: 400 })
     }
 
     const { data, error } = await supabaseAdmin
@@ -170,15 +190,25 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, ...rawUpdates } = body
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     }
 
+    // Parse tiered rates from the update payload
+    const tieredRates = parseTieredRates(rawUpdates)
+
+    // Remove tiered fields from rawUpdates to avoid double-setting
+    const updates: Record<string, any> = {}
+    for (const [key, val] of Object.entries(rawUpdates)) {
+      if (!VEHICLE_TIERS.some(t => key.startsWith(`${t}_`))) {
+        updates[key] = val
+      }
+    }
+
     // Regenerate route_name if relevant fields changed
-    if (updates.city || updates.service_type || updates.duration || updates.area || updates.vehicle_type) {
-      // Fetch current record to merge with updates
+    if (updates.city || updates.service_type || updates.duration || updates.area) {
       const { data: current } = await supabaseAdmin
         .from('transportation_rates')
         .select('*')
@@ -191,25 +221,11 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Parse numeric fields
-    if (updates.base_rate_eur !== undefined) {
-      updates.base_rate_eur = parseFloat(updates.base_rate_eur) || 0
-    }
-    if (updates.base_rate_non_eur !== undefined) {
-      updates.base_rate_non_eur = parseFloat(updates.base_rate_non_eur) || 0
-    }
-    if (updates.capacity_min !== undefined) {
-      updates.capacity_min = updates.capacity_min ? parseInt(updates.capacity_min) : null
-    }
-    if (updates.capacity_max !== undefined) {
-      updates.capacity_max = updates.capacity_max ? parseInt(updates.capacity_max) : null
-    }
-
     updates.updated_at = new Date().toISOString()
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .update(updates)
+      .update({ ...updates, ...tieredRates })
       .eq('id', id)
       .select('*')
       .single()
@@ -266,11 +282,11 @@ function generateServiceCode(data: any): string {
     parts.push(data.destination_city?.substring(0, 3).toUpperCase() || 'XXX')
   } else {
     parts.push(data.city?.toUpperCase().replace(/\s+/g, '') || 'CITY')
-    
+
     if (data.area) {
       parts.push(data.area.toUpperCase().replace(/_/g, ''))
     }
-    
+
     if (data.duration === 'half_day') {
       parts.push('HALF')
     } else if (data.duration === 'full_day') {
@@ -278,14 +294,23 @@ function generateServiceCode(data: any): string {
     }
   }
 
-  parts.push(data.vehicle_type?.toUpperCase().replace(/\s+/g, '') || 'VEHICLE')
+  // Service type suffix
+  const typeMap: Record<string, string> = {
+    'airport_transfer': 'APT',
+    'city_transfer': 'CITY',
+    'day_tour': 'TOUR',
+    'dinner_transfer': 'DINNER',
+    'intercity_transfer': 'XFER',
+    'sound_light_transfer': 'SL'
+  }
+  parts.push(typeMap[data.service_type] || data.service_type?.toUpperCase() || 'SVC')
 
   return parts.join('-')
 }
 
 function generateRouteName(data: any): string {
   if (data.service_type === 'intercity_transfer') {
-    return `${data.origin_city || 'Origin'} to ${data.destination_city || 'Destination'} - ${data.vehicle_type || 'Vehicle'}`
+    return `${data.origin_city || 'Origin'} to ${data.destination_city || 'Destination'}`
   }
 
   const parts: string[] = []
@@ -310,5 +335,14 @@ function generateRouteName(data: any): string {
     parts.push('Full Day')
   }
 
-  return `${parts.join(' ')} - ${data.vehicle_type || 'Vehicle'}`
+  const serviceNames: Record<string, string> = {
+    'airport_transfer': 'Airport Transfer',
+    'city_transfer': 'City Transfer',
+    'day_tour': 'Day Tour',
+    'dinner_transfer': 'Dinner Transfer',
+    'sound_light_transfer': 'Sound & Light Transfer'
+  }
+  parts.push(serviceNames[data.service_type] || data.service_type || 'Service')
+
+  return parts.join(' ')
 }
