@@ -73,6 +73,14 @@ interface ItineraryDay {
   flight_from?: string
 }
 
+interface CabinAllocationItem {
+  type: 'single' | 'double' | 'triple' | 'suite'
+  count: number
+  pax: number
+  ratePerPersonPerNight: number
+  costPerNight: number
+}
+
 interface Itinerary {
   id: string
   itinerary_code: string
@@ -92,6 +100,7 @@ interface Itinerary {
   status: string
   total_cost: number
   notes: string
+  cabin_allocation?: CabinAllocationItem[] | null
 }
 
 interface ItineraryService {
@@ -588,6 +597,7 @@ export default function ItineraryEditorPage() {
           total_days: days.length,
           total_cost: totalCost,
           status: itinerary.status, // Preserve the current status
+          cabin_allocation: itinerary.cabin_allocation || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', itineraryId)
@@ -1540,6 +1550,46 @@ export default function ItineraryEditorPage() {
               ))}
             </div>
           </div>
+
+          {/* Cabin Allocation (for cruise packages) */}
+          {itinerary.cabin_allocation && itinerary.cabin_allocation.length > 0 && (
+            <div className="bg-white rounded-xl p-5 mb-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <span>🛏️</span> Cabin Allocation
+              </h3>
+              <div className="space-y-2">
+                {itinerary.cabin_allocation.map((cabin, idx) => (
+                  <div key={idx} className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-blue-800 capitalize">
+                        {cabin.count}× {cabin.type}
+                      </span>
+                      <span className="text-xs text-blue-600">
+                        ({cabin.pax} pax)
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-blue-800">
+                        ${cabin.ratePerPersonPerNight}/pp/night
+                      </div>
+                      <div className="text-xs text-blue-600">
+                        ${cabin.costPerNight}/night total
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between pt-2 border-t border-gray-200 mt-2">
+                  <span className="text-xs font-semibold text-gray-600">Total per night</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    ${itinerary.cabin_allocation.reduce((sum, c) => sum + c.costPerNight, 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-3">
+                Auto-selected cheapest option. Recalculate pricing to update cabin allocation.
+              </p>
+            </div>
+          )}
 
           {/* Action Box */}
           <div className="bg-[#f4f7f1] rounded-xl p-5 border border-[#b8c9a8]">

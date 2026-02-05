@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import {
+  fetchCruiseTransportPricingRules,
+  findCruiseTransportRule,
+  getCruiseTransportRate
+} from '@/lib/auto-pricing-service'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -735,99 +740,232 @@ async function findCruiseContent(
 }
 
 // ============================================
-// CRUISE RATE LOOKUP
+// CRUISE RATE LOOKUP (with cabin allocation)
 // ============================================
+
+interface CabinAllocation {
+  type: 'single' | 'double' | 'triple' | 'suite'
+  count: number
+  pax: number  // total people in this cabin type
+  ratePerPersonPerNight: number
+  costPerNight: number  // rate × pax
+}
 
 interface CruiseRate {
   found: boolean
-  perPersonPerNight: number
   shipName: string
   supplierId: string | null
-  cabinType: string
+  season: string
+  cabinAllocation: CabinAllocation[]
+  totalPerNight: number       // supplier cost for all cabins per night
+  totalSupplierCost: number   // totalPerNight × nights
+  nights: number
 }
 
-async function getCruiseRate(
-  tier: ServiceTier,
-  recommendedSuppliers: string[],
-  supabase: any
-): Promise<CruiseRate> {
-  const defaultRates: Record<ServiceTier, number> = {
-    'budget': 150,
-    'standard': 200,
-    'deluxe': 300,
-    'luxury': 500
+/**
+ * Detect which season a date falls in for a given cruise ship record
+ */
+function detectCruiseSeason(ship: any, startDate: string): string {
+  const date = new Date(startDate)
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const mmdd = month * 100 + day  // e.g., March 20 = 320
+
+  const toMmdd = (dateStr: string | null): number => {
+    if (!dateStr) return 0
+    const d = new Date(dateStr)
+    return (d.getMonth() + 1) * 100 + d.getDate()
   }
+
+  // Check peak season first (2 possible periods)
+  if (ship.peak_season_1_start && ship.peak_season_1_end) {
+    const start = toMmdd(ship.peak_season_1_start)
+    const end = toMmdd(ship.peak_season_1_end)
+    if (start <= end ? (mmdd >= start && mmdd <= end) : (mmdd >= start || mmdd <= end)) return 'peak'
+  }
+  if (ship.peak_season_2_start && ship.peak_season_2_end) {
+    const start = toMmdd(ship.peak_season_2_start)
+    const end = toMmdd(ship.peak_season_2_end)
+    if (start <= end ? (mmdd >= start && mmdd <= end) : (mmdd >= start || mmdd <= end)) return 'peak'
+  }
+
+  // Check high season
+  if (ship.high_season_start && ship.high_season_end) {
+    const start = toMmdd(ship.high_season_start)
+    const end = toMmdd(ship.high_season_end)
+    if (start <= end ? (mmdd >= start && mmdd <= end) : (mmdd >= start || mmdd <= end)) return 'high'
+  }
+
+  // Default to low season
+  return 'low'
+}
+
+/**
+ * Get per-person-per-night rates for a given season and passport type
+ */
+function getCruiseSeasonRates(ship: any, season: string, isEuro: boolean): {
+  single: number; double: number; triple: number; suite: number
+} {
+  const suffix = isEuro ? 'eur' : 'non_eur'
+  return {
+    single: toNumber(ship[`rate_${season}_single_${suffix}`], 0),
+    double: toNumber(ship[`rate_${season}_double_${suffix}`], 0),
+    triple: toNumber(ship[`rate_${season}_triple_${suffix}`], 0),
+    suite:  toNumber(ship[`rate_${season}_suite_${suffix}`], 0),
+  }
+}
+
+/**
+ * Calculate all valid cabin allocations for a given number of passengers
+ * Returns them sorted by total cost (cheapest first)
+ */
+function calculateCabinAllocations(
+  totalPax: number,
+  rates: { single: number; double: number; triple: number; suite: number }
+): CabinAllocation[][] {
+  const allocations: CabinAllocation[][] = []
+
+  // Generate combinations of double, triple, single that sum to totalPax
+  // Max cabins of each type
+  const maxTriples = Math.floor(totalPax / 3)
+  const maxDoubles = Math.floor(totalPax / 2)
+
+  for (let triples = 0; triples <= maxTriples; triples++) {
+    const remaining = totalPax - (triples * 3)
+    for (let doubles = 0; doubles <= Math.floor(remaining / 2); doubles++) {
+      const singles = remaining - (doubles * 2)
+
+      const allocation: CabinAllocation[] = []
+      let totalPerNight = 0
+
+      if (doubles > 0 && rates.double > 0) {
+        const cost = rates.double * 2 * doubles
+        allocation.push({ type: 'double', count: doubles, pax: doubles * 2, ratePerPersonPerNight: rates.double, costPerNight: cost })
+        totalPerNight += cost
+      }
+      if (triples > 0 && rates.triple > 0) {
+        const cost = rates.triple * 3 * triples
+        allocation.push({ type: 'triple', count: triples, pax: triples * 3, ratePerPersonPerNight: rates.triple, costPerNight: cost })
+        totalPerNight += cost
+      }
+      if (singles > 0 && rates.single > 0) {
+        const cost = rates.single * 1 * singles
+        allocation.push({ type: 'single', count: singles, pax: singles, ratePerPersonPerNight: rates.single, costPerNight: cost })
+        totalPerNight += cost
+      }
+
+      // Only include if all passengers are accounted for
+      const allocatedPax = allocation.reduce((sum, a) => sum + a.pax, 0)
+      if (allocatedPax === totalPax && allocation.length > 0) {
+        allocations.push(allocation)
+      }
+    }
+  }
+
+  // Sort by total cost per night (cheapest first)
+  allocations.sort((a, b) => {
+    const costA = a.reduce((sum, cabin) => sum + cabin.costPerNight, 0)
+    const costB = b.reduce((sum, cabin) => sum + cabin.costPerNight, 0)
+    return costA - costB
+  })
+
+  return allocations
+}
+
+/**
+ * Main cruise rate function: finds ship, detects season, calculates optimal cabin allocation
+ */
+async function getCruiseRate(
+  params: {
+    tier: ServiceTier
+    recommendedSuppliers: string[]
+    supabase: any
+    totalPax: number
+    nights: number
+    startDate: string
+    isEuroPassport: boolean
+  }
+): Promise<CruiseRate> {
+  const { tier, recommendedSuppliers, supabase, totalPax, nights, startDate, isEuroPassport } = params
 
   const noRate: CruiseRate = {
     found: false,
-    perPersonPerNight: defaultRates[tier],
     shipName: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Nile Cruise`,
     supplierId: null,
-    cabinType: 'Standard Cabin'
+    season: 'high',
+    cabinAllocation: [],
+    totalPerNight: 0,
+    totalSupplierCost: 0,
+    nights
   }
 
   try {
-    // If we have recommended suppliers, try to match
+    let ship: any = null
+
+    // Try recommended suppliers first
     if (recommendedSuppliers && recommendedSuppliers.length > 0) {
-      const { data: matchedShips } = await supabase
+      const { data } = await supabase
         .from('nile_cruises')
         .select('*')
         .eq('is_active', true)
         .in('ship_name', recommendedSuppliers)
         .limit(1)
-
-      if (matchedShips && matchedShips.length > 0) {
-        const ship = matchedShips[0]
-        return {
-          found: true,
-          perPersonPerNight: ship.rate_per_person_eur || ship.double_cabin_rate_eur || defaultRates[tier],
-          shipName: ship.ship_name,
-          supplierId: ship.supplier_id || ship.id,
-          cabinType: ship.cabin_type || 'Standard Cabin'
-        }
-      }
+      if (data?.length) ship = data[0]
     }
 
-    // Fallback: find any cruise matching tier
-    const { data: tierCruises } = await supabase
-      .from('nile_cruises')
-      .select('*')
-      .eq('is_active', true)
-      .eq('tier', tier)
-      .order('is_preferred', { ascending: false })
-      .limit(1)
-
-    if (tierCruises && tierCruises.length > 0) {
-      const ship = tierCruises[0]
-      return {
-        found: true,
-        perPersonPerNight: ship.rate_per_person_eur || ship.double_cabin_rate_eur || defaultRates[tier],
-        shipName: ship.ship_name,
-        supplierId: ship.supplier_id || ship.id,
-        cabinType: ship.cabin_type || 'Standard Cabin'
-      }
+    // Fallback: tier match
+    if (!ship) {
+      const { data } = await supabase
+        .from('nile_cruises')
+        .select('*')
+        .eq('is_active', true)
+        .eq('tier', tier)
+        .order('is_preferred', { ascending: false })
+        .limit(1)
+      if (data?.length) ship = data[0]
     }
 
     // Final fallback: any active cruise
-    const { data: anyCruise } = await supabase
-      .from('nile_cruises')
-      .select('*')
-      .eq('is_active', true)
-      .order('is_preferred', { ascending: false })
-      .limit(1)
-
-    if (anyCruise && anyCruise.length > 0) {
-      const ship = anyCruise[0]
-      return {
-        found: true,
-        perPersonPerNight: ship.rate_per_person_eur || ship.double_cabin_rate_eur || defaultRates[tier],
-        shipName: ship.ship_name,
-        supplierId: ship.supplier_id || ship.id,
-        cabinType: ship.cabin_type || 'Standard Cabin'
-      }
+    if (!ship) {
+      const { data } = await supabase
+        .from('nile_cruises')
+        .select('*')
+        .eq('is_active', true)
+        .order('is_preferred', { ascending: false })
+        .limit(1)
+      if (data?.length) ship = data[0]
     }
 
-    return noRate
+    if (!ship) return noRate
+
+    // Detect season
+    const season = detectCruiseSeason(ship, startDate)
+    const rates = getCruiseSeasonRates(ship, season, isEuroPassport)
+
+    console.log(`🚢 Cruise: ${ship.ship_name} | Season: ${season} | Passport: ${isEuroPassport ? 'EUR' : 'non-EUR'}`)
+    console.log(`💰 Rates (pppn): single=${rates.single}, double=${rates.double}, triple=${rates.triple}, suite=${rates.suite}`)
+
+    // Calculate optimal cabin allocation (cheapest first)
+    const allocations = calculateCabinAllocations(totalPax, rates)
+
+    if (allocations.length === 0) return noRate
+
+    // Use cheapest allocation
+    const bestAllocation = allocations[0]
+    const totalPerNight = bestAllocation.reduce((sum, a) => sum + a.costPerNight, 0)
+
+    console.log(`🛏️ Cabin allocation (${totalPax} pax): ${bestAllocation.map(a => `${a.count}×${a.type}`).join(' + ')} = ${totalPerNight}/night`)
+
+    return {
+      found: true,
+      shipName: ship.ship_name,
+      supplierId: ship.supplier_id || ship.id,
+      season,
+      cabinAllocation: bestAllocation,
+      totalPerNight,
+      totalSupplierCost: totalPerNight * nights,
+      nights
+    }
 
   } catch (err) {
     console.error('⚠️ Error fetching cruise rate:', err)
@@ -1668,12 +1806,48 @@ export async function POST(request: NextRequest) {
           duration_days = cruiseContent.content.duration_days
         }
         
-        const cruiseRate = await getCruiseRate(tier, cruiseContent.recommendedSuppliers, supabase)
-        console.log(`💰 Cruise rate: €${cruiseRate.perPersonPerNight}/person/night on ${cruiseRate.shipName}`)
-
         const nights = duration_days - 1
-        
-        // Create itinerary - UPDATED: Use effectivePackageType + B2B partner fields
+        const cruiseRate = await getCruiseRate({
+          tier,
+          recommendedSuppliers: cruiseContent.recommendedSuppliers,
+          supabase,
+          totalPax,
+          nights,
+          startDate: start_date,
+          isEuroPassport
+        })
+        console.log(`💰 Cruise rate: ${cruiseRate.totalPerNight}/night total on ${cruiseRate.shipName} (${cruiseRate.season} season)`)
+        if (cruiseRate.cabinAllocation.length > 0) {
+          console.log(`🛏️ Cabins: ${cruiseRate.cabinAllocation.map(a => `${a.count}×${a.type}`).join(' + ')}`)
+        }
+
+        // Fetch cruise transport (bundled flat rate)
+        const cruiseTransportRules = await fetchCruiseTransportPricingRules()
+        const cruiseTransportRule = findCruiseTransportRule(cruiseTransportRules, duration_days)
+        let cruiseTransportRate = 0
+        let cruiseTransportVehicle = 'Minivan'
+        if (cruiseTransportRule) {
+          const transport = getCruiseTransportRate(cruiseTransportRule, totalPax)
+          cruiseTransportRate = transport.rate
+          cruiseTransportVehicle = transport.vehicleType
+          console.log(`🚗 Cruise transport: ${cruiseTransportVehicle} = ${cruiseTransportRate} (flat rate for ${duration_days}D)`)
+        }
+
+        // Fetch guide rate
+        const { data: cruiseGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [finalLanguage]).limit(5)
+        const cruiseGuide = cruiseGuides?.[0]
+        const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate_eur, 55) : 55
+
+        // Fetch tipping rates
+        const { data: cruiseTippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
+        let cruiseDailyTips = cruiseTippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 15
+        const cruiseTierTipsMultiplier: Record<ServiceTier, number> = { 'budget': 0.8, 'standard': 1.0, 'deluxe': 1.2, 'luxury': 1.5 }
+        cruiseDailyTips = Math.round(cruiseDailyTips * cruiseTierTipsMultiplier[tier])
+
+        // Fetch entrance fees
+        const { data: cruiseEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
+
+        // Create itinerary with cabin_allocation
         const { data: itinerary, error: itineraryError } = await supabase
           .from('itineraries')
           .insert({
@@ -1697,6 +1871,7 @@ export async function POST(request: NextRequest) {
             cost_mode,
             notes: special_requests.length > 0 ? special_requests.join('; ') : null,
             client_id,
+            cabin_allocation: cruiseRate.found ? cruiseRate.cabinAllocation : null,
             // B2B Partner fields
             partner_id: partner_id || null,
             partner_commission_percent: partner_commission_percent || 0,
@@ -1712,6 +1887,7 @@ export async function POST(request: NextRequest) {
         let totalSupplierCost = 0
         let totalClientPrice = 0
         const createdCruiseDays: { id: string; title: string; description: string; city: string; overnight_city: string }[] = []
+        let transportAdded = false
 
         // Create days from Content Library
         for (const dayData of cruiseContent.dayByDay) {
@@ -1722,6 +1898,9 @@ export async function POST(request: NextRequest) {
           const dayDescription = dayData.description
           const dayCity = dayData.city || effectiveCity
           const dayOvernight = dayData.overnight || `On board - ${dayData.city}`
+          const isLastDay = dayData.day_number === duration_days
+          const isSailingDay = dayData.is_sailing_day || false
+          const dayNeedsGuide = !isSailingDay && (dayData.attractions?.length > 0 || dayData.guide_required !== false)
 
           const { data: day, error: dayError } = await supabase
             .from('itinerary_days')
@@ -1734,10 +1913,11 @@ export async function POST(request: NextRequest) {
               city: dayCity,
               overnight_city: dayOvernight,
               attractions: dayData.attractions || [],
-              guide_required: true,
+              guide_required: dayNeedsGuide,
               lunch_included: dayData.meals?.includes('lunch') ?? true,
               dinner_included: dayData.meals?.includes('dinner') ?? true,
-              hotel_included: false
+              hotel_included: false,
+              is_cruise_day: true
             })
             .select()
             .single()
@@ -1751,44 +1931,100 @@ export async function POST(request: NextRequest) {
 
           if (skip_pricing) continue
 
-          // Add cruise service (per night)
-          const isLastDay = dayData.day_number === duration_days
-          if (!isLastDay) {
-            const nightCost = cruiseRate.perPersonPerNight * totalPax
-            const nightClientPrice = withMargin(nightCost)
+          // --- SERVICE 1: Cruise Accommodation (per night, not on last day) ---
+          if (!isLastDay && cruiseRate.found) {
+            const nightCost = cruiseRate.totalPerNight
+            const cabinDesc = cruiseRate.cabinAllocation.map(a => `${a.count}×${a.type}`).join(' + ')
 
             await supabase.from('itinerary_services').insert({
               itinerary_day_id: day.id,
               service_type: 'cruise',
               service_code: cruiseRate.supplierId || 'CRUISE',
-              service_name: `${cruiseRate.shipName} - Full Board`,
+              service_name: `${cruiseRate.shipName} - Full Board (${cabinDesc})`,
               supplier_name: cruiseRate.shipName,
               quantity: totalPax,
-              rate_eur: cruiseRate.perPersonPerNight,
-              rate_non_eur: cruiseRate.perPersonPerNight,
+              rate_eur: cruiseRate.totalPerNight / totalPax,
+              rate_non_eur: cruiseRate.totalPerNight / totalPax,
               total_cost: nightCost,
-              client_price: nightClientPrice,
-              notes: `Night ${dayData.day_number}: ${dayData.overnight || 'On board'}`
+              client_price: withMargin(nightCost),
+              notes: `Night ${dayData.day_number}: ${dayOvernight} | ${cruiseRate.season} season | ${cabinDesc}`
             })
 
             totalSupplierCost += nightCost
-            totalClientPrice += nightClientPrice
+            totalClientPrice += withMargin(nightCost)
           }
 
-          // Add entrance fees
+          // --- SERVICE 2: Bundled Cruise Transport (flat rate, added once on day 1) ---
+          if (!transportAdded && cruiseTransportRate > 0) {
+            await supabase.from('itinerary_services').insert({
+              itinerary_day_id: day.id,
+              service_type: 'transportation',
+              service_code: cruiseTransportRule?.id || 'CRUISE-TRANSPORT',
+              service_name: `Cruise Transport Package (${cruiseTransportVehicle})`,
+              supplier_name: null,
+              quantity: 1,
+              rate_eur: cruiseTransportRate,
+              rate_non_eur: cruiseTransportRate,
+              total_cost: cruiseTransportRate,
+              client_price: withMargin(cruiseTransportRate),
+              notes: `Bundled transport for ${duration_days}D cruise: transfers + sightseeing (${cruiseTransportVehicle})`
+            })
+
+            totalSupplierCost += cruiseTransportRate
+            totalClientPrice += withMargin(cruiseTransportRate)
+            transportAdded = true
+          }
+
+          // --- SERVICE 3: Guide (on touring days, not sailing days) ---
+          if (dayNeedsGuide) {
+            await supabase.from('itinerary_services').insert({
+              itinerary_day_id: day.id,
+              service_type: 'guide',
+              service_code: cruiseGuide?.id || 'GUIDE',
+              service_name: `${finalLanguage} Speaking Guide`,
+              supplier_name: cruiseGuide?.name || null,
+              quantity: 1,
+              rate_eur: cruiseGuidePerDay,
+              rate_non_eur: cruiseGuidePerDay,
+              total_cost: cruiseGuidePerDay,
+              client_price: withMargin(cruiseGuidePerDay),
+              notes: `Professional ${finalLanguage} guide`
+            })
+
+            totalSupplierCost += cruiseGuidePerDay
+            totalClientPrice += withMargin(cruiseGuidePerDay)
+
+            // --- SERVICE 4: Tips (when guide is present) ---
+            await supabase.from('itinerary_services').insert({
+              itinerary_day_id: day.id,
+              service_type: 'tips',
+              service_code: 'TIPS',
+              service_name: 'Daily Tips',
+              quantity: 1,
+              rate_eur: cruiseDailyTips,
+              rate_non_eur: cruiseDailyTips,
+              total_cost: cruiseDailyTips,
+              client_price: withMargin(cruiseDailyTips),
+              notes: 'Driver and guide tips'
+            })
+
+            totalSupplierCost += cruiseDailyTips
+            totalClientPrice += withMargin(cruiseDailyTips)
+          }
+
+          // --- SERVICE 5: Entrance Fees ---
           if (dayData.attractions?.length > 0) {
-            const { data: entranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
-            
             let dayEntranceTotal = 0
             const matchedAttractions: string[] = []
 
             for (const attractionName of dayData.attractions) {
-              const fee = entranceFees?.find((ef: any) =>
+              const fee = cruiseEntranceFees?.find((ef: any) =>
                 ef.attraction_name.toLowerCase().includes(attractionName.toLowerCase()) ||
                 attractionName.toLowerCase().includes(ef.attraction_name.toLowerCase())
               )
 
               if (fee) {
+                if (fee.is_addon) continue
                 const feePerPerson = isEuroPassport ? toNumber(fee.eur_rate, 0) : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
                 dayEntranceTotal += feePerPerson * totalPax
                 matchedAttractions.push(fee.attraction_name)
@@ -1799,8 +2035,8 @@ export async function POST(request: NextRequest) {
               await supabase.from('itinerary_services').insert({
                 itinerary_day_id: day.id,
                 service_type: 'entrance',
-                service_code: 'ENTRANCE-FEES',
-                service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'} rates)`,
+                service_code: 'ENTRANCE',
+                service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'})`,
                 quantity: totalPax,
                 rate_eur: dayEntranceTotal / totalPax,
                 rate_non_eur: dayEntranceTotal / totalPax,
@@ -1812,6 +2048,26 @@ export async function POST(request: NextRequest) {
               totalSupplierCost += dayEntranceTotal
               totalClientPrice += withMargin(dayEntranceTotal)
             }
+          }
+
+          // --- SERVICE 6: Water (on touring days) ---
+          if (!isSailingDay) {
+            const waterCost = 2 * totalPax
+            await supabase.from('itinerary_services').insert({
+              itinerary_day_id: day.id,
+              service_type: 'supplies',
+              service_code: 'WATER',
+              service_name: 'Water Bottles',
+              quantity: totalPax,
+              rate_eur: 2,
+              rate_non_eur: 2,
+              total_cost: waterCost,
+              client_price: withMargin(waterCost),
+              notes: 'Bottled water'
+            })
+
+            totalSupplierCost += waterCost
+            totalClientPrice += withMargin(waterCost)
           }
         }
 
@@ -2027,6 +2283,7 @@ export async function POST(request: NextRequest) {
     // Create days and services
     let totalSupplierCost = 0
     let totalClientPrice = 0
+    let landCruiseTransportAdded = false
     const createdLandDays: { id: string; title: string; description: string; city: string; overnight_city: string }[] = []
 
     for (const dayData of itineraryData.days || []) {
@@ -2067,7 +2324,8 @@ export async function POST(request: NextRequest) {
           guide_required: dayNeedsGuide,
           lunch_included: dayIncludesLunch,
           dinner_included: dayIncludesDinner,
-          hotel_included: includesHotelForDay
+          hotel_included: includesHotelForDay,
+          is_cruise_day: isCruiseDay
         })
         .select()
         .single()
@@ -2148,8 +2406,8 @@ export async function POST(request: NextRequest) {
         totalClientPrice += withMargin(hotelServiceRate)
       }
 
-      // Transportation (always included unless it's a free day)
-      if (!isFreeDay) {
+      // Transportation (skip for cruise days — bundled transport added separately)
+      if (!isFreeDay && !isCruiseDay) {
         const transportRate = isTransferOnly ? vehiclePerDay * 0.5 : vehiclePerDay
         services.push({
           service_type: 'transportation',
@@ -2325,24 +2583,77 @@ export async function POST(request: NextRequest) {
         totalClientPrice += withMargin(hotelCost)
       }
 
-      // Cruise accommodation (for cruise days)
+      // Cruise accommodation + bundled transport (for cruise days in cruise-land packages)
       if (isCruiseDay && !isLastDay) {
-        const cruiseRate = await getCruiseRate(tier, [], supabase)
-        const nightCost = cruiseRate.perPersonPerNight * totalPax
-        services.push({
-          service_type: 'cruise',
-          service_code: cruiseRate.supplierId || 'CRUISE',
-          service_name: `${cruiseRate.shipName} - Full Board`,
-          supplier_name: cruiseRate.shipName,
-          quantity: totalPax,
-          rate_eur: cruiseRate.perPersonPerNight,
-          rate_non_eur: cruiseRate.perPersonPerNight,
-          total_cost: nightCost,
-          client_price: withMargin(nightCost),
-          notes: `Night ${dayNumber}: On board`
+        // Count cruise nights for this itinerary
+        const cruiseNightsInPackage = (itineraryData.days || []).filter(
+          (d: any) => (d.is_cruise_day || d.accommodation_type === 'cruise') && d.day_number !== duration_days
+        ).length
+
+        const landCruiseRate = await getCruiseRate({
+          tier,
+          recommendedSuppliers: [],
+          supabase,
+          totalPax,
+          nights: cruiseNightsInPackage,
+          startDate: start_date,
+          isEuroPassport
         })
-        totalSupplierCost += nightCost
-        totalClientPrice += withMargin(nightCost)
+
+        if (landCruiseRate.found) {
+          const nightCost = landCruiseRate.totalPerNight
+          const cabinDesc = landCruiseRate.cabinAllocation.map((a: CabinAllocation) => `${a.count}×${a.type}`).join(' + ')
+
+          services.push({
+            service_type: 'cruise',
+            service_code: landCruiseRate.supplierId || 'CRUISE',
+            service_name: `${landCruiseRate.shipName} - Full Board (${cabinDesc})`,
+            supplier_name: landCruiseRate.shipName,
+            quantity: totalPax,
+            rate_eur: landCruiseRate.totalPerNight / totalPax,
+            rate_non_eur: landCruiseRate.totalPerNight / totalPax,
+            total_cost: nightCost,
+            client_price: withMargin(nightCost),
+            notes: `Night ${dayNumber}: On board | ${landCruiseRate.season} season | ${cabinDesc}`
+          })
+          totalSupplierCost += nightCost
+          totalClientPrice += withMargin(nightCost)
+
+          // Store cabin allocation on itinerary (once)
+          if (dayNumber === (itineraryData.days || []).find((d: any) => d.is_cruise_day || d.accommodation_type === 'cruise')?.day_number) {
+            await supabase.from('itineraries').update({
+              cabin_allocation: landCruiseRate.cabinAllocation
+            }).eq('id', itinerary.id)
+          }
+        }
+      }
+
+      // Bundled cruise transport (added once on first cruise day)
+      if (isCruiseDay && !landCruiseTransportAdded) {
+        const cruiseDaysCount = (itineraryData.days || []).filter(
+          (d: any) => d.is_cruise_day || d.accommodation_type === 'cruise'
+        ).length
+
+        const landCruiseTransportRules = await fetchCruiseTransportPricingRules()
+        const landCruiseTransportRule = findCruiseTransportRule(landCruiseTransportRules, cruiseDaysCount)
+        if (landCruiseTransportRule) {
+          const transport = getCruiseTransportRate(landCruiseTransportRule, totalPax)
+          services.push({
+            service_type: 'transportation',
+            service_code: landCruiseTransportRule.id || 'CRUISE-TRANSPORT',
+            service_name: `Cruise Transport Package (${transport.vehicleType})`,
+            supplier_name: null,
+            quantity: 1,
+            rate_eur: transport.rate,
+            rate_non_eur: transport.rate,
+            total_cost: transport.rate,
+            client_price: withMargin(transport.rate),
+            notes: `Bundled transport for ${cruiseDaysCount}D cruise: transfers + sightseeing (${transport.vehicleType})`
+          })
+          totalSupplierCost += transport.rate
+          totalClientPrice += withMargin(transport.rate)
+        }
+        landCruiseTransportAdded = true
       }
 
       // Insert all services
