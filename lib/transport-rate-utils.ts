@@ -166,8 +166,8 @@ export function getAllVehicleTiers(rate: TransportRateRecord | any): VehicleRate
 
 function getDefaultCapacity(tier: VehicleTier): { min: number; max: number } {
   switch (tier) {
-    case 'sedan': return { min: 1, max: 3 }
-    case 'minivan': return { min: 4, max: 7 }
+    case 'sedan': return { min: 1, max: 2 }
+    case 'minivan': return { min: 3, max: 7 }
     case 'van': return { min: 8, max: 12 }
     case 'minibus': return { min: 13, max: 20 }
     case 'bus': return { min: 21, max: 45 }

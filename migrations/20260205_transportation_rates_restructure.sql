@@ -21,8 +21,8 @@ ADD COLUMN IF NOT EXISTS bus_rate_non_eur NUMERIC(10,2) DEFAULT NULL;
 -- 2. Add capacity range columns for each vehicle tier
 ALTER TABLE transportation_rates
 ADD COLUMN IF NOT EXISTS sedan_capacity_min INTEGER DEFAULT 1,
-ADD COLUMN IF NOT EXISTS sedan_capacity_max INTEGER DEFAULT 3,
-ADD COLUMN IF NOT EXISTS minivan_capacity_min INTEGER DEFAULT 4,
+ADD COLUMN IF NOT EXISTS sedan_capacity_max INTEGER DEFAULT 2,
+ADD COLUMN IF NOT EXISTS minivan_capacity_min INTEGER DEFAULT 3,
 ADD COLUMN IF NOT EXISTS minivan_capacity_max INTEGER DEFAULT 7,
 ADD COLUMN IF NOT EXISTS van_capacity_min INTEGER DEFAULT 8,
 ADD COLUMN IF NOT EXISTS van_capacity_max INTEGER DEFAULT 12,

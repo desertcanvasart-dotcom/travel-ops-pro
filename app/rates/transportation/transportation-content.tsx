@@ -83,8 +83,8 @@ interface Supplier {
 }
 
 const VEHICLE_TIERS = [
-  { key: 'sedan', label: 'Sedan', defaultMin: 1, defaultMax: 3 },
-  { key: 'minivan', label: 'Minivan', defaultMin: 4, defaultMax: 7 },
+  { key: 'sedan', label: 'Sedan', defaultMin: 1, defaultMax: 2 },
+  { key: 'minivan', label: 'Minivan', defaultMin: 3, defaultMax: 7 },
   { key: 'van', label: 'Van', defaultMin: 8, defaultMax: 12 },
   { key: 'minibus', label: 'Minibus', defaultMin: 13, defaultMax: 20 },
   { key: 'bus', label: 'Bus', defaultMin: 21, defaultMax: 45 },
