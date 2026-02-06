@@ -26,9 +26,16 @@ interface BaseRate {
 
 interface TransportationRate extends BaseRate {
   service_type?: string
-  vehicle_type?: string
-  capacity_min?: number
-  capacity_max?: number
+  sedan_rate_eur?: number
+  sedan_rate_non_eur?: number
+  minivan_rate_eur?: number
+  minivan_rate_non_eur?: number
+  van_rate_eur?: number
+  van_rate_non_eur?: number
+  minibus_rate_eur?: number
+  minibus_rate_non_eur?: number
+  bus_rate_eur?: number
+  bus_rate_non_eur?: number
 }
 
 interface GuideRate extends BaseRate {
@@ -831,49 +838,58 @@ export default function RatesPage() {
             
             {/* Transportation Table */}
             {activeTab === 'transportation' && (
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.service')}</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.vehicle')}</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
-                    <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.capacity')}</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.rate')}</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.supplier')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {paginatedRates.transportation.map((rate, index) => (
-                    <tr key={rate.service_code} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors`}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{rate.service_type}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{rate.vehicle_type}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
-                          {rate.city}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-xs">
-                        {rate.capacity_min && rate.capacity_max ? 
-                          <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-700">{rate.capacity_min}-{rate.capacity_max}</span> : 
-                          <span className="text-gray-400">-</span>
-                        }
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600">{rate.supplier_name || '-'}</td>
-                    </tr>
-                  ))}
-                  {paginatedRates.transportation.length === 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px]">
+                  <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
-                        <span className="text-3xl">🚗</span>
-                        <p className="text-sm font-medium mt-2">{t('empty.transportation')}</p>
-                      </td>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.service')}</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Sedan</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Minivan</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Van</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Minibus</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Bus</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.supplier')}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedRates.transportation.map((rate, index) => (
+                      <tr key={rate.service_code + '-' + index} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors`}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{rate.service_type}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                            {rate.city}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                          {rate.sedan_rate_eur ? formatRate(Number(rate.sedan_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                          {rate.minivan_rate_eur ? formatRate(Number(rate.minivan_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                          {rate.van_rate_eur ? formatRate(Number(rate.van_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                          {rate.minibus_rate_eur ? formatRate(Number(rate.minibus_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                          {rate.bus_rate_eur ? formatRate(Number(rate.bus_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-600">{rate.supplier_name || '-'}</td>
+                      </tr>
+                    ))}
+                    {paginatedRates.transportation.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                          <span className="text-3xl">🚗</span>
+                          <p className="text-sm font-medium mt-2">{t('empty.transportation')}</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             {/* Guides Table */}
