@@ -84,11 +84,11 @@ interface Supplier {
 }
 
 const VEHICLE_TIERS = [
-  { key: 'sedan', label: 'Sedan', defaultMin: 1, defaultMax: 2 },
-  { key: 'minivan', label: 'Minivan', defaultMin: 3, defaultMax: 7 },
-  { key: 'van', label: 'Van', defaultMin: 8, defaultMax: 12 },
-  { key: 'minibus', label: 'Minibus', defaultMin: 13, defaultMax: 20 },
-  { key: 'bus', label: 'Bus', defaultMin: 21, defaultMax: 45 },
+  { key: 'sedan', labelKey: 'sedan', defaultMin: 1, defaultMax: 2 },
+  { key: 'minivan', labelKey: 'minivan', defaultMin: 3, defaultMax: 7 },
+  { key: 'van', labelKey: 'van', defaultMin: 8, defaultMax: 12 },
+  { key: 'minibus', labelKey: 'minibus', defaultMin: 13, defaultMax: 20 },
+  { key: 'bus', labelKey: 'bus', defaultMin: 21, defaultMax: 45 },
 ] as const
 
 interface FormData {
@@ -143,16 +143,16 @@ const initialFormData: FormData = {
 }
 
 const SERVICE_TYPES = [
-  { value: 'airport_transfer', label: 'Airport Transfer', needsDestination: false },
-  { value: 'day_tour', label: 'Day Tour', needsDestination: false },
-  { value: 'multi_day', label: 'Multi-Day', needsDestination: false },
-  { value: 'city_transfer', label: 'City Transfer', needsDestination: true },
-  { value: 'intercity', label: 'Intercity', needsDestination: true },
-  { value: 'intercity_transfer', label: 'Intercity Transfer', needsDestination: true },
-  { value: 'half_day', label: 'Half Day', needsDestination: false },
-  { value: 'sound_light', label: 'Sound & Light Transfer', needsDestination: false },
-  { value: 'dinner_transfer', label: 'Dinner Transfer', needsDestination: false },
-  { value: 'sound_light_transfer', label: 'Sound & Light Transfer', needsDestination: false },
+  { value: 'airport_transfer', labelKey: 'airportTransfer', needsDestination: false },
+  { value: 'day_tour', labelKey: 'dayTour', needsDestination: false },
+  { value: 'multi_day', labelKey: 'multiDay', needsDestination: false },
+  { value: 'city_transfer', labelKey: 'cityTransfer', needsDestination: true },
+  { value: 'intercity', labelKey: 'intercity', needsDestination: true },
+  { value: 'intercity_transfer', labelKey: 'intercityTransfer', needsDestination: true },
+  { value: 'half_day', labelKey: 'halfDay', needsDestination: false },
+  { value: 'sound_light', labelKey: 'soundLightTransfer', needsDestination: false },
+  { value: 'dinner_transfer', labelKey: 'dinnerTransfer', needsDestination: false },
+  { value: 'sound_light_transfer', labelKey: 'soundLightTransfer', needsDestination: false },
 ]
 
 // Using centralized EGYPT_CITIES from lib/constants/egypt-cities.ts
@@ -184,7 +184,17 @@ function getMinRate(rate: TransportationRate): number {
 export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
   const tCommon = useTranslations('rates.common')
+  const tCities = useTranslations('quote.cities')
   const dialog = useConfirmDialog()
+
+  // Helper to translate city names - falls back to original if no translation
+  const translateCity = (city: string) => {
+    try {
+      return tCities(city as any) || city
+    } catch {
+      return city
+    }
+  }
 
   const { formatWithConversion } = useCurrency()
   const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
@@ -580,7 +590,7 @@ export default function TransportationContent() {
           >
             <option value="">{t('allCities')}</option>
             {EGYPT_CITIES.map(city => (
-              <option key={city} value={city}>{city}</option>
+              <option key={city} value={city}>{translateCity(city)}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -595,7 +605,7 @@ export default function TransportationContent() {
           >
             <option value="">{t('allServiceTypes')}</option>
             {SERVICE_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{type.label}</option>
+              <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -640,7 +650,8 @@ export default function TransportationContent() {
             const activeTiers = getActiveTiers(rate)
             const isIntercity = needsDestinationCity(rate.service_type)
             const supplierName = rate.supplier?.name || rate.supplier_name
-            const serviceLabel = SERVICE_TYPES.find(t => t.value === rate.service_type)?.label || rate.service_type
+            const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
+            const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
 
             return (
               <div
@@ -668,10 +679,10 @@ export default function TransportationContent() {
                         </span>
                         {isIntercity && rate.destination_city ? (
                           <span className="text-xs text-gray-500">
-                            {rate.city} → {rate.destination_city}
+                            {translateCity(rate.city)} → {translateCity(rate.destination_city)}
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-500">{rate.city}</span>
+                          <span className="text-xs text-gray-500">{translateCity(rate.city)}</span>
                         )}
                       </div>
                     </div>
@@ -718,7 +729,7 @@ export default function TransportationContent() {
                           const capMax = rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number
                           return (
                             <tr key={tier.key} className="border-t border-gray-50">
-                              <td className="py-1.5 text-xs font-medium text-gray-700">{tier.label}</td>
+                              <td className="py-1.5 text-xs font-medium text-gray-700">{t(tier.labelKey)}</td>
                               <td className="py-1.5 text-xs text-center text-gray-500">{capMin}-{capMax}</td>
                               <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRate(eurRate)}</td>
                             </tr>
@@ -879,7 +890,7 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       {SERVICE_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>{type.label}</option>
+                        <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
                       ))}
                     </select>
                   </div>
@@ -910,9 +921,9 @@ export default function TransportationContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      <option value="">Select City</option>
+                      <option value="">{t('selectDepartureCity')}</option>
                       {EGYPT_CITIES.map(city => (
-                        <option key={city} value={city}>{city}</option>
+                        <option key={city} value={city}>{translateCity(city)}</option>
                       ))}
                     </select>
                   </div>
@@ -920,7 +931,7 @@ export default function TransportationContent() {
                   {needsDestinationCity(formData.service_type) && (
                     <div>
                       <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                        Destination City <span className="text-red-500">*</span>
+                        {t('selectDestinationCity')} <span className="text-red-500">*</span>
                       </label>
                       <select
                         value={formData.destination_city}
@@ -928,9 +939,9 @@ export default function TransportationContent() {
                         required
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       >
-                        <option value="">Select Destination</option>
+                        <option value="">{t('selectDestinationCity')}</option>
                         {EGYPT_CITIES.filter(city => city !== formData.city).map(city => (
-                          <option key={city} value={city}>{city}</option>
+                          <option key={city} value={city}>{translateCity(city)}</option>
                         ))}
                       </select>
                     </div>
@@ -971,7 +982,7 @@ export default function TransportationContent() {
                       {VEHICLE_TIERS.map(tier => (
                         <tr key={tier.key} className="border-t border-gray-200">
                           <td className="px-3 py-2">
-                            <span className="text-sm font-medium text-gray-700">{tier.label}</span>
+                            <span className="text-sm font-medium text-gray-700">{t(tier.labelKey)}</span>
                             <span className="text-xs text-gray-400 ml-1">({tier.defaultMin}-{tier.defaultMax} pax)</span>
                           </td>
                           <td className="px-3 py-2 text-center">
