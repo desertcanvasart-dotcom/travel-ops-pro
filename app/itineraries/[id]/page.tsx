@@ -81,6 +81,7 @@ interface ExistingInvoice {
 
 export default function ViewItineraryPage() {
   const t = useTranslations('itineraries.detail')
+  const tEdit = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
   const dialog = useConfirmDialog()
   const params = useParams()
@@ -790,127 +791,14 @@ export default function ViewItineraryPage() {
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => setShowSendModal(true)}
-                className="bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 transition-colors text-sm font-medium flex items-center gap-1.5"
-              >
-                <Send className="w-4 h-4" />
-                {t('sendQuote')}
-              </button>
-              <button
-                onClick={handleGenerateInvoice}
-                disabled={generatingInvoice}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1.5 transition-colors ${
-                  existingInvoice 
-                    ? 'bg-green-600 text-white hover:bg-green-700' 
-                    : 'bg-amber-600 text-white hover:bg-amber-700'
-                } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
-              >
-                {generatingInvoice ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>{t('creating')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Receipt className="w-4 h-4" />
-                    {existingInvoice ? existingInvoice.invoice_number : t('invoice')}
-                  </>
-                )}
-              </button>
-              {existingBooking ? (
-                <Link
-                  href={`/bookings/${existingBooking.id}`}
-                  className="px-3 py-1.5 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-1.5"
-                  title={t('viewBooking')}
-                >
-                  <Briefcase className="w-4 h-4" />
-                  {existingBooking.booking_code}
-                </Link>
-              ) : itinerary.status === 'confirmed' && (
-                <button
-                  onClick={handleCreateBooking}
-                  disabled={creatingBooking}
-                  className={`px-3 py-1.5 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-1.5 ${creatingBooking ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={t('createBooking')}
-                >
-                  {creatingBooking ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>{t('creating')}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Briefcase className="w-4 h-4" />
-                      {t('createBooking')}
-                    </>
-                  )}
-                </button>
-              )}
-              <button
-                onClick={handleGenerateCommissions}
-                disabled={generatingCommissions}
-                className="px-3 py-1.5 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
-                title={t('generateCommissionRecords')}
-              >
-                {generatingCommissions ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>{t('generating')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Handshake className="w-4 h-4" />
-                    <span>{t('commissions')}</span>
-                  </>
-                )}
-              </button>
-                   <GenerateDocumentsButton 
-                  itineraryId={itinerary.id}
-                   itineraryCode={itinerary.itinerary_code}
-                    />
-              <Link
-                href={`/documents/contract/${itinerary.id}`}
-                className="px-3 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-1.5"
-              >
-                <FileText className="w-4 h-4" />
-                {t('contract')}
-              </Link>
-              <button
-                onClick={handleDownloadPDF}
-                disabled={generatingPDF}
-                className={`px-3 py-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-1.5 ${
-                  generatingPDF ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {generatingPDF ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                    <span>{t('generating')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    {t('pdf')}
-                  </>
-                )}
-              </button>
-              <AddExpenseFromItinerary 
-                itineraryId={itinerary.id}
-                itineraryCode={itinerary.itinerary_code}
-                clientName={itinerary.client_name}
-              />
-              <Link 
-                href={`/itineraries/${itinerary.id}/edit`}
-                className="p-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                title={tCommon('edit')}
-              >
-                <Edit2 className="w-4 h-4" />
-              </Link>
-            </div>
+{/* Edit Button Only */}
+            <Link
+              href={`/itineraries/${itinerary.id}/edit`}
+              className="p-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+              title={tCommon('edit')}
+            >
+              <Edit2 className="w-5 h-5" />
+            </Link>
           </div>
         </div>
       </header>
@@ -1135,6 +1023,123 @@ export default function ViewItineraryPage() {
           )}
         </div>
 
+{/* Action Bar */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => setShowSendModal(true)}
+              className="h-10 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors text-sm font-medium flex items-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              {t('sendQuote')}
+            </button>
+            <button
+              onClick={handleGenerateInvoice}
+              disabled={generatingInvoice}
+              className={`h-10 px-4 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
+                existingInvoice
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-amber-600 text-white hover:bg-amber-700'
+              } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
+            >
+              {generatingInvoice ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>{t('creating')}</span>
+                </>
+              ) : (
+                <>
+                  <Receipt className="w-4 h-4" />
+                  {existingInvoice ? existingInvoice.invoice_number : t('invoice')}
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleGenerateCommissions}
+              disabled={generatingCommissions}
+              className="h-10 px-4 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              title={t('generateCommissionRecords')}
+            >
+              {generatingCommissions ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>{t('generating')}</span>
+                </>
+              ) : (
+                <>
+                  <Handshake className="w-4 h-4" />
+                  <span>{t('commissions')}</span>
+                </>
+              )}
+            </button>
+            <GenerateDocumentsButton
+              itineraryId={itinerary.id}
+              itineraryCode={itinerary.itinerary_code}
+            />
+            <Link
+              href={`/documents/contract/${itinerary.id}`}
+              className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              {t('contract')}
+            </Link>
+            <button
+              onClick={handleDownloadPDF}
+              disabled={generatingPDF}
+              className={`h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 ${
+                generatingPDF ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              {generatingPDF ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span>{t('generating')}</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  {t('pdf')}
+                </>
+              )}
+            </button>
+            <AddExpenseFromItinerary
+              itineraryId={itinerary.id}
+              itineraryCode={itinerary.itinerary_code}
+              clientName={itinerary.client_name}
+            />
+            {existingBooking ? (
+              <Link
+                href={`/bookings/${existingBooking.id}`}
+                className="h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
+                title={t('viewBooking')}
+              >
+                <Briefcase className="w-4 h-4" />
+                {existingBooking.booking_code}
+              </Link>
+            ) : itinerary.status === 'confirmed' && (
+              <button
+                onClick={handleCreateBooking}
+                disabled={creatingBooking}
+                className={`h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2 ${creatingBooking ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={t('createBooking')}
+              >
+                {creatingBooking ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>{t('creating')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Briefcase className="w-4 h-4" />
+                    {t('createBooking')}
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Resource Cards */}
         <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />
         <div id="resource-assignment">
@@ -1177,7 +1182,7 @@ export default function ViewItineraryPage() {
                               <span className="text-lg">{getServiceIcon(service.service_type)}</span>
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
-                                <p className="text-xs text-gray-500 capitalize">{service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}</p>
+                                <p className="text-xs text-gray-500">{tEdit.has(`serviceTypes.${service.service_type}`) ? tEdit(`serviceTypes.${service.service_type}`) : service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}</p>
                                 {service.notes && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
                               </div>
                             </div>

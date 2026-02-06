@@ -934,7 +934,11 @@
         "activity": "Activity",
         "tips": "Tips",
         "supplies": "Supplies",
-        "service_fee": "Service Fee"
+        "service_fee": "Service Fee",
+        "cruise": "Cruise",
+        "airport_service": "Airport Service",
+        "hotel_service": "Hotel Service",
+        "water": "Water"
       },
       "packageTypes": {
         "day-trips": {

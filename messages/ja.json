@@ -1362,7 +1362,11 @@
         "activity": "アクティビティ",
         "tips": "チップ",
         "supplies": "備品",
-        "service_fee": "サービス料"
+        "service_fee": "サービス料",
+        "cruise": "クルーズ",
+        "airport_service": "空港サービス",
+        "hotel_service": "ホテルサービス",
+        "water": "水"
       },
       "serviceNamePlaceholder": "サービス名",
       "supplier": "サプライヤー",
@@ -1471,7 +1475,7 @@
       "clickToEdit": "クリックして編集",
       "switchToManualMode": "編集するには手動モードに切り替えてください",
       "noServicesAdded": "まだサービスが追加されていません",
-      "overnightIn": "<span class=\"font-medium\">{city}</span>で宿泊",
+      "overnightIn": "{city}で宿泊",
       "viewBooking": "予約を表示",
       "createBooking": "予約を作成",
       "bookingCreatedSuccessfully": "予約が正常に作成されました",
