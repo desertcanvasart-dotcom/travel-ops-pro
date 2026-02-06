@@ -1007,14 +1007,14 @@ export default function ViewItineraryPage() {
           </div>
           {!itinerary.client_phone && <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md"><p className="text-yellow-800 text-xs">{t('clientPhoneRequiredWarning')}</p></div>}
           {itinerary.client_phone && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="flex flex-wrap items-center gap-2">
             {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess(t('bookingConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
             {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess(t('paymentReminderSent')); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
             <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess(t('paymentConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
             <button
               type="button"
               onClick={() => setShowSendModal(true)}
-              className="h-10 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:bg-primary-700"
             >
               <Send className="w-4 h-4" />
               {t('sendQuote')}

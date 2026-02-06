@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import Link from 'next/link'
-import { ArrowLeft, Download, Eye, Edit2, Plus, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, Download, Eye, Edit2, Plus, X, Loader2, Copy, Check, Languages, ChevronDown } from 'lucide-react'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -108,6 +108,25 @@ export default function ContractPage() {
     specialNotes: 'Safety & Comfort: Meet & assist at all airports, trusted vetted teams, 24/7 WhatsApp support.\nPractical: Bottled water provided daily, restaurants chosen for cleanliness and hygiene.'
   })
 
+  // Copy & Translate state
+  const [copied, setCopied] = useState(false)
+  const [translating, setTranslating] = useState(false)
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false)
+  const [targetLanguage, setTargetLanguage] = useState<string | null>(null)
+
+  const SUPPORTED_LANGUAGES = [
+    { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+    { code: 'fr', name: 'French', flag: '🇫🇷' },
+    { code: 'de', name: 'German', flag: '🇩🇪' },
+    { code: 'it', name: 'Italian', flag: '🇮🇹' },
+    { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
+    { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+    { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+    { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+    { code: 'ko', name: 'Korean', flag: '🇰🇷' },
+    { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+  ]
+
   useEffect(() => {
     if (params.id) {
       fetchItinerary(params.id as string)
@@ -205,6 +224,177 @@ export default function ContractPage() {
     }
   }
 
+  // Generate contract text for copying
+  const generateContractText = () => {
+    const formatDate = (dateStr: string) => {
+      return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    }
+
+    return `TRAVEL SERVICE CONTRACT
+Contract Number: ${contractData.contractNumber}
+Date: ${formatDate(contractData.contractDate)}
+
+═══════════════════════════════════════════
+
+PARTIES
+
+Service Provider:
+${contractData.serviceProvider}
+Website: ${contractData.providerWebsite}
+Location: ${contractData.providerLocation}
+
+Client:
+Name: ${contractData.clientName}
+Email: ${contractData.clientEmail}
+Number of Travelers: ${contractData.numTravelers}
+
+═══════════════════════════════════════════
+
+TOUR DETAILS
+
+Tour Package: ${contractData.tourPackage}
+Start Date: ${formatDate(contractData.startDate)}
+End Date: ${formatDate(contractData.endDate)}
+Duration: ${contractData.duration}
+Destinations: ${contractData.destinations}
+
+═══════════════════════════════════════════
+
+FINANCIAL TERMS
+
+Total Package Price: USD $${contractData.totalCost.toLocaleString()}
+(USD $${(contractData.totalCost / contractData.numTravelers).toFixed(2)} per person × ${contractData.numTravelers} travelers)
+
+Payment Terms:
+${contractData.paymentTerms}
+
+═══════════════════════════════════════════
+
+WHAT'S INCLUDED
+
+${contractData.inclusions.map(item => `• ${item}`).join('\n')}
+
+WHAT'S NOT INCLUDED
+
+${contractData.exclusions.map(item => `• ${item}`).join('\n')}
+
+═══════════════════════════════════════════
+
+CANCELLATION POLICY
+
+• ${contractData.cancellation45Days}
+• ${contractData.cancellation44to30Days}
+• ${contractData.cancellation29to15Days}
+• ${contractData.cancellation14to0Days}
+
+Flight Cancellation: ${contractData.flightCancellation}
+No-Show Policy: ${contractData.noShowPolicy}
+Force Majeure: ${contractData.forceMajeure}
+
+═══════════════════════════════════════════
+
+SPECIAL NOTES
+
+${contractData.specialNotes}
+
+═══════════════════════════════════════════
+
+This contract is governed by the laws of Egypt.
+`
+  }
+
+  const handleCopyContract = async () => {
+    try {
+      const text = generateContractText()
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      console.error('Error copying contract:', error)
+      dialog.alert(t('error'), 'Failed to copy contract', 'warning')
+    }
+  }
+
+  const handleTranslate = async (langCode: string) => {
+    setTranslating(true)
+    setTargetLanguage(langCode)
+    setShowLanguageDropdown(false)
+
+    try {
+      // Translate key text fields
+      const fieldsToTranslate = [
+        { key: 'paymentTerms', value: contractData.paymentTerms },
+        { key: 'specialNotes', value: contractData.specialNotes },
+        { key: 'cancellation45Days', value: contractData.cancellation45Days },
+        { key: 'cancellation44to30Days', value: contractData.cancellation44to30Days },
+        { key: 'cancellation29to15Days', value: contractData.cancellation29to15Days },
+        { key: 'cancellation14to0Days', value: contractData.cancellation14to0Days },
+        { key: 'flightCancellation', value: contractData.flightCancellation },
+        { key: 'noShowPolicy', value: contractData.noShowPolicy },
+        { key: 'forceMajeure', value: contractData.forceMajeure },
+      ]
+
+      const translatedFields: Partial<ContractData> = {}
+
+      for (const field of fieldsToTranslate) {
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: field.value,
+            targetLanguage: langCode,
+            action: 'fromEnglish'
+          })
+        })
+        const data = await response.json()
+        if (data.success) {
+          translatedFields[field.key as keyof ContractData] = data.data.translatedText
+        }
+      }
+
+      // Translate inclusions
+      const translatedInclusions = await Promise.all(
+        contractData.inclusions.map(async (item) => {
+          const response = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: item, targetLanguage: langCode, action: 'fromEnglish' })
+          })
+          const data = await response.json()
+          return data.success ? data.data.translatedText : item
+        })
+      )
+
+      // Translate exclusions
+      const translatedExclusions = await Promise.all(
+        contractData.exclusions.map(async (item) => {
+          const response = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: item, targetLanguage: langCode, action: 'fromEnglish' })
+          })
+          const data = await response.json()
+          return data.success ? data.data.translatedText : item
+        })
+      )
+
+      setContractData(prev => ({
+        ...prev,
+        ...translatedFields,
+        inclusions: translatedInclusions,
+        exclusions: translatedExclusions
+      }))
+
+      const langName = SUPPORTED_LANGUAGES.find(l => l.code === langCode)?.name || langCode
+      dialog.alert(t('success'), `Contract translated to ${langName}`, 'success')
+    } catch (error) {
+      console.error('Error translating contract:', error)
+      dialog.alert(t('error'), 'Failed to translate contract', 'warning')
+    } finally {
+      setTranslating(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -245,6 +435,7 @@ export default function ContractPage() {
 
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => setEditMode(!editMode)}
               className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-50 flex items-center gap-1.5 text-sm font-medium"
             >
@@ -252,7 +443,61 @@ export default function ContractPage() {
               {editMode ? t('preview') : t('edit')}
             </button>
 
+            {/* Copy Button */}
             <button
+              type="button"
+              onClick={handleCopyContract}
+              className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-50 flex items-center gap-1.5 text-sm font-medium"
+              title="Copy contract to clipboard"
+            >
+              {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+
+            {/* Translate Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+                disabled={translating}
+                className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-50 flex items-center gap-1.5 text-sm font-medium disabled:opacity-50"
+              >
+                {translating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Translating...
+                  </>
+                ) : (
+                  <>
+                    <Languages className="w-4 h-4" />
+                    Translate
+                    <ChevronDown className="w-3 h-3" />
+                  </>
+                )}
+              </button>
+
+              {showLanguageDropdown && (
+                <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+                  {SUPPORTED_LANGUAGES.map(lang => (
+                    <button
+                      type="button"
+                      key={lang.code}
+                      onClick={() => handleTranslate(lang.code)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 ${
+                        targetLanguage === lang.code ? 'bg-blue-50 text-blue-700' : ''
+                      }`}
+                    >
+                      <span>{lang.flag}</span>
+                      <span>{lang.name}</span>
+                      {targetLanguage === lang.code && <Check className="w-4 h-4 ml-auto" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
               onClick={handleDownloadPDF}
               disabled={saving}
               className="bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 flex items-center gap-1.5 text-sm font-medium disabled:opacity-50"

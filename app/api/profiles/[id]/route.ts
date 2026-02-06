@@ -82,3 +82,56 @@ export async function PUT(
     )
   }
 }
+
+// DELETE - Delete user profile
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    // First check if the user exists and is not an admin (prevent deleting admins)
+    const { data: profile, error: fetchError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', id)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    if (profile?.role === 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Cannot delete admin users' },
+        { status: 403 }
+      )
+    }
+
+    // Delete the user profile
+    const { error } = await supabase
+      .from('user_profiles')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    // Also delete the auth user if possible (requires admin privileges)
+    try {
+      await supabase.auth.admin.deleteUser(id)
+    } catch (authError) {
+      console.warn('Could not delete auth user:', authError)
+      // Profile is already deleted, so we continue
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'User deleted successfully'
+    })
+  } catch (error) {
+    console.error('Error deleting profile:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete user' },
+      { status: 500 }
+    )
+  }
+}

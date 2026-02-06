@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useRole } from '@/hooks/useRole'
+import { useAuth } from '@/app/contexts/AuthContext'
 import {
   Users,
   UserPlus,
@@ -64,6 +65,7 @@ const ROLE_COLORS: Record<string, string> = {
 export default function UserManagementPage() {
   const router = useRouter()
   const { isAdmin, canManageTeam } = useRole()
+  const { profile } = useAuth()
   
   const [activeTab, setActiveTab] = useState<'users' | 'invitations'>('users')
   const [members, setMembers] = useState<TeamMember[]>([])
@@ -122,7 +124,8 @@ export default function UserManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: inviteForm.email,
-          role: inviteForm.role
+          role: inviteForm.role,
+          invited_by: profile?.id
         })
       })
 
@@ -174,7 +177,8 @@ export default function UserManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: invitation.email,
-          role: invitation.role
+          role: invitation.role,
+          invited_by: profile?.id
         })
       })
 
@@ -213,6 +217,26 @@ export default function UserManagementPage() {
       }
     } catch (error) {
       console.error('Error updating status:', error)
+    }
+  }
+
+  const deleteMember = async (memberId: string, memberName: string) => {
+    if (!confirm(`Are you sure you want to permanently delete "${memberName}"? This action cannot be undone.`)) return
+
+    try {
+      const response = await fetch(`/api/profiles/${memberId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        fetchMembers()
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Failed to delete user')
+      }
+    } catch (error) {
+      console.error('Error deleting member:', error)
+      alert('Failed to delete user')
     }
   }
 
@@ -378,13 +402,21 @@ export default function UserManagementPage() {
                         <button
                           onClick={() => toggleMemberStatus(member.id, member.is_active)}
                           className={`p-1.5 rounded transition-colors ${
-                            member.is_active 
-                              ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' 
+                            member.is_active
+                              ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
                               : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
                           }`}
                           title={member.is_active ? 'Deactivate' : 'Activate'}
                         >
                           {member.is_active ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteMember(member.id, member.full_name)}
+                          className="p-1.5 rounded transition-colors text-gray-400 hover:text-red-600 hover:bg-red-50"
+                          title="Delete user permanently"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     )}
