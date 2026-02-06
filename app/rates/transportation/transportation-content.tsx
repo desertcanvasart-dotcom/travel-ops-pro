@@ -184,7 +184,7 @@ function getMinRate(rate: TransportationRate): number {
 export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
   const tCommon = useTranslations('rates.common')
-  const tCities = useTranslations('quote.cities')
+  const tCities = useTranslations('tourBuilder.cities')
   const dialog = useConfirmDialog()
 
   // Helper to translate city names - falls back to original if no translation
@@ -667,7 +667,7 @@ export default function TransportationContent() {
                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                         }`}>
-                          {rate.is_active ? 'Active' : 'Inactive'}
+                          {rate.is_active ? t('active') : t('inactive')}
                         </span>
                       </div>
                       <h3 className="text-sm font-medium text-gray-900 mt-1 truncate">
@@ -716,8 +716,8 @@ export default function TransportationContent() {
                   <table className="w-full">
                     <thead>
                       <tr className="text-[10px] uppercase tracking-wider text-gray-400">
-                        <th className="text-left py-1 font-medium">Vehicle</th>
-                        <th className="text-center py-1 font-medium">Pax</th>
+                        <th className="text-left py-1 font-medium">{t('vehicle')}</th>
+                        <th className="text-center py-1 font-medium">{t('pax')}</th>
                         <th className="text-right py-1 font-medium">{t('eurRate')}</th>
                       </tr>
                     </thead>
@@ -737,7 +737,7 @@ export default function TransportationContent() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan={3} className="py-2 text-xs text-center text-gray-400">No rates configured</td>
+                          <td colSpan={3} className="py-2 text-xs text-center text-gray-400">{t('noRatesConfigured')}</td>
                         </tr>
                       )}
                     </tbody>
@@ -972,8 +972,8 @@ export default function TransportationContent() {
                   <table className="w-full">
                     <thead>
                       <tr className="bg-gray-100 text-[10px] uppercase tracking-wider text-gray-500">
-                        <th className="text-left px-3 py-2 font-medium">Vehicle</th>
-                        <th className="text-center px-3 py-2 font-medium">Capacity</th>
+                        <th className="text-left px-3 py-2 font-medium">{t('vehicle')}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t('capacity')}</th>
                         <th className="text-center px-3 py-2 font-medium">{t('eurRate')}</th>
                         <th className="text-center px-3 py-2 font-medium">{t('nonEurRate')}</th>
                       </tr>
