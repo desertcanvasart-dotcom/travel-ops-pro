@@ -105,6 +105,10 @@ export async function PUT(
     if (body.pickup_location !== undefined) updateData.pickup_location = body.pickup_location
     if (body.pickup_time !== undefined) updateData.pickup_time = body.pickup_time
 
+    // Inclusions and exclusions
+    if (body.inclusions !== undefined) updateData.inclusions = body.inclusions
+    if (body.exclusions !== undefined) updateData.exclusions = body.exclusions
+
     // Get current itinerary status before update (for booking auto-creation)
     let previousStatus: string | null = null
     if (body.status === 'confirmed') {

@@ -1480,7 +1480,12 @@
       "createBooking": "予約を作成",
       "bookingCreatedSuccessfully": "予約が正常に作成されました",
       "failedToCreateBooking": "予約の作成に失敗しました",
-      "failedToCreateVersion": "言語バージョンの作成に失敗しました"
+      "failedToCreateVersion": "言語バージョンの作成に失敗しました",
+      "whatsIncluded": "含まれるもの",
+      "whatsNotIncluded": "含まれないもの",
+      "noInclusionsYet": "まだ追加されていません",
+      "noExclusionsYet": "まだ追加されていません",
+      "addItem": "項目を追加"
     }
   },
   "payments": {

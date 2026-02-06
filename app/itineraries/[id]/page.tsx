@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
@@ -46,6 +46,8 @@ interface Itinerary {
   tier?: string
   available_languages?: Language[]
   versions?: Record<string, ItineraryVersion>
+  inclusions?: string[]
+  exclusions?: string[]
 }
 
 interface ItineraryDay {
@@ -116,6 +118,13 @@ export default function ViewItineraryPage() {
   const [savingCostMode, setSavingCostMode] = useState(false)
   const [savingServiceCost, setSavingServiceCost] = useState(false)
   const [costModeChanged, setCostModeChanged] = useState(false)
+
+  // Inclusions & Exclusions state
+  const [editingInclusions, setEditingInclusions] = useState(false)
+  const [editingExclusions, setEditingExclusions] = useState(false)
+  const [localInclusions, setLocalInclusions] = useState<string[]>([])
+  const [localExclusions, setLocalExclusions] = useState<string[]>([])
+  const [savingInclusions, setSavingInclusions] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -472,6 +481,32 @@ export default function ViewItineraryPage() {
       await dialog.alert(tCommon('error'), t('failedToGeneratePDF'), 'warning')
     } finally {
       setGeneratingPDF(false)
+    }
+  }
+
+  const saveInclusionsExclusions = async (type: 'inclusions' | 'exclusions', items: string[]) => {
+    if (!itinerary) return
+
+    setSavingInclusions(true)
+    try {
+      const response = await fetch(`/api/itineraries/${itinerary.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [type]: items })
+      })
+
+      if (response.ok) {
+        setItinerary(prev => prev ? { ...prev, [type]: items } : null)
+        if (type === 'inclusions') {
+          setEditingInclusions(false)
+        } else {
+          setEditingExclusions(false)
+        }
+      }
+    } catch (error) {
+      console.error(`Error saving ${type}:`, error)
+    } finally {
+      setSavingInclusions(false)
     }
   }
 
@@ -1216,6 +1251,187 @@ export default function ViewItineraryPage() {
         </div>
 
         {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
+
+        {/* Inclusions & Exclusions Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          {/* Inclusions */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                {t('whatsIncluded')}
+              </h3>
+              {!editingInclusions ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalInclusions(itinerary?.inclusions || [])
+                    setEditingInclusions(true)
+                  }}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  {t('edit')}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => saveInclusionsExclusions('inclusions', localInclusions)}
+                    disabled={savingInclusions}
+                    className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+                  >
+                    {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingInclusions(false)}
+                    className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                    title="Cancel"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {editingInclusions ? (
+              <div className="space-y-2">
+                {localInclusions.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={item}
+                      onChange={(e) => {
+                        const updated = [...localInclusions]
+                        updated[index] = e.target.value
+                        setLocalInclusions(updated)
+                      }}
+                      placeholder="Enter inclusion item"
+                      className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLocalInclusions(localInclusions.filter((_, i) => i !== index))}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                      title="Remove item"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setLocalInclusions([...localInclusions, ''])}
+                  className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
+                >
+                  <Plus className="w-3 h-3" />
+                  {t('addItem')}
+                </button>
+              </div>
+            ) : (
+              <ul className="space-y-1.5">
+                {(itinerary?.inclusions || []).map((item, index) => (
+                  <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
+                    <Check className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
+                    {item}
+                  </li>
+                ))}
+                {(!itinerary?.inclusions || itinerary.inclusions.length === 0) && (
+                  <li className="text-sm text-gray-400 italic">{t('noInclusionsYet')}</li>
+                )}
+              </ul>
+            )}
+          </div>
+
+          {/* Exclusions */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-500" />
+                {t('whatsNotIncluded')}
+              </h3>
+              {!editingExclusions ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalExclusions(itinerary?.exclusions || [])
+                    setEditingExclusions(true)
+                  }}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  {t('edit')}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => saveInclusionsExclusions('exclusions', localExclusions)}
+                    disabled={savingInclusions}
+                    className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+                  >
+                    {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingExclusions(false)}
+                    className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                    title="Cancel"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {editingExclusions ? (
+              <div className="space-y-2">
+                {localExclusions.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={item}
+                      onChange={(e) => {
+                        const updated = [...localExclusions]
+                        updated[index] = e.target.value
+                        setLocalExclusions(updated)
+                      }}
+                      placeholder="Enter exclusion item"
+                      className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLocalExclusions(localExclusions.filter((_, i) => i !== index))}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                      title="Remove item"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setLocalExclusions([...localExclusions, ''])}
+                  className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
+                >
+                  <Plus className="w-3 h-3" />
+                  {t('addItem')}
+                </button>
+              </div>
+            ) : (
+              <ul className="space-y-1.5">
+                {(itinerary?.exclusions || []).map((item, index) => (
+                  <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
+                    <X className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
+                    {item}
+                  </li>
+                ))}
+                {(!itinerary?.exclusions || itinerary.exclusions.length === 0) && (
+                  <li className="text-sm text-gray-400 italic">{t('noExclusionsYet')}</li>
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

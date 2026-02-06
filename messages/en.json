@@ -1028,7 +1028,12 @@
       "bookingConfirmationSent": "Booking confirmation sent",
       "paymentReminderSent": "Payment reminder sent",
       "paymentConfirmationSent": "Payment confirmation sent",
-      "failedToUpdateCostMode": "Failed to update cost mode"
+      "failedToUpdateCostMode": "Failed to update cost mode",
+      "whatsIncluded": "What's Included",
+      "whatsNotIncluded": "What's Not Included",
+      "noInclusionsYet": "No inclusions added yet",
+      "noExclusionsYet": "No exclusions added yet",
+      "addItem": "Add Item"
     }
   },
   "payments": {
