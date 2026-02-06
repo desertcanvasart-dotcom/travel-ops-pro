@@ -163,10 +163,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Must have at least one vehicle tier rate
-    const hasAnyRate = VEHICLE_TIERS.some(t => tieredRates[`${t}_rate_eur`] != null && tieredRates[`${t}_rate_eur`] > 0)
-    if (!hasAnyRate) {
+    const firstTierRate = VEHICLE_TIERS.map(t => tieredRates[`${t}_rate_eur`]).find(r => r != null && r > 0)
+    if (!firstTierRate) {
       return NextResponse.json({ success: false, error: 'At least one vehicle tier rate is required' }, { status: 400 })
     }
+
+    // Set legacy base_rate_eur from first available tier rate (NOT NULL constraint)
+    newRate.base_rate_eur = firstTierRate
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
@@ -222,6 +225,12 @@ export async function PUT(request: NextRequest) {
     }
 
     updates.updated_at = new Date().toISOString()
+
+    // Keep legacy base_rate_eur in sync with first available tier rate
+    const firstTierRate = VEHICLE_TIERS.map(t => tieredRates[`${t}_rate_eur`]).find(r => r != null && r > 0)
+    if (firstTierRate) {
+      updates.base_rate_eur = firstTierRate
+    }
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
