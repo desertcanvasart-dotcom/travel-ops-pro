@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 // ============================================
 // TYPES
@@ -154,7 +155,7 @@ const SERVICE_TYPES = [
   { value: 'sound_light_transfer', label: 'Sound & Light Transfer', needsDestination: false },
 ]
 
-const CITIES = ['Cairo', 'Giza', 'Luxor', 'Aswan', 'Alexandria', 'Hurghada', 'Sharm El Sheikh', 'Dahab', 'Siwa', 'Marsa Alam']
+// Using centralized EGYPT_CITIES from lib/constants/egypt-cities.ts
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
@@ -578,7 +579,7 @@ export default function TransportationContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('allCities')}</option>
-            {CITIES.map(city => (
+            {EGYPT_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
           </select>
@@ -910,7 +911,7 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">Select City</option>
-                      {CITIES.map(city => (
+                      {EGYPT_CITIES.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
@@ -928,7 +929,7 @@ export default function TransportationContent() {
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       >
                         <option value="">Select Destination</option>
-                        {CITIES.filter(city => city !== formData.city).map(city => (
+                        {EGYPT_CITIES.filter(city => city !== formData.city).map(city => (
                           <option key={city} value={city}>{city}</option>
                         ))}
                       </select>
