@@ -14,11 +14,17 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Building2
+  Building2,
+  LayoutGrid,
+  List,
+  Table2,
+  Loader2
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
+
+type ViewMode = 'cards' | 'table' | 'list'
 
 // ============================================
 // TYPES
@@ -217,6 +223,11 @@ export default function TransportationContent() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
 
+  // View mode & bulk selection
+  const [viewMode, setViewMode] = useState<ViewMode>('cards')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+
   // ============================================
   // DATA FETCHING
   // ============================================
@@ -263,7 +274,12 @@ export default function TransportationContent() {
 
   useEffect(() => {
     setCurrentPage(1)
+    setSelectedIds(new Set())
   }, [searchTerm, cityFilter, serviceTypeFilter, supplierFilter, showInactive, itemsPerPage])
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [currentPage])
 
   // ============================================
   // FORM HELPERS
@@ -467,6 +483,63 @@ export default function TransportationContent() {
   }
 
   // ============================================
+  // BULK SELECTION & DELETE
+  // ============================================
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginatedRates.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(paginatedRates.map(r => r.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+
+    const confirmed = await dialog.confirmDelete(
+      t('deleteSelected'),
+      t('bulkDeleteConfirm', { count: selectedIds.size })
+    )
+    if (!confirmed) return
+
+    setBulkDeleting(true)
+    let successCount = 0
+    let failCount = 0
+
+    const deletePromises = Array.from(selectedIds).map(async (id) => {
+      try {
+        const response = await fetch(`/api/resources/transportation/${id}`, { method: 'DELETE' })
+        if (response.ok) successCount++
+        else failCount++
+      } catch {
+        failCount++
+      }
+    })
+
+    await Promise.allSettled(deletePromises)
+    setBulkDeleting(false)
+    setSelectedIds(new Set())
+
+    if (failCount === 0) {
+      await dialog.alert('Deleted', t('bulkDeleteSuccess', { count: successCount }), 'success')
+    } else {
+      await dialog.alert('Warning', t('bulkDeletePartial', { success: successCount, total: selectedIds.size, failed: failCount }), 'warning')
+    }
+
+    fetchRates()
+  }
+
+  // ============================================
   // FILTERING & PAGINATION
   // ============================================
 
@@ -637,124 +710,381 @@ export default function TransportationContent() {
         >
           {showInactive ? t('hideInactive') : t('showInactive')}
         </button>
+
+        {/* View Toggle */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 ml-auto">
+          <button
+            onClick={() => setViewMode('table')}
+            className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-white shadow text-[#647C47]' : 'text-gray-500 hover:text-gray-700'}`}
+            title={t('tableView')}
+          >
+            <Table2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('cards')}
+            className={`p-1.5 rounded ${viewMode === 'cards' ? 'bg-white shadow text-[#647C47]' : 'text-gray-500 hover:text-gray-700'}`}
+            title={t('cardView')}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-white shadow text-[#647C47]' : 'text-gray-500 hover:text-gray-700'}`}
+            title={t('listView')}
+          >
+            <List className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Card Grid */}
-      {paginatedRates.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-sm text-gray-500">
-          {t('noRatesFound')}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {paginatedRates.map((rate) => {
-            const activeTiers = getActiveTiers(rate)
-            const isIntercity = needsDestinationCity(rate.service_type)
-            const supplierName = rate.supplier?.name || rate.supplier_name
-            const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
-            const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
+      {/* ============================================ */}
+      {/* CARD VIEW */}
+      {/* ============================================ */}
+      {viewMode === 'cards' && (
+        <>
+          {paginatedRates.length === 0 ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-sm text-gray-500">
+              {t('noRatesFound')}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {paginatedRates.map((rate) => {
+                const activeTiers = getActiveTiers(rate)
+                const isIntercity = needsDestinationCity(rate.service_type)
+                const supplierName = rate.supplier?.name || rate.supplier_name
+                const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
+                const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
 
-            return (
-              <div
-                key={rate.id}
-                className={`bg-white rounded-lg border ${rate.is_active ? 'border-gray-200' : 'border-gray-100 opacity-60'} hover:shadow-md transition-shadow`}
-              >
-                {/* Card Header */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-gray-400">{rate.service_code}</span>
+                return (
+                  <div
+                    key={rate.id}
+                    className={`bg-white rounded-lg border ${rate.is_active ? 'border-gray-200' : 'border-gray-100 opacity-60'} hover:shadow-md transition-shadow`}
+                  >
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-gray-400">{rate.service_code}</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {rate.is_active ? t('active') : t('inactive')}
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-medium text-gray-900 mt-1 truncate">
+                            {rate.route_name || serviceLabel}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">
+                              {serviceLabel}
+                            </span>
+                            {isIntercity && rate.destination_city ? (
+                              <span className="text-xs text-gray-500">
+                                {translateCity(rate.city)} → {translateCity(rate.destination_city)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-500">{translateCity(rate.city)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 ml-2">
+                          <button onClick={() => openEditModal(rate)} className="p-1 text-gray-400 hover:text-[#647C47] transition-colors" title="Edit">
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(rate)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      {supplierName && (
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <Building2 className="h-3 w-3 text-gray-400" />
+                          <span className="text-xs text-gray-500">{supplierName}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="px-4 py-2">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="text-[10px] uppercase tracking-wider text-gray-400">
+                            <th className="text-left py-1 font-medium">{t('vehicle')}</th>
+                            <th className="text-center py-1 font-medium">{t('pax')}</th>
+                            <th className="text-right py-1 font-medium">{t('eurRate')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeTiers.length > 0 ? (
+                            activeTiers.map(tier => {
+                              const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number
+                              const capMin = rate[`${tier.key}_capacity_min` as keyof TransportationRate] as number
+                              const capMax = rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number
+                              return (
+                                <tr key={tier.key} className="border-t border-gray-50">
+                                  <td className="py-1.5 text-xs font-medium text-gray-700">{t(tier.labelKey)}</td>
+                                  <td className="py-1.5 text-xs text-center text-gray-500">{capMin}-{capMax}</td>
+                                  <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRate(eurRate)}</td>
+                                </tr>
+                              )
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={3} className="py-2 text-xs text-center text-gray-400">{t('noRatesConfigured')}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {rate.includes && (
+                      <div className="px-4 py-2 border-t border-gray-50">
+                        <p className="text-xs text-gray-500 truncate" title={rate.includes}>
+                          Includes: {rate.includes}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ============================================ */}
+      {/* TABLE VIEW */}
+      {/* ============================================ */}
+      {viewMode === 'table' && (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px]">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-3 py-2 text-left w-10">
+                    <input
+                      type="checkbox"
+                      checked={paginatedRates.length > 0 && selectedIds.size === paginatedRates.length}
+                      onChange={toggleSelectAll}
+                      title={t('selectAll')}
+                      className="h-4 w-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47]"
+                    />
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('serviceCode')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('serviceType')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('city')}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('sedan')}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('minivan')}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('van')}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('minibus')}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('bus')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('supplier')}</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">{t('status')}</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">{t('actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {paginatedRates.map((rate, index) => {
+                  const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
+                  const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
+                  const supplierName = rate.supplier?.name || rate.supplier_name
+                  const isIntercity = needsDestinationCity(rate.service_type)
+
+                  return (
+                    <tr
+                      key={rate.id}
+                      className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-gray-100 transition-colors`}
+                    >
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(rate.id)}
+                          onChange={() => toggleSelection(rate.id)}
+                          title={t('selectAll')}
+                          className="h-4 w-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47]"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="text-xs font-mono text-gray-600">{rate.service_code}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">{serviceLabel}</span>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-700">
+                        {isIntercity && rate.destination_city
+                          ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
+                          : translateCity(rate.city)}
+                      </td>
+                      {VEHICLE_TIERS.map(tier => {
+                        const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number | null
+                        return (
+                          <td key={tier.key} className="px-3 py-2 text-right text-sm">
+                            {eurRate != null && eurRate > 0 ? (
+                              <span className="font-medium text-gray-900">{formatRate(eurRate)}</span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                      <td className="px-3 py-2">
+                        {supplierName ? (
+                          <div className="flex items-center gap-1">
+                            <Building2 className="h-3 w-3 text-gray-400" />
+                            <span className="text-xs text-gray-600 truncate max-w-[120px]">{supplierName}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                         }`}>
                           {rate.is_active ? t('active') : t('inactive')}
                         </span>
-                      </div>
-                      <h3 className="text-sm font-medium text-gray-900 mt-1 truncate">
-                        {rate.route_name || serviceLabel}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">
-                          {serviceLabel}
-                        </span>
-                        {isIntercity && rate.destination_city ? (
-                          <span className="text-xs text-gray-500">
-                            {translateCity(rate.city)} → {translateCity(rate.destination_city)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-500">{translateCity(rate.city)}</span>
-                        )}
-                      </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => openEditModal(rate)} className="p-1 text-gray-400 hover:text-[#647C47] transition-colors" title="Edit">
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(rate)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {paginatedRates.length === 0 && (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-12 text-center text-gray-500">
+                      <Car className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-sm">{t('noRatesFound')}</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* LIST VIEW */}
+      {/* ============================================ */}
+      {viewMode === 'list' && (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200">
+            <input
+              type="checkbox"
+              checked={paginatedRates.length > 0 && selectedIds.size === paginatedRates.length}
+              onChange={toggleSelectAll}
+              title={t('selectAll')}
+              className="h-4 w-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47]"
+            />
+            <span className="text-xs text-gray-500">
+              {selectedIds.size > 0 ? t('selected', { count: selectedIds.size }) : t('selectAll')}
+            </span>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {paginatedRates.map((rate) => {
+              const activeTiers = getActiveTiers(rate)
+              const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
+              const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
+              const isIntercity = needsDestinationCity(rate.service_type)
+              const cityDisplay = isIntercity && rate.destination_city
+                ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
+                : translateCity(rate.city)
+
+              return (
+                <div
+                  key={rate.id}
+                  className={`flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors ${
+                    !rate.is_active ? 'opacity-60' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(rate.id)}
+                      onChange={() => toggleSelection(rate.id)}
+                      title={t('selectAll')}
+                      className="h-4 w-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47] flex-shrink-0"
+                    />
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${rate.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
+                    <span className="text-xs font-mono text-gray-400 flex-shrink-0">{rate.service_code}</span>
+                    <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded flex-shrink-0">
+                      {serviceLabel}
+                    </span>
+                    <span className="text-sm text-gray-600 truncate">{cityDisplay}</span>
+                  </div>
+
+                  <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                    <div className="hidden md:flex items-center gap-1 text-xs text-gray-500">
+                      {activeTiers.length > 0 ? (
+                        activeTiers.map((tier, idx) => {
+                          const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number
+                          return (
+                            <span key={tier.key}>
+                              {idx > 0 && <span className="mx-0.5 text-gray-300">|</span>}
+                              <span className="text-gray-400">{t(tier.labelKey)}:</span>{' '}
+                              <span className="font-medium text-gray-700">{formatRate(eurRate)}</span>
+                            </span>
+                          )
+                        })
+                      ) : (
+                        <span className="text-gray-300">{t('noRatesConfigured')}</span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1 ml-2">
-                      <button
-                        onClick={() => openEditModal(rate)}
-                        className="p-1 text-gray-400 hover:text-[#647C47] transition-colors"
-                        title="Edit"
-                      >
+
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEditModal(rate)} className="p-1 text-gray-400 hover:text-[#647C47] transition-colors" title="Edit">
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
-                      <button
-                        onClick={() => handleDelete(rate)}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete"
-                      >
+                      <button onClick={() => handleDelete(rate)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
-                  {supplierName && (
-                    <div className="flex items-center gap-1 mt-1.5">
-                      <Building2 className="h-3 w-3 text-gray-400" />
-                      <span className="text-xs text-gray-500">{supplierName}</span>
-                    </div>
-                  )}
                 </div>
-
-                {/* Vehicle Tiers Table */}
-                <div className="px-4 py-2">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="text-[10px] uppercase tracking-wider text-gray-400">
-                        <th className="text-left py-1 font-medium">{t('vehicle')}</th>
-                        <th className="text-center py-1 font-medium">{t('pax')}</th>
-                        <th className="text-right py-1 font-medium">{t('eurRate')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeTiers.length > 0 ? (
-                        activeTiers.map(tier => {
-                          const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number
-                          const capMin = rate[`${tier.key}_capacity_min` as keyof TransportationRate] as number
-                          const capMax = rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number
-                          return (
-                            <tr key={tier.key} className="border-t border-gray-50">
-                              <td className="py-1.5 text-xs font-medium text-gray-700">{t(tier.labelKey)}</td>
-                              <td className="py-1.5 text-xs text-center text-gray-500">{capMin}-{capMax}</td>
-                              <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRate(eurRate)}</td>
-                            </tr>
-                          )
-                        })
-                      ) : (
-                        <tr>
-                          <td colSpan={3} className="py-2 text-xs text-center text-gray-400">{t('noRatesConfigured')}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Card Footer */}
-                {rate.includes && (
-                  <div className="px-4 py-2 border-t border-gray-50">
-                    <p className="text-xs text-gray-500 truncate" title={rate.includes}>
-                      Includes: {rate.includes}
-                    </p>
-                  </div>
-                )}
+              )
+            })}
+            {paginatedRates.length === 0 && (
+              <div className="px-4 py-12 text-center text-gray-500">
+                <Car className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm">{t('noRatesFound')}</p>
               </div>
-            )
-          })}
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky bottom-4 z-40 mx-auto w-fit">
+          <div className="flex items-center gap-4 bg-gray-900 text-white px-5 py-3 rounded-lg shadow-xl">
+            <span className="text-sm font-medium">
+              {t('selected', { count: selectedIds.size })}
+            </span>
+            <div className="w-px h-5 bg-gray-600" />
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 rounded-md transition-colors disabled:opacity-50"
+            >
+              {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {bulkDeleting ? t('deleting') : t('deleteSelected')}
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-gray-400 hover:text-white transition-colors"
+              title={t('deselectAll')}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 
