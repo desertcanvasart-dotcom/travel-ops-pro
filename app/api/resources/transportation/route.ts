@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
       notes: body.notes || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
       base_rate_eur: firstTierRate,
+      base_rate_non_eur: firstTierRate,
       ...tieredRates
     }
 

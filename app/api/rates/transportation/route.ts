@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
 
     // Set legacy base_rate_eur from first available tier rate (NOT NULL constraint)
     newRate.base_rate_eur = firstTierRate
+    newRate.base_rate_non_eur = firstTierRate
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
