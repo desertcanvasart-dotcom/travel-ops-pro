@@ -1346,6 +1346,15 @@ TIER: ${tier.toUpperCase()}
 TRAVELERS: ${totalPax}
 LANGUAGE: ${language}
 PACKAGE: ${packageType || 'cruise-land'}
+${packageType === 'tours-only' || packageType === 'day-trips' ? `
+⚠️ TOURS-ONLY/DAY-TRIPS PACKAGE (CRITICAL):
+This is a TOURS-ONLY package - NO accommodation is included!
+- Set overnight_city to NULL for all days
+- Set accommodation_type to NULL for all days
+- Set needs_hotel_service to FALSE for all days
+- DO NOT mention overnight stays or accommodation in descriptions
+- This is guide + transport + entrance fees ONLY
+` : ''}
 ${language !== 'English' ? `
 ⚠️ LANGUAGE REQUIREMENT (CRITICAL):
 Write ALL content (trip_name, title, description) in ${language}.
@@ -2309,7 +2318,11 @@ export async function POST(request: NextRequest) {
         dayTitle = `Day ${dayNumber}: Day at Leisure`
       }
 
-      // Create day record
+      // Create day record - for tours-only/day-trips, no overnight city
+      const overnightCityValue = (effectivePackageType === 'tours-only' || effectivePackageType === 'day-trips')
+        ? null
+        : (dayData.overnight_city || dayData.city || effectiveCity)
+
       const { data: day, error: dayError } = await supabase
         .from('itinerary_days')
         .insert({
@@ -2319,7 +2332,7 @@ export async function POST(request: NextRequest) {
           title: dayTitle,
           description: dayData.description || '',
           city: dayData.city || effectiveCity,
-          overnight_city: dayData.overnight_city || dayData.city || effectiveCity,
+          overnight_city: overnightCityValue,
           attractions: dayData.attractions || [],
           guide_required: dayNeedsGuide,
           lunch_included: dayIncludesLunch,
@@ -2340,7 +2353,7 @@ export async function POST(request: NextRequest) {
         title: dayTitle,
         description: dayData.description || '',
         city: dayData.city || effectiveCity,
-        overnight_city: dayData.overnight_city || dayData.city || effectiveCity
+        overnight_city: overnightCityValue
       })
 
       if (skip_pricing) continue

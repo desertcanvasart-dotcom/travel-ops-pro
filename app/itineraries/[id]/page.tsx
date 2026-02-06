@@ -1270,7 +1270,7 @@ export default function ViewItineraryPage() {
                   }}
                   className="text-xs text-primary-600 hover:text-primary-700 font-medium"
                 >
-                  {t('edit')}
+                  {tCommon('edit')}
                 </button>
               ) : (
                 <div className="flex items-center gap-1">
@@ -1359,7 +1359,7 @@ export default function ViewItineraryPage() {
                   }}
                   className="text-xs text-primary-600 hover:text-primary-700 font-medium"
                 >
-                  {t('edit')}
+                  {tCommon('edit')}
                 </button>
               ) : (
                 <div className="flex items-center gap-1">
