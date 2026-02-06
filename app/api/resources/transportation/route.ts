@@ -76,8 +76,8 @@ export async function POST(request: NextRequest) {
     const tieredRates = parseTieredRates(body)
 
     // Must have at least one vehicle tier rate
-    const firstTierRate = VEHICLE_TIERS.map(t => tieredRates[`${t}_rate_eur`]).find(r => r != null && r > 0)
-    if (!firstTierRate) {
+    const hasAnyRate = VEHICLE_TIERS.some(t => tieredRates[`${t}_rate_eur`] != null && tieredRates[`${t}_rate_eur`] > 0)
+    if (!hasAnyRate) {
       return NextResponse.json({ error: 'At least one vehicle tier rate is required' }, { status: 400 })
     }
 
@@ -100,8 +100,6 @@ export async function POST(request: NextRequest) {
       supplier_name: body.supplier_name || null,
       notes: body.notes || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
-      base_rate_eur: firstTierRate,
-      base_rate_non_eur: firstTierRate,
       ...tieredRates
     }
 
