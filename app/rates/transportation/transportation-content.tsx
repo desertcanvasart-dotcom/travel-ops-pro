@@ -718,7 +718,7 @@ export default function TransportationContent() {
                       <tr className="text-[10px] uppercase tracking-wider text-gray-400">
                         <th className="text-left py-1 font-medium">Vehicle</th>
                         <th className="text-center py-1 font-medium">Pax</th>
-                        <th className="text-right py-1 font-medium">EUR Rate</th>
+                        <th className="text-right py-1 font-medium">{t('eurRate')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -974,8 +974,8 @@ export default function TransportationContent() {
                       <tr className="bg-gray-100 text-[10px] uppercase tracking-wider text-gray-500">
                         <th className="text-left px-3 py-2 font-medium">Vehicle</th>
                         <th className="text-center px-3 py-2 font-medium">Capacity</th>
-                        <th className="text-center px-3 py-2 font-medium">EUR Rate</th>
-                        <th className="text-center px-3 py-2 font-medium">Non-EUR Rate</th>
+                        <th className="text-center px-3 py-2 font-medium">{t('eurRate')}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t('nonEurRate')}</th>
                       </tr>
                     </thead>
                     <tbody>
