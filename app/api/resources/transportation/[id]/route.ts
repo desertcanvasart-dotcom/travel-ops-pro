@@ -92,6 +92,12 @@ export async function PUT(
       ...tieredRates
     }
 
+    // Keep legacy base_rate_eur in sync with first available tier rate
+    const firstTierRate = VEHICLE_TIERS.map(t => tieredRates[`${t}_rate_eur`]).find(r => r != null && r > 0)
+    if (firstTierRate) {
+      updateData.base_rate_eur = firstTierRate
+    }
+
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
       .update(updateData)
