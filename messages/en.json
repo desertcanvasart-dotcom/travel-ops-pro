@@ -98,6 +98,25 @@
     "whatsNotIncluded": "What's Not Included",
     "remove": "Remove",
     "addItem": "Add Item",
+    "defaultInclusions": {
+      "privateTransport": "Private transportation throughout: all airport transfers",
+      "guiding": "Licensed private guiding: Egyptologist-naturalist for sightseeing",
+      "entranceFees": "Entrance fees to all sites listed",
+      "accommodation": "Accommodation as specified in the itinerary",
+      "domesticFlights": "Domestic flights as per itinerary",
+      "meals": "Curated lunches in clean, reliable restaurants",
+      "tips": "Tips for drivers, porters, and hotel concierge",
+      "taxes": "All taxes and service charges"
+    },
+    "defaultExclusions": {
+      "internationalFlights": "International flights",
+      "unspecifiedMeals": "Meals not specified in the itinerary",
+      "gratuities": "Gratuities for your guide (appreciated but not obligatory)",
+      "insurance": "Travel insurance",
+      "personalExpenses": "Personal expenses",
+      "visaFees": "Visa fees (if applicable)",
+      "optionalActivities": "Optional activities not mentioned in the itinerary"
+    },
     "cancellationPolicy": "Cancellation Policy",
     "cancellation45DaysBefore": "45+ days before travel",
     "cancellation44to30DaysBefore": "44-30 days before travel",
@@ -1033,7 +1052,8 @@
       "whatsNotIncluded": "What's Not Included",
       "noInclusionsYet": "No inclusions added yet",
       "noExclusionsYet": "No exclusions added yet",
-      "addItem": "Add Item"
+      "addItem": "Add Item",
+      "translateItems": "Translate"
     }
   },
   "payments": {

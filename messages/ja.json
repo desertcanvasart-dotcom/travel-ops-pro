@@ -101,6 +101,25 @@
     "whatsNotIncluded": "含まれないもの",
     "remove": "削除",
     "addItem": "項目を追加",
+    "defaultInclusions": {
+      "privateTransport": "全行程における専用車での送迎（空港送迎を含む）",
+      "guiding": "エジプト学者・博物学者による認定プライベートガイド付き観光",
+      "entranceFees": "記載されている全観光地の入場料",
+      "accommodation": "旅程に記載された宿泊施設",
+      "domesticFlights": "旅程に記載の国内線フライト",
+      "meals": "清潔で信頼できるレストランでの厳選ランチ",
+      "tips": "ドライバー、ポーター、ホテルコンシェルジュへのチップ",
+      "taxes": "全税金およびサービス料"
+    },
+    "defaultExclusions": {
+      "internationalFlights": "国際線航空券",
+      "unspecifiedMeals": "旅程に記載のない食事",
+      "gratuities": "ガイドへのチップ（任意ですが歓迎されます）",
+      "insurance": "旅行保険",
+      "personalExpenses": "個人的な費用",
+      "visaFees": "ビザ代（該当する場合）",
+      "optionalActivities": "旅程に記載のないオプショナルアクティビティ"
+    },
     "cancellationPolicy": "キャンセルポリシー",
     "cancellation45DaysBefore": "出発45日以上前",
     "cancellation44to30DaysBefore": "出発44〜30日前",
@@ -1485,7 +1504,8 @@
       "whatsNotIncluded": "含まれないもの",
       "noInclusionsYet": "まだ追加されていません",
       "noExclusionsYet": "まだ追加されていません",
-      "addItem": "項目を追加"
+      "addItem": "項目を追加",
+      "translateItems": "翻訳"
     }
   },
   "payments": {

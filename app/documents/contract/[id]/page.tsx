@@ -80,23 +80,23 @@ export default function ContractPage() {
     depositPercentage: 10,
     paymentTerms: 'A 10% deposit is required at the time of booking to secure the reservation. The remaining balance is to be paid in cash upon arrival in Egypt.',
     inclusions: [
-      'Private transportation throughout: all airport transfers',
-      'Licensed private guiding: Egyptologist-naturalist for sightseeing',
-      'Entrance fees to all sites listed',
-      'Accommodation as specified in the itinerary',
-      'Domestic flights as per itinerary',
-      'Curated lunches in clean, reliable restaurants',
-      'Tips for drivers, porters, and hotel concierge',
-      'All taxes and service charges'
+      t('defaultInclusions.privateTransport'),
+      t('defaultInclusions.guiding'),
+      t('defaultInclusions.entranceFees'),
+      t('defaultInclusions.accommodation'),
+      t('defaultInclusions.domesticFlights'),
+      t('defaultInclusions.meals'),
+      t('defaultInclusions.tips'),
+      t('defaultInclusions.taxes')
     ],
     exclusions: [
-      'International flights',
-      'Meals not specified in the itinerary',
-      'Gratuities for your guide (appreciated but not obligatory)',
-      'Travel insurance',
-      'Personal expenses',
-      'Visa fees (if applicable)',
-      'Optional activities not mentioned in the itinerary'
+      t('defaultExclusions.internationalFlights'),
+      t('defaultExclusions.unspecifiedMeals'),
+      t('defaultExclusions.gratuities'),
+      t('defaultExclusions.insurance'),
+      t('defaultExclusions.personalExpenses'),
+      t('defaultExclusions.visaFees'),
+      t('defaultExclusions.optionalActivities')
     ],
     cancellation45Days: 'Cancellations received 45 days before travel date are totally refundable.',
     cancellation44to30Days: 'Cancellations received 44 days to 30 days before travel date are subject to 15% cancellation fees.',
@@ -153,7 +153,9 @@ export default function ContractPage() {
           endDate: itin.end_date,
           duration: itin.parsed_data?.duration || 'N/A',
           destinations: itin.destinations || 'Cairo, Luxor, Aswan',
-          totalCost: itin.total_cost
+          totalCost: itin.total_cost,
+          ...(itin.inclusions?.length > 0 && { inclusions: itin.inclusions }),
+          ...(itin.exclusions?.length > 0 && { exclusions: itin.exclusions })
         }))
       }
     } catch (error) {

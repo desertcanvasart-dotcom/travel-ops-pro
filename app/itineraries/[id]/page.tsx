@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
@@ -125,6 +125,7 @@ export default function ViewItineraryPage() {
   const [localInclusions, setLocalInclusions] = useState<string[]>([])
   const [localExclusions, setLocalExclusions] = useState<string[]>([])
   const [savingInclusions, setSavingInclusions] = useState(false)
+  const [translatingInclusions, setTranslatingInclusions] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -507,6 +508,58 @@ export default function ViewItineraryPage() {
       console.error(`Error saving ${type}:`, error)
     } finally {
       setSavingInclusions(false)
+    }
+  }
+
+  const translateInclusionsExclusions = async () => {
+    if (!itinerary) return
+
+    const langCode = currentLocale === 'en' ? 'en' : currentLocale
+    const items = [
+      ...(itinerary.inclusions || []),
+      ...(itinerary.exclusions || [])
+    ]
+    if (items.length === 0) return
+
+    setTranslatingInclusions(true)
+    try {
+      const translatedAll = await Promise.all(
+        items.map(async (item) => {
+          const response = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: item, targetLanguage: langCode, action: 'fromEnglish' })
+          })
+          const data = await response.json()
+          return data.success ? data.data.translatedText : item
+        })
+      )
+
+      const inclusionCount = (itinerary.inclusions || []).length
+      const translatedInclusions = translatedAll.slice(0, inclusionCount)
+      const translatedExclusions = translatedAll.slice(inclusionCount)
+
+      // Save both to DB
+      const response = await fetch(`/api/itineraries/${itinerary.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inclusions: translatedInclusions,
+          exclusions: translatedExclusions
+        })
+      })
+
+      if (response.ok) {
+        setItinerary(prev => prev ? {
+          ...prev,
+          inclusions: translatedInclusions,
+          exclusions: translatedExclusions
+        } : null)
+      }
+    } catch (error) {
+      console.error('Error translating inclusions/exclusions:', error)
+    } finally {
+      setTranslatingInclusions(false)
     }
   }
 
@@ -1253,7 +1306,20 @@ export default function ViewItineraryPage() {
         {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
 
         {/* Inclusions & Exclusions Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+        {currentLocale !== 'en' && !editingInclusions && !editingExclusions && (
+          <div className="flex justify-end mt-6 mb-1">
+            <button
+              type="button"
+              onClick={translateInclusionsExclusions}
+              disabled={translatingInclusions}
+              className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded hover:bg-primary-50 disabled:opacity-50"
+            >
+              {translatingInclusions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
+              {t('translateItems')}
+            </button>
+          </div>
+        )}
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${currentLocale === 'en' || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
           {/* Inclusions */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
             <div className="flex items-center justify-between mb-3">
