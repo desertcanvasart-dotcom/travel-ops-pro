@@ -123,42 +123,36 @@ interface AccommodationRate {
   contact_phone?: string
   reservations_email?: string
   reservations_phone?: string
-  // Low Season / Base rates - EUR
-  single_rate_eur?: number
-  double_rate_eur?: number
-  triple_rate_eur?: number
-  suite_rate_eur?: number
-  // Low Season / Base rates - Non-EUR
-  single_rate_non_eur?: number
-  double_rate_non_eur?: number
-  triple_rate_non_eur?: number
-  suite_rate_non_eur?: number
+  // Low Season - Per Person rates EUR
+  pp_double_eur?: number
+  single_supp_eur?: number
+  triple_red_eur?: number
+  // Low Season - Per Person rates Non-EUR
+  pp_double_non_eur?: number
+  single_supp_non_eur?: number
+  triple_red_non_eur?: number
   // Low Season dates
   low_season_from?: string
   low_season_to?: string
-  // High Season rates - EUR
-  high_season_single_eur?: number
-  high_season_double_eur?: number
-  high_season_triple_eur?: number
-  high_season_suite_eur?: number
-  // High Season rates - Non-EUR
-  high_season_single_non_eur?: number
-  high_season_double_non_eur?: number
-  high_season_triple_non_eur?: number
-  high_season_suite_non_eur?: number
+  // High Season - Per Person rates EUR
+  high_pp_double_eur?: number
+  high_single_supp_eur?: number
+  high_triple_red_eur?: number
+  // High Season - Per Person rates Non-EUR
+  high_pp_double_non_eur?: number
+  high_single_supp_non_eur?: number
+  high_triple_red_non_eur?: number
   // High Season dates
   high_season_from?: string
   high_season_to?: string
-  // Peak Season rates - EUR
-  peak_season_single_eur?: number
-  peak_season_double_eur?: number
-  peak_season_triple_eur?: number
-  peak_season_suite_eur?: number
-  // Peak Season rates - Non-EUR
-  peak_season_single_non_eur?: number
-  peak_season_double_non_eur?: number
-  peak_season_triple_non_eur?: number
-  peak_season_suite_non_eur?: number
+  // Peak Season - Per Person rates EUR
+  peak_pp_double_eur?: number
+  peak_single_supp_eur?: number
+  peak_triple_red_eur?: number
+  // Peak Season - Per Person rates Non-EUR
+  peak_pp_double_non_eur?: number
+  peak_single_supp_non_eur?: number
+  peak_triple_red_non_eur?: number
   // Peak Season dates
   peak_season_from?: string
   peak_season_to?: string
@@ -395,37 +389,31 @@ export default function HotelsContent() {
     contact_phone: '',
     reservations_email: '',
     reservations_phone: '',
-    // Low Season
-    single_rate_eur: 0,
-    double_rate_eur: 0,
-    triple_rate_eur: 0,
-    suite_rate_eur: 0,
-    single_rate_non_eur: 0,
-    double_rate_non_eur: 0,
-    triple_rate_non_eur: 0,
-    suite_rate_non_eur: 0,
+    // Low Season - Per Person
+    pp_double_eur: 0,
+    single_supp_eur: 0,
+    triple_red_eur: 0,
+    pp_double_non_eur: 0,
+    single_supp_non_eur: 0,
+    triple_red_non_eur: 0,
     low_season_from: '2025-05-01',
     low_season_to: '2025-09-30',
-    // High Season
-    high_season_single_eur: 0,
-    high_season_double_eur: 0,
-    high_season_triple_eur: 0,
-    high_season_suite_eur: 0,
-    high_season_single_non_eur: 0,
-    high_season_double_non_eur: 0,
-    high_season_triple_non_eur: 0,
-    high_season_suite_non_eur: 0,
+    // High Season - Per Person
+    high_pp_double_eur: 0,
+    high_single_supp_eur: 0,
+    high_triple_red_eur: 0,
+    high_pp_double_non_eur: 0,
+    high_single_supp_non_eur: 0,
+    high_triple_red_non_eur: 0,
     high_season_from: '2025-10-01',
     high_season_to: '2026-04-30',
-    // Peak Season
-    peak_season_single_eur: 0,
-    peak_season_double_eur: 0,
-    peak_season_triple_eur: 0,
-    peak_season_suite_eur: 0,
-    peak_season_single_non_eur: 0,
-    peak_season_double_non_eur: 0,
-    peak_season_triple_non_eur: 0,
-    peak_season_suite_non_eur: 0,
+    // Peak Season - Per Person
+    peak_pp_double_eur: 0,
+    peak_single_supp_eur: 0,
+    peak_triple_red_eur: 0,
+    peak_pp_double_non_eur: 0,
+    peak_single_supp_non_eur: 0,
+    peak_triple_red_non_eur: 0,
     peak_season_from: '2025-12-20',
     peak_season_to: '2026-01-05',
     peak_season_2_from: '',
@@ -550,37 +538,31 @@ export default function HotelsContent() {
       contact_phone: '',
       reservations_email: '',
       reservations_phone: '',
-      // Low Season
-      single_rate_eur: 0,
-      double_rate_eur: 0,
-      triple_rate_eur: 0,
-      suite_rate_eur: 0,
-      single_rate_non_eur: 0,
-      double_rate_non_eur: 0,
-      triple_rate_non_eur: 0,
-      suite_rate_non_eur: 0,
+      // Low Season - Per Person
+      pp_double_eur: 0,
+      single_supp_eur: 0,
+      triple_red_eur: 0,
+      pp_double_non_eur: 0,
+      single_supp_non_eur: 0,
+      triple_red_non_eur: 0,
       low_season_from: '2025-05-01',
       low_season_to: '2025-09-30',
-      // High Season
-      high_season_single_eur: 0,
-      high_season_double_eur: 0,
-      high_season_triple_eur: 0,
-      high_season_suite_eur: 0,
-      high_season_single_non_eur: 0,
-      high_season_double_non_eur: 0,
-      high_season_triple_non_eur: 0,
-      high_season_suite_non_eur: 0,
+      // High Season - Per Person
+      high_pp_double_eur: 0,
+      high_single_supp_eur: 0,
+      high_triple_red_eur: 0,
+      high_pp_double_non_eur: 0,
+      high_single_supp_non_eur: 0,
+      high_triple_red_non_eur: 0,
       high_season_from: '2025-10-01',
       high_season_to: '2026-04-30',
-      // Peak Season
-      peak_season_single_eur: 0,
-      peak_season_double_eur: 0,
-      peak_season_triple_eur: 0,
-      peak_season_suite_eur: 0,
-      peak_season_single_non_eur: 0,
-      peak_season_double_non_eur: 0,
-      peak_season_triple_non_eur: 0,
-      peak_season_suite_non_eur: 0,
+      // Peak Season - Per Person
+      peak_pp_double_eur: 0,
+      peak_single_supp_eur: 0,
+      peak_triple_red_eur: 0,
+      peak_pp_double_non_eur: 0,
+      peak_single_supp_non_eur: 0,
+      peak_triple_red_non_eur: 0,
       peak_season_from: '2025-12-20',
       peak_season_to: '2026-01-05',
       peak_season_2_from: '',
@@ -624,37 +606,31 @@ export default function HotelsContent() {
       contact_phone: rate.contact_phone || '',
       reservations_email: rate.reservations_email || '',
       reservations_phone: rate.reservations_phone || '',
-      // Low Season
-      single_rate_eur: rate.single_rate_eur || 0,
-      double_rate_eur: rate.double_rate_eur || 0,
-      triple_rate_eur: rate.triple_rate_eur || 0,
-      suite_rate_eur: rate.suite_rate_eur || 0,
-      single_rate_non_eur: rate.single_rate_non_eur || 0,
-      double_rate_non_eur: rate.double_rate_non_eur || 0,
-      triple_rate_non_eur: rate.triple_rate_non_eur || 0,
-      suite_rate_non_eur: rate.suite_rate_non_eur || 0,
+      // Low Season - Per Person
+      pp_double_eur: rate.pp_double_eur || 0,
+      single_supp_eur: rate.single_supp_eur || 0,
+      triple_red_eur: rate.triple_red_eur || 0,
+      pp_double_non_eur: rate.pp_double_non_eur || 0,
+      single_supp_non_eur: rate.single_supp_non_eur || 0,
+      triple_red_non_eur: rate.triple_red_non_eur || 0,
       low_season_from: rate.low_season_from || '2025-05-01',
       low_season_to: rate.low_season_to || '2025-09-30',
-      // High Season
-      high_season_single_eur: rate.high_season_single_eur || 0,
-      high_season_double_eur: rate.high_season_double_eur || 0,
-      high_season_triple_eur: rate.high_season_triple_eur || 0,
-      high_season_suite_eur: rate.high_season_suite_eur || 0,
-      high_season_single_non_eur: rate.high_season_single_non_eur || 0,
-      high_season_double_non_eur: rate.high_season_double_non_eur || 0,
-      high_season_triple_non_eur: rate.high_season_triple_non_eur || 0,
-      high_season_suite_non_eur: rate.high_season_suite_non_eur || 0,
+      // High Season - Per Person
+      high_pp_double_eur: rate.high_pp_double_eur || 0,
+      high_single_supp_eur: rate.high_single_supp_eur || 0,
+      high_triple_red_eur: rate.high_triple_red_eur || 0,
+      high_pp_double_non_eur: rate.high_pp_double_non_eur || 0,
+      high_single_supp_non_eur: rate.high_single_supp_non_eur || 0,
+      high_triple_red_non_eur: rate.high_triple_red_non_eur || 0,
       high_season_from: rate.high_season_from || '2025-10-01',
       high_season_to: rate.high_season_to || '2026-04-30',
-      // Peak Season
-      peak_season_single_eur: rate.peak_season_single_eur || 0,
-      peak_season_double_eur: rate.peak_season_double_eur || 0,
-      peak_season_triple_eur: rate.peak_season_triple_eur || 0,
-      peak_season_suite_eur: rate.peak_season_suite_eur || 0,
-      peak_season_single_non_eur: rate.peak_season_single_non_eur || 0,
-      peak_season_double_non_eur: rate.peak_season_double_non_eur || 0,
-      peak_season_triple_non_eur: rate.peak_season_triple_non_eur || 0,
-      peak_season_suite_non_eur: rate.peak_season_suite_non_eur || 0,
+      // Peak Season - Per Person
+      peak_pp_double_eur: rate.peak_pp_double_eur || 0,
+      peak_single_supp_eur: rate.peak_single_supp_eur || 0,
+      peak_triple_red_eur: rate.peak_triple_red_eur || 0,
+      peak_pp_double_non_eur: rate.peak_pp_double_non_eur || 0,
+      peak_single_supp_non_eur: rate.peak_single_supp_non_eur || 0,
+      peak_triple_red_non_eur: rate.peak_triple_red_non_eur || 0,
       peak_season_from: rate.peak_season_from || '2025-12-20',
       peak_season_to: rate.peak_season_to || '2026-01-05',
       peak_season_2_from: rate.peak_season_2_from || '',
@@ -752,9 +728,9 @@ export default function HotelsContent() {
     const headers = [
       'Service Code', 'Hotel Name', 'City', 'Board Basis', 'Tier',
       'Contact Name', 'Contact Email', 'Contact Phone', 'Reservations Email', 'Reservations Phone',
-      'Low Single EUR', 'Low Double EUR', 'Low Triple EUR', 'Low Suite EUR',
-      'High Single EUR', 'High Double EUR', 'High Triple EUR', 'High Suite EUR',
-      'Peak Single EUR', 'Peak Double EUR', 'Peak Triple EUR', 'Peak Suite EUR',
+      'Low PP Dbl EUR', 'Low Sgl Supp EUR', 'Low Tpl Red EUR',
+      'High PP Dbl EUR', 'High Sgl Supp EUR', 'High Tpl Red EUR',
+      'Peak PP Dbl EUR', 'Peak Sgl Supp EUR', 'Peak Tpl Red EUR',
       'Valid From', 'Valid To', 'Company/Supplier', 'Active'
     ]
     
@@ -769,18 +745,15 @@ export default function HotelsContent() {
       r.contact_phone || '',
       r.reservations_email || '',
       r.reservations_phone || '',
-      r.single_rate_eur || '',
-      r.double_rate_eur || '',
-      r.triple_rate_eur || '',
-      r.suite_rate_eur || '',
-      r.high_season_single_eur || '',
-      r.high_season_double_eur || '',
-      r.high_season_triple_eur || '',
-      r.high_season_suite_eur || '',
-      r.peak_season_single_eur || '',
-      r.peak_season_double_eur || '',
-      r.peak_season_triple_eur || '',
-      r.peak_season_suite_eur || '',
+      r.pp_double_eur || '',
+      r.single_supp_eur || '',
+      r.triple_red_eur || '',
+      r.high_pp_double_eur || '',
+      r.high_single_supp_eur || '',
+      r.high_triple_red_eur || '',
+      r.peak_pp_double_eur || '',
+      r.peak_single_supp_eur || '',
+      r.peak_triple_red_eur || '',
       r.rate_valid_from || '',
       r.rate_valid_to || '',
       r.supplier?.name || r.supplier_name || '',
@@ -832,7 +805,7 @@ export default function HotelsContent() {
   const activeRates = rates.filter(r => r.is_active).length
   const linkedRates = rates.filter(r => r.supplier_id).length
   const avgRate = rates.length > 0 
-    ? (rates.reduce((sum, r) => sum + (r.double_rate_eur || 0), 0) / rates.filter(r => (r.double_rate_eur || 0) > 0).length || 0).toFixed(0)
+    ? (rates.reduce((sum, r) => sum + (r.pp_double_eur || 0), 0) / rates.filter(r => (r.pp_double_eur || 0) > 0).length || 0).toFixed(0)
     : '0'
 
   // Prevent hydration mismatch
@@ -937,7 +910,7 @@ export default function HotelsContent() {
               <span className="text-gray-400">💶</span>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
-            <p className="text-xs text-gray-600">{t('avgDoubleLow')}</p>
+            <p className="text-xs text-gray-600">{t('avgPPDblLow')}</p>
             <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
           </div>
 
@@ -1066,8 +1039,8 @@ export default function HotelsContent() {
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('tier')}</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('city')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('board')}</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('lowDbl')}</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('highDbl')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('lowPPDbl')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('highPPDbl')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('status')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('actions')}</th>
                   </tr>
@@ -1111,12 +1084,12 @@ export default function HotelsContent() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-green-600">
-                          {formatRate(rate.double_rate_eur || 0)}
+                          {formatRate(rate.pp_double_eur || 0)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-orange-600">
-                          {formatRate(rate.high_season_double_eur || 0)}
+                          {formatRate(rate.high_pp_double_eur || 0)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1238,15 +1211,15 @@ export default function HotelsContent() {
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
                       <div className="text-center">
                         <p className="text-xs text-blue-600 font-medium">{t('low')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.double_rate_eur || 0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.pp_double_eur || 0)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-orange-600 font-medium">{t('high')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.high_season_double_eur || 0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.high_pp_double_eur || 0)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-red-600 font-medium">{t('peak')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.peak_season_double_eur || 0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.peak_pp_double_eur || 0)}</p>
                       </div>
                     </div>
                   </div>
@@ -1310,7 +1283,7 @@ export default function HotelsContent() {
                     )}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold text-green-600">{formatRate(rate.double_rate_eur || 0)}</span>
+                    <span className="text-sm font-bold text-green-600">{formatRate(rate.pp_double_eur || 0)}</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleEdit(rate)}
@@ -1594,48 +1567,38 @@ export default function HotelsContent() {
                     </div>
                   </div>
                   <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
-                      <input type="number" name="single_rate_eur" value={formData.single_rate_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
+                      <input type="number" name="pp_double_eur" value={formData.pp_double_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
-                      <input type="number" name="double_rate_eur" value={formData.double_rate_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
+                      <input type="number" name="single_supp_eur" value={formData.single_supp_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
-                      <input type="number" name="triple_rate_eur" value={formData.triple_rate_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
-                      <input type="number" name="suite_rate_eur" value={formData.suite_rate_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
+                      <input type="number" name="triple_red_eur" value={formData.triple_red_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
                   <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
-                      <input type="number" name="single_rate_non_eur" value={formData.single_rate_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
+                      <input type="number" name="pp_double_non_eur" value={formData.pp_double_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
-                      <input type="number" name="double_rate_non_eur" value={formData.double_rate_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
+                      <input type="number" name="single_supp_non_eur" value={formData.single_supp_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
-                      <input type="number" name="triple_rate_non_eur" value={formData.triple_rate_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
-                      <input type="number" name="suite_rate_non_eur" value={formData.suite_rate_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
+                      <input type="number" name="triple_red_non_eur" value={formData.triple_red_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
@@ -1663,48 +1626,38 @@ export default function HotelsContent() {
                     </div>
                   </div>
                   <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
-                      <input type="number" name="high_season_single_eur" value={formData.high_season_single_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
+                      <input type="number" name="high_pp_double_eur" value={formData.high_pp_double_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
-                      <input type="number" name="high_season_double_eur" value={formData.high_season_double_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
+                      <input type="number" name="high_single_supp_eur" value={formData.high_single_supp_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
-                      <input type="number" name="high_season_triple_eur" value={formData.high_season_triple_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
-                      <input type="number" name="high_season_suite_eur" value={formData.high_season_suite_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
+                      <input type="number" name="high_triple_red_eur" value={formData.high_triple_red_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
                   <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
-                      <input type="number" name="high_season_single_non_eur" value={formData.high_season_single_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
+                      <input type="number" name="high_pp_double_non_eur" value={formData.high_pp_double_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
-                      <input type="number" name="high_season_double_non_eur" value={formData.high_season_double_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
+                      <input type="number" name="high_single_supp_non_eur" value={formData.high_single_supp_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
-                      <input type="number" name="high_season_triple_non_eur" value={formData.high_season_triple_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
-                      <input type="number" name="high_season_suite_non_eur" value={formData.high_season_suite_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
+                      <input type="number" name="high_triple_red_non_eur" value={formData.high_triple_red_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
@@ -1742,48 +1695,38 @@ export default function HotelsContent() {
                     </div>
                   </div>
                   <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="grid grid-cols-3 gap-3 mb-4">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
-                      <input type="number" name="peak_season_single_eur" value={formData.peak_season_single_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
+                      <input type="number" name="peak_pp_double_eur" value={formData.peak_pp_double_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
-                      <input type="number" name="peak_season_double_eur" value={formData.peak_season_double_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
+                      <input type="number" name="peak_single_supp_eur" value={formData.peak_single_supp_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
-                      <input type="number" name="peak_season_triple_eur" value={formData.peak_season_triple_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
-                      <input type="number" name="peak_season_suite_eur" value={formData.peak_season_suite_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
+                      <input type="number" name="peak_triple_red_eur" value={formData.peak_triple_red_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>
                   <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('single')}</label>
-                      <input type="number" name="peak_season_single_non_eur" value={formData.peak_season_single_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
+                      <input type="number" name="peak_pp_double_non_eur" value={formData.peak_pp_double_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('double')}</label>
-                      <input type="number" name="peak_season_double_non_eur" value={formData.peak_season_double_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
+                      <input type="number" name="peak_single_supp_non_eur" value={formData.peak_single_supp_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('triple')}</label>
-                      <input type="number" name="peak_season_triple_non_eur" value={formData.peak_season_triple_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('suite')}</label>
-                      <input type="number" name="peak_season_suite_non_eur" value={formData.peak_season_suite_non_eur} onChange={handleChange} step="0.01" min="0"
+                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
+                      <input type="number" name="peak_triple_red_non_eur" value={formData.peak_triple_red_non_eur} onChange={handleChange} step="0.01" min="0"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
                     </div>
                   </div>

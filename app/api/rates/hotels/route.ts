@@ -67,53 +67,47 @@ export async function POST(request: NextRequest) {
       low_season_from: body.low_season_from || null,
       low_season_to: body.low_season_to || null,
       
-      // Low Season rates - EUR
-      single_rate_eur: parseFloat(body.single_rate_eur) || 0,
-      double_rate_eur: parseFloat(body.double_rate_eur) || 0,
-      triple_rate_eur: parseFloat(body.triple_rate_eur) || 0,
-      suite_rate_eur: parseFloat(body.suite_rate_eur) || 0,
-      
-      // Low Season rates - Non-EUR
-      single_rate_non_eur: parseFloat(body.single_rate_non_eur) || 0,
-      double_rate_non_eur: parseFloat(body.double_rate_non_eur) || 0,
-      triple_rate_non_eur: parseFloat(body.triple_rate_non_eur) || 0,
-      suite_rate_non_eur: parseFloat(body.suite_rate_non_eur) || 0,
-      
+      // Low Season rates - Per Person EUR
+      pp_double_eur: parseFloat(body.pp_double_eur) || 0,
+      single_supp_eur: parseFloat(body.single_supp_eur) || 0,
+      triple_red_eur: parseFloat(body.triple_red_eur) || 0,
+
+      // Low Season rates - Per Person Non-EUR
+      pp_double_non_eur: parseFloat(body.pp_double_non_eur) || 0,
+      single_supp_non_eur: parseFloat(body.single_supp_non_eur) || 0,
+      triple_red_non_eur: parseFloat(body.triple_red_non_eur) || 0,
+
       // High Season dates
       high_season_from: body.high_season_from || null,
       high_season_to: body.high_season_to || null,
-      
-      // High Season rates - EUR
-      high_season_single_eur: parseFloat(body.high_season_single_eur) || 0,
-      high_season_double_eur: parseFloat(body.high_season_double_eur) || 0,
-      high_season_triple_eur: parseFloat(body.high_season_triple_eur) || 0,
-      high_season_suite_eur: parseFloat(body.high_season_suite_eur) || 0,
-      
-      // High Season rates - Non-EUR
-      high_season_single_non_eur: parseFloat(body.high_season_single_non_eur) || 0,
-      high_season_double_non_eur: parseFloat(body.high_season_double_non_eur) || 0,
-      high_season_triple_non_eur: parseFloat(body.high_season_triple_non_eur) || 0,
-      high_season_suite_non_eur: parseFloat(body.high_season_suite_non_eur) || 0,
-      
+
+      // High Season rates - Per Person EUR
+      high_pp_double_eur: parseFloat(body.high_pp_double_eur) || 0,
+      high_single_supp_eur: parseFloat(body.high_single_supp_eur) || 0,
+      high_triple_red_eur: parseFloat(body.high_triple_red_eur) || 0,
+
+      // High Season rates - Per Person Non-EUR
+      high_pp_double_non_eur: parseFloat(body.high_pp_double_non_eur) || 0,
+      high_single_supp_non_eur: parseFloat(body.high_single_supp_non_eur) || 0,
+      high_triple_red_non_eur: parseFloat(body.high_triple_red_non_eur) || 0,
+
       // Peak Season dates (Period 1)
       peak_season_from: body.peak_season_from || null,
       peak_season_to: body.peak_season_to || null,
-      
+
       // Peak Season dates (Period 2 - optional)
       peak_season_2_from: body.peak_season_2_from || null,
       peak_season_2_to: body.peak_season_2_to || null,
-      
-      // Peak Season rates - EUR
-      peak_season_single_eur: parseFloat(body.peak_season_single_eur) || 0,
-      peak_season_double_eur: parseFloat(body.peak_season_double_eur) || 0,
-      peak_season_triple_eur: parseFloat(body.peak_season_triple_eur) || 0,
-      peak_season_suite_eur: parseFloat(body.peak_season_suite_eur) || 0,
-      
-      // Peak Season rates - Non-EUR
-      peak_season_single_non_eur: parseFloat(body.peak_season_single_non_eur) || 0,
-      peak_season_double_non_eur: parseFloat(body.peak_season_double_non_eur) || 0,
-      peak_season_triple_non_eur: parseFloat(body.peak_season_triple_non_eur) || 0,
-      peak_season_suite_non_eur: parseFloat(body.peak_season_suite_non_eur) || 0,
+
+      // Peak Season rates - Per Person EUR
+      peak_pp_double_eur: parseFloat(body.peak_pp_double_eur) || 0,
+      peak_single_supp_eur: parseFloat(body.peak_single_supp_eur) || 0,
+      peak_triple_red_eur: parseFloat(body.peak_triple_red_eur) || 0,
+
+      // Peak Season rates - Per Person Non-EUR
+      peak_pp_double_non_eur: parseFloat(body.peak_pp_double_non_eur) || 0,
+      peak_single_supp_non_eur: parseFloat(body.peak_single_supp_non_eur) || 0,
+      peak_triple_red_non_eur: parseFloat(body.peak_triple_red_non_eur) || 0,
       
       // Rate validity
       rate_valid_from: body.rate_valid_from || null,

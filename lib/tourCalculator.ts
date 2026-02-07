@@ -101,15 +101,13 @@ import {
     }
   
     // 1. ACCOMMODATION COST
-    // Calculated per room, not per person
-    // Assumption: 2 people per double room
+    // Per-person pricing: pp_double × number of guests
     if (day.accommodation) {
-      const rooms = calculateRoomsNeeded(pax)
-      const ratePerRoom = isEuroPassport
-        ? day.accommodation.base_rate_eur
-        : day.accommodation.base_rate_non_eur
-      
-      pricing.accommodation = rooms * ratePerRoom
+      const ppDouble = isEuroPassport
+        ? day.accommodation.pp_double_eur
+        : day.accommodation.pp_double_non_eur
+
+      pricing.accommodation = ppDouble * pax
     }
   
     // 2. MEAL COSTS

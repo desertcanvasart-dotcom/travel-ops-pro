@@ -67,11 +67,10 @@ export default function AccommodationSelector({
     return true
   })
 
-  // Calculate rooms needed and price
-  const roomsNeeded = Math.ceil(pax / 2)
+  // Calculate per-person price
   const getPrice = (acc: AccommodationRate) => {
-    const ratePerRoom = isEuroPassport ? acc.base_rate_eur : acc.base_rate_non_eur
-    return roomsNeeded * ratePerRoom
+    const ppDouble = isEuroPassport ? acc.pp_double_eur : acc.pp_double_non_eur
+    return ppDouble * pax
   }
 
   if (!city) {
@@ -205,10 +204,10 @@ export default function AccommodationSelector({
                       €{getPrice(acc).toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {roomsNeeded} {roomsNeeded > 1 ? t('rooms') : t('room')}
+                      {pax} {pax > 1 ? t('persons') : t('person')}
                     </div>
                     <div className="text-xs text-gray-400">
-                      €{(isEuroPassport ? acc.base_rate_eur : acc.base_rate_non_eur).toFixed(2)}{t('perRoom')}
+                      €{(isEuroPassport ? acc.pp_double_eur : acc.pp_double_non_eur).toFixed(2)}{t('perPerson')}
                     </div>
                   </div>
                 </div>
@@ -227,7 +226,7 @@ export default function AccommodationSelector({
                 {selectedAccommodation.property_name}
               </div>
               <div className="text-blue-700 text-xs mt-1">
-                {roomsNeeded} {selectedAccommodation.room_type} {roomsNeeded > 1 ? t('rooms') : t('room')}
+                {pax} {pax > 1 ? t('persons') : t('person')} • {selectedAccommodation.room_type}
               </div>
               <div className="text-blue-600 text-xs mt-1">
                 {t('board')}: {selectedAccommodation.board_basis}

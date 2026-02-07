@@ -124,11 +124,14 @@ export interface Tour {
     room_type: string
     board_basis: 'BB' | 'HB' | 'FB' | 'AI'
     city: string
-    base_rate_eur: number
-    base_rate_non_eur: number
+    // Per-person pricing
+    pp_double_eur: number
+    pp_double_non_eur: number
+    single_supp_eur: number
+    single_supp_non_eur: number
+    triple_red_eur: number
+    triple_red_non_eur: number
     tier: 'budget' | 'standard' | 'premium' | 'luxury'
-    single_supplement_eur?: number
-    single_supplement_non_eur?: number
   }
   
   export interface MealRate {
