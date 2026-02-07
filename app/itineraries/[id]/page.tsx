@@ -515,29 +515,42 @@ export default function ViewItineraryPage() {
     if (!itinerary) return
 
     const langCode = currentLocale === 'en' ? 'en' : currentLocale
-    const items = [
-      ...(itinerary.inclusions || []),
-      ...(itinerary.exclusions || [])
-    ]
-    if (items.length === 0) return
+    const inclusions = itinerary.inclusions || []
+    const exclusions = itinerary.exclusions || []
+    if (inclusions.length === 0 && exclusions.length === 0) return
 
     setTranslatingInclusions(true)
     try {
-      const translatedAll = await Promise.all(
-        items.map(async (item) => {
-          const response = await fetch('/api/translate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: item, targetLanguage: langCode, action: 'fromEnglish' })
-          })
-          const data = await response.json()
-          return data.success ? data.data.translatedText : item
-        })
-      )
+      // Batch translate inclusions and exclusions separately for better context
+      const [inclusionsRes, exclusionsRes] = await Promise.all([
+        inclusions.length > 0
+          ? fetch('/api/translate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                texts: inclusions,
+                targetLanguage: langCode,
+                action: 'batchTranslate',
+                context: 'inclusions (what is included in the tour package price)'
+              })
+            }).then(r => r.json())
+          : { success: true, data: { translatedTexts: [] } },
+        exclusions.length > 0
+          ? fetch('/api/translate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                texts: exclusions,
+                targetLanguage: langCode,
+                action: 'batchTranslate',
+                context: 'exclusions (what is NOT included in the tour package price)'
+              })
+            }).then(r => r.json())
+          : { success: true, data: { translatedTexts: [] } }
+      ])
 
-      const inclusionCount = (itinerary.inclusions || []).length
-      const translatedInclusions = translatedAll.slice(0, inclusionCount)
-      const translatedExclusions = translatedAll.slice(inclusionCount)
+      const translatedInclusions = inclusionsRes.success ? inclusionsRes.data.translatedTexts : inclusions
+      const translatedExclusions = exclusionsRes.success ? exclusionsRes.data.translatedTexts : exclusions
 
       // Save both to DB
       const response = await fetch(`/api/itineraries/${itinerary.id}`, {
