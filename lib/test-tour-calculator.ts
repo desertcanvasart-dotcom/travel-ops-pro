@@ -29,8 +29,12 @@ const sampleTour: Tour = {
         room_type: 'Double Standard',
         board_basis: 'BB',
         city: 'Cairo',
-        base_rate_eur: 100,
-        base_rate_non_eur: 90,
+        pp_double_eur: 50,
+        pp_double_non_eur: 45,
+        single_supp_eur: 30,
+        single_supp_non_eur: 25,
+        triple_red_eur: 10,
+        triple_red_non_eur: 8,
         tier: 'standard'
       },
       lunch_meal: {
@@ -121,8 +125,12 @@ const sampleTour: Tour = {
         room_type: 'Double Standard',
         board_basis: 'BB',
         city: 'Cairo',
-        base_rate_eur: 100,
-        base_rate_non_eur: 90,
+        pp_double_eur: 50,
+        pp_double_non_eur: 45,
+        single_supp_eur: 30,
+        single_supp_non_eur: 25,
+        triple_red_eur: 10,
+        triple_red_non_eur: 8,
         tier: 'standard'
       },
       lunch_meal: {
@@ -177,8 +185,12 @@ const sampleTour: Tour = {
         room_type: 'Double Standard',
         board_basis: 'BB',
         city: 'Cairo',
-        base_rate_eur: 100,
-        base_rate_non_eur: 90,
+        pp_double_eur: 50,
+        pp_double_non_eur: 45,
+        single_supp_eur: 30,
+        single_supp_non_eur: 25,
+        triple_red_eur: 10,
+        triple_red_non_eur: 8,
         tier: 'standard'
       },
       notes: 'Free day - departure'
