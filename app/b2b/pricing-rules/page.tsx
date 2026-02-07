@@ -8,6 +8,8 @@ import {
   Car, Ticket, AlertCircle, CheckCircle2,
   ChevronDown, ChevronUp
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 // ============================================
 // B2B PRICING RULES MANAGEMENT
@@ -183,6 +185,7 @@ export default function B2BPricingRulesPage() {
 
   const [ruleForm, setRuleForm] = useState<RuleFormData>(DEFAULT_RULE_FORM)
   const [packageForm, setPackageForm] = useState<PackageFormData>(DEFAULT_PACKAGE_FORM)
+  const { confirmDelete } = useConfirmDialog()
 
   const showToast = (type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
@@ -303,7 +306,7 @@ export default function B2BPricingRulesPage() {
   }
 
   const handleDeleteRule = async (rule: PricingRule) => {
-    if (!confirm(t('deleteRuleConfirm', { serviceName: rule.service_name }))) return
+    if (!(await confirmDelete(rule.service_name))) return
 
     try {
       const res = await fetch(`/api/b2b/pricing-rules/${rule.id}`, { method: 'DELETE' })
@@ -392,7 +395,7 @@ export default function B2BPricingRulesPage() {
   }
 
   const handleDeletePackage = async (pkg: TransportPackage) => {
-    if (!confirm(t('deletePackageConfirm', { packageName: pkg.package_name }))) return
+    if (!(await confirmDelete(pkg.package_name))) return
 
     try {
       const res = await fetch(`/api/b2b/transport-packages/${pkg.id}`, { method: 'DELETE' })
@@ -1038,21 +1041,27 @@ export default function B2BPricingRulesPage() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('originCity')}</label>
-                  <input
-                    type="text"
+                  <select
                     value={packageForm.origin_city}
                     onChange={(e) => setPackageForm({ ...packageForm, origin_city: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
+                  >
+                    {EGYPT_CITIES.map(city => (
+                      <option key={city} value={city}>{city}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('destinationCity')}</label>
-                  <input
-                    type="text"
+                  <select
                     value={packageForm.destination_city}
                     onChange={(e) => setPackageForm({ ...packageForm, destination_city: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
+                  >
+                    {EGYPT_CITIES.map(city => (
+                      <option key={city} value={city}>{city}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('durationDays')}</label>
