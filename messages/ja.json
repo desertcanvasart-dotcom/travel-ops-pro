@@ -6618,5 +6618,30 @@
     "taskTitlePlaceholder": "タスクのタイトル",
     "taskDescriptionPlaceholder": "タスクの説明...",
     "notesPlaceholder": "追加のメモ..."
+  },
+  "resourceSummary": {
+    "noResourcesAssigned": "リソース未割り当て",
+    "noResourcesDescription": "ガイドと車両を割り当てて、ツアーをより効率的に管理しましょう",
+    "assignResources": "リソースを割り当てる",
+    "loadingResources": "リソースを読み込み中...",
+    "assignedResources": "割り当て済みリソース",
+    "assignedSubtitle": "ツアーガイド・車両・ロジスティクス",
+    "edit": "編集",
+    "tourGuide": "ツアーガイド",
+    "languages": "対応言語",
+    "phone": "電話番号",
+    "specialInstructions": "特別な指示",
+    "capacity": "定員",
+    "passengers": "{count}名",
+    "licensePlate": "ナンバープレート",
+    "specialRequirements": "特別な要件",
+    "pickupDetails": "ピックアップ詳細",
+    "location": "場所",
+    "time": "時間",
+    "allResourcesConfirmed": "全リソース確認済み",
+    "guideAndVehicleAssigned": "ガイドと車両が割り当てられています",
+    "guideAssignedVehicleNeeded": "ガイド割り当て済み - 車両が必要です",
+    "vehicleAssignedGuideNeeded": "車両割り当て済み - ガイドが必要です",
+    "additionalResourcesNeeded": "追加のリソースが必要な場合があります"
   }
 }

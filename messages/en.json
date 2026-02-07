@@ -5841,5 +5841,30 @@
     "taskTitlePlaceholder": "Task title",
     "taskDescriptionPlaceholder": "Task description...",
     "notesPlaceholder": "Additional notes..."
+  },
+  "resourceSummary": {
+    "noResourcesAssigned": "No Resources Assigned",
+    "noResourcesDescription": "Assign a guide and vehicle to this tour for better organization",
+    "assignResources": "Assign Resources",
+    "loadingResources": "Loading resources...",
+    "assignedResources": "Assigned Resources",
+    "assignedSubtitle": "Tour guide, vehicle & logistics",
+    "edit": "Edit",
+    "tourGuide": "Tour Guide",
+    "languages": "Languages",
+    "phone": "Phone",
+    "specialInstructions": "Special Instructions",
+    "capacity": "Capacity",
+    "passengers": "{count} passengers",
+    "licensePlate": "License Plate",
+    "specialRequirements": "Special Requirements",
+    "pickupDetails": "Pickup Details",
+    "location": "Location",
+    "time": "Time",
+    "allResourcesConfirmed": "All resources confirmed",
+    "guideAndVehicleAssigned": "Guide and vehicle assigned for this tour",
+    "guideAssignedVehicleNeeded": "Guide assigned - vehicle needed",
+    "vehicleAssignedGuideNeeded": "Vehicle assigned - guide needed",
+    "additionalResourcesNeeded": "Additional resources may be required"
   }
 }

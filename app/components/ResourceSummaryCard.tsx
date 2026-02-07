@@ -2,6 +2,7 @@
 
 import { Users, Truck, MapPin, Clock, AlertCircle, Edit, Phone, Languages, UserCircle, Info } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 
 interface Guide {
   id: string
@@ -38,6 +39,7 @@ export default function ResourceSummaryCard({
   pickupTime,
   onEdit
 }: ResourceSummaryCardProps) {
+  const t = useTranslations('resourceSummary')
   const [guide, setGuide] = useState<Guide | null>(null)
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
   const [loading, setLoading] = useState(false)
@@ -84,9 +86,9 @@ export default function ResourceSummaryCard({
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-2">No Resources Assigned</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">{t('noResourcesAssigned')}</h3>
           <p className="text-gray-600 mb-4">
-            Assign a guide and vehicle to this tour for better organization
+            {t('noResourcesDescription')}
           </p>
           {onEdit && (
             <button
@@ -94,7 +96,7 @@ export default function ResourceSummaryCard({
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors"
             >
               <Edit className="w-4 h-4" />
-              Assign Resources
+              {t('assignResources')}
             </button>
           )}
         </div>
@@ -107,7 +109,7 @@ export default function ResourceSummaryCard({
       <div className="bg-white rounded-xl shadow-autoura border border-gray-200 p-6">
         <div className="flex items-center justify-center py-8">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="ml-3 text-gray-600">Loading resources...</span>
+          <span className="ml-3 text-gray-600">{t('loadingResources')}</span>
         </div>
       </div>
     )
@@ -123,8 +125,8 @@ export default function ResourceSummaryCard({
               <Users className="w-5 h-5 text-primary-600" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Assigned Resources</h3>
-              <p className="text-blue-100 text-sm">Tour guide, vehicle & logistics</p>
+              <h3 className="text-lg font-bold text-white">{t('assignedResources')}</h3>
+              <p className="text-blue-100 text-sm">{t('assignedSubtitle')}</p>
             </div>
           </div>
           {onEdit && (
@@ -133,7 +135,7 @@ export default function ResourceSummaryCard({
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-colors backdrop-blur-sm"
             >
               <Edit className="w-4 h-4" />
-              Edit
+              {t('edit')}
             </button>
           )}
         </div>
@@ -166,7 +168,7 @@ export default function ResourceSummaryCard({
                     <h4 className="text-lg font-bold text-gray-900 mb-1">{guide.name}</h4>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Users className="w-4 h-4 flex-shrink-0" />
-                      <span className="font-medium">Tour Guide</span>
+                      <span className="font-medium">{t('tourGuide')}</span>
                     </div>
                   </div>
                 </div>
@@ -177,7 +179,7 @@ export default function ResourceSummaryCard({
                     <div className="flex items-start gap-2">
                       <Languages className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <div className="text-xs text-gray-500 mb-1">Languages</div>
+                        <div className="text-xs text-gray-500 mb-1">{t('languages')}</div>
                         <div className="flex flex-wrap gap-1">
                           {guide.languages.map((lang, index) => (
                             <span
@@ -197,7 +199,7 @@ export default function ResourceSummaryCard({
                     <div className="flex items-center gap-2">
                       <Phone className="w-4 h-4 text-blue-600 flex-shrink-0" />
                       <div className="flex-1">
-                        <div className="text-xs text-gray-500">Phone</div>
+                        <div className="text-xs text-gray-500">{t('phone')}</div>
                         <a
                           href={`tel:${guide.phone}`}
                           className="text-sm font-medium text-blue-600 hover:text-blue-700"
@@ -213,7 +215,7 @@ export default function ResourceSummaryCard({
                     <div className="flex items-start gap-2 mt-3 pt-3 border-t border-gray-200">
                       <Info className="w-4 h-4 text-gray-600 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <div className="text-xs text-gray-500 mb-1">Special Instructions</div>
+                        <div className="text-xs text-gray-500 mb-1">{t('specialInstructions')}</div>
                         <p className="text-sm text-gray-700 whitespace-pre-wrap">{guideNotes}</p>
                       </div>
                     </div>
@@ -253,9 +255,9 @@ export default function ResourceSummaryCard({
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-green-600" />
                       <div>
-                        <div className="text-xs text-gray-500">Capacity</div>
+                        <div className="text-xs text-gray-500">{t('capacity')}</div>
                         <div className="text-sm font-medium text-gray-900">
-                          {vehicle.passenger_capacity} passengers
+                          {t('passengers', { count: vehicle.passenger_capacity })}
                         </div>
                       </div>
                     </div>
@@ -263,7 +265,7 @@ export default function ResourceSummaryCard({
                     {/* License Plate */}
                     {vehicle.license_plate && (
                       <div className="flex items-center gap-2">
-                        <div className="text-xs text-gray-500">License Plate</div>
+                        <div className="text-xs text-gray-500">{t('licensePlate')}</div>
                         <div className="px-3 py-1 bg-gray-900 text-white font-mono text-sm rounded">
                           {vehicle.license_plate}
                         </div>
@@ -276,7 +278,7 @@ export default function ResourceSummaryCard({
                     <div className="flex items-start gap-2 mt-3 pt-3 border-t border-gray-200">
                       <Info className="w-4 h-4 text-gray-600 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <div className="text-xs text-gray-500 mb-1">Special Requirements</div>
+                        <div className="text-xs text-gray-500 mb-1">{t('specialRequirements')}</div>
                         <p className="text-sm text-gray-700 whitespace-pre-wrap">{vehicleNotes}</p>
                       </div>
                     </div>
@@ -294,7 +296,7 @@ export default function ResourceSummaryCard({
               <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-white" />
               </div>
-              <h4 className="text-lg font-bold text-gray-900">Pickup Details</h4>
+              <h4 className="text-lg font-bold text-gray-900">{t('pickupDetails')}</h4>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -302,7 +304,7 @@ export default function ResourceSummaryCard({
                 <div className="flex items-start gap-3">
                   <MapPin className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <div className="text-xs text-gray-500 mb-1">Location</div>
+                    <div className="text-xs text-gray-500 mb-1">{t('location')}</div>
                     <p className="text-sm font-medium text-gray-900">{pickupLocation}</p>
                   </div>
                 </div>
@@ -312,7 +314,7 @@ export default function ResourceSummaryCard({
                 <div className="flex items-start gap-3">
                   <Clock className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <div className="text-xs text-gray-500 mb-1">Time</div>
+                    <div className="text-xs text-gray-500 mb-1">{t('time')}</div>
                     <p className="text-sm font-medium text-gray-900">{pickupTime}</p>
                   </div>
                 </div>
@@ -327,15 +329,15 @@ export default function ResourceSummaryCard({
             <span className="text-white font-bold text-sm">✓</span>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium text-gray-900">All resources confirmed</p>
+            <p className="text-sm font-medium text-gray-900">{t('allResourcesConfirmed')}</p>
             <p className="text-xs text-gray-600">
               {guide && vehicle
-                ? 'Guide and vehicle assigned for this tour'
+                ? t('guideAndVehicleAssigned')
                 : guide
-                ? 'Guide assigned - vehicle needed'
+                ? t('guideAssignedVehicleNeeded')
                 : vehicle
-                ? 'Vehicle assigned - guide needed'
-                : 'Additional resources may be required'}
+                ? t('vehicleAssignedGuideNeeded')
+                : t('additionalResourcesNeeded')}
             </p>
           </div>
         </div>
