@@ -10,12 +10,14 @@ interface LanguageSelectorProps {
   variant?: 'default' | 'compact' | 'dropdown'
   showLabel?: boolean
   className?: string
+  dropdownPosition?: 'above' | 'below'
 }
 
 export function LanguageSelector({
   variant = 'default',
   showLabel = true,
-  className = ''
+  className = '',
+  dropdownPosition = 'below'
 }: LanguageSelectorProps) {
   const currentLocale = useLocale() as Locale
   const t = useTranslations('settings')
@@ -46,7 +48,7 @@ export function LanguageSelector({
         {isOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-            <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+            <div className={`absolute right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 ${dropdownPosition === 'above' ? 'bottom-full mb-1' : 'mt-1'}`}>
               {locales.map((locale) => (
                 <button
                   key={locale}

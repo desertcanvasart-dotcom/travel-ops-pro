@@ -605,12 +605,12 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             `}
           >
             {isCollapsed ? (
-              <LanguageSelector variant="compact" />
+              <LanguageSelector variant="compact" dropdownPosition="above" />
             ) : (
               <>
                 <Globe className="w-[18px] h-[18px] flex-shrink-0 text-gray-500" />
                 <div className="flex-1">
-                  <LanguageSelector variant="compact" />
+                  <LanguageSelector variant="compact" dropdownPosition="above" />
                 </div>
               </>
             )}
