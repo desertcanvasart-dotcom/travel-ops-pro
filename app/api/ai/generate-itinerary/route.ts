@@ -2170,18 +2170,33 @@ export async function POST(request: NextRequest) {
     const hotelServiceRate = hotelServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 15
 
     let hotelRate = 0
-    let hotelName_final = hotel_name || 'Standard Hotel'
-    let selectedHotel = null
+    let hotelName_final = hotel_name || null
+    let selectedHotel: any = null
 
     if (includeAccommodationFinal) {
-      const { data: hotels } = await supabase.from('hotel_contacts').select('*').ilike('city', effectiveCity).eq('is_active', true).eq('tier', tier).order('is_preferred', { ascending: false }).limit(5)
+      // Look up hotel from accommodation_rates (per-person pricing)
+      const { data: hotels } = await supabase
+        .from('accommodation_rates')
+        .select('*')
+        .ilike('city', effectiveCity)
+        .eq('is_active', true)
+        .eq('tier', tier)
+        .order('created_at', { ascending: false })
+        .limit(5)
+
       if (hotels?.length) {
         selectedHotel = hotels[0]
-        hotelRate = toNumber(selectedHotel.rate_double_eur, 80)
-        hotelName_final = selectedHotel.name
-      } else {
-        const defaultRates: Record<ServiceTier, number> = { 'budget': 45, 'standard': 80, 'deluxe': 120, 'luxury': 180 }
-        hotelRate = defaultRates[tier]
+        hotelRate = isEuroPassport
+          ? toNumber(selectedHotel.pp_double_eur, 0)
+          : toNumber(selectedHotel.pp_double_non_eur, 0)
+        hotelName_final = selectedHotel.property_name
+      }
+
+      // Fallback: if no hotel found in accommodation_rates, use default per-person rates
+      if (!hotelRate) {
+        const defaultPPRates: Record<ServiceTier, number> = { 'budget': 25, 'standard': 40, 'deluxe': 60, 'luxury': 90 }
+        hotelRate = defaultPPRates[tier]
+        if (!hotelName_final) hotelName_final = `${tier.charAt(0).toUpperCase() + tier.slice(1)} Hotel`
       }
     }
 
@@ -2192,7 +2207,7 @@ export async function POST(request: NextRequest) {
 
     const vehiclePerDay = selectedVehicle ? toNumber(selectedVehicle.daily_rate_eur, 50) : 50
     const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 55) : 55
-    const roomsNeeded = Math.ceil(totalPax / 2)
+
 
     // ============================================
     // GENERATE ITINERARY CONTENT
@@ -2358,11 +2373,44 @@ export async function POST(request: NextRequest) {
 
       if (skip_pricing) continue
 
-      // Handle departure day - only transfer
+      // Handle departure day - transfer + airport/hotel services
       if (dayData.is_departure && isTransferOnly) {
+        const departureServices: any[] = []
+
+        // Airport service (international departure)
+        departureServices.push({
+          service_type: 'airport_service',
+          service_code: 'AIRPORT',
+          service_name: 'Airport Meet & Assist (International)',
+          quantity: 1,
+          rate_eur: airportServiceRate,
+          rate_non_eur: airportServiceRate,
+          total_cost: airportServiceRate,
+          client_price: withMargin(airportServiceRate),
+          notes: dayData.flight_info ? `Flight: ${dayData.flight_info}` : 'Airport assistance'
+        })
+        totalSupplierCost += airportServiceRate
+        totalClientPrice += withMargin(airportServiceRate)
+
+        // Hotel service (check-out assistance)
+        const isCruiseCheckout = dayData.accommodation_type === 'cruise' || dayData.is_cruise_day
+        departureServices.push({
+          service_type: 'hotel_service',
+          service_code: 'HOTEL-SVC',
+          service_name: isCruiseCheckout ? 'Cruise Disembarkation Assistance' : 'Hotel Porterage & Assistance',
+          quantity: 1,
+          rate_eur: hotelServiceRate,
+          rate_non_eur: hotelServiceRate,
+          total_cost: hotelServiceRate,
+          client_price: withMargin(hotelServiceRate),
+          notes: isCruiseCheckout ? 'Cruise disembarkation assistance' : 'Hotel check-out assistance'
+        })
+        totalSupplierCost += hotelServiceRate
+        totalClientPrice += withMargin(hotelServiceRate)
+
+        // Transfer to airport
         const transferCost = vehiclePerDay * 0.5
-        await supabase.from('itinerary_services').insert({
-          itinerary_day_id: day.id,
+        departureServices.push({
           service_type: 'transportation',
           service_code: 'TRANSFER',
           service_name: 'Airport Transfer',
@@ -2375,6 +2423,11 @@ export async function POST(request: NextRequest) {
         })
         totalSupplierCost += transferCost
         totalClientPrice += withMargin(transferCost)
+
+        // Insert all departure services
+        for (const svc of departureServices) {
+          await supabase.from('itinerary_services').insert({ itinerary_day_id: day.id, ...svc })
+        }
         continue
       }
 
@@ -2401,8 +2454,8 @@ export async function POST(request: NextRequest) {
         totalClientPrice += withMargin(airportServiceRate)
       }
 
-      // Hotel Services (for check-in/check-out including cruise)
-      if (dayData.needs_hotel_service && !isFreeDay) {
+      // Hotel Services (for check-in/check-out — always on arrival/departure days regardless of accommodation type)
+      if ((dayData.needs_hotel_service || dayData.is_arrival || dayData.is_departure) && !isFreeDay) {
         const isCruiseService = dayData.accommodation_type === 'cruise' || dayData.is_cruise_day
         services.push({
           service_type: 'hotel_service',
@@ -2493,12 +2546,14 @@ export async function POST(request: NextRequest) {
           if (fee) {
             // Check if it's an add-on (should be excluded from automatic pricing)
             if (fee.is_addon) continue
-            
-            const feePerPerson = isEuroPassport 
-              ? toNumber(fee.eur_rate, 0) 
+
+            const feePerPerson = isEuroPassport
+              ? toNumber(fee.eur_rate, 0)
               : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
             dayEntranceTotal += feePerPerson * totalPax
             matchedAttractions.push(fee.attraction_name)
+          } else {
+            console.warn(`⚠️ Day ${dayNumber}: No entrance fee found for "${attr}" — skipping`)
           }
         }
         
@@ -2577,15 +2632,15 @@ export async function POST(request: NextRequest) {
         totalClientPrice += withMargin(waterCost)
       }
 
-      // Hotel (only if included and not last day and not cruise day)
+      // Hotel (only if included and not last day and not cruise day) — per-person pricing
       if (includesHotelForDay && hotelRate > 0) {
-        const hotelCost = hotelRate * roomsNeeded
+        const hotelCost = hotelRate * totalPax
         services.push({
           service_type: 'accommodation',
           service_code: selectedHotel?.id || 'HOTEL',
-          service_name: `${hotelName_final} (${roomsNeeded} room${roomsNeeded > 1 ? 's' : ''})`,
+          service_name: `${hotelName_final} (${totalPax} ${totalPax > 1 ? 'persons' : 'person'})`,
           supplier_name: hotelName_final,
-          quantity: roomsNeeded,
+          quantity: totalPax,
           rate_eur: hotelRate,
           rate_non_eur: hotelRate,
           total_cost: hotelCost,
