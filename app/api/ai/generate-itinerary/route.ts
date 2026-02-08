@@ -1786,6 +1786,13 @@ export async function POST(request: NextRequest) {
     }
     isEuroPassport = isEuroPassport ?? false
 
+    // Auto-set currency to EUR for Euro passport holders
+    let effectiveCurrency = currency
+    if (isEuroPassport && effectiveCurrency !== 'EUR') {
+      console.log(`💶 Euro passport detected (${nationality}) — setting currency to EUR (was ${effectiveCurrency})`)
+      effectiveCurrency = 'EUR'
+    }
+
     // Calculate dates
     const startDateObj = new Date(start_date)
     const endDate = new Date(startDateObj)
@@ -1870,7 +1877,7 @@ export async function POST(request: NextRequest) {
             total_days: duration_days,
             num_adults,
             num_children,
-            currency,
+            currency: effectiveCurrency,
             total_cost: 0,
             total_revenue: 0,
             margin_percent,
@@ -2110,7 +2117,7 @@ export async function POST(request: NextRequest) {
             generation_mode: 'creative',
             mode: skip_pricing ? 'draft' : 'quoted',
             redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
-            currency,
+            currency: effectiveCurrency,
             total_days: duration_days,
             ...(skip_pricing ? {} : {
               supplier_cost: totalSupplierCost,
@@ -2279,7 +2286,7 @@ export async function POST(request: NextRequest) {
         total_days: duration_days,
         num_adults,
         num_children,
-        currency,
+        currency: effectiveCurrency,
         total_cost: 0,
         total_revenue: 0,
         margin_percent,
@@ -2769,7 +2776,7 @@ export async function POST(request: NextRequest) {
         generation_mode: inputMode,
         mode: skip_pricing ? 'draft' : 'quoted',
         redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
-        currency,
+        currency: effectiveCurrency,
         total_days: duration_days,
         ...(skip_pricing ? {} : {
           supplier_cost: totalSupplierCost,

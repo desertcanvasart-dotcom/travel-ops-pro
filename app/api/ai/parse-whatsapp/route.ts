@@ -485,6 +485,19 @@ export async function POST(request: Request) {
       }
     }
 
+    // Determine Euro passport from nationality
+    const detectedNationality = extracted.nationality || ''
+    const euCountries = [
+      'austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark',
+      'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland',
+      'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands',
+      'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden',
+      'norway', 'iceland', 'liechtenstein', 'switzerland'
+    ]
+    const isEuroPassport = detectedNationality
+      ? euCountries.some(c => detectedNationality.toLowerCase().includes(c))
+      : null
+
     // Build final response with fallbacks
     const data = {
       // Client info
@@ -492,7 +505,8 @@ export async function POST(request: Request) {
       client_email: extracted.client_email || regexEmail || '',
       client_phone: extracted.client_phone || regexPhone || '',
       company_name: extracted.company_name || '',
-      nationality: extracted.nationality || '',
+      nationality: detectedNationality,
+      is_euro_passport: isEuroPassport,
 
       // Trip info
       trip_name: extracted.trip_name || extracted.tour_requested || 'Egypt Tour',
@@ -537,6 +551,8 @@ export async function POST(request: Request) {
 
     console.log('✅ Parsed result:', {
       client: data.client_name,
+      nationality: data.nationality,
+      isEuroPassport: data.is_euro_passport,
       packageType: data.package_type,
       mealPlan: data.meal_plan,
       isStructured: data.is_structured_input,

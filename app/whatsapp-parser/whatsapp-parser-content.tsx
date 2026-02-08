@@ -72,6 +72,7 @@ interface ExtractedData {
   conversation_language: string
   confidence_score: number
   nationality?: string
+  is_euro_passport?: boolean | null
   tier?: string
   // NEW: Structured input detection
   is_structured_input: boolean
@@ -1261,7 +1262,7 @@ function WhatsAppParserContent() {
           nationality: clientNationality,
           status: 'prospect',
           client_type: extractedData.num_adults > 2 ? 'family' : 'individual',
-          passport_type: 'other',
+          passport_type: extractedData.is_euro_passport === true ? 'eu' : extractedData.is_euro_passport === false ? 'non-eu' : 'other',
           preferred_language: extractedData.conversation_language || 'English',
           client_source: 'whatsapp',
           vip_status: selectedTier === 'luxury',
@@ -1338,6 +1339,9 @@ function WhatsAppParserContent() {
         ? b2bPartners.find(p => p.id === selectedPartnerId)
         : null
 
+      // Determine currency: Euro passport holders get EUR, others use user preference
+      const effectiveCurrency = data.is_euro_passport === true ? 'EUR' : userPreferences.default_currency
+
       const response = await fetch('/api/ai/generate-itinerary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1349,7 +1353,8 @@ function WhatsAppParserContent() {
           package_type: packageType,
           cost_mode: userPreferences.default_cost_mode,
           margin_percent: userPreferences.default_margin_percent,
-          currency: userPreferences.default_currency,
+          currency: effectiveCurrency,
+          is_euro_passport: data.is_euro_passport,
           skip_pricing: generationMode === 'edit',
           input_mode_override: inputMode,
           is_structured_input: data.is_structured_input,
