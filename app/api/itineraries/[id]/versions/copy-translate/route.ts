@@ -129,7 +129,7 @@ export async function POST(
       // If no version exists, try to get content from main itinerary
       const { data: itinerary } = await supabase
         .from('itineraries')
-        .select('trip_name, notes, pickup_location, guide_notes, vehicle_notes')
+        .select('trip_name, notes, pickup_location, guide_notes, vehicle_notes, inclusions, exclusions')
         .eq('id', id)
         .single()
 
@@ -157,7 +157,9 @@ export async function POST(
           notes: translatedContent.notes || null,
           pickup_location: translatedContent.pickup_location || null,
           guide_notes: translatedContent.guide_notes || null,
-          vehicle_notes: translatedContent.vehicle_notes || null
+          vehicle_notes: translatedContent.vehicle_notes || null,
+          inclusions: translatedContent.inclusions || itinerary.inclusions || null,
+          exclusions: translatedContent.exclusions || itinerary.exclusions || null
         })
         .select()
         .single()
@@ -199,7 +201,9 @@ export async function POST(
         notes: translatedContent.notes || null,
         pickup_location: translatedContent.pickup_location || null,
         guide_notes: translatedContent.guide_notes || null,
-        vehicle_notes: translatedContent.vehicle_notes || null
+        vehicle_notes: translatedContent.vehicle_notes || null,
+        inclusions: translatedContent.inclusions || sourceVersion.inclusions || null,
+        exclusions: translatedContent.exclusions || sourceVersion.exclusions || null
       })
       .select()
       .single()

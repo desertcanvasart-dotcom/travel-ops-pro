@@ -104,6 +104,8 @@ export async function POST(
         pickup_location: content.pickup_location || null,
         guide_notes: content.guide_notes || null,
         vehicle_notes: content.vehicle_notes || null,
+        inclusions: content.inclusions || null,
+        exclusions: content.exclusions || null,
         created_by: content.created_by || null
       })
       .select()

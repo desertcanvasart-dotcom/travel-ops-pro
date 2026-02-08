@@ -121,7 +121,9 @@ export const ITINERARY_TRANSLATION_FIELDS: TranslationFieldConfig[] = [
   { key: 'notes', type: 'string' },
   { key: 'pickup_location', type: 'string' },
   { key: 'guide_notes', type: 'string' },
-  { key: 'vehicle_notes', type: 'string' }
+  { key: 'vehicle_notes', type: 'string' },
+  { key: 'inclusions', type: 'string[]' },
+  { key: 'exclusions', type: 'string[]' }
 ]
 
 /**

@@ -77,6 +77,8 @@ export async function PUT(
     if (body.pickup_location !== undefined) updateData.pickup_location = body.pickup_location
     if (body.guide_notes !== undefined) updateData.guide_notes = body.guide_notes
     if (body.vehicle_notes !== undefined) updateData.vehicle_notes = body.vehicle_notes
+    if (body.inclusions !== undefined) updateData.inclusions = body.inclusions
+    if (body.exclusions !== undefined) updateData.exclusions = body.exclusions
 
     const { data, error } = await supabase
       .from('itinerary_versions')

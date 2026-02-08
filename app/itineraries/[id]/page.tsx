@@ -490,14 +490,38 @@ export default function ViewItineraryPage() {
 
     setSavingInclusions(true)
     try {
-      const response = await fetch(`/api/itineraries/${itinerary.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [type]: items })
-      })
+      let response: Response
+      if (activeLanguage === 'en') {
+        // English: save to base itinerary table
+        response = await fetch(`/api/itineraries/${itinerary.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [type]: items })
+        })
+        if (response.ok) {
+          setItinerary(prev => prev ? { ...prev, [type]: items } : null)
+        }
+      } else {
+        // Non-English: save to version table
+        response = await fetch(`/api/itineraries/${itinerary.id}/versions/${activeLanguage}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [type]: items })
+        })
+        if (response.ok) {
+          setItinerary(prev => {
+            if (!prev) return null
+            const updatedVersions = { ...(prev.versions || {}) }
+            updatedVersions[activeLanguage] = {
+              ...(updatedVersions[activeLanguage] || {}),
+              [type]: items
+            }
+            return { ...prev, versions: updatedVersions }
+          })
+        }
+      }
 
       if (response.ok) {
-        setItinerary(prev => prev ? { ...prev, [type]: items } : null)
         if (type === 'inclusions') {
           setEditingInclusions(false)
         } else {
@@ -514,7 +538,8 @@ export default function ViewItineraryPage() {
   const translateInclusionsExclusions = async () => {
     if (!itinerary) return
 
-    const langCode = currentLocale === 'en' ? 'en' : currentLocale
+    const langCode = activeLanguage
+    // Always translate from the base English inclusions/exclusions
     const inclusions = itinerary.inclusions || []
     const exclusions = itinerary.exclusions || []
     if (inclusions.length === 0 && exclusions.length === 0) return
@@ -552,8 +577,8 @@ export default function ViewItineraryPage() {
       const translatedInclusions = inclusionsRes.success ? inclusionsRes.data.translatedTexts : inclusions
       const translatedExclusions = exclusionsRes.success ? exclusionsRes.data.translatedTexts : exclusions
 
-      // Save both to DB
-      const response = await fetch(`/api/itineraries/${itinerary.id}`, {
+      // Save to language version table (not the base itinerary)
+      const response = await fetch(`/api/itineraries/${itinerary.id}/versions/${langCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -563,11 +588,17 @@ export default function ViewItineraryPage() {
       })
 
       if (response.ok) {
-        setItinerary(prev => prev ? {
-          ...prev,
-          inclusions: translatedInclusions,
-          exclusions: translatedExclusions
-        } : null)
+        // Update the versions map in local state (not the base itinerary)
+        setItinerary(prev => {
+          if (!prev) return null
+          const updatedVersions = { ...(prev.versions || {}) }
+          updatedVersions[langCode] = {
+            ...(updatedVersions[langCode] || {}),
+            inclusions: translatedInclusions,
+            exclusions: translatedExclusions
+          }
+          return { ...prev, versions: updatedVersions }
+        })
       }
     } catch (error) {
       console.error('Error translating inclusions/exclusions:', error)
@@ -745,7 +776,9 @@ export default function ViewItineraryPage() {
         notes: itinerary?.notes || '',
         pickup_location: itinerary?.pickup_location || '',
         guide_notes: itinerary?.guide_notes || '',
-        vehicle_notes: itinerary?.vehicle_notes || ''
+        vehicle_notes: itinerary?.vehicle_notes || '',
+        inclusions: itinerary?.inclusions || [],
+        exclusions: itinerary?.exclusions || []
       }
     }
     const version = itinerary.versions[activeLanguage] || itinerary.versions['en']
@@ -755,7 +788,9 @@ export default function ViewItineraryPage() {
         notes: version.notes || itinerary.notes,
         pickup_location: version.pickup_location || itinerary.pickup_location,
         guide_notes: version.guide_notes || itinerary.guide_notes,
-        vehicle_notes: version.vehicle_notes || itinerary.vehicle_notes
+        vehicle_notes: version.vehicle_notes || itinerary.vehicle_notes,
+        inclusions: version.inclusions || itinerary.inclusions || [],
+        exclusions: version.exclusions || itinerary.exclusions || []
       }
     }
     return {
@@ -763,7 +798,9 @@ export default function ViewItineraryPage() {
       notes: itinerary.notes,
       pickup_location: itinerary.pickup_location,
       guide_notes: itinerary.guide_notes,
-      vehicle_notes: itinerary.vehicle_notes
+      vehicle_notes: itinerary.vehicle_notes,
+      inclusions: itinerary.inclusions || [],
+      exclusions: itinerary.exclusions || []
     }
   }
 
@@ -1344,7 +1381,7 @@ export default function ViewItineraryPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setLocalInclusions(itinerary?.inclusions || [])
+                    setLocalInclusions(getVersionedContent().inclusions)
                     setEditingInclusions(true)
                   }}
                   className="text-xs text-primary-600 hover:text-primary-700 font-medium"
@@ -1409,13 +1446,13 @@ export default function ViewItineraryPage() {
               </div>
             ) : (
               <ul className="space-y-1.5">
-                {(itinerary?.inclusions || []).map((item, index) => (
+                {getVersionedContent().inclusions.map((item, index) => (
                   <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
                     <Check className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
                     {item}
                   </li>
                 ))}
-                {(!itinerary?.inclusions || itinerary.inclusions.length === 0) && (
+                {getVersionedContent().inclusions.length === 0 && (
                   <li className="text-sm text-gray-400 italic">{t('noInclusionsYet')}</li>
                 )}
               </ul>
@@ -1433,7 +1470,7 @@ export default function ViewItineraryPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setLocalExclusions(itinerary?.exclusions || [])
+                    setLocalExclusions(getVersionedContent().exclusions)
                     setEditingExclusions(true)
                   }}
                   className="text-xs text-primary-600 hover:text-primary-700 font-medium"
@@ -1498,13 +1535,13 @@ export default function ViewItineraryPage() {
               </div>
             ) : (
               <ul className="space-y-1.5">
-                {(itinerary?.exclusions || []).map((item, index) => (
+                {getVersionedContent().exclusions.map((item, index) => (
                   <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
                     <X className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
                     {item}
                   </li>
                 ))}
-                {(!itinerary?.exclusions || itinerary.exclusions.length === 0) && (
+                {getVersionedContent().exclusions.length === 0 && (
                   <li className="text-sm text-gray-400 italic">{t('noExclusionsYet')}</li>
                 )}
               </ul>
