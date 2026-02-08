@@ -1852,13 +1852,13 @@ export async function POST(request: NextRequest) {
         // Fetch guide rate
         const { data: cruiseGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [finalLanguage]).limit(5)
         const cruiseGuide = cruiseGuides?.[0]
-        const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate_eur, 55) : 55
+        const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate_eur, 0) : 0
+        if (!cruiseGuidePerDay) console.warn(`⚠️ No cruise guide rate found for ${finalLanguage}/${tier}`)
 
         // Fetch tipping rates
         const { data: cruiseTippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
-        let cruiseDailyTips = cruiseTippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 15
-        const cruiseTierTipsMultiplier: Record<ServiceTier, number> = { 'budget': 0.8, 'standard': 1.0, 'deluxe': 1.2, 'luxury': 1.5 }
-        cruiseDailyTips = Math.round(cruiseDailyTips * cruiseTierTipsMultiplier[tier])
+        let cruiseDailyTips = cruiseTippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 0
+        if (!cruiseDailyTips) console.warn('⚠️ No cruise tipping rates found')
 
         // Fetch entrance fees
         const { data: cruiseEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
@@ -2154,34 +2154,77 @@ export async function POST(request: NextRequest) {
       includeAccommodationFinal = false
     }
 
-    // Fetch rates
-    const { data: vehicles } = await supabase.from('vehicles').select('*').eq('is_active', true).eq('tier', tier).order('is_preferred', { ascending: false })
-    let selectedVehicle = vehicles?.find((v: any) => totalPax >= toNumber(v.capacity_min, 1) && totalPax <= toNumber(v.capacity_max, 99)) || vehicles?.[vehicles.length - 1]
-    
+    // Fetch rates — all from database, no hardcoded fallbacks
+    // Transportation: query transportation_rates (tiered vehicle structure)
+    const { data: transportRates } = await supabase
+      .from('transportation_rates')
+      .select('*')
+      .eq('is_active', true)
+      .eq('service_type', 'day_tour')
+      .ilike('city', effectiveCity)
+      .limit(1)
+
+    const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
+    const transportResult = transportRates?.length ? getTransportRateForPax(transportRates[0], totalPax, isEuroPassport) : null
+    if (!transportResult) {
+      console.warn(`⚠️ No transportation rate found for ${effectiveCity}, ${totalPax} pax — transport will be €0`)
+    }
+    const vehiclePerDay = transportResult ? (isEuroPassport ? transportResult.rateEur : transportResult.rateNonEur) : 0
+    const vehicleTypeName = transportResult ? transportResult.vehicleType : 'Vehicle'
+    const vehicleServiceCode = transportRates?.[0]?.id || 'TRANS'
+    const vehicleSupplierName = transportRates?.[0]?.supplier_name || null
+
+    // Transfer rate: query transportation_rates for airport_transfer service type
+    const { data: transferRates } = await supabase
+      .from('transportation_rates')
+      .select('*')
+      .eq('is_active', true)
+      .eq('service_type', 'airport_transfer')
+      .ilike('city', effectiveCity)
+      .limit(1)
+    const transferResult = transferRates?.length ? getTransportRateForPax(transferRates[0], totalPax, isEuroPassport) : null
+    const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
+    if (!transferResult) {
+      console.warn(`⚠️ No airport transfer rate found for ${effectiveCity}, ${totalPax} pax — transfer will be €0`)
+    }
+
+    // Guides
     const { data: guides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [finalLanguage]).limit(5)
     let selectedGuide = guides?.[0]
+    if (!selectedGuide) {
+      // Fallback: any active guide for this language
+      const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('is_active', true).contains('languages', [finalLanguage]).limit(1)
+      selectedGuide = fallbackGuides?.[0]
+    }
+    const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 0) : 0
+    if (!guidePerDay) console.warn(`⚠️ No guide rate found for ${finalLanguage}/${tier} — guide will be €0`)
 
+    // Entrance fees
     const { data: allEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
-    
+
+    // Meal rates
     const { data: mealRates } = await supabase.from('meal_rates').select('*').eq('is_active', true).limit(1)
-    const tierMealMultiplier: Record<ServiceTier, number> = { 'budget': 0.8, 'standard': 1.0, 'deluxe': 1.3, 'luxury': 1.6 }
-    let lunchRate = Math.round(toNumber(mealRates?.[0]?.lunch_rate_eur, 12) * tierMealMultiplier[tier])
-    let dinnerRate = Math.round(toNumber(mealRates?.[0]?.dinner_rate_eur, 18) * tierMealMultiplier[tier])
+    let lunchRate = toNumber(mealRates?.[0]?.lunch_rate_eur, 0)
+    let dinnerRate = toNumber(mealRates?.[0]?.dinner_rate_eur, 0)
+    if (!lunchRate) console.warn('⚠️ No lunch rate found in meal_rates — lunch will be €0')
+    if (!dinnerRate) console.warn('⚠️ No dinner rate found in meal_rates — dinner will be €0')
 
-    // Fetch airport services rates
+    // Airport services
     const { data: airportServicesData } = await supabase.from('airport_services').select('*').eq('is_active', true)
-    const airportServiceRate = airportServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 25
+    const airportServiceRate = airportServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
+    if (!airportServiceRate) console.warn('⚠️ No airport service rates found — airport service will be €0')
 
-    // Fetch hotel services rates
+    // Hotel services
     const { data: hotelServicesData } = await supabase.from('hotel_services').select('*').eq('is_active', true)
-    const hotelServiceRate = hotelServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 15
+    const hotelServiceRate = hotelServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
+    if (!hotelServiceRate) console.warn('⚠️ No hotel service rates found — hotel service will be €0')
 
+    // Accommodation
     let hotelRate = 0
     let hotelName_final = hotel_name || null
     let selectedHotel: any = null
 
     if (includeAccommodationFinal) {
-      // Look up hotel from accommodation_rates (per-person pricing)
       const { data: hotels } = await supabase
         .from('accommodation_rates')
         .select('*')
@@ -2199,21 +2242,15 @@ export async function POST(request: NextRequest) {
         hotelName_final = selectedHotel.property_name
       }
 
-      // Fallback: if no hotel found in accommodation_rates, use default per-person rates
       if (!hotelRate) {
-        const defaultPPRates: Record<ServiceTier, number> = { 'budget': 25, 'standard': 40, 'deluxe': 60, 'luxury': 90 }
-        hotelRate = defaultPPRates[tier]
-        if (!hotelName_final) hotelName_final = `${tier.charAt(0).toUpperCase() + tier.slice(1)} Hotel`
+        console.warn(`⚠️ No hotel rate found for ${effectiveCity}/${tier} — accommodation will be €0`)
       }
     }
 
+    // Tipping rates
     const { data: tippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
-    let dailyTips = tippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 15
-    const tierTipsMultiplier: Record<ServiceTier, number> = { 'budget': 0.8, 'standard': 1.0, 'deluxe': 1.2, 'luxury': 1.5 }
-    dailyTips = Math.round(dailyTips * tierTipsMultiplier[tier])
-
-    const vehiclePerDay = selectedVehicle ? toNumber(selectedVehicle.daily_rate_eur, 50) : 50
-    const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 55) : 55
+    let dailyTips = tippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 0
+    if (!dailyTips) console.warn('⚠️ No tipping rates found — tips will be €0')
 
 
     // ============================================
@@ -2415,21 +2452,21 @@ export async function POST(request: NextRequest) {
         totalSupplierCost += hotelServiceRate
         totalClientPrice += withMargin(hotelServiceRate)
 
-        // Transfer to airport
-        const transferCost = vehiclePerDay * 0.5
+        // Transfer to airport (uses airport_transfer rate from transportation_rates)
         departureServices.push({
           service_type: 'transportation',
-          service_code: 'TRANSFER',
+          service_code: transferRates?.[0]?.id || vehicleServiceCode,
           service_name: 'Airport Transfer',
+          supplier_name: transferRates?.[0]?.supplier_name || vehicleSupplierName,
           quantity: 1,
-          rate_eur: transferCost,
-          rate_non_eur: transferCost,
-          total_cost: transferCost,
-          client_price: withMargin(transferCost),
+          rate_eur: transferRate,
+          rate_non_eur: transferRate,
+          total_cost: transferRate,
+          client_price: withMargin(transferRate),
           notes: 'Transfer to airport'
         })
-        totalSupplierCost += transferCost
-        totalClientPrice += withMargin(transferCost)
+        totalSupplierCost += transferRate
+        totalClientPrice += withMargin(transferRate)
 
         // Insert all departure services
         for (const svc of departureServices) {
@@ -2481,12 +2518,12 @@ export async function POST(request: NextRequest) {
 
       // Transportation (skip for cruise days — bundled transport added separately)
       if (!isFreeDay && !isCruiseDay) {
-        const transportRate = isTransferOnly ? vehiclePerDay * 0.5 : vehiclePerDay
+        const transportRate = isTransferOnly ? transferRate : vehiclePerDay
         services.push({
           service_type: 'transportation',
-          service_code: selectedVehicle?.id || 'TRANS',
-          service_name: isTransferOnly ? 'Airport/Hotel Transfer' : `${selectedVehicle?.vehicle_type || 'Vehicle'} Transportation`,
-          supplier_name: selectedVehicle?.company_name || null,
+          service_code: vehicleServiceCode,
+          service_name: isTransferOnly ? 'Airport/Hotel Transfer' : `${vehicleTypeName} Transportation`,
+          supplier_name: vehicleSupplierName,
           quantity: 1,
           rate_eur: transportRate,
           rate_non_eur: transportRate,
