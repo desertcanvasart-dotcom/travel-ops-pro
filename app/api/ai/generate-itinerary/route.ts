@@ -235,15 +235,15 @@ D1, D2, D3... = Day 1, Day 2, Day 3...
 @ = at (time), e.g., "arrive @05:10" = arrive at 05:10
 
 -----------------------------------------------------------------
-CRITICAL: ENTRANCE FEE MARKERS
+CRITICAL: ENTRANCE FEE LOGIC
 -----------------------------------------------------------------
-(INSIDE) = Entrance fee REQUIRED - guests will enter the site
+DEFAULT: Any site mentioned by name = Entrance fee INCLUDED automatically
 (OUTSIDE) = NO entrance fee - photo stop only, viewing from outside
 
 Examples:
-- "Alexandria Library (OUTSIDE)" = Photo stop, NO entrance fee
-- "Pompey's Pillar (INSIDE)" = Entrance fee required
-- "Pyramids" with no marker = Assume entrance included
+- "Pyramids" = Entrance fee included (default)
+- "Pompey's Pillar" = Entrance fee included (default)
+- "Alexandria Library (OUTSIDE)" = Photo stop ONLY, NO entrance fee
 
 -----------------------------------------------------------------
 FREE DAYS AND SAILING DAYS
@@ -289,7 +289,7 @@ COMMON PATTERNS - EXAMPLES
 = 2 nights Cairo + 3 nights Cruise + 3 nights Hurghada
 = Total: 2+3+3 = 8 nights = 9 DAYS
 
-"D1 CAI/ALX/CAI Arrive MS956@05:10, Pompey's Pillar (INSIDE), Library (OUTSIDE), L, back to CAI"
+"D1 CAI/ALX/CAI Arrive MS956@05:10, Pompey's Pillar, Library (OUTSIDE), L, back to CAI"
 = Day 1: Arrive Cairo, then FULL DAY TRIP to Alexandria with sites, lunch, return to Cairo
 = This is NOT just arrival - it's arrival + full day tour!
 
@@ -435,7 +435,8 @@ function detectCruiseRequest(
   cities: string[],
   specialRequests: string[],
   durationDays: number,
-  rawItinerary?: string
+  rawItinerary?: string,
+  parserPackageType?: string
 ): CruiseDetectionResult {
   const allText = [
     tourRequested || '',
@@ -445,15 +446,47 @@ function detectCruiseRequest(
     ...(specialRequests || [])
   ].join(' ').toLowerCase()
 
-  // Cruise keywords - includes abbreviations
+  // CRITICAL: If the parser already determined this is a land-package and
+  // the raw itinerary contains hotel names but NO cruise-specific terms (CRZ, NTS CRZ),
+  // trust the parser and skip cruise detection entirely.
+  const hasCruiseAbbreviations = /\b(crz|nts\s*crz|c\/in\s*crz|c\/out\s*crz|nile\s*cruise)\b/i.test(allText)
+  const hasHotelMentions = /\b(hotel|marriott|mena\s*house|hilton|sheraton|sofitel|movenpick|steigenberger|four\s*seasons|oberoi\s*hotel|hyatt|kempinski|resort|accommodation)\b/i.test(allText)
+
+  if (parserPackageType === 'land-package' && !hasCruiseAbbreviations && hasHotelMentions) {
+    console.log('🛡️ CRUISE GUARD: Parser says land-package, no CRZ/cruise abbreviations found, hotel names present — skipping cruise detection')
+    return {
+      isCruise: false,
+      cruiseType: null,
+      route: null,
+      detectedDuration: null,
+      startCity: null,
+      endCity: null,
+      keywords: [],
+      includesLand: false,
+      cruiseNights: 0,
+      landNights: 0
+    }
+  }
+
+  // Cruise keywords - TIGHTENED: removed generic words that cause false positives
+  // "sailing" removed - appears in travel prose (e.g., "sailing through history")
+  // "on board" removed - appears in prose (e.g., "on board with the plan")
+  // "cruise" alone kept but we require it as a TRAVEL term, not part of other words
   const cruiseKeywords = [
-    'nile cruise', 'cruise', 'river cruise', 'boat cruise',
-    'felucca', 'dahabiya', 'sailing', 'cruise ship',
+    'nile cruise', 'river cruise', 'boat cruise',
+    'felucca', 'dahabiya', 'cruise ship',
     'lake nasser', 'floating hotel',
-    'crz', 'nts crz', 'check in crz', 'c/in crz', 'on board'
+    'crz', 'nts crz', 'check in crz', 'c/in crz'
   ]
 
+  // For the generic word "cruise", only match if it's used as a travel/booking term,
+  // not as part of a restaurant name or other context
+  const hasCruiseAsBookingTerm = /\b(\d+\s*night[s]?\s*cruise|cruise\s*(from|to|between|package|itinerary|ship)|book\s*(a|the)\s*cruise|nile\s*cruise)\b/i.test(allText)
+
   const matchedKeywords = cruiseKeywords.filter(keyword => allText.includes(keyword))
+  if (hasCruiseAsBookingTerm) {
+    matchedKeywords.push('cruise (booking term)')
+  }
   const isCruise = matchedKeywords.length > 0
 
   // Calculate cruise nights from "XNTs CRZ" pattern
@@ -1192,8 +1225,20 @@ async function fetchAttractionsList(supabase: any): Promise<string[]> {
       .select('attraction_name')
       .eq('is_active', true)
       .eq('is_addon', false) // Exclude add-ons
-    
-    return data?.map((a: any) => a.attraction_name) || []
+
+    if (!data) return []
+
+    // CRITICAL: Filter out non-Latin names (e.g., Japanese, Arabic) to prevent
+    // the AI from outputting attraction names in wrong languages.
+    // Only pass English/Latin-script names to the AI prompt.
+    return data
+      .map((a: any) => a.attraction_name)
+      .filter((name: string) => {
+        // Keep names that are primarily Latin characters (English, French, etc.)
+        // Reject names that are primarily non-Latin (Japanese, Arabic, etc.)
+        const latinChars = (name.match(/[a-zA-Z]/g) || []).length
+        return latinChars > name.length * 0.3 // At least 30% Latin characters
+      })
   } catch {
     return []
   }
@@ -1208,29 +1253,50 @@ async function fetchAttractionsList(supabase: any): Promise<string[]> {
 // ============================================
 function preParseRawItinerary(rawItinerary: string): { dayNumber: number; rawContent: string }[] {
   const segments: { dayNumber: number; rawContent: string }[] = []
-  
-  // Split by D1, D2, D3... or Day 1, Day 2... patterns
-  const dayPattern = /(?:^|\n)\s*(D(\d+)|Day\s*(\d+))\b/gi
-  const matches = [...rawItinerary.matchAll(dayPattern)]
-  
-  if (matches.length === 0) {
+
+  // Try Egyptian shorthand first: D1, D2, D3...
+  const egyptPattern = /(?:^|\n)\s*D(\d+)\b/gi
+  const egyptMatches = [...rawItinerary.matchAll(egyptPattern)]
+
+  // Then try prose-style: "Day 1", "Day 2" (can appear anywhere, not just line start)
+  const prosePattern = /\bDay\s*(\d+)\b/gi
+  const proseMatches = [...rawItinerary.matchAll(prosePattern)]
+
+  // Use whichever pattern found more matches (prefer Egyptian shorthand if both found)
+  let matches: RegExpMatchArray[]
+  let dayNumGroup: number
+
+  if (egyptMatches.length >= 2) {
+    matches = egyptMatches
+    dayNumGroup = 1
+  } else if (proseMatches.length >= 2) {
+    matches = proseMatches
+    dayNumGroup = 1
+  } else if (egyptMatches.length > 0) {
+    matches = egyptMatches
+    dayNumGroup = 1
+  } else if (proseMatches.length > 0) {
+    matches = proseMatches
+    dayNumGroup = 1
+  } else {
     // No day markers found, return entire content as day 1
     return [{ dayNumber: 1, rawContent: rawItinerary.trim() }]
   }
-  
+
   for (let i = 0; i < matches.length; i++) {
     const match = matches[i]
-    const dayNum = parseInt(match[2] || match[3])
+    const dayNum = parseInt(match[dayNumGroup])
     const startIdx = match.index!
     const endIdx = i < matches.length - 1 ? matches[i + 1].index! : rawItinerary.length
-    
+
     const content = rawItinerary.substring(startIdx, endIdx).trim()
     segments.push({ dayNumber: dayNum, rawContent: content })
   }
-  
+
   // Sort by day number
   segments.sort((a, b) => a.dayNumber - b.dayNumber)
-  
+
+  console.log(`📋 Pre-parsed ${segments.length} day segments from raw itinerary`)
   return segments
 }
 
@@ -1269,10 +1335,12 @@ ${seg.rawContent}
 ───────────────────────────────────────`
   }).join('\n')
 
-  const prompt = `You are a DATA CONVERTER. Your ONLY task is to convert travel agent shorthand into JSON format.
+  const prompt = `You are a DATA CONVERTER. Your ONLY task is to convert an existing itinerary into JSON format.
 
 ⛔ THIS IS NOT A CREATIVE TASK ⛔
 You are NOT designing an itinerary. You are CONVERTING an existing one.
+The input may be in Egyptian travel shorthand (D1 CAI, D2 ALX) OR in full prose English (Day 1 Arrival in Cairo...).
+Either way, your job is the SAME: extract EXACTLY what is described and convert to JSON.
 
 ${EGYPT_TRAVEL_GLOSSARY}
 
@@ -1280,24 +1348,31 @@ ${EGYPT_TRAVEL_GLOSSARY}
 ⛔ FORBIDDEN ACTIONS - VIOLATING THESE IS A CRITICAL ERROR ⛔
 ═══════════════════════════════════════════════════════════════
 
-1. FORBIDDEN: Adding attractions NOT in the input
+1. FORBIDDEN: Adding attractions, cities, or activities NOT in the input
    - If Abu Simbel is not mentioned → DO NOT ADD IT
    - If Unfinished Obelisk is not mentioned → DO NOT ADD IT
-   - If Grand Museum is not mentioned → DO NOT ADD IT
-   
-2. FORBIDDEN: Removing or skipping activities from input
-   - If D1 says "Alexandria tour" → Day 1 MUST include Alexandria
-   - If D2 says "Pyramids & Museum" → Day 2 MUST include BOTH
-   
-3. FORBIDDEN: Reordering days or activities
-   - D1 content goes in day_number: 1
-   - D2 content goes in day_number: 2
-   - NEVER put D1 content in day_number: 2
-   
-4. FORBIDDEN: "Improving" the itinerary
+   - If Aswan, Luxor, or a Nile Cruise is not mentioned → DO NOT ADD THEM
+   - If the input says Cairo only → the output must be Cairo only
+
+2. FORBIDDEN: Changing the itinerary type
+   - If the input describes a HOTEL stay (e.g., "Marriott Mena House") → this is a LAND itinerary, NOT a cruise
+   - If the input describes a Nile Cruise → keep it as a cruise
+   - NEVER convert a hotel itinerary into a cruise or vice versa
+
+3. FORBIDDEN: Removing or skipping activities from input
+   - If Day 1 says "Alexandria tour" → Day 1 MUST include Alexandria
+   - If Day 2 says "Pyramids & Museum" → Day 2 MUST include BOTH
+
+4. FORBIDDEN: Reordering days or activities
+   - Day 1 content goes in day_number: 1
+   - Day 2 content goes in day_number: 2
+   - NEVER put Day 1 content in day_number: 2
+
+5. FORBIDDEN: "Improving" the itinerary
    - Do NOT add sites you think they "should" visit
    - Do NOT rearrange for "better flow"
    - Do NOT combine or split days
+   - Do NOT add a Nile Cruise to a land-only itinerary
 
 ═══════════════════════════════════════════════════════════════
 📋 EXACT DAY-BY-DAY INPUT TO CONVERT
@@ -1320,9 +1395,24 @@ MULTI-CITY PATTERN:
 "D1 CAI/ALX/CAI" = Day trip: Arrive Cairo → Visit Alexandria → Return Cairo
 This is NOT just "Arrival" - it's arrival PLUS a FULL DAY TOUR!
 
-ENTRANCE MARKERS:
-(INSIDE) = Entrance fee required → add to entrance_included[]
+DAY TRIPS (CRITICAL):
+If the input mentions visiting a city and then RETURNING to the base hotel:
+- "day trip to Alexandria" → overnight_city = base hotel city (e.g., "Cairo"), NOT "Alexandria"
+- "return to Cairo" or "back to [city]" → confirms it's a day trip
+- cities_visited = ["Cairo", "Alexandria"] but overnight_city = "Cairo"
+- The hotel stay remains in the base city throughout
+
+DEPARTURE/FAREWELL DAYS:
+If input mentions "farewell", "departure", "airport transfer", "final breakfast":
+- is_departure: true, is_transfer_only: true
+- overnight_city should be the departure city (usually Cairo)
+- Guide is NOT needed for transfer-only days
+
+ENTRANCE FEE LOGIC:
+DEFAULT: Any attraction mentioned = entrance fee included → add to attractions[]
 (OUTSIDE) = Photo stop only → add to photo_stops[] (NO entrance fee)
+Do NOT use an "entrance_included" array. The "attractions" array IS the entrance fee list.
+Only sites explicitly marked (OUTSIDE) go into photo_stops[] and are excluded from fees.
 
 FREE DAYS:
 "D5 CRZ" with nothing else = Sailing day → is_free_day: true, is_sailing_day: true
@@ -1345,7 +1435,7 @@ TOTAL DAYS: ${expectedDays}
 TIER: ${tier.toUpperCase()}
 TRAVELERS: ${totalPax}
 LANGUAGE: ${language}
-PACKAGE: ${packageType || 'cruise-land'}
+PACKAGE: ${packageType || 'land-package'}
 ${packageType === 'tours-only' || packageType === 'day-trips' ? `
 ⚠️ TOURS-ONLY/DAY-TRIPS PACKAGE (CRITICAL):
 This is a TOURS-ONLY package - NO accommodation is included!
@@ -1363,7 +1453,12 @@ Write ALL content (trip_name, title, description) in ${language}.
 - Each day's description must be in ${language}
 - City names should remain in English for internal use
 - Attraction names must remain EXACT as provided (in English) for database matching
-` : ''}
+` : `
+⚠️ LANGUAGE: Write ALL content (trip_name, title, description) in ENGLISH.
+- ALL attraction names MUST be in English
+- Do NOT use Japanese, Arabic, or any non-Latin characters
+- City names in English
+`}
 ═══════════════════════════════════════════════════════════════
 📤 OUTPUT FORMAT (Return ONLY valid JSON)
 ═══════════════════════════════════════════════════════════════
@@ -1390,7 +1485,6 @@ Write ALL content (trip_name, title, description) in ${language}.
       "is_sailing_day": false,
       
       "attractions": ["Pompey's Pillar", "Qaitbay Citadel", "Alexandria Library", "Montazah Park"],
-      "entrance_included": ["Pompey's Pillar", "Qaitbay Citadel", "Montazah Park"],
       "photo_stops": ["Alexandria Library"],
       
       "activities": ["Airport arrival", "Transfer to Alexandria", "Visit Pompey's Pillar", "Visit Qaitbay Citadel", "Photo stop at Alexandria Library", "Visit Montazah Park", "Lunch", "Return to Cairo", "Dinner"],
@@ -1414,13 +1508,18 @@ Write ALL content (trip_name, title, description) in ${language}.
 ═══════════════════════════════════════════════════════════════
 
 □ I have exactly ${expectedDays} day objects in my response
-□ Day 1 contains ALL activities from D1 input (not just "arrival")
-□ Day 2 contains ALL activities from D2 input
+□ Day 1 contains ALL activities from D1/Day 1 input (not just "arrival")
+□ Day 2 contains ALL activities from D2/Day 2 input
 □ Each day's content matches ONLY what was in that day's input
 □ I did NOT add Abu Simbel, Unfinished Obelisk, or other sites not mentioned
+□ DAY TRIPS: If input says "return to Cairo" or "back to [city]", the overnight_city is the RETURN city, NOT the visited city
+□ OVERNIGHT CITIES: If the hotel is in Cairo and they take a day trip, overnight_city = "Cairo" (not the day-trip destination)
+□ DEPARTURE DAY: If input mentions "farewell", "departure", or "airport transfer", set is_departure: true, is_transfer_only: true
+□ ALL attraction names are in ENGLISH (no Japanese, Arabic, or other non-Latin names)
 □ Free/sailing days have is_free_day: true
-□ INSIDE attractions are in entrance_included (with fee)
-□ OUTSIDE attractions are in photo_stops (NO fee)
+□ ALL attractions are in the attractions[] array (entrance fees apply by default)
+□ ONLY sites explicitly marked (OUTSIDE) are in photo_stops[] (NO fee)
+□ There is NO "entrance_included" array in the output
 □ Flight arrivals have needs_airport_service: true
 □ The last day with activities includes everything mentioned (not just "departure")
 
@@ -1452,14 +1551,18 @@ NOW CONVERT THE ITINERARY TO JSON:`
   }
 
   const result = JSON.parse(jsonMatch[0])
-  
+
+  // ============================================
+  // POST-GENERATION VALIDATION
+  // ============================================
+
   // Validate day count
   if (result.days && result.days.length < expectedDays) {
     console.warn(`⚠️ AI returned ${result.days.length} days but expected ${expectedDays}`)
   } else {
     console.log(`✅ AI successfully generated ${result.days?.length || 0} days`)
   }
-  
+
   // Log first day for debugging
   if (result.days && result.days[0]) {
     console.log('📍 Day 1 generated:', {
@@ -1467,6 +1570,43 @@ NOW CONVERT THE ITINERARY TO JSON:`
       attractions: result.days[0].attractions,
       cities_visited: result.days[0].cities_visited
     })
+  }
+
+  // HALLUCINATION CHECK: Verify output cities match input cities
+  if (result.days && daySegments.length > 0) {
+    const outputCities = result.days.map((d: any) => (d.city || '').toLowerCase()).filter(Boolean)
+
+    // Check if AI hallucinated cruise days when input has no cruise
+    const inputHasCruise = /\b(crz|nile\s*cruise|cruise)\b/i.test(rawItinerary)
+    const outputHasCruise = result.days.some((d: any) =>
+      d.is_cruise_day === true ||
+      d.accommodation_type === 'cruise' ||
+      /\b(cruise|sailing|nile)\b/i.test(d.title || '') && /\b(on board|sailing)\b/i.test(d.title || '')
+    )
+
+    if (!inputHasCruise && outputHasCruise) {
+      console.error('🚨 HALLUCINATION DETECTED: AI generated cruise days but input has NO cruise!')
+      console.error('🚨 Stripping cruise flags from output...')
+      // Strip cruise flags — force to land itinerary
+      result.days.forEach((d: any) => {
+        d.is_cruise_day = false
+        d.is_sailing_day = false
+        if (d.accommodation_type === 'cruise') d.accommodation_type = 'hotel'
+      })
+    }
+
+    // Check if AI hallucinated cities not in input (e.g., Aswan/Luxor when input says Cairo)
+    const inputMentionsCairo = /\b(cairo|cai|giza|gza|pyramid|museum|mena\s*house)\b/i.test(rawItinerary)
+    const inputMentionsUpperEgypt = /\b(aswan|asw|luxor|lxr|kom\s*ombo|edfu|abu\s*simbel|philae|valley\s*of\s*(the\s*)?kings)\b/i.test(rawItinerary)
+    const outputMentionsUpperEgypt = outputCities.some((c: string) =>
+      /\b(aswan|luxor|kom\s*ombo|edfu)\b/i.test(c)
+    )
+
+    if (inputMentionsCairo && !inputMentionsUpperEgypt && outputMentionsUpperEgypt) {
+      console.error('🚨 HALLUCINATION DETECTED: AI added Upper Egypt cities (Aswan/Luxor) but input only mentions Cairo area!')
+      console.error('🚨 This is a critical hallucination — the AI ignored the input entirely.')
+      // Force regeneration with a stricter prompt would be ideal, but for now log heavily
+    }
   }
 
   return result
@@ -1526,7 +1666,11 @@ ${writingContext}
 PACKAGE INCLUDES:
 - Transportation: Yes (private vehicle)
 - Guide: Yes (${language} speaking)
-- Entrance Fees: Yes
+- Entrance Fees: Yes (all attractions in the "attractions" array get entrance fees automatically)
+
+ENTRANCE FEE RULE:
+- All sites in "attractions" array = entrance fee included (default)
+- If a site is a photo stop only (outside viewing), add it to "photo_stops" array instead
 - Lunch: ${includeLunch ? 'Yes' : 'No'}
 - Dinner: ${includeDinner ? 'Yes' : 'No'}
 - Hotels: ${includeAccommodation ? 'Yes (except last day)' : 'No'}
@@ -1538,15 +1682,26 @@ PLANNING GUIDELINES:
 4. Group nearby attractions on the same day
 5. Include realistic driving times
 6. For ${tier} tier: ${TIER_DESCRIPTIONS[tier]}
+
+CRITICAL CONSTRAINTS:
+- ONLY use cities from the CITIES list above. Do NOT add cities not mentioned.
+- If no Nile Cruise / CRZ is mentioned, do NOT create a cruise itinerary.
+- If no Aswan/Luxor is mentioned, do NOT add Upper Egypt destinations.
+- Stay faithful to the client's request — do not "improve" by adding unrelated destinations.
+- Do NOT generate a Nile Cruise unless the client explicitly asks for one.
 ${language !== 'English' ? `
 LANGUAGE REQUIREMENT (CRITICAL):
 Write ALL content (trip_name, title, description) in ${language}.
 - trip_name must be in ${language}
-- Each day's title must be in ${language} (e.g., "1日目: カイロ到着とギザのピラミッド" for Japanese)
+- Each day's title must be in ${language}
 - Each day's description must be in ${language}
 - City names should remain in their original English form for internal use
 - Attraction names must remain EXACT as provided (in English) for database matching
-` : ''}
+` : `
+LANGUAGE: Write ALL content in ENGLISH.
+- ALL text must be in English
+- ALL attraction names MUST be in English (no Japanese, Arabic, or other scripts)
+`}
 Return ONLY valid JSON:
 {
   "trip_name": "Descriptive Trip Name",
@@ -1562,6 +1717,7 @@ Return ONLY valid JSON:
       "is_departure": false,
       "is_transfer_only": false,
       "attractions": ["Exact Attraction Name"],
+      "photo_stops": [],
       "guide_required": true,
       "includes_lunch": ${includeLunch},
       "includes_dinner": ${includeDinner},
@@ -1604,12 +1760,19 @@ function determinePackageType(
   requestedPackageType: string,
   cruiseDetection: CruiseDetectionResult
 ): PackageType {
-  // If explicitly requested cruise-land, use it
-  if (requestedPackageType === 'cruise-land') {
-    return 'cruise-land'
+  // CRITICAL: If the parser explicitly set a non-cruise package type (land-package, tours-only, day-trips),
+  // and cruise detection did NOT find strong cruise indicators, TRUST THE PARSER.
+  // This prevents false cruise overrides from generic keyword matches.
+  const parserSaysLand = ['land-package', 'tours-only', 'day-trips', 'full-package'].includes(requestedPackageType)
+  const parserSaysCruise = ['cruise-package', 'cruise-land'].includes(requestedPackageType)
+
+  // If parser explicitly says cruise, trust it
+  if (parserSaysCruise) {
+    if (requestedPackageType === 'cruise-land') return 'cruise-land'
+    return 'cruise-package'
   }
 
-  // If not a cruise detected, use the requested package type (or land-package as default)
+  // If no cruise detected by the generator either, use the requested package type
   if (!cruiseDetection.isCruise) {
     if (requestedPackageType === 'full-package') {
       return 'land-package'
@@ -1617,11 +1780,19 @@ function determinePackageType(
     return (requestedPackageType as PackageType) || 'land-package'
   }
 
-  // It's a cruise - determine if cruise-only or cruise+land
+  // Cruise was detected by the generator BUT parser says land —
+  // Only override if the cruise detection has strong evidence (cruise abbreviations, not just city names)
+  if (parserSaysLand && cruiseDetection.keywords.length <= 1) {
+    console.log(`🛡️ PACKAGE GUARD: Parser says ${requestedPackageType}, cruise detection weak (${cruiseDetection.keywords.join(', ')}) — keeping parser's decision`)
+    if (requestedPackageType === 'full-package') return 'land-package'
+    return (requestedPackageType as PackageType) || 'land-package'
+  }
+
+  // Strong cruise detection overrides parser — determine if cruise-only or cruise+land
   if (cruiseDetection.includesLand) {
     return 'cruise-land'
   }
-  
+
   return 'cruise-package'
 }
 
@@ -1679,7 +1850,12 @@ export async function POST(request: NextRequest) {
     } = body
 
     const finalTourName = tour_requested || tour_name || 'Egypt Tour'
-    const finalLanguage = language !== 'English' ? language : (conversation_language || 'English')
+    // CRITICAL: "language" is the GUIDE language preference (e.g., "Spanish speaking guide").
+    // It should NOT determine the itinerary content language.
+    // The itinerary content language should ONLY be non-English if explicitly requested
+    // (e.g., "write the itinerary in Spanish") — NOT inferred from nationality.
+    // For now, guide language defaults to English unless explicitly requested.
+    const finalLanguage = language !== 'English' ? language : 'English'
     const tier: ServiceTier = raw_tier ? normalizeTier(raw_tier) : budget_level !== 'standard' ? normalizeTier(budget_level) : userPrefs.default_tier
 
     if (!isValidDate(start_date)) {
@@ -1693,7 +1869,7 @@ export async function POST(request: NextRequest) {
     // DETERMINE INPUT MODE
     // ============================================
     let inputMode: InputMode = 'creative'
-    
+
     if (input_mode_override === 'structured') {
       inputMode = 'structured'
     } else if (input_mode_override === 'creative') {
@@ -1702,19 +1878,36 @@ export async function POST(request: NextRequest) {
       inputMode = 'structured'
     } else if (raw_itinerary) {
       // Auto-detect structured input from raw itinerary patterns
-      // D1, D2, D3... OR 2NTS CAI, 3NTS CRZ... OR Day 1:, Day 2:...
+      // EXPANDED: Now also catches prose-style "Day 1 Arrival..." without colon/dash
       const structuredPatterns = [
         /\bD\d+\b/i,                    // D1, D2, D3...
         /\d+\s*NTS?\s*[A-Z]{2,4}/i,     // 2NTS CAI, 3NTS CRZ
-        /\bDay\s*\d+\s*[:\-–]/i,        // Day 1:, Day 2:
+        /\bDay\s*\d+\s*(?:[:\-–—]|\b)/i, // Day 1:, Day 2 -, Day 1 Arrival (any separator or word boundary)
         /PROGRAM\s*:/i,                  // PROGRAM: header
         /\b[A-Z]{3}\/[A-Z]{3}\b/        // CAI/ALX, LXR/HRG city transitions
       ]
-      
+
+      // Count how many "Day N" markers exist — if >=2, it's definitely structured
+      const dayMarkerCount = (raw_itinerary.match(/\bDay\s*\d+\b/gi) || []).length
+      const dMarkerCount = (raw_itinerary.match(/\bD\d+\b/gi) || []).length
+
       if (structuredPatterns.some(pattern => pattern.test(raw_itinerary))) {
         inputMode = 'structured'
         console.log('🔍 Auto-detected structured input from patterns in raw_itinerary')
       }
+
+      // Extra safety: if there are 2+ day markers, force structured even if regex didn't match
+      if (inputMode === 'creative' && (dayMarkerCount >= 2 || dMarkerCount >= 2)) {
+        inputMode = 'structured'
+        console.log(`🔍 Forced structured mode: found ${dayMarkerCount} Day markers and ${dMarkerCount} D markers`)
+      }
+    }
+
+    // CRITICAL SAFETY: If parser flagged structured AND raw_itinerary exists, ALWAYS use structured
+    // This prevents falling through to creative mode which ignores the provided itinerary
+    if (is_structured_input && raw_itinerary && inputMode === 'creative') {
+      inputMode = 'structured'
+      console.log('🛡️ SAFETY: Parser detected structured input but mode was creative — forcing structured')
     }
 
     console.log('🤖 Input Mode:', inputMode, '| Override:', input_mode_override, '| is_structured_input:', is_structured_input)
@@ -1736,12 +1929,13 @@ export async function POST(request: NextRequest) {
     // CRUISE DETECTION (for both modes now)
     // ============================================
     const cruiseDetection = detectCruiseRequest(
-      finalTourName, 
-      interests, 
-      cities, 
-      special_requests, 
+      finalTourName,
+      interests,
+      cities,
+      special_requests,
       duration_days,
-      raw_itinerary || '' // Pass raw itinerary for better detection
+      raw_itinerary || '', // Pass raw itinerary for better detection
+      requested_package_type // Pass parser's package type to prevent false overrides
     )
 
     // Adjust duration for cruise if needed:
@@ -1807,10 +2001,12 @@ export async function POST(request: NextRequest) {
     const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
 
     // ============================================
-    // CRUISE PATH (creative mode, cruise-package or cruise-land)
+    // CRUISE PATH (creative mode ONLY, cruise-package or cruise-land)
+    // CRITICAL: Structured mode ALWAYS takes priority over cruise content library.
+    // If the user provided a day-by-day itinerary, we must follow it — not replace with a cruise template.
     // ============================================
-    if (cruiseDetection.isCruise && inputMode === 'creative' && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
-      console.log(`🚢 Processing as ${effectivePackageType} itinerary (creative mode)...`)
+    if (cruiseDetection.isCruise && inputMode === 'creative' && !raw_itinerary && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
+      console.log(`🚢 Processing as ${effectivePackageType} itinerary (creative mode, no raw itinerary provided)...`)
       
       const cruiseContent = await findCruiseContent(cruiseDetection, tier, duration_days)
       
@@ -2028,12 +2224,18 @@ export async function POST(request: NextRequest) {
             totalClientPrice += withMargin(cruiseDailyTips)
           }
 
-          // --- SERVICE 5: Entrance Fees ---
+          // --- SERVICE 5: Entrance Fees (all attractions get fees, except photo_stops) ---
+          const cruisePhotoStops = dayData.photo_stops || []
           if (dayData.attractions?.length > 0) {
             let dayEntranceTotal = 0
             const matchedAttractions: string[] = []
 
             for (const attractionName of dayData.attractions) {
+              // Skip if this attraction is a photo stop (outside viewing only, no fee)
+              if (cruisePhotoStops.some((ps: string) => ps.toLowerCase() === attractionName.toLowerCase())) {
+                continue
+              }
+
               const fee = cruiseEntranceFees?.find((ef: any) =>
                 ef.attraction_name.toLowerCase().includes(attractionName.toLowerCase()) ||
                 attractionName.toLowerCase().includes(ef.attraction_name.toLowerCase())
@@ -2225,21 +2427,45 @@ export async function POST(request: NextRequest) {
     let selectedHotel: any = null
 
     if (includeAccommodationFinal) {
-      const { data: hotels } = await supabase
-        .from('accommodation_rates')
-        .select('*')
-        .ilike('city', effectiveCity)
-        .eq('is_active', true)
-        .eq('tier', tier)
-        .order('created_at', { ascending: false })
-        .limit(5)
+      // PRIORITY 1: Try to match the specific hotel name from the parsed input
+      if (hotel_name) {
+        const { data: namedHotels } = await supabase
+          .from('accommodation_rates')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('property_name', `%${hotel_name}%`)
+          .limit(3)
 
-      if (hotels?.length) {
-        selectedHotel = hotels[0]
-        hotelRate = isEuroPassport
-          ? toNumber(selectedHotel.pp_double_eur, 0)
-          : toNumber(selectedHotel.pp_double_non_eur, 0)
-        hotelName_final = selectedHotel.property_name
+        if (namedHotels?.length) {
+          selectedHotel = namedHotels[0]
+          hotelRate = isEuroPassport
+            ? toNumber(selectedHotel.pp_double_eur, 0)
+            : toNumber(selectedHotel.pp_double_non_eur, 0)
+          hotelName_final = selectedHotel.property_name
+          console.log(`🏨 Matched parsed hotel name "${hotel_name}" → ${selectedHotel.property_name} (rate: ${hotelRate})`)
+        } else {
+          console.log(`⚠️ Parsed hotel "${hotel_name}" not found in accommodation_rates — falling back to tier search`)
+        }
+      }
+
+      // PRIORITY 2: Fall back to city + tier search if no hotel matched by name
+      if (!selectedHotel) {
+        const { data: hotels } = await supabase
+          .from('accommodation_rates')
+          .select('*')
+          .ilike('city', effectiveCity)
+          .eq('is_active', true)
+          .eq('tier', tier)
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (hotels?.length) {
+          selectedHotel = hotels[0]
+          hotelRate = isEuroPassport
+            ? toNumber(selectedHotel.pp_double_eur, 0)
+            : toNumber(selectedHotel.pp_double_non_eur, 0)
+          hotelName_final = selectedHotel.property_name
+        }
       }
 
       if (!hotelRate) {
@@ -2568,8 +2794,8 @@ export async function POST(request: NextRequest) {
       totalClientPrice += withMargin(dailyTips)
       }
 
-      // Entrance fees (ONLY for INSIDE attractions, not OUTSIDE photo stops)
-      const entranceAttractions = dayData.entrance_included || dayData.attractions || []
+      // Entrance fees — all attractions get fees by default, except photo_stops (outside only)
+      const entranceAttractions = dayData.attractions || []
       const photoStops = dayData.photo_stops || []
       
       if (entranceAttractions.length > 0 && !isTransferOnly && !isFreeDay) {
@@ -2577,7 +2803,7 @@ export async function POST(request: NextRequest) {
         const matchedAttractions: string[] = []
         
         for (const attr of entranceAttractions) {
-          // Skip if this attraction is in photo_stops (OUTSIDE)
+          // Skip if this attraction is in photo_stops (outside viewing only, no fee)
           if (photoStops.some((ps: string) => ps.toLowerCase() === attr.toLowerCase())) {
             continue
           }
@@ -2602,8 +2828,8 @@ export async function POST(request: NextRequest) {
         }
         
         if (dayEntranceTotal > 0) {
-          const notesText = photoStops.length > 0 
-            ? `Inside: ${matchedAttractions.join(', ')} | Photo stops: ${photoStops.join(', ')}`
+          const notesText = photoStops.length > 0
+            ? `Entrance: ${matchedAttractions.join(', ')} | Photo stops: ${photoStops.join(', ')}`
             : `Sites: ${matchedAttractions.join(', ')}`
           
           services.push({

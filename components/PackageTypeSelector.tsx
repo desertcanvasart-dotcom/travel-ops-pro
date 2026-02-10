@@ -16,11 +16,12 @@ import {
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
-export type PackageType = 
+export type PackageType =
   | 'day-trips'
   | 'tours-only'
   | 'land-package'
   | 'full-package'
+  | 'cruise-package'
   | 'cruise-land'
   | 'shore-excursions'
 
@@ -98,6 +99,22 @@ const PACKAGE_TYPES: PackageTypeOption[] = [
     color: 'text-primary-600',
     bgColor: 'bg-primary-50',
     borderColor: 'border-primary-200',
+    includes: {
+      accommodation: true,
+      airportTransfers: true,
+      internalTransfers: true,
+      tours: true,
+      meals: 'per-hotel'
+    }
+  },
+  {
+    slug: 'cruise-package',
+    name: 'Cruise Only',
+    description: 'Nile Cruise only — no hotels or land tours.',
+    icon: Anchor,
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-50',
+    borderColor: 'border-teal-200',
     includes: {
       accommodation: true,
       airportTransfers: true,

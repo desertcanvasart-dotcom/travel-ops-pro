@@ -175,13 +175,15 @@ function detectStructuredItinerary(text: string): StructureDetectionResult {
 
   // ============================================
   // PATTERN 9: Standard "Day 1:", "Day 2:" markers
+  // Handles: "Day 1:", "Day 1 -", "Day 1 –", "Day 1 —",
+  //          "Day 1 Arrival...", "Day 1\n", "Day 1 (anything)"
   // ============================================
-  const dayMarkerPattern = /\bDay\s*(\d+)\s*[:\-–]/gi
+  const dayMarkerPattern = /\bDay\s*(\d+)\s*(?:[:\-–—]|\b)/gi
   const dayMarkers = text.match(dayMarkerPattern)
   if (dayMarkers && dayMarkers.length >= 2) {
-    signals.push(`Found ${dayMarkers.length} standard day markers (Day 1:, Day 2:)`)
+    signals.push(`Found ${dayMarkers.length} standard day markers (Day 1, Day 2...)`)
     confidence += Math.min(dayMarkers.length * 12, 30)
-    
+
     // Extract highest day number
     dayMarkers.forEach(match => {
       const num = parseInt(match.replace(/\D/g, ''))
@@ -263,16 +265,15 @@ function detectStructuredItinerary(text: string): StructureDetectionResult {
   // ============================================
   // EXTRACT DAY SEGMENTS for passing to AI
   // ============================================
-  
-  // Method 1: Split by D1, D2, D3... pattern
+
+  // Method 1: Split by D1, D2, D3... pattern (Egyptian shorthand)
   const daySegmentPattern = /\bD(\d+)\b/gi
   let lastIndex = 0
   let match
   const segments: { dayNum: number; content: string; startIndex: number }[] = []
-  
+
   while ((match = daySegmentPattern.exec(text)) !== null) {
     if (segments.length > 0) {
-      // Complete the previous segment
       segments[segments.length - 1].content = text.substring(segments[segments.length - 1].startIndex, match.index).trim()
     }
     segments.push({
@@ -281,12 +282,31 @@ function detectStructuredItinerary(text: string): StructureDetectionResult {
       startIndex: match.index
     })
   }
-  
+
   // Complete the last segment
   if (segments.length > 0) {
     segments[segments.length - 1].content = text.substring(segments[segments.length - 1].startIndex).trim()
   }
-  
+
+  // Method 2: If no D1/D2 segments found, try "Day 1", "Day 2" prose-style patterns
+  if (segments.length === 0) {
+    const prosePattern = /\bDay\s*(\d+)\b/gi
+    while ((match = prosePattern.exec(text)) !== null) {
+      if (segments.length > 0) {
+        segments[segments.length - 1].content = text.substring(segments[segments.length - 1].startIndex, match.index).trim()
+      }
+      segments.push({
+        dayNum: parseInt(match[1]),
+        content: '',
+        startIndex: match.index
+      })
+    }
+
+    if (segments.length > 0) {
+      segments[segments.length - 1].content = text.substring(segments[segments.length - 1].startIndex).trim()
+    }
+  }
+
   // Sort by day number and extract content
   segments.sort((a, b) => a.dayNum - b.dayNum)
   segments.forEach(seg => {
@@ -541,12 +561,15 @@ export async function POST(request: Request) {
       structure_signals: structureDetection.signals,
       
       // EXTRACTED DAY-BY-DAY (only if structured)
-      extracted_days: structureDetection.isStructured && extracted.days 
-        ? extracted.days 
+      extracted_days: structureDetection.isStructured && extracted.days
+        ? extracted.days
         : null,
-      
-      // Raw itinerary text for generator (only if structured)
-      raw_itinerary: structureDetection.isStructured ? conversation : null
+
+      // Raw itinerary text for generator
+      // ALWAYS pass the raw text so the generator can do its own structure detection
+      // even if the parser's confidence was too low to flag it as structured.
+      // This prevents losing the original itinerary content.
+      raw_itinerary: conversation
     }
 
     console.log('✅ Parsed result:', {
@@ -762,7 +785,7 @@ Return ONLY valid JSON:
   "num_adults": number (default 2),
   "num_children": number (default 0),
 
-  "language": "guide language preference",
+  "language": "guide language - ONLY set if explicitly requested (e.g. 'Spanish guide'). Default to 'English'.",
   "interests": ["decoded interests/attractions"],
   "cities": ["Cairo", "Alexandria", "Aswan", "Luxor", "Hurghada"],
   "special_requests": ["any special requests"],
@@ -929,7 +952,7 @@ Extract the following and return as JSON:
   "num_adults": number,
   "num_children": number,
 
-  "language": "Preferred guide language - infer from traveler nationality if not explicit (e.g. Japanese customers = 'Japanese')",
+  "language": "Preferred guide language - ONLY set if explicitly requested in the conversation (e.g. 'we need a Spanish guide' or 'Japanese speaking guide'). Do NOT infer from nationality. Default to 'English' if not explicitly stated.",
   "interests": ["places they want to visit", "activities"],
   "cities": ["cities mentioned"],
   "special_requests": ["any special requests"],

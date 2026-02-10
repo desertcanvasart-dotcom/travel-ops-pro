@@ -2412,7 +2412,9 @@
     "createPartner": "パートナーを作成",
     "cancelAddPartner": "キャンセル",
     "partnerCreated": "パートナーが正常に作成されました",
-    "noPartnersYet": "パートナーがまだありません"
+    "noPartnersYet": "パートナーがまだありません",
+    "editText": "編集",
+    "preview": "プレビュー"
   },
   "suppliers": {
     "title": "サプライヤー",

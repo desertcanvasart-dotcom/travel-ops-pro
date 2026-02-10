@@ -1464,7 +1464,9 @@
     "createPartner": "Create Partner",
     "cancelAddPartner": "Cancel",
     "partnerCreated": "Partner created successfully",
-    "noPartnersYet": "No partners yet"
+    "noPartnersYet": "No partners yet",
+    "editText": "Edit",
+    "preview": "Preview"
   },
   "suppliers": {
     "title": "Suppliers",
