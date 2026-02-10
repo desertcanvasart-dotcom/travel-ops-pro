@@ -976,6 +976,10 @@
           "name": "Full Package",
           "desc": "All-inclusive with flights and everything"
         },
+        "cruise-package": {
+          "name": "Cruise Package",
+          "desc": "Nile Cruise only"
+        },
         "cruise-land": {
           "name": "Cruise & Land",
           "desc": "Combination of cruise and land tours"

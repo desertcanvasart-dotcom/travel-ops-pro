@@ -98,7 +98,7 @@ interface B2BPartner {
 }
 
 // UPDATED: Package types
-type PackageType = 'day-trips' | 'tours-only' | 'land-package' | 'cruise-package' | 'cruise-land'
+type PackageType = 'day-trips' | 'tours-only' | 'land-package' | 'full-package' | 'cruise-package' | 'cruise-land' | 'shore-excursions'
 type GenerationStep = 'idle' | 'creating-client' | 'checking-suppliers' | 'building-route' | 'calculating-margins' | 'finalizing' | 'complete'
 type ClientStep = 'pending' | 'confirming' | 'confirmed' | 'existing-selected'
 type GenerationMode = 'edit' | 'quick'
@@ -122,8 +122,10 @@ const PACKAGE_TYPES = [
   { slug: 'day-trips', name: 'Day Trips', icon: Sun, description: 'No accommodation', color: 'amber' },
   { slug: 'tours-only', name: 'Tours Only', icon: Map, description: 'Client has own hotel', color: 'blue' },
   { slug: 'land-package', name: 'Land Package', icon: Hotel, description: 'Tours + Hotels', color: 'emerald' },
+  { slug: 'full-package', name: 'Full Package', icon: Package, description: 'All inclusive + Airport', color: 'primary' },
   { slug: 'cruise-package', name: 'Cruise Package', icon: Ship, description: 'Nile Cruise only', color: 'cyan' },
-  { slug: 'cruise-land', name: 'Cruise + Land', icon: Package, description: 'Cruise + Hotels', color: 'primary' },
+  { slug: 'cruise-land', name: 'Cruise + Land', icon: Ship, description: 'Cruise + Hotels', color: 'indigo' },
+  { slug: 'shore-excursions', name: 'Shore Excursions', icon: Anchor, description: 'Port day tours', color: 'teal' },
 ]
 
 const DEFAULT_PREFERENCES: UserPreferences = {
@@ -1136,7 +1138,7 @@ function WhatsAppParserContent() {
       // Set package type from AI detection
       if (result.data.package_type) {
         // Valid package types for this component
-        const validTypes: PackageType[] = ['day-trips', 'tours-only', 'land-package', 'cruise-package', 'cruise-land']
+        const validTypes: PackageType[] = ['day-trips', 'tours-only', 'land-package', 'full-package', 'cruise-package', 'cruise-land', 'shore-excursions']
         if (validTypes.includes(result.data.package_type as PackageType)) {
           setPackageType(result.data.package_type as PackageType)
         }
