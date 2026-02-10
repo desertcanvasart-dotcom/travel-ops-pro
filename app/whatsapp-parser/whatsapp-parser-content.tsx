@@ -16,6 +16,7 @@ import {
   Zap, Pencil, FileText, Wand2, ListChecks, AlertTriangle, Plus
 } from 'lucide-react'
 import Link from 'next/link'
+import { type PackageType, PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 
 // ============================================
 // TYPES
@@ -97,8 +98,7 @@ interface B2BPartner {
   commission_percent: number
 }
 
-// UPDATED: Package types
-type PackageType = 'day-trips' | 'tours-only' | 'land-package' | 'full-package' | 'cruise-package' | 'cruise-land' | 'shore-excursions'
+// PackageType imported from '@/lib/package-types'
 type GenerationStep = 'idle' | 'creating-client' | 'checking-suppliers' | 'building-route' | 'calculating-margins' | 'finalizing' | 'complete'
 type ClientStep = 'pending' | 'confirming' | 'confirmed' | 'existing-selected'
 type GenerationMode = 'edit' | 'quick'
@@ -1137,9 +1137,7 @@ function WhatsAppParserContent() {
 
       // Set package type from AI detection
       if (result.data.package_type) {
-        // Valid package types for this component
-        const validTypes: PackageType[] = ['day-trips', 'tours-only', 'land-package', 'full-package', 'cruise-package', 'cruise-land', 'shore-excursions']
-        if (validTypes.includes(result.data.package_type as PackageType)) {
+        if (PACKAGE_TYPE_SLUGS.includes(result.data.package_type as PackageType)) {
           setPackageType(result.data.package_type as PackageType)
         }
       }

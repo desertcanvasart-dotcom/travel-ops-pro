@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!
@@ -778,7 +779,7 @@ Return ONLY valid JSON:
   "trip_name": "Descriptive trip name based on itinerary",
   "tour_requested": "original request summary",
   "tour_name": "Descriptive tour name",
-  "package_type": "day-trips|tours-only|land-package|cruise-package|cruise-land - CRITICAL: Use 'cruise-package' for Nile Cruise only, 'cruise-land' if cruise + hotels!",
+  "package_type": "${PACKAGE_TYPE_SLUGS.join('|')} - CRITICAL: Use 'cruise-package' for Nile Cruise only, 'cruise-land' if cruise + hotels!",
   "start_date": "YYYY-MM-DD format if mentioned",
   "end_date": "YYYY-MM-DD format if mentioned",
   "duration_days": number (calculate from NTS if not explicit),
