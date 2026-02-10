@@ -45,6 +45,8 @@ export interface ItineraryVersion extends VersionMetadata {
   pickup_location: string | null
   guide_notes: string | null
   vehicle_notes: string | null
+  inclusions?: string[]
+  exclusions?: string[]
 }
 
 export interface ItineraryDayVersion extends VersionMetadata {
