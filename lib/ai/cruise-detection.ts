@@ -3,6 +3,8 @@
 // Extracted from generate-itinerary/route.ts
 // ============================================
 
+import { type PackageType } from '@/lib/package-types'
+
 export interface CruiseDetectionResult {
   isCruise: boolean
   cruiseType: 'nile-cruise' | 'lake-nasser' | null
@@ -221,4 +223,48 @@ export function detectCruiseRequest(
     cruiseNights,
     landNights
   }
+}
+
+// ============================================
+// DETERMINE EFFECTIVE PACKAGE TYPE
+// ============================================
+
+export function determinePackageType(
+  requestedPackageType: string,
+  cruiseDetection: CruiseDetectionResult
+): PackageType {
+  // CRITICAL: If the parser explicitly set a non-cruise package type (land-package, tours-only, day-trips),
+  // and cruise detection did NOT find strong cruise indicators, TRUST THE PARSER.
+  // This prevents false cruise overrides from generic keyword matches.
+  const parserSaysLand = ['land-package', 'tours-only', 'day-trips', 'full-package'].includes(requestedPackageType)
+  const parserSaysCruise = ['cruise-package', 'cruise-land'].includes(requestedPackageType)
+
+  // If parser explicitly says cruise, trust it
+  if (parserSaysCruise) {
+    if (requestedPackageType === 'cruise-land') return 'cruise-land'
+    return 'cruise-package'
+  }
+
+  // If no cruise detected by the generator either, use the requested package type
+  if (!cruiseDetection.isCruise) {
+    if (requestedPackageType === 'full-package') {
+      return 'land-package'
+    }
+    return (requestedPackageType as PackageType) || 'land-package'
+  }
+
+  // Cruise was detected by the generator BUT parser says land —
+  // Only override if the cruise detection has strong evidence (cruise abbreviations, not just city names)
+  if (parserSaysLand && cruiseDetection.keywords.length <= 1) {
+    console.log(`🛡️ PACKAGE GUARD: Parser says ${requestedPackageType}, cruise detection weak (${cruiseDetection.keywords.join(', ')}) — keeping parser's decision`)
+    if (requestedPackageType === 'full-package') return 'land-package'
+    return (requestedPackageType as PackageType) || 'land-package'
+  }
+
+  // Strong cruise detection overrides parser — determine if cruise-only or cruise+land
+  if (cruiseDetection.includesLand) {
+    return 'cruise-land'
+  }
+
+  return 'cruise-package'
 }

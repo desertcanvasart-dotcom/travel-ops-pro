@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { detectCruiseRequest } from '@/lib/ai/cruise-detection'
+import { detectCruiseRequest, determinePackageType, type CruiseDetectionResult } from '@/lib/ai/cruise-detection'
 
 describe('detectCruiseRequest', () => {
   const defaultArgs = {
@@ -156,5 +156,71 @@ describe('detectCruiseRequest', () => {
       expect(result.cruiseNights).toBe(3)
       expect(result.detectedDuration).toBe(4) // 3 NTS + 1
     })
+  })
+})
+
+describe('determinePackageType', () => {
+  const baseCruiseDetection: CruiseDetectionResult = {
+    isCruise: true,
+    cruiseType: 'nile-cruise',
+    route: 'aswan-luxor',
+    detectedDuration: 5,
+    startCity: 'Aswan',
+    endCity: 'Luxor',
+    includesLand: false,
+    cruiseNights: 4,
+    landNights: 0,
+    keywords: ['nile cruise', 'CRZ'],
+  }
+
+  const noCruiseDetection: CruiseDetectionResult = {
+    isCruise: false,
+    cruiseType: null,
+    route: null,
+    detectedDuration: null,
+    startCity: null,
+    endCity: null,
+    includesLand: false,
+    cruiseNights: 0,
+    landNights: 0,
+    keywords: [],
+  }
+
+  it('should trust parser when it says cruise-package', () => {
+    expect(determinePackageType('cruise-package', noCruiseDetection)).toBe('cruise-package')
+  })
+
+  it('should trust parser when it says cruise-land', () => {
+    expect(determinePackageType('cruise-land', noCruiseDetection)).toBe('cruise-land')
+  })
+
+  it('should return land-package when no cruise detected and parser says land-package', () => {
+    expect(determinePackageType('land-package', noCruiseDetection)).toBe('land-package')
+  })
+
+  it('should normalize full-package to land-package when no cruise', () => {
+    expect(determinePackageType('full-package', noCruiseDetection)).toBe('land-package')
+  })
+
+  it('should keep parser decision when cruise detection is weak (1 keyword)', () => {
+    const weakCruise = { ...baseCruiseDetection, keywords: ['nile'] }
+    expect(determinePackageType('land-package', weakCruise)).toBe('land-package')
+  })
+
+  it('should override to cruise-package when detection is strong and parser says land', () => {
+    expect(determinePackageType('land-package', baseCruiseDetection)).toBe('cruise-package')
+  })
+
+  it('should return cruise-land when detection includes land', () => {
+    const withLand = { ...baseCruiseDetection, includesLand: true }
+    expect(determinePackageType('land-package', withLand)).toBe('cruise-land')
+  })
+
+  it('should preserve tours-only when no cruise detected', () => {
+    expect(determinePackageType('tours-only', noCruiseDetection)).toBe('tours-only')
+  })
+
+  it('should preserve day-trips when no cruise detected', () => {
+    expect(determinePackageType('day-trips', noCruiseDetection)).toBe('day-trips')
   })
 })

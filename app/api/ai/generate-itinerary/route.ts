@@ -11,19 +11,15 @@ import { type PackageType } from '@/lib/package-types'
 import {
   type ServiceTier,
   type InputMode,
-  type ExtractedDay,
-  VALID_TIERS,
-  TIER_MAP,
-  TIER_DESCRIPTIONS,
   isValidDate,
   toNumber,
   normalizeTier,
   calculateExpectedDays,
-  preParseRawItinerary,
 } from '@/lib/ai/parsing-utils'
 import {
   type CruiseDetectionResult,
   detectCruiseRequest,
+  determinePackageType,
 } from '@/lib/ai/cruise-detection'
 import {
   type CabinAllocation,
@@ -31,14 +27,14 @@ import {
   getCruiseRate,
 } from '@/lib/ai/cruise-pricing'
 import {
-  type WritingRule,
   findCruiseContent,
   fetchContentLibrary,
   fetchWritingRules,
   buildContentContext,
   buildWritingRulesContext,
 } from '@/lib/ai/content-library'
-import { EGYPT_TRAVEL_GLOSSARY } from '@/lib/ai/egypt-glossary'
+import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai/prompt-builder'
+import { fetchAllPricingRates, createLandItineraryServices } from '@/lib/ai/service-creation'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -52,9 +48,6 @@ const supabaseAdmin = createAdminClient(
 
 // Default margin percentage (used if no user preference)
 const DEFAULT_MARGIN_PERCENT = 25
-
-// ServiceTier, InputMode, VALID_TIERS, TIER_MAP, TIER_DESCRIPTIONS
-// imported from '@/lib/ai/parsing-utils'
 
 // ============================================
 // LANGUAGE CODE MAPPING
@@ -78,7 +71,7 @@ async function createLanguageVersions(
   itineraryId: string,
   tripName: string,
   language: string,
-  dayIds: { id: string; title: string; description: string; city: string; overnight_city: string }[]
+  dayIds: { id: string; title: string; description: string; city: string; overnight_city: string | null }[]
 ) {
   const langCode = getVersionLanguageCode(language)
 
@@ -129,18 +122,6 @@ async function createLanguageVersions(
     console.error('Error in createLanguageVersions:', err)
   }
 }
-
-// EGYPT_TRAVEL_GLOSSARY imported from '@/lib/ai/egypt-glossary'
-
-// ExtractedDay, isValidDate, toNumber, normalizeTier, calculateExpectedDays
-// imported from '@/lib/ai/parsing-utils'
-
-// CruiseDetectionResult, detectCruiseRequest
-// imported from '@/lib/ai/cruise-detection'
-
-// CruiseContentMatch, ContentItem, WritingRule, findCruiseContent,
-// fetchContentLibrary, fetchWritingRules, buildContentContext, buildWritingRulesContext
-// imported from '@/lib/ai/content-library'
 
 // ============================================
 // FETCH USER PREFERENCES
@@ -209,520 +190,6 @@ async function fetchAttractionsList(supabase: any): Promise<string[]> {
   } catch {
     return []
   }
-}
-
-// ============================================
-// STRUCTURED MODE: FOLLOW PROVIDED ITINERARY
-// ============================================
-
-// preParseRawItinerary imported from '@/lib/ai/parsing-utils'
-
-async function generateFromStructuredInput(
-  extractedDays: ExtractedDay[],
-  rawItinerary: string,
-  params: {
-    tier: ServiceTier
-    totalPax: number
-    language: string
-    attractionNames: string[]
-    writingRules: WritingRule[]
-    packageType?: PackageType
-  }
-): Promise<any> {
-  const { tier, totalPax, language, attractionNames, writingRules, packageType } = params
-  const writingContext = buildWritingRulesContext(writingRules)
-
-  // Calculate expected number of days
-  const expectedDays = calculateExpectedDays(rawItinerary, extractedDays)
-
-  // PRE-PARSE the raw itinerary into day segments
-  const daySegments = preParseRawItinerary(rawItinerary)
-  
-  console.log(`📋 STRUCTURED MODE: Pre-parsed ${daySegments.length} day segments, expecting ${expectedDays} days`)
-  daySegments.forEach(seg => {
-    console.log(`  Day ${seg.dayNumber}: ${seg.rawContent.substring(0, 80)}...`)
-  })
-
-  // Build the day-by-day mapping section
-  const dayMappingSection = daySegments.map(seg => {
-    return `
-DAY ${seg.dayNumber} INPUT (CONVERT THIS EXACTLY):
-───────────────────────────────────────
-${seg.rawContent}
-───────────────────────────────────────`
-  }).join('\n')
-
-  const prompt = `You are a DATA CONVERTER. Your ONLY task is to convert an existing itinerary into JSON format.
-
-⛔ THIS IS NOT A CREATIVE TASK ⛔
-You are NOT designing an itinerary. You are CONVERTING an existing one.
-The input may be in Egyptian travel shorthand (D1 CAI, D2 ALX) OR in full prose English (Day 1 Arrival in Cairo...).
-Either way, your job is the SAME: extract EXACTLY what is described and convert to JSON.
-
-${EGYPT_TRAVEL_GLOSSARY}
-
-═══════════════════════════════════════════════════════════════
-⛔ FORBIDDEN ACTIONS - VIOLATING THESE IS A CRITICAL ERROR ⛔
-═══════════════════════════════════════════════════════════════
-
-1. FORBIDDEN: Adding attractions, cities, or activities NOT in the input
-   - If Abu Simbel is not mentioned → DO NOT ADD IT
-   - If Unfinished Obelisk is not mentioned → DO NOT ADD IT
-   - If Aswan, Luxor, or a Nile Cruise is not mentioned → DO NOT ADD THEM
-   - If the input says Cairo only → the output must be Cairo only
-
-2. FORBIDDEN: Changing the itinerary type
-   - If the input describes a HOTEL stay (e.g., "Marriott Mena House") → this is a LAND itinerary, NOT a cruise
-   - If the input describes a Nile Cruise → keep it as a cruise
-   - NEVER convert a hotel itinerary into a cruise or vice versa
-
-3. FORBIDDEN: Removing or skipping activities from input
-   - If Day 1 says "Alexandria tour" → Day 1 MUST include Alexandria
-   - If Day 2 says "Pyramids & Museum" → Day 2 MUST include BOTH
-
-4. FORBIDDEN: Reordering days or activities
-   - Day 1 content goes in day_number: 1
-   - Day 2 content goes in day_number: 2
-   - NEVER put Day 1 content in day_number: 2
-
-5. FORBIDDEN: "Improving" the itinerary
-   - Do NOT add sites you think they "should" visit
-   - Do NOT rearrange for "better flow"
-   - Do NOT combine or split days
-   - Do NOT add a Nile Cruise to a land-only itinerary
-
-═══════════════════════════════════════════════════════════════
-📋 EXACT DAY-BY-DAY INPUT TO CONVERT
-═══════════════════════════════════════════════════════════════
-${dayMappingSection}
-
-═══════════════════════════════════════════════════════════════
-📋 FULL RAW ITINERARY (for reference)
-═══════════════════════════════════════════════════════════════
-${rawItinerary}
-
-═══════════════════════════════════════════════════════════════
-🔍 DECODING RULES
-═══════════════════════════════════════════════════════════════
-
-CITY CODES:
-CAI=Cairo, ALX=Alexandria, ASW=Aswan, LXR=Luxor, HRG=Hurghada, CRZ=Cruise
-
-MULTI-CITY PATTERN:
-"D1 CAI/ALX/CAI" = Day trip: Arrive Cairo → Visit Alexandria → Return Cairo
-This is NOT just "Arrival" - it's arrival PLUS a FULL DAY TOUR!
-
-DAY TRIPS (CRITICAL):
-If the input mentions visiting a city and then RETURNING to the base hotel:
-- "day trip to Alexandria" → overnight_city = base hotel city (e.g., "Cairo"), NOT "Alexandria"
-- "return to Cairo" or "back to [city]" → confirms it's a day trip
-- cities_visited = ["Cairo", "Alexandria"] but overnight_city = "Cairo"
-- The hotel stay remains in the base city throughout
-
-DEPARTURE/FAREWELL DAYS:
-If input mentions "farewell", "departure", "airport transfer", "final breakfast":
-- is_departure: true, is_transfer_only: true
-- overnight_city should be the departure city (usually Cairo)
-- Guide is NOT needed for transfer-only days
-
-ENTRANCE FEE LOGIC:
-DEFAULT: Any attraction mentioned = entrance fee included → add to attractions[]
-(OUTSIDE) = Photo stop only → add to photo_stops[] (NO entrance fee)
-Do NOT use an "entrance_included" array. The "attractions" array IS the entrance fee list.
-Only sites explicitly marked (OUTSIDE) go into photo_stops[] and are excluded from fees.
-
-FREE DAYS:
-"D5 CRZ" with nothing else = Sailing day → is_free_day: true, is_sailing_day: true
-"D8 HRG" with nothing else = Free day → is_free_day: true
-
-MEALS:
-L = Lunch included
-D = Dinner included
-"Chinese Dinner" = Dinner at Chinese restaurant
-"Pigeon Lunch" = Lunch with Egyptian pigeon dish
-
-FLIGHTS:
-MS956@05:10 = EgyptAir flight 956 at 05:10
-"DEPARTED BY MS955@23:20" = Departure flight at 23:20
-
-═══════════════════════════════════════════════════════════════
-⚙️ CONFIGURATION
-═══════════════════════════════════════════════════════════════
-TOTAL DAYS: ${expectedDays}
-TIER: ${tier.toUpperCase()}
-TRAVELERS: ${totalPax}
-LANGUAGE: ${language}
-PACKAGE: ${packageType || 'land-package'}
-${packageType === 'tours-only' || packageType === 'day-trips' ? `
-⚠️ TOURS-ONLY/DAY-TRIPS PACKAGE (CRITICAL):
-This is a TOURS-ONLY package - NO accommodation is included!
-- Set overnight_city to NULL for all days
-- Set accommodation_type to NULL for all days
-- Set needs_hotel_service to FALSE for all days
-- DO NOT mention overnight stays or accommodation in descriptions
-- This is guide + transport + entrance fees ONLY
-` : ''}${packageType === 'cruise-package' || packageType === 'cruise-land' ? `
-⚠️ NILE CRUISE PACKAGE (CRITICAL):
-This is a ${packageType === 'cruise-package' ? 'CRUISE-ONLY' : 'CRUISE + LAND'} package!
-- Set is_cruise_day: true for ALL days spent on the Nile cruise
-- Set accommodation_type: "cruise" for ALL cruise days (NOT "hotel")
-- Set is_sailing_day: true for days with NO tours (just sailing on the Nile)
-- Cruise days do NOT need individual transport (transport is bundled)
-- Meals on cruise days are typically included (Full Board: breakfast, lunch, dinner)
-- The last day (departure/disembarkation) should have is_cruise_day: false
-` : ''}
-${language !== 'English' ? `
-⚠️ LANGUAGE REQUIREMENT (CRITICAL):
-Write ALL content (trip_name, title, description) in ${language}.
-- trip_name must be in ${language}
-- Each day's title must be in ${language}
-- Each day's description must be in ${language}
-- City names should remain in English for internal use
-- Attraction names must remain EXACT as provided (in English) for database matching
-` : `
-⚠️ LANGUAGE: Write ALL content (trip_name, title, description) in ENGLISH.
-- ALL attraction names MUST be in English
-- Do NOT use Japanese, Arabic, or any non-Latin characters
-- City names in English
-`}
-═══════════════════════════════════════════════════════════════
-📤 OUTPUT FORMAT (Return ONLY valid JSON)
-═══════════════════════════════════════════════════════════════
-
-{
-  "trip_name": "Egypt: Cairo, Nile Cruise & Hurghada",
-  "total_days": ${expectedDays},
-  "days": [
-    {
-      "day_number": 1,
-      "date": null,
-      "title": "Day 1: Arrival & Alexandria Day Trip",
-      "description": "2-3 sentences describing ONLY what is in the input",
-      "city": "Cairo",
-      "cities_visited": ["Cairo", "Alexandria"],
-      "overnight_city": "Cairo",
-      "accommodation_type": "hotel",
-      
-      "is_arrival": true,
-      "is_departure": false,
-      "is_transfer_only": false,
-      "is_free_day": false,
-      "is_cruise_day": false,
-      "is_sailing_day": false,
-      
-      "attractions": ["Pompey's Pillar", "Qaitbay Citadel", "Alexandria Library", "Montazah Park"],
-      "photo_stops": ["Alexandria Library"],
-      
-      "activities": ["Airport arrival", "Transfer to Alexandria", "Visit Pompey's Pillar", "Visit Qaitbay Citadel", "Photo stop at Alexandria Library", "Visit Montazah Park", "Lunch", "Return to Cairo", "Dinner"],
-      "guide_required": true,
-      
-      "includes_lunch": true,
-      "includes_dinner": true,
-      "meal_notes": null,
-      
-      "flight_info": "MS956 arriving 05:10",
-      "transport_type": "flight",
-      
-      "needs_airport_service": true,
-      "needs_hotel_service": true
-    }
-  ]
-}
-
-═══════════════════════════════════════════════════════════════
-✅ VERIFICATION CHECKLIST (Complete before responding)
-═══════════════════════════════════════════════════════════════
-
-□ I have exactly ${expectedDays} day objects in my response
-□ Day 1 contains ALL activities from D1/Day 1 input (not just "arrival")
-□ Day 2 contains ALL activities from D2/Day 2 input
-□ Each day's content matches ONLY what was in that day's input
-□ I did NOT add Abu Simbel, Unfinished Obelisk, or other sites not mentioned
-□ DAY TRIPS: If input says "return to Cairo" or "back to [city]", the overnight_city is the RETURN city, NOT the visited city
-□ OVERNIGHT CITIES: If the hotel is in Cairo and they take a day trip, overnight_city = "Cairo" (not the day-trip destination)
-□ DEPARTURE DAY: If input mentions "farewell", "departure", or "airport transfer", set is_departure: true, is_transfer_only: true
-□ ALL attraction names are in ENGLISH (no Japanese, Arabic, or other non-Latin names)
-□ Free/sailing days have is_free_day: true
-□ ALL attractions are in the attractions[] array (entrance fees apply by default)
-□ ONLY sites explicitly marked (OUTSIDE) are in photo_stops[] (NO fee)
-□ There is NO "entrance_included" array in the output
-□ Flight arrivals have needs_airport_service: true
-□ The last day with activities includes everything mentioned (not just "departure")
-
-NOW CONVERT THE ITINERARY TO JSON:`
-
-  console.log('🤖 Sending STRICT structured prompt to AI...')
-
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 16384,
-    messages: [
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  })
-
-  const responseText = message.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map(block => block.text)
-    .join('')
-
-  // Parse JSON
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    console.error('❌ Failed to parse AI response:', responseText.substring(0, 500))
-    throw new Error('Failed to parse AI response as JSON')
-  }
-
-  const result = JSON.parse(jsonMatch[0])
-
-  // ============================================
-  // POST-GENERATION VALIDATION
-  // ============================================
-
-  // Validate day count
-  if (result.days && result.days.length < expectedDays) {
-    console.warn(`⚠️ AI returned ${result.days.length} days but expected ${expectedDays}`)
-  } else {
-    console.log(`✅ AI successfully generated ${result.days?.length || 0} days`)
-  }
-
-  // Log first day for debugging
-  if (result.days && result.days[0]) {
-    console.log('📍 Day 1 generated:', {
-      title: result.days[0].title,
-      attractions: result.days[0].attractions,
-      cities_visited: result.days[0].cities_visited
-    })
-  }
-
-  // HALLUCINATION CHECK: Verify output cities match input cities
-  if (result.days && daySegments.length > 0) {
-    const outputCities = result.days.map((d: any) => (d.city || '').toLowerCase()).filter(Boolean)
-
-    // Check if AI hallucinated cruise days when input has no cruise
-    const inputHasCruise = /\b(crz|nile\s*cruise|cruise)\b/i.test(rawItinerary)
-    const outputHasCruise = result.days.some((d: any) =>
-      d.is_cruise_day === true ||
-      d.accommodation_type === 'cruise' ||
-      /\b(cruise|sailing|nile)\b/i.test(d.title || '') && /\b(on board|sailing)\b/i.test(d.title || '')
-    )
-
-    if (!inputHasCruise && outputHasCruise) {
-      console.error('🚨 HALLUCINATION DETECTED: AI generated cruise days but input has NO cruise!')
-      console.error('🚨 Stripping cruise flags from output...')
-      // Strip cruise flags — force to land itinerary
-      result.days.forEach((d: any) => {
-        d.is_cruise_day = false
-        d.is_sailing_day = false
-        if (d.accommodation_type === 'cruise') d.accommodation_type = 'hotel'
-      })
-    }
-
-    // Check if AI hallucinated cities not in input (e.g., Aswan/Luxor when input says Cairo)
-    const inputMentionsCairo = /\b(cairo|cai|giza|gza|pyramid|museum|mena\s*house)\b/i.test(rawItinerary)
-    const inputMentionsUpperEgypt = /\b(aswan|asw|luxor|lxr|kom\s*ombo|edfu|abu\s*simbel|philae|valley\s*of\s*(the\s*)?kings)\b/i.test(rawItinerary)
-    const outputMentionsUpperEgypt = outputCities.some((c: string) =>
-      /\b(aswan|luxor|kom\s*ombo|edfu)\b/i.test(c)
-    )
-
-    if (inputMentionsCairo && !inputMentionsUpperEgypt && outputMentionsUpperEgypt) {
-      console.error('🚨 HALLUCINATION DETECTED: AI added Upper Egypt cities (Aswan/Luxor) but input only mentions Cairo area!')
-      console.error('🚨 This is a critical hallucination — the AI ignored the input entirely.')
-      // Force regeneration with a stricter prompt would be ideal, but for now log heavily
-    }
-  }
-
-  return result
-}
-
-// ============================================
-// CREATIVE MODE: AI GENERATES ITINERARY
-// ============================================
-
-async function generateCreativeItinerary(
-  params: {
-    clientName: string
-    tourName: string
-    durationDays: number
-    tier: ServiceTier
-    totalPax: number
-    numAdults: number
-    numChildren: number
-    language: string
-    cities: string[]
-    interests: string[]
-    specialRequests: string[]
-    startDate: string
-    effectiveCity: string
-    attractionNames: string[]
-    contentContext: string
-    writingContext: string
-    includeLunch: boolean
-    includeDinner: boolean
-    includeAccommodation: boolean
-  }
-): Promise<any> {
-  const {
-    clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
-    language, cities, interests, specialRequests, startDate, effectiveCity,
-    attractionNames, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation
-  } = params
-
-  const prompt = `Create a ${durationDays}-day Egypt itinerary.
-
-${EGYPT_TRAVEL_GLOSSARY}
-
-CLIENT: ${clientName}
-TOUR: ${tourName}
-DATE: ${startDate}
-TRAVELERS: ${numAdults} adults${numChildren > 0 ? `, ${numChildren} children` : ''}
-TIER: ${tier.toUpperCase()} (${TIER_DESCRIPTIONS[tier]})
-CITIES: ${cities.length > 0 ? cities.join(', ') : effectiveCity}
-${interests.length > 0 ? `INTERESTS: ${interests.join(', ')}` : ''}
-${specialRequests.length > 0 ? `SPECIAL REQUESTS: ${specialRequests.join(', ')}` : ''}
-
-AVAILABLE ATTRACTIONS (use EXACT names):
-${attractionNames.join(', ')}
-${contentContext}
-${writingContext}
-
-PACKAGE INCLUDES:
-- Transportation: Yes (private vehicle)
-- Guide: Yes (${language} speaking)
-- Entrance Fees: Yes (all attractions in the "attractions" array get entrance fees automatically)
-
-ENTRANCE FEE RULE:
-- All sites in "attractions" array = entrance fee included (default)
-- If a site is a photo stop only (outside viewing), add it to "photo_stops" array instead
-- Lunch: ${includeLunch ? 'Yes' : 'No'}
-- Dinner: ${includeDinner ? 'Yes' : 'No'}
-- Hotels: ${includeAccommodation ? 'Yes (except last day)' : 'No'}
-
-PLANNING GUIDELINES:
-1. Create a logical flow between cities (don't jump around)
-2. First day typically arrival + lighter activities
-3. Last day typically departure transfer
-4. Group nearby attractions on the same day
-5. Include realistic driving times
-6. For ${tier} tier: ${TIER_DESCRIPTIONS[tier]}
-
-CRITICAL CONSTRAINTS:
-- ONLY use cities from the CITIES list above. Do NOT add cities not mentioned.
-- If no Nile Cruise / CRZ is mentioned, do NOT create a cruise itinerary.
-- If no Aswan/Luxor is mentioned, do NOT add Upper Egypt destinations.
-- Stay faithful to the client's request — do not "improve" by adding unrelated destinations.
-- Do NOT generate a Nile Cruise unless the client explicitly asks for one.
-${language !== 'English' ? `
-LANGUAGE REQUIREMENT (CRITICAL):
-Write ALL content (trip_name, title, description) in ${language}.
-- trip_name must be in ${language}
-- Each day's title must be in ${language}
-- Each day's description must be in ${language}
-- City names should remain in their original English form for internal use
-- Attraction names must remain EXACT as provided (in English) for database matching
-` : `
-LANGUAGE: Write ALL content in ENGLISH.
-- ALL text must be in English
-- ALL attraction names MUST be in English (no Japanese, Arabic, or other scripts)
-`}
-Return ONLY valid JSON:
-{
-  "trip_name": "Descriptive Trip Name",
-  "total_days": ${durationDays},
-  "days": [
-    {
-      "day_number": 1,
-      "title": "Day 1: Arrival in Cairo",
-      "description": "Professional 2-3 sentence description of the day",
-      "city": "Cairo",
-      "overnight_city": "Cairo",
-      "is_arrival": true,
-      "is_departure": false,
-      "is_transfer_only": false,
-      "attractions": ["Exact Attraction Name"],
-      "photo_stops": [],
-      "is_cruise_day": false,
-      "accommodation_type": "hotel",
-      "guide_required": true,
-      "includes_lunch": ${includeLunch},
-      "includes_dinner": ${includeDinner},
-      "includes_hotel": ${includeAccommodation}
-    }
-  ]
-}
-
-Use EXACT attraction names from the provided list. Set includes_hotel to false on the last day.
-For cruise packages: set is_cruise_day: true and accommodation_type: "cruise" for all days on the Nile cruise.`
-
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  })
-
-  const responseText = message.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map(block => block.text)
-    .join('')
-
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    throw new Error('Failed to parse AI response as JSON')
-  }
-
-  return JSON.parse(jsonMatch[0])
-}
-
-// ============================================
-// DETERMINE EFFECTIVE PACKAGE TYPE
-// ============================================
-
-function determinePackageType(
-  requestedPackageType: string,
-  cruiseDetection: CruiseDetectionResult
-): PackageType {
-  // CRITICAL: If the parser explicitly set a non-cruise package type (land-package, tours-only, day-trips),
-  // and cruise detection did NOT find strong cruise indicators, TRUST THE PARSER.
-  // This prevents false cruise overrides from generic keyword matches.
-  const parserSaysLand = ['land-package', 'tours-only', 'day-trips', 'full-package'].includes(requestedPackageType)
-  const parserSaysCruise = ['cruise-package', 'cruise-land'].includes(requestedPackageType)
-
-  // If parser explicitly says cruise, trust it
-  if (parserSaysCruise) {
-    if (requestedPackageType === 'cruise-land') return 'cruise-land'
-    return 'cruise-package'
-  }
-
-  // If no cruise detected by the generator either, use the requested package type
-  if (!cruiseDetection.isCruise) {
-    if (requestedPackageType === 'full-package') {
-      return 'land-package'
-    }
-    return (requestedPackageType as PackageType) || 'land-package'
-  }
-
-  // Cruise was detected by the generator BUT parser says land —
-  // Only override if the cruise detection has strong evidence (cruise abbreviations, not just city names)
-  if (parserSaysLand && cruiseDetection.keywords.length <= 1) {
-    console.log(`🛡️ PACKAGE GUARD: Parser says ${requestedPackageType}, cruise detection weak (${cruiseDetection.keywords.join(', ')}) — keeping parser's decision`)
-    if (requestedPackageType === 'full-package') return 'land-package'
-    return (requestedPackageType as PackageType) || 'land-package'
-  }
-
-  // Strong cruise detection overrides parser — determine if cruise-only or cruise+land
-  if (cruiseDetection.includesLand) {
-    return 'cruise-land'
-  }
-
-  return 'cruise-package'
 }
 
 // ============================================
@@ -1285,127 +752,16 @@ export async function POST(request: NextRequest) {
       includeAccommodationFinal = false
     }
 
-    // Fetch rates — all from database, no hardcoded fallbacks
-    // Transportation: query transportation_rates (tiered vehicle structure)
-    const { data: transportRates } = await supabase
-      .from('transportation_rates')
-      .select('*')
-      .eq('is_active', true)
-      .eq('service_type', 'day_tour')
-      .ilike('city', effectiveCity)
-      .limit(1)
-
-    const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
-    const transportResult = transportRates?.length ? getTransportRateForPax(transportRates[0], totalPax, isEuroPassport) : null
-    if (!transportResult) {
-      console.warn(`⚠️ No transportation rate found for ${effectiveCity}, ${totalPax} pax — transport will be €0`)
-    }
-    const vehiclePerDay = transportResult ? (isEuroPassport ? transportResult.rateEur : transportResult.rateNonEur) : 0
-    const vehicleTypeName = transportResult ? transportResult.vehicleType : 'Vehicle'
-    const vehicleServiceCode = transportRates?.[0]?.id || 'TRANS'
-    const vehicleSupplierName = transportRates?.[0]?.supplier_name || null
-
-    // Transfer rate: query transportation_rates for airport_transfer service type
-    const { data: transferRates } = await supabase
-      .from('transportation_rates')
-      .select('*')
-      .eq('is_active', true)
-      .eq('service_type', 'airport_transfer')
-      .ilike('city', effectiveCity)
-      .limit(1)
-    const transferResult = transferRates?.length ? getTransportRateForPax(transferRates[0], totalPax, isEuroPassport) : null
-    const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
-    if (!transferResult) {
-      console.warn(`⚠️ No airport transfer rate found for ${effectiveCity}, ${totalPax} pax — transfer will be €0`)
-    }
-
-    // Guides
-    const { data: guides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [finalLanguage]).limit(5)
-    let selectedGuide = guides?.[0]
-    if (!selectedGuide) {
-      // Fallback: any active guide for this language
-      const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('is_active', true).contains('languages', [finalLanguage]).limit(1)
-      selectedGuide = fallbackGuides?.[0]
-    }
-    const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 0) : 0
-    if (!guidePerDay) console.warn(`⚠️ No guide rate found for ${finalLanguage}/${tier} — guide will be €0`)
-
-    // Entrance fees
-    const { data: allEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
-
-    // Meal rates
-    const { data: mealRates } = await supabase.from('meal_rates').select('*').eq('is_active', true).limit(1)
-    let lunchRate = toNumber(mealRates?.[0]?.lunch_rate_eur, 0)
-    let dinnerRate = toNumber(mealRates?.[0]?.dinner_rate_eur, 0)
-    if (!lunchRate) console.warn('⚠️ No lunch rate found in meal_rates — lunch will be €0')
-    if (!dinnerRate) console.warn('⚠️ No dinner rate found in meal_rates — dinner will be €0')
-
-    // Airport services
-    const { data: airportServicesData } = await supabase.from('airport_services').select('*').eq('is_active', true)
-    const airportServiceRate = airportServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
-    if (!airportServiceRate) console.warn('⚠️ No airport service rates found — airport service will be €0')
-
-    // Hotel services
-    const { data: hotelServicesData } = await supabase.from('hotel_services').select('*').eq('is_active', true)
-    const hotelServiceRate = hotelServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
-    if (!hotelServiceRate) console.warn('⚠️ No hotel service rates found — hotel service will be €0')
-
-    // Accommodation
-    let hotelRate = 0
-    let hotelName_final = hotel_name || null
-    let selectedHotel: any = null
-
-    if (includeAccommodationFinal) {
-      // PRIORITY 1: Try to match the specific hotel name from the parsed input
-      if (hotel_name) {
-        const { data: namedHotels } = await supabase
-          .from('accommodation_rates')
-          .select('*')
-          .eq('is_active', true)
-          .ilike('property_name', `%${hotel_name}%`)
-          .limit(3)
-
-        if (namedHotels?.length) {
-          selectedHotel = namedHotels[0]
-          hotelRate = isEuroPassport
-            ? toNumber(selectedHotel.pp_double_eur, 0)
-            : toNumber(selectedHotel.pp_double_non_eur, 0)
-          hotelName_final = selectedHotel.property_name
-          console.log(`🏨 Matched parsed hotel name "${hotel_name}" → ${selectedHotel.property_name} (rate: ${hotelRate})`)
-        } else {
-          console.log(`⚠️ Parsed hotel "${hotel_name}" not found in accommodation_rates — falling back to tier search`)
-        }
-      }
-
-      // PRIORITY 2: Fall back to city + tier search if no hotel matched by name
-      if (!selectedHotel) {
-        const { data: hotels } = await supabase
-          .from('accommodation_rates')
-          .select('*')
-          .ilike('city', effectiveCity)
-          .eq('is_active', true)
-          .eq('tier', tier)
-          .order('created_at', { ascending: false })
-          .limit(5)
-
-        if (hotels?.length) {
-          selectedHotel = hotels[0]
-          hotelRate = isEuroPassport
-            ? toNumber(selectedHotel.pp_double_eur, 0)
-            : toNumber(selectedHotel.pp_double_non_eur, 0)
-          hotelName_final = selectedHotel.property_name
-        }
-      }
-
-      if (!hotelRate) {
-        console.warn(`⚠️ No hotel rate found for ${effectiveCity}/${tier} — accommodation will be €0`)
-      }
-    }
-
-    // Tipping rates
-    const { data: tippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
-    let dailyTips = tippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 0
-    if (!dailyTips) console.warn('⚠️ No tipping rates found — tips will be €0')
+    // Fetch all pricing rates from database
+    const rates = await fetchAllPricingRates(supabase, {
+      tier,
+      effectiveCity,
+      totalPax,
+      isEuroPassport,
+      language: finalLanguage,
+      hotelName: hotel_name || null,
+      includeAccommodation: includeAccommodationFinal,
+    })
 
 
     // ============================================
@@ -1418,6 +774,7 @@ export async function POST(request: NextRequest) {
       console.log('📋 Using STRUCTURED mode - following provided itinerary')
       
       itineraryData = await generateFromStructuredInput(
+        anthropic,
         extracted_days || [],
         raw_itinerary,
         {
@@ -1432,7 +789,7 @@ export async function POST(request: NextRequest) {
     } else {
       console.log('🎨 Using CREATIVE mode - AI generating itinerary')
       
-      itineraryData = await generateCreativeItinerary({
+      itineraryData = await generateCreativeItinerary(anthropic, {
         clientName: client_name,
         tourName: finalTourName,
         durationDays: duration_days,
@@ -1503,438 +860,29 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Created itinerary ${itinerary.id} with ${duration_days} days`)
 
-    // Create days and services
-    let totalSupplierCost = 0
-    let totalClientPrice = 0
-    let landCruiseTransportAdded = false
-    const createdLandDays: { id: string; title: string; description: string; city: string; overnight_city: string }[] = []
+    // Create days and services using extracted module
+    const serviceResult = await createLandItineraryServices(supabase, {
+      itineraryId: itinerary.id,
+      itineraryData,
+      rates,
+      startDateObj,
+      durationDays: duration_days,
+      effectivePackageType,
+      effectiveCity,
+      totalPax,
+      isEuroPassport,
+      tier,
+      language: finalLanguage,
+      includeLunch: include_lunch,
+      includeDinner: include_dinner,
+      includeAccommodation: includeAccommodationFinal,
+      skipPricing: skip_pricing,
+      marginPercent: margin_percent,
+      startDate: start_date,
+    })
 
-    for (const dayData of itineraryData.days || []) {
-      const dayNumber = dayData.day_number || 1
-      const dayDate = new Date(startDateObj)
-      dayDate.setDate(startDateObj.getDate() + dayNumber - 1)
 
-      const isLastDay = dayNumber === duration_days
-      const isTransferOnly = dayData.is_transfer_only || false
-      const isSailingDay = dayData.is_sailing_day || false
-      const isFreeDay = dayData.is_free_day || isSailingDay || false
-      // Cruise day detection: trust AI output OR force based on package type
-      // For cruise-package: ALL days except departure are cruise days
-      // For cruise-land: trust AI's is_cruise_day flag or accommodation_type
-      const isCruiseDay = dayData.is_cruise_day || dayData.accommodation_type === 'cruise'
-        || (effectivePackageType === 'cruise-package' && !isLastDay && !isTransferOnly)
-      const dayNeedsGuide = dayData.guide_required !== false && !isTransferOnly && !isFreeDay
-      const dayIncludesLunch = isFreeDay ? false : (dayData.includes_lunch ?? include_lunch)
-      const dayIncludesDinner = dayData.includes_dinner ?? include_dinner
-      const includesHotelForDay = !isLastDay && includeAccommodationFinal && !isCruiseDay && (dayData.includes_hotel !== false)
-
-      // Generate appropriate title for free/sailing days
-      let dayTitle = dayData.title || `Day ${dayNumber}`
-      if (isSailingDay && !dayTitle.toLowerCase().includes('sailing')) {
-        dayTitle = `Day ${dayNumber}: Sailing Day on the Nile`
-      } else if (isFreeDay && !isSailingDay && !dayTitle.toLowerCase().includes('free') && !dayTitle.toLowerCase().includes('leisure')) {
-        dayTitle = `Day ${dayNumber}: Day at Leisure`
-      }
-
-      // Create day record - for tours-only/day-trips, no overnight city
-      const overnightCityValue = (effectivePackageType === 'tours-only' || effectivePackageType === 'day-trips')
-        ? null
-        : (dayData.overnight_city || dayData.city || effectiveCity)
-
-      const { data: day, error: dayError } = await supabase
-        .from('itinerary_days')
-        .insert({
-          itinerary_id: itinerary.id,
-          day_number: dayNumber,
-          date: dayDate.toISOString().split('T')[0],
-          title: dayTitle,
-          description: dayData.description || '',
-          city: dayData.city || effectiveCity,
-          overnight_city: overnightCityValue,
-          attractions: dayData.attractions || [],
-          guide_required: dayNeedsGuide,
-          lunch_included: dayIncludesLunch,
-          dinner_included: dayIncludesDinner,
-          hotel_included: includesHotelForDay,
-          is_cruise_day: isCruiseDay
-        })
-        .select()
-        .single()
-
-      if (dayError) {
-        console.error(`❌ Error creating day ${dayNumber}:`, dayError)
-        continue
-      }
-
-      createdLandDays.push({
-        id: day.id,
-        title: dayTitle,
-        description: dayData.description || '',
-        city: dayData.city || effectiveCity,
-        overnight_city: overnightCityValue
-      })
-
-      if (skip_pricing) continue
-
-      // Handle departure day - transfer + airport/hotel services
-      if (dayData.is_departure && isTransferOnly) {
-        const departureServices: any[] = []
-
-        // Airport service (international departure)
-        departureServices.push({
-          service_type: 'airport_service',
-          service_code: 'AIRPORT',
-          service_name: 'Airport Meet & Assist (International)',
-          quantity: 1,
-          rate_eur: airportServiceRate,
-          rate_non_eur: airportServiceRate,
-          total_cost: airportServiceRate,
-          client_price: withMargin(airportServiceRate),
-          notes: dayData.flight_info ? `Flight: ${dayData.flight_info}` : 'Airport assistance'
-        })
-        totalSupplierCost += airportServiceRate
-        totalClientPrice += withMargin(airportServiceRate)
-
-        // Hotel service (check-out assistance)
-        const isCruiseCheckout = dayData.accommodation_type === 'cruise' || dayData.is_cruise_day
-        departureServices.push({
-          service_type: 'hotel_service',
-          service_code: 'HOTEL-SVC',
-          service_name: isCruiseCheckout ? 'Cruise Disembarkation Assistance' : 'Hotel Porterage & Assistance',
-          quantity: 1,
-          rate_eur: hotelServiceRate,
-          rate_non_eur: hotelServiceRate,
-          total_cost: hotelServiceRate,
-          client_price: withMargin(hotelServiceRate),
-          notes: isCruiseCheckout ? 'Cruise disembarkation assistance' : 'Hotel check-out assistance'
-        })
-        totalSupplierCost += hotelServiceRate
-        totalClientPrice += withMargin(hotelServiceRate)
-
-        // Transfer to airport (uses airport_transfer rate from transportation_rates)
-        departureServices.push({
-          service_type: 'transportation',
-          service_code: transferRates?.[0]?.id || vehicleServiceCode,
-          service_name: 'Airport Transfer',
-          supplier_name: transferRates?.[0]?.supplier_name || vehicleSupplierName,
-          quantity: 1,
-          rate_eur: transferRate,
-          rate_non_eur: transferRate,
-          total_cost: transferRate,
-          client_price: withMargin(transferRate),
-          notes: 'Transfer to airport'
-        })
-        totalSupplierCost += transferRate
-        totalClientPrice += withMargin(transferRate)
-
-        // Insert all departure services
-        for (const svc of departureServices) {
-          await supabase.from('itinerary_services').insert({ itinerary_day_id: day.id, ...svc })
-        }
-        continue
-      }
-
-      // Services array
-      const services: any[] = []
-
-      // Airport Services (for arrivals/departures/domestic flights)
-      if (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info) {
-        const isInternational = dayData.is_arrival || dayData.is_departure
-        const serviceDesc = isInternational ? 'Airport Meet & Assist (International)' : 'Airport Meet & Assist (Domestic)'
-        
-        services.push({
-          service_type: 'airport_service',
-          service_code: 'AIRPORT',
-          service_name: serviceDesc,
-          quantity: 1,
-          rate_eur: airportServiceRate,
-          rate_non_eur: airportServiceRate,
-          total_cost: airportServiceRate,
-          client_price: withMargin(airportServiceRate),
-          notes: dayData.flight_info ? `Flight: ${dayData.flight_info}` : 'Airport assistance'
-        })
-        totalSupplierCost += airportServiceRate
-        totalClientPrice += withMargin(airportServiceRate)
-      }
-
-      // Hotel Services (for check-in/check-out — always on arrival/departure days regardless of accommodation type)
-      if ((dayData.needs_hotel_service || dayData.is_arrival || dayData.is_departure) && !isFreeDay) {
-        const isCruiseService = dayData.accommodation_type === 'cruise' || dayData.is_cruise_day
-        services.push({
-          service_type: 'hotel_service',
-          service_code: 'HOTEL-SVC',
-          service_name: isCruiseService ? 'Cruise Boarding Assistance' : 'Hotel Porterage & Assistance',
-          quantity: 1,
-          rate_eur: hotelServiceRate,
-          rate_non_eur: hotelServiceRate,
-          total_cost: hotelServiceRate,
-          client_price: withMargin(hotelServiceRate),
-          notes: isCruiseService ? 'Cruise embarkation/disembarkation assistance' : 'Hotel check-in/out assistance'
-        })
-        totalSupplierCost += hotelServiceRate
-        totalClientPrice += withMargin(hotelServiceRate)
-      }
-
-      // Transportation (skip for cruise days — bundled transport added separately)
-      if (!isFreeDay && !isCruiseDay) {
-        const transportRate = isTransferOnly ? transferRate : vehiclePerDay
-        services.push({
-          service_type: 'transportation',
-          service_code: vehicleServiceCode,
-          service_name: isTransferOnly ? 'Airport/Hotel Transfer' : `${vehicleTypeName} Transportation`,
-          supplier_name: vehicleSupplierName,
-          quantity: 1,
-          rate_eur: transportRate,
-          rate_non_eur: transportRate,
-          total_cost: transportRate,
-          client_price: withMargin(transportRate),
-          notes: `From ${dayData.city || effectiveCity}`
-        })
-        totalSupplierCost += transportRate
-        totalClientPrice += withMargin(transportRate)
-      }
-
-      // Guide (only if required for this day)
-      if (dayNeedsGuide) {
-        services.push({
-          service_type: 'guide',
-          service_code: selectedGuide?.id || 'GUIDE',
-          service_name: `${finalLanguage} Speaking Guide`,
-          supplier_name: selectedGuide?.name || null,
-          quantity: 1,
-          rate_eur: guidePerDay,
-          rate_non_eur: guidePerDay,
-          total_cost: guidePerDay,
-          client_price: withMargin(guidePerDay),
-          notes: `Professional ${finalLanguage} guide`
-        })
-        totalSupplierCost += guidePerDay
-        totalClientPrice += withMargin(guidePerDay)
-
-       // Tips (only when guide is present)
-       services.push({
-        service_type: 'tips',
-        service_code: 'TIPS',
-        service_name: 'Daily Tips',
-        quantity: 1,
-        rate_eur: dailyTips,
-        rate_non_eur: dailyTips,
-        total_cost: dailyTips,
-        client_price: withMargin(dailyTips),
-        notes: 'Driver and guide tips'
-      })
-      totalSupplierCost += dailyTips
-      totalClientPrice += withMargin(dailyTips)
-      }
-
-      // Entrance fees — all attractions get fees by default, except photo_stops (outside only)
-      const entranceAttractions = dayData.attractions || []
-      const photoStops = dayData.photo_stops || []
-      
-      if (entranceAttractions.length > 0 && !isTransferOnly && !isFreeDay) {
-        let dayEntranceTotal = 0
-        const matchedAttractions: string[] = []
-        
-        for (const attr of entranceAttractions) {
-          // Skip if this attraction is in photo_stops (outside viewing only, no fee)
-          if (photoStops.some((ps: string) => ps.toLowerCase() === attr.toLowerCase())) {
-            continue
-          }
-          
-          const fee = allEntranceFees?.find((ef: any) =>
-            ef.attraction_name.toLowerCase().includes(attr.toLowerCase()) ||
-            attr.toLowerCase().includes(ef.attraction_name.toLowerCase())
-          )
-          
-          if (fee) {
-            // Check if it's an add-on (should be excluded from automatic pricing)
-            if (fee.is_addon) continue
-
-            const feePerPerson = isEuroPassport
-              ? toNumber(fee.eur_rate, 0)
-              : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
-            dayEntranceTotal += feePerPerson * totalPax
-            matchedAttractions.push(fee.attraction_name)
-          } else {
-            console.warn(`⚠️ Day ${dayNumber}: No entrance fee found for "${attr}" — skipping`)
-          }
-        }
-        
-        if (dayEntranceTotal > 0) {
-          const notesText = photoStops.length > 0
-            ? `Entrance: ${matchedAttractions.join(', ')} | Photo stops: ${photoStops.join(', ')}`
-            : `Sites: ${matchedAttractions.join(', ')}`
-          
-          services.push({
-            service_type: 'entrance',
-            service_code: 'ENTRANCE',
-            service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'})`,
-            quantity: totalPax,
-            rate_eur: dayEntranceTotal / totalPax,
-            rate_non_eur: dayEntranceTotal / totalPax,
-            total_cost: dayEntranceTotal,
-            client_price: withMargin(dayEntranceTotal),
-            notes: notesText
-          })
-          totalSupplierCost += dayEntranceTotal
-          totalClientPrice += withMargin(dayEntranceTotal)
-        }
-      }
-
-      // Lunch (only if included for this day)
-      if (dayIncludesLunch) {
-        const lunchCost = lunchRate * totalPax
-        services.push({
-          service_type: 'meal',
-          service_code: 'LUNCH',
-          service_name: 'Lunch',
-          quantity: totalPax,
-          rate_eur: lunchRate,
-          rate_non_eur: lunchRate,
-          total_cost: lunchCost,
-          client_price: withMargin(lunchCost),
-          notes: 'Lunch at local restaurant'
-        })
-        totalSupplierCost += lunchCost
-        totalClientPrice += withMargin(lunchCost)
-      }
-
-      // Dinner (only if included for this day)
-      if (dayIncludesDinner) {
-        const dinnerCost = dinnerRate * totalPax
-        services.push({
-          service_type: 'meal',
-          service_code: 'DINNER',
-          service_name: 'Dinner',
-          quantity: totalPax,
-          rate_eur: dinnerRate,
-          rate_non_eur: dinnerRate,
-          total_cost: dinnerCost,
-          client_price: withMargin(dinnerCost),
-          notes: 'Dinner'
-        })
-        totalSupplierCost += dinnerCost
-        totalClientPrice += withMargin(dinnerCost)
-      }
-
-       // Water (for touring days only)
-      if (!isTransferOnly && !isFreeDay) {
-        const waterCost = 2 * totalPax
-        services.push({
-          service_type: 'supplies',
-          service_code: 'WATER',
-          service_name: 'Water Bottles',
-          quantity: totalPax,
-          rate_eur: 2,
-          rate_non_eur: 2,
-          total_cost: waterCost,
-          client_price: withMargin(waterCost),
-          notes: 'Bottled water'
-        })
-        totalSupplierCost += waterCost
-        totalClientPrice += withMargin(waterCost)
-      }
-
-      // Hotel (only if included and not last day and not cruise day) — per-person pricing
-      if (includesHotelForDay && hotelRate > 0) {
-        const hotelCost = hotelRate * totalPax
-        services.push({
-          service_type: 'accommodation',
-          service_code: selectedHotel?.id || 'HOTEL',
-          service_name: `${hotelName_final} (${totalPax} ${totalPax > 1 ? 'persons' : 'person'})`,
-          supplier_name: hotelName_final,
-          quantity: totalPax,
-          rate_eur: hotelRate,
-          rate_non_eur: hotelRate,
-          total_cost: hotelCost,
-          client_price: withMargin(hotelCost),
-          notes: `Overnight at ${hotelName_final}`
-        })
-        totalSupplierCost += hotelCost
-        totalClientPrice += withMargin(hotelCost)
-      }
-
-      // Cruise accommodation + bundled transport (for cruise days in cruise-land packages)
-      if (isCruiseDay && !isLastDay) {
-        // Count cruise nights for this itinerary
-        const cruiseNightsInPackage = (itineraryData.days || []).filter(
-          (d: any) => (d.is_cruise_day || d.accommodation_type === 'cruise') && d.day_number !== duration_days
-        ).length
-
-        const landCruiseRate = await getCruiseRate({
-          tier,
-          recommendedSuppliers: [],
-          supabase,
-          totalPax,
-          nights: cruiseNightsInPackage,
-          startDate: start_date,
-          isEuroPassport
-        })
-
-        if (landCruiseRate.found) {
-          const nightCost = landCruiseRate.totalPerNight
-          const cabinDesc = landCruiseRate.cabinAllocation.map((a: CabinAllocation) => `${a.count}×${a.type}`).join(' + ')
-
-          services.push({
-            service_type: 'cruise',
-            service_code: landCruiseRate.supplierId || 'CRUISE',
-            service_name: `${landCruiseRate.shipName} - Full Board (${cabinDesc})`,
-            supplier_name: landCruiseRate.shipName,
-            quantity: totalPax,
-            rate_eur: landCruiseRate.totalPerNight / totalPax,
-            rate_non_eur: landCruiseRate.totalPerNight / totalPax,
-            total_cost: nightCost,
-            client_price: withMargin(nightCost),
-            notes: `Night ${dayNumber}: On board | ${landCruiseRate.season} season | ${cabinDesc}`
-          })
-          totalSupplierCost += nightCost
-          totalClientPrice += withMargin(nightCost)
-
-          // Store cabin allocation on itinerary (once)
-          if (dayNumber === (itineraryData.days || []).find((d: any) => d.is_cruise_day || d.accommodation_type === 'cruise')?.day_number) {
-            await supabase.from('itineraries').update({
-              cabin_allocation: landCruiseRate.cabinAllocation
-            }).eq('id', itinerary.id)
-          }
-        }
-      }
-
-      // Bundled cruise transport (added once on first cruise day)
-      if (isCruiseDay && !landCruiseTransportAdded) {
-        const cruiseDaysCount = (itineraryData.days || []).filter(
-          (d: any) => d.is_cruise_day || d.accommodation_type === 'cruise'
-        ).length
-
-        const landCruiseTransportRules = await fetchCruiseTransportPricingRules()
-        const landCruiseTransportRule = findCruiseTransportRule(landCruiseTransportRules, cruiseDaysCount)
-        if (landCruiseTransportRule) {
-          const transport = getCruiseTransportRate(landCruiseTransportRule, totalPax)
-          services.push({
-            service_type: 'transportation',
-            service_code: landCruiseTransportRule.id || 'CRUISE-TRANSPORT',
-            service_name: `Cruise Transport Package (${transport.vehicleType})`,
-            supplier_name: null,
-            quantity: 1,
-            rate_eur: transport.rate,
-            rate_non_eur: transport.rate,
-            total_cost: transport.rate,
-            client_price: withMargin(transport.rate),
-            notes: `Bundled transport for ${cruiseDaysCount}D cruise: transfers + sightseeing (${transport.vehicleType})`
-          })
-          totalSupplierCost += transport.rate
-          totalClientPrice += withMargin(transport.rate)
-        }
-        landCruiseTransportAdded = true
-      }
-
-      // Insert all services
-      for (const svc of services) {
-        await supabase.from('itinerary_services').insert({
-          itinerary_day_id: day.id,
-          ...svc
-        })
-      }
-    }
+    const { createdDays, totalSupplierCost, totalClientPrice } = serviceResult
 
     // Update totals
     if (!skip_pricing) {
@@ -1957,6 +905,13 @@ export async function POST(request: NextRequest) {
     })
 
     // Auto-create language version
+    const createdLandDays = createdDays.map(d => ({
+      id: d.dayId,
+      title: d.title,
+      description: d.description,
+      city: d.city,
+      overnight_city: d.overnightCity
+    }))
     await createLanguageVersions(supabase, itinerary.id, itineraryData.trip_name, finalLanguage, createdLandDays)
 
     return NextResponse.json({
