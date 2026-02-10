@@ -636,7 +636,14 @@ export async function POST(
       }
 
       // ENTRANCE FEES - WITH ADD-ON CHECK AND CHILD/INFANT DISCOUNTS
-      for (const attraction of attractions) {
+      // Skip attractions marked (outside) — these are photo stops only, no entrance fee
+      for (const rawAttraction of attractions) {
+        if (/\(outside\)/i.test(rawAttraction)) {
+          console.log(`[Pricing] 📸 Skipping photo stop: ${rawAttraction}`)
+          continue
+        }
+        // Strip any remaining markers from the name for database matching
+        const attraction = rawAttraction.replace(/\s*\((?:outside|inside)\)\s*/gi, '').trim()
         const entrance = await getEntranceFee(attraction, isEuroPassport)
 
         // Skip add-ons if not explicitly included

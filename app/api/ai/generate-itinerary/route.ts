@@ -1444,6 +1444,15 @@ This is a TOURS-ONLY package - NO accommodation is included!
 - Set needs_hotel_service to FALSE for all days
 - DO NOT mention overnight stays or accommodation in descriptions
 - This is guide + transport + entrance fees ONLY
+` : ''}${packageType === 'cruise-package' || packageType === 'cruise-land' ? `
+⚠️ NILE CRUISE PACKAGE (CRITICAL):
+This is a ${packageType === 'cruise-package' ? 'CRUISE-ONLY' : 'CRUISE + LAND'} package!
+- Set is_cruise_day: true for ALL days spent on the Nile cruise
+- Set accommodation_type: "cruise" for ALL cruise days (NOT "hotel")
+- Set is_sailing_day: true for days with NO tours (just sailing on the Nile)
+- Cruise days do NOT need individual transport (transport is bundled)
+- Meals on cruise days are typically included (Full Board: breakfast, lunch, dinner)
+- The last day (departure/disembarkation) should have is_cruise_day: false
 ` : ''}
 ${language !== 'English' ? `
 ⚠️ LANGUAGE REQUIREMENT (CRITICAL):
@@ -1718,6 +1727,8 @@ Return ONLY valid JSON:
       "is_transfer_only": false,
       "attractions": ["Exact Attraction Name"],
       "photo_stops": [],
+      "is_cruise_day": false,
+      "accommodation_type": "hotel",
       "guide_required": true,
       "includes_lunch": ${includeLunch},
       "includes_dinner": ${includeDinner},
@@ -1726,7 +1737,8 @@ Return ONLY valid JSON:
   ]
 }
 
-Use EXACT attraction names from the provided list. Set includes_hotel to false on the last day.`
+Use EXACT attraction names from the provided list. Set includes_hotel to false on the last day.
+For cruise packages: set is_cruise_day: true and accommodation_type: "cruise" for all days on the Nile cruise.`
 
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -2005,8 +2017,8 @@ export async function POST(request: NextRequest) {
     // CRITICAL: Structured mode ALWAYS takes priority over cruise content library.
     // If the user provided a day-by-day itinerary, we must follow it — not replace with a cruise template.
     // ============================================
-    if (cruiseDetection.isCruise && inputMode === 'creative' && !raw_itinerary && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
-      console.log(`🚢 Processing as ${effectivePackageType} itinerary (creative mode, no raw itinerary provided)...`)
+    if (cruiseDetection.isCruise && inputMode === 'creative' && !is_structured_input && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
+      console.log(`🚢 Processing as ${effectivePackageType} itinerary (creative mode, no structured input)...`)
       
       const cruiseContent = await findCruiseContent(cruiseDetection, tier, duration_days)
       
@@ -2589,7 +2601,11 @@ export async function POST(request: NextRequest) {
       const isTransferOnly = dayData.is_transfer_only || false
       const isSailingDay = dayData.is_sailing_day || false
       const isFreeDay = dayData.is_free_day || isSailingDay || false
+      // Cruise day detection: trust AI output OR force based on package type
+      // For cruise-package: ALL days except departure are cruise days
+      // For cruise-land: trust AI's is_cruise_day flag or accommodation_type
       const isCruiseDay = dayData.is_cruise_day || dayData.accommodation_type === 'cruise'
+        || (effectivePackageType === 'cruise-package' && !isLastDay && !isTransferOnly)
       const dayNeedsGuide = dayData.guide_required !== false && !isTransferOnly && !isFreeDay
       const dayIncludesLunch = isFreeDay ? false : (dayData.includes_lunch ?? include_lunch)
       const dayIncludesDinner = dayData.includes_dinner ?? include_dinner
