@@ -124,6 +124,38 @@ export async function POST(request: NextRequest) {
       console.error('❌ Error storing message:', msgError)
     } else {
       console.log('✅ Message stored successfully')
+
+      // Update conversation metadata (last_message, last_message_at, unread_count)
+      // This ensures the Unified Inbox shows the latest message snippet and timestamp
+      if (conversationId) {
+        const messageSnippet = body || (numMedia > 0 ? '📎 Media' : '')
+        const now = new Date().toISOString()
+
+        // First, get current unread_count to increment it
+        const { data: currentConv } = await supabase
+          .from('whatsapp_conversations')
+          .select('unread_count')
+          .eq('id', conversationId)
+          .single()
+
+        const currentUnread = currentConv?.unread_count || 0
+
+        const { error: updateError } = await supabase
+          .from('whatsapp_conversations')
+          .update({
+            last_message: messageSnippet,
+            last_message_at: now,
+            unread_count: currentUnread + 1,
+            updated_at: now
+          })
+          .eq('id', conversationId)
+
+        if (updateError) {
+          console.error('❌ Error updating conversation metadata:', updateError)
+        } else {
+          console.log('✅ Conversation metadata updated (unread:', currentUnread + 1, ')')
+        }
+      }
     }
 
     // ============================================
