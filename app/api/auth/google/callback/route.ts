@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.redirect(
-      new URL('/settings/email?success=true', baseUrl)
+      new URL('/communications?gmail=connected', baseUrl)
     )
   } catch (err: any) {
     console.error('OAuth callback error:', err)
