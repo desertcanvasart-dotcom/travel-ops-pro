@@ -8,21 +8,29 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Use the public app URL for redirects (request.url on Railway resolves to internal localhost:8080)
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || ''
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
   const state = searchParams.get('state') // Contains user_id
   const error = searchParams.get('error')
 
+  // Determine the correct base URL for redirects
+  const baseUrl = BASE_URL || request.headers.get('x-forwarded-host')
+    ? `https://${request.headers.get('x-forwarded-host')}`
+    : request.url
+
   if (error) {
     return NextResponse.redirect(
-      new URL(`/settings/email?error=${error}`, request.url)
+      new URL(`/settings/email?error=${error}`, baseUrl)
     )
   }
 
   if (!code || !state) {
     return NextResponse.redirect(
-      new URL('/settings/email?error=missing_params', request.url)
+      new URL('/settings/email?error=missing_params', baseUrl)
     )
   }
 
@@ -60,12 +68,12 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.redirect(
-      new URL('/settings/email?success=true', request.url)
+      new URL('/settings/email?success=true', baseUrl)
     )
   } catch (err: any) {
     console.error('OAuth callback error:', err)
     return NextResponse.redirect(
-      new URL(`/settings/email?error=${encodeURIComponent(err.message)}`, request.url)
+      new URL(`/settings/email?error=${encodeURIComponent(err.message)}`, baseUrl)
     )
   }
 }
