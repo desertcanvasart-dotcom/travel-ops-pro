@@ -7,13 +7,19 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Use service role key to bypass RLS — webhooks have no user session
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(request: NextRequest) {
   try {
     // Parse Twilio webhook data (form-urlencoded)
     const formData = await request.formData()
-    
+
     const from = formData.get('From') as string // e.g., "whatsapp:+201234567890"
     const to = formData.get('To') as string // Your WhatsApp number
     const body = formData.get('Body') as string // Message text
@@ -33,8 +39,6 @@ export async function POST(request: NextRequest) {
     // Extract phone number (remove "whatsapp:" prefix)
     const phoneNumber = from.replace('whatsapp:', '')
     const toNumber = to.replace('whatsapp:', '')
-
-    const supabase = createClient()
     
     // ============================================
     // STEP 1: Find or create client
