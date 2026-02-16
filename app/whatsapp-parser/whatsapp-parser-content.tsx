@@ -1440,7 +1440,7 @@ function WhatsAppParserContent() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {fromInbox && (
-                <Link href="/whatsapp-inbox" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                <Link href="/communications" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                   <ArrowLeft className="w-5 h-5" />
                 </Link>
               )}

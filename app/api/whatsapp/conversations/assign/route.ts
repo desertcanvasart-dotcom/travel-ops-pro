@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
             type: 'whatsapp_assigned',
             title: 'New WhatsApp Chat Assigned',
             message: `You've been assigned a WhatsApp conversation with ${clientName}`,
-            link: `/whatsapp-inbox?conversation=${conversation_id}`,
+            link: `/communications?conversation=${conversation_id}`,
             is_read: false,
             email_sent: false
           })
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
                 type: 'whatsapp_assigned',
                 title: 'New WhatsApp Chat Assigned',
                 message: `You've been assigned a WhatsApp conversation with ${clientName}. Last message: "${conversation.last_message?.substring(0, 100) || 'No messages yet'}"`,
-                link: `/whatsapp-inbox?conversation=${conversation_id}`,
+                link: `/communications?conversation=${conversation_id}`,
                 send_email: true
               })
             })
