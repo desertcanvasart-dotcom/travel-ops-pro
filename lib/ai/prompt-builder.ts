@@ -148,6 +148,23 @@ FLIGHTS:
 MS956@05:10 = EgyptAir flight 956 at 05:10
 "DEPARTED BY MS955@23:20" = Departure flight at 23:20
 
+DOMESTIC FLIGHTS (between Egyptian cities, e.g., Cairo→Aswan, Luxor→Cairo):
+- transport_type: "flight"
+- flight_info: "MS956 arriving 05:10" (airline code + time)
+- needs_airport_service: true (airport services needed at BOTH ends)
+- is_arrival: false, is_departure: false (these are for international only)
+- Guide is NOT needed during the flight/transfer portions
+- If sightseeing happens after landing, set guide_required: true and list attractions normally
+
+INTERCITY ROAD TRANSFERS (driving between cities, e.g., Aswan→Luxor, Luxor→Hurghada, Cairo→Alexandria overnight):
+- The "city" field must reflect the DESTINATION city (where the day ends)
+- The "overnight_city" must be the city where the traveler sleeps that night
+- needs_hotel_service: true (check-out at origin, check-in at destination)
+- If sightseeing at the destination: guide_required: true and list attractions normally
+- If transfer only (no sightseeing): is_transfer_only: true
+- This is DIFFERENT from a day trip — a day trip returns to the same city (overnight_city stays the same)
+- NOTE: Do NOT confuse intercity road transfers with day trips. "Drive to Luxor" = intercity. "Day trip to Alexandria and return" = day trip.
+
 ═══════════════════════════════════════════════════════════════
 ⚙️ CONFIGURATION
 ═══════════════════════════════════════════════════════════════
@@ -250,6 +267,9 @@ Write ALL content (trip_name, title, description) in ${language}.
 □ ONLY sites explicitly marked (OUTSIDE) are in photo_stops[] (NO fee)
 □ There is NO "entrance_included" array in the output
 □ Flight arrivals have needs_airport_service: true
+□ Domestic flights between cities: transport_type: "flight", needs_airport_service: true, is_arrival: false, is_departure: false
+□ Intercity road transfers: city = destination city, overnight_city = destination city, needs_hotel_service: true
+□ Day trips: city = destination BUT overnight_city = BASE city (traveler returns to same hotel)
 □ The last day with activities includes everything mentioned (not just "departure")
 
 NOW CONVERT THE ITINERARY TO JSON:`

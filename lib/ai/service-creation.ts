@@ -265,8 +265,11 @@ export async function createLandItineraryServices(
   let totalClientPrice = 0
   let landCruiseTransportAdded = false
   const createdDays: CreateDayServicesResult[] = []
+  let previousDayData: any = null // Track previous day for intercity detection
 
-  for (const dayData of itineraryData.days || []) {
+  const allDays = itineraryData.days || []
+  for (let dayIndex = 0; dayIndex < allDays.length; dayIndex++) {
+    const dayData = allDays[dayIndex]
     const dayNumber = dayData.day_number || 1
     const dayDate = new Date(startDateObj)
     dayDate.setDate(startDateObj.getDate() + dayNumber - 1)
@@ -282,6 +285,24 @@ export async function createLandItineraryServices(
     const dayIncludesLunch = isFreeDay ? false : (dayData.includes_lunch ?? includeLunch)
     const dayIncludesDinner = dayData.includes_dinner ?? includeDinner
     const includesHotelForDay = !isLastDay && includeAccommodation && !isCruiseDay && (dayData.includes_hotel !== false)
+
+    // Airport & flight detection helpers
+    const isDomesticFlight = !dayData.is_arrival && !dayData.is_departure
+      && !!dayData.flight_info && dayData.transport_type === 'flight'
+    const hasAirportOnThisDay = dayData.is_arrival || dayData.is_departure || isDomesticFlight
+    const hasSightseeingOnThisDay = !isTransferOnly && !isFreeDay
+      && ((dayData.attractions?.length > 0) || dayData.guide_required !== false)
+
+    // Intercity transfer detection: city changed from previous day by road (not flight, not cruise)
+    const previousOvernightCity = previousDayData?.overnight_city || previousDayData?.city
+    const currentCity = dayData.city || effectiveCity
+    const isIntercityTransfer = previousDayData
+      && previousOvernightCity
+      && previousOvernightCity.toLowerCase() !== currentCity.toLowerCase()
+      && !isDomesticFlight
+      && !isCruiseDay
+      && previousDayData.accommodation_type !== 'cruise'
+      && !dayData.is_arrival  // International arrivals are not intercity
 
     // Generate appropriate title for free/sailing days
     let dayTitle = dayData.title || `Day ${dayNumber}`
@@ -394,22 +415,85 @@ export async function createLandItineraryServices(
 
     // Airport Services (for arrivals/departures/domestic flights)
     if (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info) {
-      const isInternational = dayData.is_arrival || dayData.is_departure
-      const serviceDesc = isInternational ? 'Airport Meet & Assist (International)' : 'Airport Meet & Assist (Domestic)'
+      if (isDomesticFlight) {
+        // Domestic flight: airport services at BOTH departure and arrival airports
+        services.push({
+          service_type: 'airport_service',
+          service_code: 'AIRPORT',
+          service_name: 'Airport Meet & Assist - Departure (Domestic)',
+          quantity: 1,
+          rate_eur: rates.airportServiceRate,
+          rate_non_eur: rates.airportServiceRate,
+          total_cost: rates.airportServiceRate,
+          client_price: withMargin(rates.airportServiceRate),
+          notes: `Domestic flight departure: ${dayData.flight_info || ''}`
+        })
+        totalSupplierCost += rates.airportServiceRate
+        totalClientPrice += withMargin(rates.airportServiceRate)
 
-      services.push({
-        service_type: 'airport_service',
-        service_code: 'AIRPORT',
-        service_name: serviceDesc,
-        quantity: 1,
-        rate_eur: rates.airportServiceRate,
-        rate_non_eur: rates.airportServiceRate,
-        total_cost: rates.airportServiceRate,
-        client_price: withMargin(rates.airportServiceRate),
-        notes: dayData.flight_info ? `Flight: ${dayData.flight_info}` : 'Airport assistance'
-      })
-      totalSupplierCost += rates.airportServiceRate
-      totalClientPrice += withMargin(rates.airportServiceRate)
+        services.push({
+          service_type: 'airport_service',
+          service_code: 'AIRPORT',
+          service_name: 'Airport Meet & Assist - Arrival (Domestic)',
+          quantity: 1,
+          rate_eur: rates.airportServiceRate,
+          rate_non_eur: rates.airportServiceRate,
+          total_cost: rates.airportServiceRate,
+          client_price: withMargin(rates.airportServiceRate),
+          notes: `Domestic flight arrival at ${dayData.city || 'destination'}`
+        })
+        totalSupplierCost += rates.airportServiceRate
+        totalClientPrice += withMargin(rates.airportServiceRate)
+
+        // Domestic flight also needs TWO airport transfers (hotel→airport + airport→hotel)
+        services.push({
+          service_type: 'transportation',
+          service_code: rates.transferServiceCode,
+          service_name: 'Airport Transfer - Departure City',
+          supplier_name: rates.transferSupplierName,
+          quantity: 1,
+          rate_eur: rates.transferRate,
+          rate_non_eur: rates.transferRate,
+          total_cost: rates.transferRate,
+          client_price: withMargin(rates.transferRate),
+          notes: 'Transfer to departure airport'
+        })
+        totalSupplierCost += rates.transferRate
+        totalClientPrice += withMargin(rates.transferRate)
+
+        services.push({
+          service_type: 'transportation',
+          service_code: rates.transferServiceCode,
+          service_name: 'Airport Transfer - Arrival City',
+          supplier_name: rates.transferSupplierName,
+          quantity: 1,
+          rate_eur: rates.transferRate,
+          rate_non_eur: rates.transferRate,
+          total_cost: rates.transferRate,
+          client_price: withMargin(rates.transferRate),
+          notes: `Transfer from ${dayData.city || 'destination'} airport`
+        })
+        totalSupplierCost += rates.transferRate
+        totalClientPrice += withMargin(rates.transferRate)
+      } else {
+        // International arrival/departure OR explicit needs_airport_service
+        const isInternational = dayData.is_arrival || dayData.is_departure
+        const serviceDesc = isInternational ? 'Airport Meet & Assist (International)' : 'Airport Meet & Assist (Domestic)'
+
+        services.push({
+          service_type: 'airport_service',
+          service_code: 'AIRPORT',
+          service_name: serviceDesc,
+          quantity: 1,
+          rate_eur: rates.airportServiceRate,
+          rate_non_eur: rates.airportServiceRate,
+          total_cost: rates.airportServiceRate,
+          client_price: withMargin(rates.airportServiceRate),
+          notes: dayData.flight_info ? `Flight: ${dayData.flight_info}` : 'Airport assistance'
+        })
+        totalSupplierCost += rates.airportServiceRate
+        totalClientPrice += withMargin(rates.airportServiceRate)
+      }
     }
 
     // Hotel Services (for check-in/check-out)
@@ -430,23 +514,167 @@ export async function createLandItineraryServices(
       totalClientPrice += withMargin(rates.hotelServiceRate)
     }
 
+    // Intercity Transfer (road transfer between cities, e.g., Aswan→Luxor, Luxor→Hurghada)
+    // Detected when the day's city differs from the previous day's overnight city
+    // This is SEPARATE from the local sightseeing vehicle at the destination
+    if (isIntercityTransfer) {
+      const originCity = previousOvernightCity || effectiveCity
+      const destCity = currentCity
+
+      // Try to fetch route-specific intercity rate from transportation_rates
+      const { getTransportRateForPax: getIntercityRate } = await import('@/lib/transport-rate-utils')
+      const { data: intercityRates } = await supabase
+        .from('transportation_rates')
+        .select('*')
+        .eq('is_active', true)
+        .eq('service_type', 'intercity_transfer')
+        .ilike('origin_city', originCity)
+        .ilike('destination_city', destCity)
+        .limit(1)
+
+      let intercityRate = 0
+      let intercityVehicle = 'Vehicle'
+      let intercityServiceCode = 'INTERCITY'
+      let intercitySupplier: string | null = null
+
+      if (intercityRates?.length) {
+        const result = getIntercityRate(intercityRates[0], totalPax, isEuroPassport)
+        if (result) {
+          intercityRate = isEuroPassport ? result.rateEur : result.rateNonEur
+          intercityVehicle = result.vehicleType
+          intercityServiceCode = intercityRates[0].id || 'INTERCITY'
+          intercitySupplier = intercityRates[0].supplier_name || null
+        }
+      }
+
+      // Fallback: if no route-specific rate, use the day-tour vehicle rate as approximation
+      if (!intercityRate) {
+        console.warn(`⚠️ No intercity rate found for ${originCity}→${destCity} — using day-tour rate as fallback`)
+        intercityRate = rates.vehiclePerDay
+        intercityVehicle = rates.vehicleTypeName
+        intercityServiceCode = rates.vehicleServiceCode
+        intercitySupplier = rates.vehicleSupplierName
+      }
+
+      services.push({
+        service_type: 'transportation',
+        service_code: intercityServiceCode,
+        service_name: `Intercity Transfer (${originCity} → ${destCity})`,
+        supplier_name: intercitySupplier,
+        quantity: 1,
+        rate_eur: intercityRate,
+        rate_non_eur: intercityRate,
+        total_cost: intercityRate,
+        client_price: withMargin(intercityRate),
+        notes: `${intercityVehicle} transfer from ${originCity} to ${destCity}`
+      })
+      totalSupplierCost += intercityRate
+      totalClientPrice += withMargin(intercityRate)
+
+      // Hotel check-out at origin city (if not already handled by departure/arrival logic)
+      if (!dayData.is_departure && !dayData.is_arrival) {
+        services.push({
+          service_type: 'hotel_service',
+          service_code: 'HOTEL-SVC',
+          service_name: 'Hotel Check-out Assistance',
+          quantity: 1,
+          rate_eur: rates.hotelServiceRate,
+          rate_non_eur: rates.hotelServiceRate,
+          total_cost: rates.hotelServiceRate,
+          client_price: withMargin(rates.hotelServiceRate),
+          notes: `Hotel check-out in ${originCity}`
+        })
+        totalSupplierCost += rates.hotelServiceRate
+        totalClientPrice += withMargin(rates.hotelServiceRate)
+
+        // Hotel check-in at destination (if staying overnight, not last day)
+        if (!isLastDay && includeAccommodation) {
+          services.push({
+            service_type: 'hotel_service',
+            service_code: 'HOTEL-SVC',
+            service_name: 'Hotel Check-in Assistance',
+            quantity: 1,
+            rate_eur: rates.hotelServiceRate,
+            rate_non_eur: rates.hotelServiceRate,
+            total_cost: rates.hotelServiceRate,
+            client_price: withMargin(rates.hotelServiceRate),
+            notes: `Hotel check-in in ${destCity}`
+          })
+          totalSupplierCost += rates.hotelServiceRate
+          totalClientPrice += withMargin(rates.hotelServiceRate)
+        }
+      }
+    }
+
+    // Airport Transfer (separate from sightseeing vehicle)
+    // When a day has BOTH an international arrival/departure AND sightseeing,
+    // the airport transfer is a separate service from the day-tour vehicle.
+    // Domestic flights already have their transfers added above.
+    if (hasAirportOnThisDay && hasSightseeingOnThisDay && !isDomesticFlight) {
+      services.push({
+        service_type: 'transportation',
+        service_code: rates.transferServiceCode,
+        service_name: 'Airport Transfer',
+        supplier_name: rates.transferSupplierName,
+        quantity: 1,
+        rate_eur: rates.transferRate,
+        rate_non_eur: rates.transferRate,
+        total_cost: rates.transferRate,
+        client_price: withMargin(rates.transferRate),
+        notes: dayData.is_arrival
+          ? 'Airport to hotel/first stop transfer'
+          : 'Hotel to airport transfer'
+      })
+      totalSupplierCost += rates.transferRate
+      totalClientPrice += withMargin(rates.transferRate)
+    }
+
     // Transportation (skip for cruise days — bundled transport added separately)
-    if (!isFreeDay && !isCruiseDay) {
-      const transportRate = isTransferOnly ? rates.transferRate : rates.vehiclePerDay
+    // Skip for domestic flight days — their transfers are already added above
+    // For intercity days: skip if transfer-only (intercity vehicle is already the transport),
+    // but ADD local sightseeing vehicle if there are attractions at the destination
+    const skipRegularTransport = isDomesticFlight || (isIntercityTransfer && isTransferOnly)
+    if (!isFreeDay && !isCruiseDay && !skipRegularTransport) {
+      const transportRate = (isTransferOnly && !isIntercityTransfer) ? rates.transferRate : rates.vehiclePerDay
+      const transportName = (isTransferOnly && !isIntercityTransfer)
+        ? 'Airport/Hotel Transfer'
+        : isIntercityTransfer && hasSightseeingOnThisDay
+          ? `${rates.vehicleTypeName} Sightseeing Transportation (${currentCity})`
+          : `${rates.vehicleTypeName} Transportation`
       services.push({
         service_type: 'transportation',
         service_code: rates.vehicleServiceCode,
-        service_name: isTransferOnly ? 'Airport/Hotel Transfer' : `${rates.vehicleTypeName} Transportation`,
+        service_name: transportName,
         supplier_name: rates.vehicleSupplierName,
         quantity: 1,
         rate_eur: transportRate,
         rate_non_eur: transportRate,
         total_cost: transportRate,
         client_price: withMargin(transportRate),
-        notes: `From ${dayData.city || effectiveCity}`
+        notes: isIntercityTransfer
+          ? `Local sightseeing vehicle in ${currentCity}`
+          : `From ${dayData.city || effectiveCity}`
       })
       totalSupplierCost += transportRate
       totalClientPrice += withMargin(transportRate)
+    }
+
+    // Domestic flight + sightseeing: add the day-tour vehicle (transfers already added above)
+    if (isDomesticFlight && hasSightseeingOnThisDay && !isCruiseDay) {
+      services.push({
+        service_type: 'transportation',
+        service_code: rates.vehicleServiceCode,
+        service_name: `${rates.vehicleTypeName} Sightseeing Transportation`,
+        supplier_name: rates.vehicleSupplierName,
+        quantity: 1,
+        rate_eur: rates.vehiclePerDay,
+        rate_non_eur: rates.vehiclePerDay,
+        total_cost: rates.vehiclePerDay,
+        client_price: withMargin(rates.vehiclePerDay),
+        notes: `Sightseeing in ${dayData.city || effectiveCity}`
+      })
+      totalSupplierCost += rates.vehiclePerDay
+      totalClientPrice += withMargin(rates.vehiclePerDay)
     }
 
     // Guide (only if required for this day)
@@ -689,6 +917,9 @@ export async function createLandItineraryServices(
         ...svc
       })
     }
+
+    // Track for next iteration (intercity detection)
+    previousDayData = dayData
   }
 
   return { createdDays, totalSupplierCost, totalClientPrice }
