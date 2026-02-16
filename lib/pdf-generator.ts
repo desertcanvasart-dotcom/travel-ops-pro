@@ -48,6 +48,8 @@ interface Itinerary {
   status: string
   notes?: string
   tier?: string
+  inclusions?: string[]
+  exclusions?: string[]
 }
 
 interface AggregatedService {
@@ -513,43 +515,60 @@ export function generateItineraryPDF(
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(60, 60, 60)
     
-    const inclusions = [
-      'Private air-conditioned vehicle for all transfers and tours',
-      'Professional English-speaking Egyptologist guide',
-      'All entrance fees to sites mentioned in the itinerary',
-      'Bottled water during tours',
-      'All applicable taxes and service charges'
-    ]
-    
+    const inclusions = itinerary.inclusions && itinerary.inclusions.length > 0
+      ? itinerary.inclusions
+      : [
+          'Private air-conditioned vehicle for all transfers and tours',
+          'Professional English-speaking Egyptologist guide',
+          'All entrance fees to sites mentioned in the itinerary',
+          'Bottled water during tours',
+          'All applicable taxes and service charges'
+        ]
+
     inclusions.forEach(item => {
+      if (yPos > pageHeight - 15) {
+        doc.addPage()
+        yPos = margin
+      }
       doc.text(`• ${item}`, margin + 3, yPos)
       yPos += 5
     })
-    
+
     yPos += 6
-    
+
     // ============================================
     // EXCLUSIONS
     // ============================================
-    
+
+    if (yPos > pageHeight - 40) {
+      doc.addPage()
+      yPos = margin
+    }
+
     doc.setFontSize(12)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(100, 124, 71)
     doc.text('EXCLUSIONS', margin, yPos)
     yPos += 6
-    
+
     doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(60, 60, 60)
-    
-    const exclusions = [
-      'International flights',
-      'Travel insurance',
-      'Personal expenses and tips (optional)',
-      'Any items not mentioned in inclusions'
-    ]
-    
+
+    const exclusions = itinerary.exclusions && itinerary.exclusions.length > 0
+      ? itinerary.exclusions
+      : [
+          'International flights',
+          'Travel insurance',
+          'Personal expenses and tips (optional)',
+          'Any items not mentioned in inclusions'
+        ]
+
     exclusions.forEach(item => {
+      if (yPos > pageHeight - 15) {
+        doc.addPage()
+        yPos = margin
+      }
       doc.text(`• ${item}`, margin + 3, yPos)
       yPos += 5
     })

@@ -83,16 +83,36 @@ export async function fetchAllPricingRates(
     console.warn(`⚠️ No airport transfer rate found for ${effectiveCity}, ${totalPax} pax — transfer will be €0`)
   }
 
-  // Guides
+  // Guides — 3-tier fallback:
+  // 1. Exact match: language + tier
+  // 2. Language match: any tier
+  // 3. Final fallback: any active guide at same tier (use their rate as baseline)
   const { data: guides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(5)
   let selectedGuide = guides?.[0]
   if (!selectedGuide) {
-    // Fallback: any active guide for this language
+    // Fallback 2: any active guide for this language (ignore tier)
     const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('is_active', true).contains('languages', [language]).limit(1)
     selectedGuide = fallbackGuides?.[0]
   }
+  if (!selectedGuide) {
+    // Fallback 3: any active guide at this tier (ignore language) — use their rate as baseline
+    // This prevents $0 guide costs when no guide speaks the requested language
+    const { data: anyTierGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).limit(1)
+    selectedGuide = anyTierGuides?.[0]
+    if (selectedGuide) {
+      console.warn(`⚠️ No ${language}-speaking guide found — using ${selectedGuide.name || 'generic'} guide rate as baseline`)
+    }
+  }
+  if (!selectedGuide) {
+    // Last resort: any active guide at all
+    const { data: anyGuides } = await supabase.from('guides').select('*').eq('is_active', true).limit(1)
+    selectedGuide = anyGuides?.[0]
+    if (selectedGuide) {
+      console.warn(`⚠️ No guide found for ${language}/${tier} — using ${selectedGuide.name || 'generic'} guide rate as last resort`)
+    }
+  }
   const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 0) : 0
-  if (!guidePerDay) console.warn(`⚠️ No guide rate found for ${language}/${tier} — guide will be €0`)
+  if (!guidePerDay) console.warn(`⚠️ No guide rate found at all — guide will be €0`)
 
   // Entrance fees
   const { data: allEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)

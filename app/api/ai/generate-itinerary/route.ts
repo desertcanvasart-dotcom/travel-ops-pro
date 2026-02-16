@@ -35,6 +35,7 @@ import {
 } from '@/lib/ai/content-library'
 import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai/prompt-builder'
 import { fetchAllPricingRates, createLandItineraryServices } from '@/lib/ai/service-creation'
+import { buildInclusionsExclusions } from '@/lib/inclusions-builder'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -246,12 +247,16 @@ export async function POST(request: NextRequest) {
     } = body
 
     const finalTourName = tour_requested || tour_name || 'Egypt Tour'
-    // CRITICAL: "language" is the GUIDE language preference (e.g., "Spanish speaking guide").
-    // It should NOT determine the itinerary content language.
-    // The itinerary content language should ONLY be non-English if explicitly requested
-    // (e.g., "write the itinerary in Spanish") — NOT inferred from nationality.
-    // For now, guide language defaults to English unless explicitly requested.
-    const finalLanguage = language !== 'English' ? language : 'English'
+    // ============================================
+    // LANGUAGE SEPARATION:
+    // guideLanguage = what language the guide speaks (from nationality or explicit request)
+    //   → Used for: guide pricing, guide services, inclusions text
+    // contentLanguage = what language the itinerary content is written in
+    //   → ALWAYS English (the generated content is always in English)
+    //   → Exception: Japanese clients get Japanese content (market requirement)
+    // ============================================
+    const guideLanguage = language || 'English'
+    const contentLanguage = guideLanguage === 'Japanese' ? 'Japanese' : 'English'
     const tier: ServiceTier = raw_tier ? normalizeTier(raw_tier) : budget_level !== 'standard' ? normalizeTier(budget_level) : userPrefs.default_tier
 
     if (!isValidDate(start_date)) {
@@ -441,11 +446,29 @@ export async function POST(request: NextRequest) {
           console.log(`🚗 Cruise transport: ${cruiseTransportVehicle} = ${cruiseTransportRate} (flat rate for ${duration_days}D)`)
         }
 
-        // Fetch guide rate
-        const { data: cruiseGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [finalLanguage]).limit(5)
-        const cruiseGuide = cruiseGuides?.[0]
+        // Fetch guide rate (uses guideLanguage for pricing) — 3-tier fallback
+        let cruiseGuide: any = null
+        const { data: cruiseGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [guideLanguage]).limit(5)
+        cruiseGuide = cruiseGuides?.[0]
+        if (!cruiseGuide) {
+          // Fallback: any active guide for this language (ignore tier)
+          const { data: fallback1 } = await supabase.from('guides').select('*').eq('is_active', true).contains('languages', [guideLanguage]).limit(1)
+          cruiseGuide = fallback1?.[0]
+        }
+        if (!cruiseGuide) {
+          // Fallback: any active guide at same tier (ignore language) — baseline rate
+          const { data: fallback2 } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).limit(1)
+          cruiseGuide = fallback2?.[0]
+          if (cruiseGuide) console.warn(`⚠️ No ${guideLanguage}-speaking cruise guide — using ${cruiseGuide.name || 'generic'} rate`)
+        }
+        if (!cruiseGuide) {
+          // Last resort: any active guide
+          const { data: fallback3 } = await supabase.from('guides').select('*').eq('is_active', true).limit(1)
+          cruiseGuide = fallback3?.[0]
+          if (cruiseGuide) console.warn(`⚠️ No cruise guide for ${guideLanguage}/${tier} — using last resort rate`)
+        }
         const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate_eur, 0) : 0
-        if (!cruiseGuidePerDay) console.warn(`⚠️ No cruise guide rate found for ${finalLanguage}/${tier}`)
+        if (!cruiseGuidePerDay) console.warn(`⚠️ No cruise guide rate found at all — guide will be €0`)
 
         // Fetch tipping rates
         const { data: cruiseTippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
@@ -455,7 +478,39 @@ export async function POST(request: NextRequest) {
         // Fetch entrance fees
         const { data: cruiseEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
 
-        // Create itinerary with cabin_allocation
+        // Build cruise-specific inclusions/exclusions BEFORE creating the record
+        const cruiseAttractionsPre: string[] = []
+        const cruiseCitiesPre = new Set<string>()
+        for (const dayData of cruiseContent.dayByDay) {
+          if (dayData.attractions) cruiseAttractionsPre.push(...dayData.attractions)
+          if (dayData.city) cruiseCitiesPre.add(dayData.city)
+        }
+
+        const cruiseIncExc = buildInclusionsExclusions({
+          packageType: effectivePackageType as PackageType,
+          tier,
+          includeLunch: true,
+          includeDinner: true,
+          includeAccommodation: true,
+          isCruise: true,
+          cruiseNights: duration_days - 1,
+          language: guideLanguage,
+          hasAirportTransfer: true,
+          attractions: [...new Set(cruiseAttractionsPre)],
+          citiesVisited: [...cruiseCitiesPre],
+          totalDays: duration_days,
+          numAdults: num_adults,
+          numChildren: num_children,
+        })
+
+        console.log('📋 Built cruise inclusions/exclusions:', {
+          inclusionsCount: cruiseIncExc.inclusions.length,
+          exclusionsCount: cruiseIncExc.exclusions.length,
+          firstInclusion: cruiseIncExc.inclusions[0],
+          packageType: effectivePackageType,
+        })
+
+        // Create itinerary with cabin_allocation AND inclusions/exclusions in INSERT
         const { data: itinerary, error: itineraryError } = await supabase
           .from('itineraries')
           .insert({
@@ -480,6 +535,9 @@ export async function POST(request: NextRequest) {
             notes: special_requests.length > 0 ? special_requests.join('; ') : null,
             client_id,
             cabin_allocation: cruiseRate.found ? cruiseRate.cabinAllocation : null,
+            // Dynamic inclusions/exclusions — included at INSERT time
+            inclusions: cruiseIncExc.inclusions,
+            exclusions: cruiseIncExc.exclusions,
             // B2B Partner fields
             partner_id: partner_id || null,
             partner_commission_percent: partner_commission_percent || 0,
@@ -589,14 +647,14 @@ export async function POST(request: NextRequest) {
               itinerary_day_id: day.id,
               service_type: 'guide',
               service_code: cruiseGuide?.id || 'GUIDE',
-              service_name: `${finalLanguage} Speaking Guide`,
+              service_name: `${guideLanguage} Speaking Guide`,
               supplier_name: cruiseGuide?.name || null,
               quantity: 1,
               rate_eur: cruiseGuidePerDay,
               rate_non_eur: cruiseGuidePerDay,
               total_cost: cruiseGuidePerDay,
               client_price: withMargin(cruiseGuidePerDay),
-              notes: `Professional ${finalLanguage} guide`
+              notes: `Professional ${guideLanguage} guide`
             })
 
             totalSupplierCost += cruiseGuidePerDay
@@ -685,21 +743,24 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Update totals
+        // Update pricing totals (inclusions/exclusions were already set in the INSERT)
         if (!skip_pricing) {
-          await supabase.from('itineraries').update({
+          const { error: updateError } = await supabase.from('itineraries').update({
             total_cost: totalClientPrice,
             total_revenue: totalClientPrice,
             supplier_cost: totalSupplierCost,
-            profit: totalClientPrice - totalSupplierCost
+            profit: totalClientPrice - totalSupplierCost,
           }).eq('id', itinerary.id)
+          if (updateError) {
+            console.error('❌ Failed to update cruise itinerary pricing:', updateError)
+          }
         }
 
         console.log('🎉 Cruise itinerary complete!')
 
         // Auto-create language version
         const cruiseTripName = cruiseContent.variation.title || cruiseContent.content.name
-        await createLanguageVersions(supabase, itinerary.id, cruiseTripName, finalLanguage, createdCruiseDays)
+        await createLanguageVersions(supabase, itinerary.id, cruiseTripName, contentLanguage, createdCruiseDays)
 
         return NextResponse.json({
           success: true,
@@ -758,7 +819,7 @@ export async function POST(request: NextRequest) {
       effectiveCity,
       totalPax,
       isEuroPassport,
-      language: finalLanguage,
+      language: guideLanguage,
       hotelName: hotel_name || null,
       includeAccommodation: includeAccommodationFinal,
     })
@@ -780,7 +841,7 @@ export async function POST(request: NextRequest) {
         {
           tier,
           totalPax,
-          language: finalLanguage,
+          language: contentLanguage,
           attractionNames,
           writingRules,
           packageType: effectivePackageType
@@ -797,7 +858,7 @@ export async function POST(request: NextRequest) {
         totalPax,
         numAdults: num_adults,
         numChildren: num_children,
-        language: finalLanguage,
+        language: contentLanguage,
         cities,
         interests,
         specialRequests: special_requests,
@@ -821,7 +882,44 @@ export async function POST(request: NextRequest) {
     const finalEndDate = new Date(startDateObj)
     finalEndDate.setDate(startDateObj.getDate() + duration_days - 1)
 
-    // Create itinerary record - UPDATED: Use effectivePackageType + B2B partner fields
+    // Build itinerary-specific inclusions/exclusions BEFORE creating the record
+    // so they are part of the initial INSERT (not a separate UPDATE that could fail silently)
+    const allAttractions: string[] = []
+    const allCities = new Set<string>()
+    for (const dayData of itineraryData.days || []) {
+      if (dayData.attractions) allAttractions.push(...dayData.attractions)
+      if (dayData.city) allCities.add(dayData.city)
+      if (dayData.cities_visited) {
+        dayData.cities_visited.forEach((c: string) => allCities.add(c))
+      }
+    }
+
+    const landIncExc = buildInclusionsExclusions({
+      packageType: effectivePackageType as PackageType,
+      tier,
+      includeLunch: include_lunch,
+      includeDinner: include_dinner,
+      includeAccommodation: includeAccommodationFinal,
+      isCruise: cruiseDetection.isCruise,
+      language: guideLanguage,
+      hotelName: rates.hotelName || undefined,
+      hasAirportTransfer: effectivePackageType === 'full-package' ||
+        effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land',
+      attractions: [...new Set(allAttractions)],
+      citiesVisited: [...allCities],
+      totalDays: duration_days,
+      numAdults: num_adults,
+      numChildren: num_children,
+    })
+
+    console.log('📋 Built inclusions/exclusions:', {
+      inclusionsCount: landIncExc.inclusions.length,
+      exclusionsCount: landIncExc.exclusions.length,
+      firstInclusion: landIncExc.inclusions[0],
+      packageType: effectivePackageType,
+    })
+
+    // Create itinerary record WITH inclusions/exclusions included in INSERT
     const { data: itinerary, error: itineraryError } = await supabase
       .from('itineraries')
       .insert({
@@ -845,6 +943,9 @@ export async function POST(request: NextRequest) {
         cost_mode,
         notes: special_requests.length > 0 ? special_requests.join('; ') : null,
         client_id,
+        // Dynamic inclusions/exclusions — included at INSERT time
+        inclusions: landIncExc.inclusions,
+        exclusions: landIncExc.exclusions,
         // B2B Partner fields
         partner_id: partner_id || null,
         partner_commission_percent: partner_commission_percent || 0,
@@ -872,7 +973,7 @@ export async function POST(request: NextRequest) {
       totalPax,
       isEuroPassport,
       tier,
-      language: finalLanguage,
+      language: guideLanguage,
       includeLunch: include_lunch,
       includeDinner: include_dinner,
       includeAccommodation: includeAccommodationFinal,
@@ -884,15 +985,18 @@ export async function POST(request: NextRequest) {
 
     const { createdDays, totalSupplierCost, totalClientPrice } = serviceResult
 
-    // Update totals
+    // Update pricing totals (inclusions/exclusions were already set in the INSERT)
     if (!skip_pricing) {
-      await supabase.from('itineraries').update({
+      const { error: updateError } = await supabase.from('itineraries').update({
         total_cost: totalClientPrice,
         total_revenue: totalClientPrice,
         supplier_cost: totalSupplierCost,
         profit: totalClientPrice - totalSupplierCost,
         status: 'quoted'
       }).eq('id', itinerary.id)
+      if (updateError) {
+        console.error('❌ Failed to update itinerary pricing:', updateError)
+      }
     }
 
     console.log('🎉 Land tour itinerary complete!', {
@@ -912,7 +1016,7 @@ export async function POST(request: NextRequest) {
       city: d.city,
       overnight_city: d.overnightCity
     }))
-    await createLanguageVersions(supabase, itinerary.id, itineraryData.trip_name, finalLanguage, createdLandDays)
+    await createLanguageVersions(supabase, itinerary.id, itineraryData.trip_name, contentLanguage, createdLandDays)
 
     return NextResponse.json({
       success: true,

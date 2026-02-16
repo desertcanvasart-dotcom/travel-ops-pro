@@ -51,7 +51,9 @@ export async function POST(request: NextRequest) {
       endDate: itinerary.end_date,
       destinations: 'Cairo, Luxor, Aswan',
       totalCost: itinerary.total_cost || 0,
-      currency: itinerary.currency || 'EUR'
+      currency: itinerary.currency || 'EUR',
+      inclusions: itinerary.inclusions || undefined,
+      exclusions: itinerary.exclusions || undefined,
     }
 
     const pdfBytes = await generateContractPDF(contractData)

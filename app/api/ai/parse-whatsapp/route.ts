@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!
+  apiKey: process.env.ANTHROPIC_API_KEY || ''
 })
 
 // ============================================
@@ -423,6 +423,13 @@ function extractPhoneFromText(text: string): string {
 
 export async function POST(request: Request) {
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json(
+        { success: false, error: 'ANTHROPIC_API_KEY is not configured' },
+        { status: 500 }
+      )
+    }
+
     const { conversation } = await request.json()
 
     if (!conversation) {
@@ -519,6 +526,74 @@ export async function POST(request: Request) {
       ? euCountries.some(c => detectedNationality.toLowerCase().includes(c))
       : null
 
+    // ============================================
+    // GUIDE LANGUAGE: nationality → language mapping
+    // If the AI extracted an explicit guide language, use it.
+    // Otherwise, infer from nationality. Otherwise, default to English.
+    // ============================================
+    const nationalityToGuideLanguage = (nationality: string): string | null => {
+      if (!nationality) return null
+      const n = nationality.toLowerCase().trim()
+      const map: Record<string, string> = {
+        // Spanish-speaking
+        'spanish': 'Spanish', 'spain': 'Spanish', 'mexican': 'Spanish', 'mexico': 'Spanish',
+        'colombian': 'Spanish', 'colombia': 'Spanish', 'argentinian': 'Spanish', 'argentina': 'Spanish',
+        'peruvian': 'Spanish', 'peru': 'Spanish', 'chilean': 'Spanish', 'chile': 'Spanish',
+        'venezuelan': 'Spanish', 'venezuela': 'Spanish', 'ecuadorian': 'Spanish', 'ecuador': 'Spanish',
+        'cuban': 'Spanish', 'cuba': 'Spanish', 'dominican': 'Spanish',
+        'guatemalan': 'Spanish', 'honduran': 'Spanish', 'salvadoran': 'Spanish',
+        'nicaraguan': 'Spanish', 'costa rican': 'Spanish', 'panamanian': 'Spanish',
+        'uruguayan': 'Spanish', 'paraguayan': 'Spanish', 'bolivian': 'Spanish',
+        // Portuguese-speaking
+        'portuguese': 'Portuguese', 'portugal': 'Portuguese',
+        'brazilian': 'Portuguese', 'brazil': 'Portuguese',
+        // French-speaking
+        'french': 'French', 'france': 'French',
+        'belgian': 'French', 'belgium': 'French',
+        'swiss': 'French', 'switzerland': 'French',
+        'canadian': 'French', // Many Canadian tourists prefer French
+        // German-speaking
+        'german': 'German', 'germany': 'German',
+        'austrian': 'German', 'austria': 'German',
+        // Italian-speaking
+        'italian': 'Italian', 'italy': 'Italian',
+        // Japanese-speaking
+        'japanese': 'Japanese', 'japan': 'Japanese',
+        // Chinese-speaking
+        'chinese': 'Chinese', 'china': 'Chinese',
+        // Russian-speaking
+        'russian': 'Russian', 'russia': 'Russian',
+        // Korean-speaking
+        'korean': 'Korean', 'south korean': 'Korean', 'korea': 'Korean',
+        // Arabic-speaking (still useful for Arabic-speaking guides)
+        'saudi': 'Arabic', 'saudi arabian': 'Arabic', 'saudi arabia': 'Arabic',
+        'emirati': 'Arabic', 'uae': 'Arabic', 'kuwaiti': 'Arabic', 'kuwait': 'Arabic',
+        'qatari': 'Arabic', 'qatar': 'Arabic', 'bahraini': 'Arabic', 'bahrain': 'Arabic',
+        'omani': 'Arabic', 'oman': 'Arabic', 'iraqi': 'Arabic', 'iraq': 'Arabic',
+        'jordanian': 'Arabic', 'jordan': 'Arabic', 'lebanese': 'Arabic', 'lebanon': 'Arabic',
+        'libyan': 'Arabic', 'libya': 'Arabic', 'tunisian': 'Arabic', 'tunisia': 'Arabic',
+        'algerian': 'Arabic', 'algeria': 'Arabic', 'moroccan': 'Arabic', 'morocco': 'Arabic',
+        'sudanese': 'Arabic', 'sudan': 'Arabic', 'syrian': 'Arabic', 'syria': 'Arabic',
+        'palestinian': 'Arabic', 'palestine': 'Arabic', 'yemeni': 'Arabic', 'yemen': 'Arabic',
+        // Dutch-speaking
+        'dutch': 'Dutch', 'netherlands': 'Dutch', 'holland': 'Dutch',
+        // Polish-speaking
+        'polish': 'Polish', 'poland': 'Polish',
+        // Turkish-speaking
+        'turkish': 'Turkish', 'turkey': 'Turkish',
+        // Greek-speaking
+        'greek': 'Greek', 'greece': 'Greek',
+        // Hindi-speaking
+        'indian': 'Hindi', 'india': 'Hindi',
+      }
+      return map[n] || null
+    }
+
+    // Determine guide language: explicit request > nationality > English
+    const explicitGuideLanguage = extracted.language && extracted.language !== 'English' ? extracted.language : null
+    const nationalityLanguage = nationalityToGuideLanguage(detectedNationality)
+    const guideLanguage = explicitGuideLanguage || nationalityLanguage || 'English'
+
     // Build final response with fallbacks
     const data = {
       // Client info
@@ -541,7 +616,8 @@ export async function POST(request: Request) {
       num_children: parseInt(extracted.num_children) || 0,
 
       // Preferences
-      language: extracted.language || 'English',
+      // Guide language: explicit request > nationality-based > English
+      language: guideLanguage,
       interests: Array.isArray(extracted.interests) ? extracted.interests : [],
       cities: Array.isArray(extracted.cities) ? extracted.cities : [],
       special_requests: Array.isArray(extracted.special_requests) ? extracted.special_requests : [],
@@ -577,6 +653,8 @@ export async function POST(request: Request) {
       client: data.client_name,
       nationality: data.nationality,
       isEuroPassport: data.is_euro_passport,
+      guideLanguage: data.language,
+      guideLanguageSource: explicitGuideLanguage ? 'explicit_request' : nationalityLanguage ? 'nationality' : 'default',
       packageType: data.package_type,
       mealPlan: data.meal_plan,
       isStructured: data.is_structured_input,
@@ -786,7 +864,7 @@ Return ONLY valid JSON:
   "num_adults": number (default 2),
   "num_children": number (default 0),
 
-  "language": "guide language - ONLY set if explicitly requested (e.g. 'Spanish guide'). Default to 'English'.",
+  "language": "guide language - set if explicitly requested (e.g. 'Spanish guide'). If not explicitly stated, leave as empty string and the system will infer from nationality.",
   "interests": ["decoded interests/attractions"],
   "cities": ["Cairo", "Alexandria", "Aswan", "Luxor", "Hurghada"],
   "special_requests": ["any special requests"],
@@ -953,7 +1031,7 @@ Extract the following and return as JSON:
   "num_adults": number,
   "num_children": number,
 
-  "language": "Preferred guide language - ONLY set if explicitly requested in the conversation (e.g. 'we need a Spanish guide' or 'Japanese speaking guide'). Do NOT infer from nationality. Default to 'English' if not explicitly stated.",
+  "language": "Preferred guide language - set if explicitly requested in the conversation (e.g. 'we need a Spanish guide' or 'Japanese speaking guide'). If not explicitly stated, leave as empty string and the system will infer from nationality.",
   "interests": ["places they want to visit", "activities"],
   "cities": ["cities mentioned"],
   "special_requests": ["any special requests"],

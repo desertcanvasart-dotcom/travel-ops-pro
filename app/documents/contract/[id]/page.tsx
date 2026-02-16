@@ -205,7 +205,9 @@ export default function ContractPage() {
         endDate: contractData.endDate,
         destinations: contractData.destinations,
         totalCost: contractData.totalCost,
-        currency: 'USD'
+        currency: 'USD',
+        inclusions: contractData.inclusions,
+        exclusions: contractData.exclusions,
       })
       
       // Download the PDF
