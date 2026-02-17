@@ -924,3 +924,57 @@ export async function createLandItineraryServices(
 
   return { createdDays, totalSupplierCost, totalClientPrice }
 }
+
+// ============================================
+// MULTI-CITY HOTEL LOOKUP (for inclusions)
+// ============================================
+
+export async function fetchHotelsForCities(
+  supabase: any,
+  params: {
+    cities: string[]
+    tier: ServiceTier
+    primaryCity: string
+    primaryHotelName: string | null
+  }
+): Promise<Map<string, string>> {
+  const { cities, tier, primaryCity, primaryHotelName } = params
+  const hotelMap = new Map<string, string>()
+
+  // Primary city hotel is already known from fetchAllPricingRates
+  if (primaryHotelName) {
+    hotelMap.set(primaryCity.toLowerCase(), primaryHotelName)
+  }
+
+  // Fetch hotels for additional cities in parallel
+  const additionalCities = cities.filter(
+    c => c.toLowerCase() !== primaryCity.toLowerCase() && !hotelMap.has(c.toLowerCase())
+  )
+
+  if (additionalCities.length > 0) {
+    const lookups = additionalCities.map(async (city) => {
+      const { data: hotels } = await supabase
+        .from('accommodation_rates')
+        .select('property_name')
+        .ilike('city', city)
+        .eq('is_active', true)
+        .eq('tier', tier)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (hotels?.length) {
+        return { city: city.toLowerCase(), hotelName: hotels[0].property_name }
+      }
+      return null
+    })
+
+    const results = await Promise.all(lookups)
+    for (const result of results) {
+      if (result) {
+        hotelMap.set(result.city, result.hotelName)
+      }
+    }
+  }
+
+  return hotelMap
+}

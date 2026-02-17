@@ -34,8 +34,8 @@ import {
   buildWritingRulesContext,
 } from '@/lib/ai/content-library'
 import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai/prompt-builder'
-import { fetchAllPricingRates, createLandItineraryServices } from '@/lib/ai/service-creation'
-import { buildInclusionsExclusions } from '@/lib/inclusions-builder'
+import { fetchAllPricingRates, createLandItineraryServices, fetchHotelsForCities } from '@/lib/ai/service-creation'
+import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclusions-builder'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -486,6 +486,9 @@ export async function POST(request: NextRequest) {
           if (dayData.city) cruiseCitiesPre.add(dayData.city)
         }
 
+        // Extract detailed cruise itinerary data for richer inclusions
+        const cruiseDetails = extractItineraryDetails(cruiseContent.dayByDay)
+
         const cruiseIncExc = buildInclusionsExclusions({
           packageType: effectivePackageType as PackageType,
           tier,
@@ -501,6 +504,11 @@ export async function POST(request: NextRequest) {
           totalDays: duration_days,
           numAdults: num_adults,
           numChildren: num_children,
+          vehicleType: cruiseTransportVehicle || undefined,
+          domesticFlights: cruiseDetails.domesticFlights.length > 0
+            ? cruiseDetails.domesticFlights : undefined,
+          intercityTransfers: cruiseDetails.intercityTransfers.length > 0
+            ? cruiseDetails.intercityTransfers : undefined,
         })
 
         console.log('📋 Built cruise inclusions/exclusions:', {
@@ -894,6 +902,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Extract detailed itinerary data for richer inclusions
+    const itineraryDetails = extractItineraryDetails(itineraryData.days || [])
+
+    // Fetch hotel names for all overnight cities (not just the primary city)
+    let hotelsPerCity: Array<{ city: string; hotelName: string; nights: number }> | undefined
+    if (includeAccommodationFinal && itineraryDetails.nightsPerCity.size > 0) {
+      const allOvernightCities = [...itineraryDetails.nightsPerCity.keys()]
+      const hotelMap = await fetchHotelsForCities(supabase, {
+        cities: allOvernightCities,
+        tier,
+        primaryCity: effectiveCity,
+        primaryHotelName: rates.hotelName,
+      })
+
+      hotelsPerCity = []
+      for (const [city, nights] of itineraryDetails.nightsPerCity) {
+        const cityHotelName = hotelMap.get(city.toLowerCase()) || 'Hotel as per itinerary'
+        hotelsPerCity.push({ city, hotelName: cityHotelName, nights })
+      }
+    }
+
     const landIncExc = buildInclusionsExclusions({
       packageType: effectivePackageType as PackageType,
       tier,
@@ -910,6 +939,12 @@ export async function POST(request: NextRequest) {
       totalDays: duration_days,
       numAdults: num_adults,
       numChildren: num_children,
+      vehicleType: rates.vehicleTypeName || undefined,
+      hotelsPerCity,
+      domesticFlights: itineraryDetails.domesticFlights.length > 0
+        ? itineraryDetails.domesticFlights : undefined,
+      intercityTransfers: itineraryDetails.intercityTransfers.length > 0
+        ? itineraryDetails.intercityTransfers : undefined,
     })
 
     console.log('📋 Built inclusions/exclusions:', {
