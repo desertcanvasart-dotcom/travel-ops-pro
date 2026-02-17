@@ -16,13 +16,20 @@ export async function GET(request: NextRequest) {
     const includeArchived = searchParams.get('includeArchived') === 'true'
 
     // Build query
+    const departmentId = searchParams.get('departmentId')
+
     let query = supabase
       .from('tasks')
       .select(`
         *,
-        assigned_member:team_members!tasks_assigned_to_fkey(id, name, role, email)
+        assigned_member:team_members!tasks_assigned_to_fkey(id, name, role, email),
+        department:departments(id, name)
       `)
       .order('created_at', { ascending: false })
+
+    if (departmentId) {
+      query = query.eq('department_id', departmentId)
+    }
 
     // Filter by archived status - only show non-archived by default
     if (!includeArchived) {
@@ -116,6 +123,7 @@ export async function POST(request: NextRequest) {
         linked_type: body.linked_type || null,
         linked_id: body.linked_id || null,
         notes: body.notes || null,
+        department_id: body.department_id || null,
         archived: false,
         archived_at: null
       })

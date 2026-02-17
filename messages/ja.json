@@ -6638,7 +6638,10 @@
     "allDates": "すべての日付",
     "taskTitlePlaceholder": "タスクのタイトル",
     "taskDescriptionPlaceholder": "タスクの説明...",
-    "notesPlaceholder": "追加のメモ..."
+    "notesPlaceholder": "追加のメモ...",
+    "department": "部門",
+    "noDepartment": "部門なし",
+    "allDepartments": "すべての部門"
   },
   "resourceSummary": {
     "noResourcesAssigned": "リソース未割り当て",

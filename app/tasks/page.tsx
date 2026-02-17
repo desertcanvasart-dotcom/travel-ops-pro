@@ -40,11 +40,17 @@ import {
   EyeOff
 } from 'lucide-react'
 
+interface Department {
+  id: string
+  name: string
+}
+
 interface TeamMember {
   id: string
   name: string
   role: string
   email?: string
+  department_id?: string
 }
 
 interface Client {
@@ -76,6 +82,8 @@ interface Task {
   created_at: string
   updated_at: string
   completed_at: string
+  department_id?: string
+  department?: Department | null
   archived: boolean
   archived_at?: string
   assigned_member?: TeamMember
@@ -124,6 +132,7 @@ export default function TasksPage() {
   const t = useTranslations('tasks')
   const [tasks, setTasks] = useState<Task[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -136,12 +145,14 @@ export default function TasksPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [departmentFilter, setDepartmentFilter] = useState('')
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     due_date: '',
     priority: 'medium',
     assigned_to: '',
+    department_id: '',
     linked_type: '',
     linked_id: '',
     notes: ''
@@ -166,6 +177,7 @@ export default function TasksPage() {
       if (priorityFilter) params.append('priority', priorityFilter)
       if (assigneeFilter) params.append('assignedTo', assigneeFilter)
       if (dueDateFilter) params.append('dueDate', dueDateFilter)
+      if (departmentFilter) params.append('departmentId', departmentFilter)
       params.append('includeArchived', showArchived ? 'true' : 'false')
 
       const response = await fetch(`/api/tasks?${params}`)
@@ -181,7 +193,7 @@ export default function TasksPage() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, priorityFilter, assigneeFilter, dueDateFilter, showArchived])
+  }, [statusFilter, priorityFilter, assigneeFilter, dueDateFilter, departmentFilter, showArchived])
 
   const fetchTeamMembers = async () => {
     try {
@@ -194,6 +206,20 @@ export default function TasksPage() {
       }
     } catch (error) {
       console.error('Error fetching team members:', error)
+    }
+  }
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch('/api/departments')
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setDepartments(result.data)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching departments:', error)
     }
   }
 
@@ -226,6 +252,7 @@ export default function TasksPage() {
   useEffect(() => {
     fetchTasks()
     fetchTeamMembers()
+    fetchDepartments()
   }, [fetchTasks])
 
   useEffect(() => {
@@ -238,7 +265,7 @@ export default function TasksPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, priorityFilter, assigneeFilter, dueDateFilter, itemsPerPage, showArchived])
+  }, [searchTerm, statusFilter, priorityFilter, assigneeFilter, dueDateFilter, departmentFilter, itemsPerPage, showArchived])
 
   const createTaskNotification = async (taskId: string, taskTitle: string, assigneeId: string, isNewTask: boolean) => {
     try {
@@ -280,6 +307,7 @@ export default function TasksPage() {
         body: JSON.stringify({
           ...formData,
           assigned_to: formData.assigned_to || null,
+          department_id: formData.department_id || null,
           linked_type: formData.linked_type || null,
           linked_id: formData.linked_id || null
         })
@@ -378,6 +406,7 @@ export default function TasksPage() {
       due_date: task.due_date || '',
       priority: task.priority || 'medium',
       assigned_to: task.assigned_to || '',
+      department_id: task.department_id || '',
       linked_type: task.linked_type || '',
       linked_id: task.linked_id || '',
       notes: task.notes || ''
@@ -407,6 +436,7 @@ export default function TasksPage() {
       due_date: '',
       priority: 'medium',
       assigned_to: '',
+      department_id: '',
       linked_type: '',
       linked_id: '',
       notes: ''
@@ -447,9 +477,10 @@ export default function TasksPage() {
     setPriorityFilter('')
     setAssigneeFilter('')
     setDueDateFilter('')
+    setDepartmentFilter('')
   }
 
-  const hasActiveFilters = statusFilter || priorityFilter || assigneeFilter || dueDateFilter
+  const hasActiveFilters = statusFilter || priorityFilter || assigneeFilter || dueDateFilter || departmentFilter
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -798,6 +829,19 @@ export default function TasksPage() {
               </select>
             </div>
             <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('department')}</label>
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+              >
+                <option value="">{t('allDepartments')}</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('dueDate')}</label>
               <select
                 value={dueDateFilter}
@@ -891,12 +935,18 @@ export default function TasksPage() {
                             <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
                               {t(`priority${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
                             </span>
-                            
+
+                            {task.department && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded bg-indigo-100 text-indigo-700">
+                                {task.department.name}
+                              </span>
+                            )}
+
                             {task.due_date && (
                               <span className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded ${
-                                taskIsOverdue 
-                                  ? 'bg-red-100 text-red-600' 
-                                  : taskIsDueToday 
+                                taskIsOverdue
+                                  ? 'bg-red-100 text-red-600'
+                                  : taskIsDueToday
                                     ? 'bg-amber-100 text-amber-600'
                                     : 'bg-gray-100 text-gray-600'
                               }`}>
@@ -1024,6 +1074,9 @@ export default function TasksPage() {
                     </div>
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {t('department')}
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     {t('linkedTo')}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1034,7 +1087,7 @@ export default function TasksPage() {
               <tbody className="divide-y divide-gray-200">
                 {paginatedTasks.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">
                       {t('noTasksFound')}
                     </td>
                   </tr>
@@ -1090,6 +1143,15 @@ export default function TasksPage() {
                             </div>
                           ) : (
                             <span className="text-xs text-gray-400">{t('unassigned')}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {task.department ? (
+                            <span className="px-2 py-0.5 text-xs font-medium rounded bg-indigo-100 text-indigo-700">
+                              {task.department.name}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -1265,6 +1327,12 @@ export default function TasksPage() {
                         <span className={`px-2 py-0.5 text-xs font-medium rounded ${priorityConfig.color}`}>
                           {t(`priority${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
                         </span>
+
+                        {task.department && (
+                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-indigo-100 text-indigo-700">
+                            {task.department.name}
+                          </span>
+                        )}
 
                         {task.due_date && (
                           <span className={`flex items-center gap-1 text-xs ${taskIsOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
@@ -1526,6 +1594,20 @@ export default function TasksPage() {
                     <option key={m.id} value={m.id}>
                       {m.name} {m.email ? `(${m.email})` : ''}
                     </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('department')}</label>
+                <select
+                  value={formData.department_id}
+                  onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                >
+                  <option value="">{t('noDepartment')}</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
               </div>

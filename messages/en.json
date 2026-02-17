@@ -5861,7 +5861,10 @@
     "allDates": "All Dates",
     "taskTitlePlaceholder": "Task title",
     "taskDescriptionPlaceholder": "Task description...",
-    "notesPlaceholder": "Additional notes..."
+    "notesPlaceholder": "Additional notes...",
+    "department": "Department",
+    "noDepartment": "No Department",
+    "allDepartments": "All Departments"
   },
   "resourceSummary": {
     "noResourcesAssigned": "No Resources Assigned",

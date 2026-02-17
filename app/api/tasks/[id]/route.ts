@@ -57,6 +57,7 @@ export async function PUT(
     if (body.linked_type !== undefined) updateData.linked_type = body.linked_type
     if (body.linked_id !== undefined) updateData.linked_id = body.linked_id
     if (body.notes !== undefined) updateData.notes = body.notes
+    if (body.department_id !== undefined) updateData.department_id = body.department_id || null
 
     // Status change with completed_at tracking
     if (body.status !== undefined) {
