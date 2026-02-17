@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
@@ -110,6 +110,14 @@ export default function ViewItineraryPage() {
   const [commissionResult, setCommissionResult] = useState<string | null>(null)
   const [existingBooking, setExistingBooking] = useState<{ id: string; booking_code: string } | null>(null)
   const [creatingBooking, setCreatingBooking] = useState(false)
+
+  // Task generation state
+  const [generatingTasks, setGeneratingTasks] = useState(false)
+  const [taskResult, setTaskResult] = useState<string | null>(null)
+  const [showTaskDialog, setShowTaskDialog] = useState(false)
+  const [taskDepartments, setTaskDepartments] = useState<{ id: string; name: string; service_types: string[] }[]>([])
+  const [taskTeamMembers, setTaskTeamMembers] = useState<{ id: string; name: string; department_id: string | null }[]>([])
+  const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({})
 
   // Cost Mode State
   const [costMode, setCostMode] = useState<'auto' | 'manual'>('auto')
@@ -234,6 +242,89 @@ export default function ViewItineraryPage() {
       await dialog.alert(tCommon('error'), t('failedToCreateBooking'), 'warning')
     } finally {
       setCreatingBooking(false)
+    }
+  }
+
+  // Task generation handlers
+  const handleOpenTaskDialog = async () => {
+    if (!itinerary) return
+
+    // Fetch departments and team members
+    try {
+      const [deptRes, memberRes] = await Promise.all([
+        fetch('/api/departments'),
+        fetch('/api/team-members?active=true'),
+      ])
+      const deptData = await deptRes.json()
+      const memberData = await memberRes.json()
+
+      const depts = (deptData.data || []).filter((d: any) => d.name !== 'Accounting')
+      const members = (memberData.data || []).map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        department_id: m.department_id,
+      }))
+
+      setTaskDepartments(depts)
+      setTaskTeamMembers(members)
+
+      // Pre-select first member per department
+      const defaults: Record<string, string> = {}
+      for (const dept of depts) {
+        const deptMembers = members.filter((m: any) => m.department_id === dept.id)
+        if (deptMembers.length > 0) {
+          defaults[dept.id] = deptMembers[0].id
+        }
+      }
+      setTaskAssignments(defaults)
+    } catch (error) {
+      console.error('Error fetching departments/members:', error)
+    }
+
+    // Check for existing tasks
+    const { data: existingTasks } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('linked_type', 'itinerary')
+      .eq('linked_id', itinerary.id)
+
+    if (existingTasks && existingTasks.length > 0) {
+      const confirmed = await dialog.confirm({
+        title: t('tasksAlreadyExistTitle'),
+        message: t('tasksAlreadyExist', { count: existingTasks.length }),
+        confirmText: t('generateNewTasks'),
+        variant: 'warning',
+      })
+      if (!confirmed) return
+    }
+
+    setShowTaskDialog(true)
+  }
+
+  const handleGenerateTasks = async () => {
+    if (!itinerary) return
+    setShowTaskDialog(false)
+    setGeneratingTasks(true)
+
+    try {
+      const response = await fetch(`/api/itineraries/${itinerary.id}/generate-tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments: taskAssignments }),
+      })
+      const result = await response.json()
+
+      if (result.success) {
+        setTaskResult(t('tasksGenerated', { count: result.count }))
+        setTimeout(() => setTaskResult(null), 8000)
+      } else {
+        await dialog.alert(tCommon('error'), result.error || t('failedToGenerateTasks'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error generating tasks:', error)
+      await dialog.alert(tCommon('error'), t('failedToGenerateTasks'), 'warning')
+    } finally {
+      setGeneratingTasks(false)
     }
   }
 
@@ -1276,8 +1367,102 @@ export default function ViewItineraryPage() {
                 )}
               </button>
             )}
+            <button
+              onClick={handleOpenTaskDialog}
+              disabled={generatingTasks}
+              className="h-10 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              title={t('generateOperationsTasks')}
+            >
+              {generatingTasks ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>{t('generating')}</span>
+                </>
+              ) : (
+                <>
+                  <ClipboardList className="w-4 h-4" />
+                  <span>{t('operationsTasks')}</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
+
+        {/* Task generation result banner */}
+        {taskResult && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
+            <span className="text-sm text-indigo-700">{taskResult}</span>
+            <Link
+              href="/tasks"
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
+            >
+              {t('viewTasks')}
+            </Link>
+          </div>
+        )}
+
+        {/* Task Assignment Dialog */}
+        {showTaskDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">{t('assignTasks')}</h2>
+                <button
+                  onClick={() => setShowTaskDialog(false)}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <p className="text-sm text-gray-500">{t('assignTasksDescription')}</p>
+
+                {taskDepartments.map(dept => {
+                  const deptMembers = taskTeamMembers.filter(m => m.department_id === dept.id)
+                  return (
+                    <div key={dept.id} className="flex items-center gap-3">
+                      <label className="text-sm font-medium text-gray-700 w-28 shrink-0">
+                        {dept.name}
+                      </label>
+                      <select
+                        value={taskAssignments[dept.id] || ''}
+                        onChange={(e) => setTaskAssignments(prev => ({ ...prev, [dept.id]: e.target.value }))}
+                        className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      >
+                        <option value="">{t('unassigned')}</option>
+                        {deptMembers.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                        {deptMembers.length === 0 && (
+                          <option disabled>{t('noMembersInDept')}</option>
+                        )}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex gap-3 p-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowTaskDialog(false)}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  {tCommon('cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGenerateTasks}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  {t('generate')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Resource Cards */}
         <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />

@@ -17,12 +17,19 @@ import {
   Users
 } from 'lucide-react'
 
+interface Department {
+  id: string
+  name: string
+}
+
 interface TeamMember {
   id: string
   name: string
   email: string
   phone: string
   role: string
+  department_id: string | null
+  department: Department | null
   notes: string
   is_active: boolean
   created_at: string
@@ -48,18 +55,35 @@ export default function TeamMembersPage() {
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
+  const [departments, setDepartments] = useState<Department[]>([])
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     role: 'staff',
+    department_id: '',
     notes: ''
   })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetchMembers()
+    fetchDepartments()
   }, [showInactive])
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch('/api/departments')
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setDepartments(result.data)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching departments:', error)
+    }
+  }
 
   const fetchMembers = async () => {
     try {
@@ -115,6 +139,7 @@ export default function TeamMembersPage() {
       email: member.email || '',
       phone: member.phone || '',
       role: member.role || 'staff',
+      department_id: member.department_id || '',
       notes: member.notes || ''
     })
     setShowModal(true)
@@ -156,6 +181,7 @@ export default function TeamMembersPage() {
       email: '',
       phone: '',
       role: 'staff',
+      department_id: '',
       notes: ''
     })
   }
@@ -295,9 +321,16 @@ export default function TeamMembersPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-gray-900">{member.name}</h3>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${roleConfig.color}`}>
-                        {t(`role${member.role.charAt(0).toUpperCase() + member.role.slice(1)}`)}
-                      </span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${roleConfig.color}`}>
+                          {t(`role${member.role.charAt(0).toUpperCase() + member.role.slice(1)}`)}
+                        </span>
+                        {member.department?.name && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
+                            {member.department.name}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -422,6 +455,20 @@ export default function TeamMembersPage() {
                 >
                   {ROLES.map(role => (
                     <option key={role.value} value={role.value}>{role.icon} {t(`role${role.value.charAt(0).toUpperCase() + role.value.slice(1)}`)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('department')}</label>
+                <select
+                  value={formData.department_id}
+                  onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                >
+                  <option value="">{t('noDepartment')}</option>
+                  {departments.map(dept => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
                   ))}
                 </select>
               </div>

@@ -1057,7 +1057,20 @@
       "noInclusionsYet": "No inclusions added yet",
       "noExclusionsYet": "No exclusions added yet",
       "addItem": "Add Item",
-      "translateItems": "Translate"
+      "translateItems": "Translate",
+      "generateOperationsTasks": "Generate operations tasks using AI",
+      "operationsTasks": "Tasks",
+      "viewTasks": "View Tasks",
+      "failedToGenerateTasks": "Failed to generate tasks",
+      "tasksAlreadyExistTitle": "Tasks Already Exist",
+      "tasksAlreadyExist": "{count} tasks already exist for this itinerary. Generate new ones? Existing tasks will not be deleted.",
+      "generateNewTasks": "Generate New Tasks",
+      "tasksGenerated": "{count} operations tasks generated successfully",
+      "assignTasks": "Assign Tasks by Department",
+      "assignTasksDescription": "Select a team member from each department to handle the generated tasks.",
+      "unassigned": "Unassigned",
+      "noMembersInDept": "No members in this department",
+      "generate": "Generate Tasks"
     }
   },
   "payments": {
@@ -5763,7 +5776,9 @@
     "roleStaff": "Staff",
     "roleOwners": "Owners",
     "roleManagers": "Managers",
-    "roleCoordinators": "Coordinators"
+    "roleCoordinators": "Coordinators",
+    "department": "Department",
+    "noDepartment": "No Department"
   },
   "tasks": {
     "title": "Tasks",

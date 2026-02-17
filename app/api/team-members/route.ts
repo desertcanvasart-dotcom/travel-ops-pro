@@ -15,8 +15,13 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('team_members')
-      .select('*')
+      .select('*, department:departments(id, name)')
       .order('name', { ascending: true })
+
+    const departmentId = searchParams.get('departmentId')
+    if (departmentId) {
+      query = query.eq('department_id', departmentId)
+    }
 
     if (activeOnly) {
       query = query.eq('is_active', true)
@@ -45,7 +50,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    const { name, email, phone, role, notes } = body
+    const { name, email, phone, role, notes, department_id } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -58,6 +63,7 @@ export async function POST(request: NextRequest) {
         email: email || null,
         phone: phone || null,
         role: role || 'staff',
+        department_id: department_id || null,
         notes: notes || null,
         is_active: true,
         created_at: new Date().toISOString(),

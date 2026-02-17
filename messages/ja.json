@@ -1509,7 +1509,20 @@
       "noInclusionsYet": "まだ追加されていません",
       "noExclusionsYet": "まだ追加されていません",
       "addItem": "項目を追加",
-      "translateItems": "翻訳"
+      "translateItems": "翻訳",
+      "generateOperationsTasks": "AIで業務タスクを生成",
+      "operationsTasks": "タスク",
+      "viewTasks": "タスクを表示",
+      "failedToGenerateTasks": "タスクの生成に失敗しました",
+      "tasksAlreadyExistTitle": "タスクが既に存在します",
+      "tasksAlreadyExist": "この旅程には既に{count}件のタスクがあります。新しいタスクを生成しますか？既存のタスクは削除されません。",
+      "generateNewTasks": "新しいタスクを生成",
+      "tasksGenerated": "{count}件の業務タスクが正常に生成されました",
+      "assignTasks": "部門別タスク割り当て",
+      "assignTasksDescription": "各部門からタスクを担当するチームメンバーを選択してください。",
+      "unassigned": "未割り当て",
+      "noMembersInDept": "この部門にメンバーがいません",
+      "generate": "タスクを生成"
     }
   },
   "payments": {
@@ -6540,7 +6553,9 @@
     "roleStaff": "スタッフ",
     "roleOwners": "オーナー",
     "roleManagers": "マネージャー",
-    "roleCoordinators": "コーディネーター"
+    "roleCoordinators": "コーディネーター",
+    "department": "部門",
+    "noDepartment": "部門なし"
   },
   "tasks": {
     "title": "タスク",
