@@ -157,27 +157,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'route_from and route_to must be different' }, { status: 400 })
     }
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key
+    const existingQuery = supabaseAdmin
       .from('flight_rates')
-      .insert(newRate)
-      .select('*')
-      .single()
+      .select('id')
+      .ilike('route_from', newRate.route_from)
+      .ilike('route_to', newRate.route_to)
+      .ilike('airline', newRate.airline)
+      .eq('cabin_class', newRate.cabin_class)
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabaseAdmin
+        .from('flight_rates')
+        .update({ ...newRate, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabaseAdmin
+        .from('flight_rates')
+        .insert(newRate)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('POST flight_rates error:', error)
-      
-      // Handle unique constraint violation
-      if (error.code === '23505') {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'A flight rate with this service code already exists' 
-        }, { status: 409 })
-      }
-      
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data }, { status: 201 })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length }, { status: existing?.length ? 200 : 201 })
   } catch (error: any) {
     console.error('POST flight_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

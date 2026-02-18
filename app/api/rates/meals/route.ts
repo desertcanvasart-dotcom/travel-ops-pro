@@ -69,18 +69,51 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false
     }
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key
+    let existingQuery = supabaseAdmin
       .from('meal_rates')
-      .insert(newRate)
-      .select('*')
-      .single()
+      .select('id')
+      .ilike('restaurant_name', newRate.restaurant_name)
+    if (newRate.city) {
+      existingQuery = existingQuery.eq('city', newRate.city)
+    } else {
+      existingQuery = existingQuery.is('city', null)
+    }
+    if (newRate.meal_type) {
+      existingQuery = existingQuery.eq('meal_type', newRate.meal_type)
+    } else {
+      existingQuery = existingQuery.is('meal_type', null)
+    }
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabaseAdmin
+        .from('meal_rates')
+        .update({ ...newRate, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabaseAdmin
+        .from('meal_rates')
+        .insert(newRate)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('POST meal_rates error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST meal_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

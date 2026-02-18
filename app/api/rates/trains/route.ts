@@ -61,18 +61,55 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false
     }
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key
+    let existingQuery = supabaseAdmin
       .from('train_rates')
-      .insert(newRate)
-      .select('*')
-      .single()
+      .select('id')
+    if (newRate.origin_city) {
+      existingQuery = existingQuery.ilike('origin_city', newRate.origin_city)
+    } else {
+      existingQuery = existingQuery.is('origin_city', null)
+    }
+    if (newRate.destination_city) {
+      existingQuery = existingQuery.ilike('destination_city', newRate.destination_city)
+    } else {
+      existingQuery = existingQuery.is('destination_city', null)
+    }
+    if (newRate.class_type) {
+      existingQuery = existingQuery.eq('class_type', newRate.class_type)
+    } else {
+      existingQuery = existingQuery.is('class_type', null)
+    }
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabaseAdmin
+        .from('train_rates')
+        .update({ ...newRate, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabaseAdmin
+        .from('train_rates')
+        .insert(newRate)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('POST train_rates error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST train_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

@@ -49,15 +49,48 @@ export async function POST(request: NextRequest) {
       supplier_id: body.supplier_id || null
     }
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key
+    let existingQuery = supabaseAdmin
       .from('nile_cruises')
-      .insert([newCruise])
-      .select(`*, supplier:supplier_id (id, name)`)
-      .single()
+      .select('id')
+      .ilike('ship_name', newCruise.ship_name)
+    if (newCruise.cabin_type) {
+      existingQuery = existingQuery.eq('cabin_type', newCruise.cabin_type)
+    } else {
+      existingQuery = existingQuery.is('cabin_type', null)
+    }
+    if (newCruise.route) {
+      existingQuery = existingQuery.eq('route', newCruise.route)
+    } else {
+      existingQuery = existingQuery.is('route', null)
+    }
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabaseAdmin
+        .from('nile_cruises')
+        .update({ ...newCruise, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select(`*, supplier:supplier_id (id, name)`)
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabaseAdmin
+        .from('nile_cruises')
+        .insert([newCruise])
+        .select(`*, supplier:supplier_id (id, name)`)
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('Error creating cruise:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

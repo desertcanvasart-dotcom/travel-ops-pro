@@ -82,18 +82,46 @@ export async function POST(request: NextRequest) {
       supplier_id: body.supplier_id || null
     }
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key
+    let existingQuery = supabaseAdmin
       .from('entrance_fees')
-      .insert(newFee)
-      .select('*')
-      .single()
+      .select('id')
+      .ilike('attraction_name', newFee.attraction_name)
+    if (newFee.city) {
+      existingQuery = existingQuery.eq('city', newFee.city)
+    } else {
+      existingQuery = existingQuery.is('city', null)
+    }
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabaseAdmin
+        .from('entrance_fees')
+        .update({ ...newFee, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabaseAdmin
+        .from('entrance_fees')
+        .insert(newFee)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('POST entrance_fees error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST entrance_fees catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

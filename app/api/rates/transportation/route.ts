@@ -169,18 +169,50 @@ export async function POST(request: NextRequest) {
     }
 
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key
+    let existingQuery = supabaseAdmin
       .from('transportation_rates')
-      .insert(newRate)
-      .select('*')
-      .single()
+      .select('id')
+      .eq('service_type', newRate.service_type)
+
+    if (newRate.service_type === 'intercity_transfer') {
+      existingQuery = existingQuery
+        .ilike('origin_city', newRate.origin_city)
+        .ilike('destination_city', newRate.destination_city)
+    } else {
+      existingQuery = existingQuery.ilike('city', newRate.city)
+      if (newRate.duration) existingQuery = existingQuery.eq('duration', newRate.duration)
+      if (newRate.area) existingQuery = existingQuery.eq('area', newRate.area)
+    }
+
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      const result = await supabaseAdmin
+        .from('transportation_rates')
+        .update({ ...newRate, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      const result = await supabaseAdmin
+        .from('transportation_rates')
+        .insert(newRate)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('POST transportation_rates error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data }, { status: 201 })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length }, { status: existing?.length ? 200 : 201 })
   } catch (error: any) {
     console.error('POST transportation_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

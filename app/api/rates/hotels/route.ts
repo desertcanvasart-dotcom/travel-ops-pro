@@ -118,18 +118,42 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false
     }
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key (property_name + city + tier)
+    const { data: existing } = await supabaseAdmin
       .from('accommodation_rates')
-      .insert(newHotel)
-      .select('*')
-      .single()
+      .select('id')
+      .ilike('property_name', newHotel.property_name)
+      .eq('city', newHotel.city)
+      .eq('tier', newHotel.tier)
+      .limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record instead of creating duplicate
+      const result = await supabaseAdmin
+        .from('accommodation_rates')
+        .update({ ...newHotel, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      const result = await supabaseAdmin
+        .from('accommodation_rates')
+        .insert(newHotel)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('POST accommodation_rates error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST accommodation_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

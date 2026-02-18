@@ -60,18 +60,48 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false
     }
 
-    const { data, error } = await supabaseAdmin
+    // Check for existing rate with same natural key
+    let existingQuery = supabaseAdmin
       .from('guide_rates')
-      .insert(newRate)
-      .select('*')
-      .single()
+      .select('id')
+      .eq('guide_language', newRate.guide_language)
+      .eq('guide_type', newRate.guide_type)
+      .eq('tour_duration', newRate.tour_duration)
+    if (newRate.city) {
+      existingQuery = existingQuery.eq('city', newRate.city)
+    } else {
+      existingQuery = existingQuery.is('city', null)
+    }
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabaseAdmin
+        .from('guide_rates')
+        .update({ ...newRate, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabaseAdmin
+        .from('guide_rates')
+        .insert(newRate)
+        .select('*')
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) {
       console.error('POST guide_rates error:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST guide_rates catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

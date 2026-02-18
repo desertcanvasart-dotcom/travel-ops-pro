@@ -122,40 +122,71 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
     
-    const { data, error } = await supabase
+    const newRecord = {
+      service_code: service_code || `ENT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      attraction_name,
+      city,
+      fee_type: fee_type || 'standard',
+      eur_rate: eur_rate || 0,
+      non_eur_rate: non_eur_rate || 0,
+      egyptian_rate: egyptian_rate || null,
+      student_discount_percentage: student_discount_percentage || null,
+      child_discount_percent: child_discount_percent || null,
+      season: season || 'all_year',
+      rate_valid_from,
+      rate_valid_to,
+      category,
+      notes,
+      is_active: is_active !== false,
+      is_addon: is_addon || false,
+      addon_note: addon_note || null,
+      supplier_id: supplier_id || null
+    }
+
+    // Check for existing rate with same natural key
+    let existingQuery = supabase
       .from('entrance_fees')
-      .insert({
-        service_code: service_code || `ENT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        attraction_name,
-        city,
-        fee_type: fee_type || 'standard',
-        eur_rate: eur_rate || 0,
-        non_eur_rate: non_eur_rate || 0,
-        egyptian_rate: egyptian_rate || null,
-        student_discount_percentage: student_discount_percentage || null,
-        child_discount_percent: child_discount_percent || null,
-        season: season || 'all_year',
-        rate_valid_from,
-        rate_valid_to,
-        category,
-        notes,
-        is_active: is_active !== false,
-        is_addon: is_addon || false,
-        addon_note: addon_note || null,
-        supplier_id: supplier_id || null
-      })
-      .select()
-      .single()
-    
+      .select('id')
+      .ilike('attraction_name', attraction_name)
+    if (city) {
+      existingQuery = existingQuery.eq('city', city)
+    } else {
+      existingQuery = existingQuery.is('city', null)
+    }
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabase
+        .from('entrance_fees')
+        .update({ ...newRecord, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select()
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabase
+        .from('entrance_fees')
+        .insert(newRecord)
+        .select()
+        .single()
+      data = result.data
+      error = result.error
+    }
+
     if (error) {
       console.error('[Attractions API] Error creating:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       data,
-      message: 'Attraction created successfully'
+      updated: !!existing?.length,
+      message: existing?.length ? 'Attraction updated successfully' : 'Attraction created successfully'
     })
     
   } catch (error: any) {

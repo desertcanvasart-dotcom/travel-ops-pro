@@ -24,15 +24,47 @@ export async function POST(request: NextRequest) {
     const supabase = createClient()
     const body = await request.json()
 
-    const { data, error } = await supabase
+    // Check for existing rate with same natural key
+    let existingQuery = supabase
       .from('tipping_rates')
-      .insert([body])
-      .select()
-      .single()
+      .select('id')
+    if (body.role_type) {
+      existingQuery = existingQuery.eq('role_type', body.role_type)
+    } else {
+      existingQuery = existingQuery.is('role_type', null)
+    }
+    if (body.context) {
+      existingQuery = existingQuery.eq('context', body.context)
+    } else {
+      existingQuery = existingQuery.is('context', null)
+    }
+    const { data: existing } = await existingQuery.limit(1)
+
+    let data, error
+    if (existing?.length) {
+      // Update existing record
+      const result = await supabase
+        .from('tipping_rates')
+        .update({ ...body, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id)
+        .select()
+        .single()
+      data = result.data
+      error = result.error
+    } else {
+      // Insert new record
+      const result = await supabase
+        .from('tipping_rates')
+        .insert([body])
+        .select()
+        .single()
+      data = result.data
+      error = result.error
+    }
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
