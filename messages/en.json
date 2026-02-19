@@ -4232,7 +4232,9 @@
     "notes": "Notes",
     "notesPlaceholder": "Special requirements, room type, meal preferences...",
     "cancel": "Cancel",
-    "adding": "Adding..."
+    "adding": "Adding...",
+    "vehicleTier": "Vehicle Tier",
+    "autoSelectedForPax": "auto-selected for {count} travelers"
   },
   "richTextEditor": {
     "insertLink": "Insert Link",

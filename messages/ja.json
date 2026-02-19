@@ -5818,7 +5818,9 @@
     "notes": "備考",
     "notesPlaceholder": "特別なリクエスト、部屋タイプ、食事の好みなど...",
     "cancel": "キャンセル",
-    "adding": "追加中..."
+    "adding": "追加中...",
+    "vehicleTier": "車両タイプ",
+    "autoSelectedForPax": "{count}名の旅行者に自動選択"
   },
   "richTextEditor": {
     "insertLink": "リンクを挿入",
