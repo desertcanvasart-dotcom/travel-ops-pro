@@ -1482,6 +1482,13 @@
       "clickToEditManually": "費用をクリックして手動で編集してください",
       "auto": "自動",
       "manualModeDescription": "<strong>手動モード：</strong>以下のサービス費用をクリックして編集できます。変更は即座に保存されます。",
+      "extraExpenses": "追加経費",
+      "extraExpensesSubtitle": "この旅行に関連する追加費用",
+      "noExpenses": "追加経費はまだ記録されていません",
+      "expenseTotal": "追加経費合計",
+      "ratesApproximate": "（概算レートで換算）",
+      "expenseDeleted": "経費が正常に削除されました",
+      "failedToDeleteExpense": "経費の削除に失敗しました",
       "whatsappActions": "WhatsAppアクション",
       "sendUpdatesTo": "{clientName}様に更新情報を送信",
       "clientPhoneRequiredWarning": "⚠️ 顧客の電話番号が必要です。編集モードで追加してください。",
@@ -5773,7 +5780,9 @@
     "breakdownByServiceType": "サービス種別の内訳",
     "items": "件",
     "note": "注意:",
-    "noteText": "チップと飲料水は通常、利益なしのパススルーコストです。交通、ガイド、入場料には標準の{marginPercent}%マークアップが適用されます。"
+    "noteText": "チップと飲料水は通常、利益なしのパススルーコストです。交通、ガイド、入場料には標準の{marginPercent}%マークアップが適用されます。",
+    "extraExpenses": "追加経費",
+    "extraExpensesNote": "追加経費はマージンを減少させる運営費です"
   },
   "resourceAssignment": {
     "loadingResources": "リソースを読み込み中...",

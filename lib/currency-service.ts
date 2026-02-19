@@ -78,7 +78,7 @@ export async function fetchExchangeRates(baseCurrency: string = 'USD'): Promise<
  * Fallback rates in case API is unavailable
  * These are approximate rates and should only be used as backup
  */
-function getFallbackRates(baseCurrency: string): ExchangeRates {
+export function getFallbackRates(baseCurrency: string): ExchangeRates {
   // Approximate rates as of early 2026 (USD as reference)
   const usdRates: Record<string, number> = {
     USD: 1,

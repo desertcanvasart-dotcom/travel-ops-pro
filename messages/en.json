@@ -1021,6 +1021,13 @@
       "costsCalculatedFromDatabase": "Costs are calculated from database rates",
       "clickToEditManually": "Click on costs to edit manually",
       "manualModeDescription": "In manual mode, you can click on any service cost to edit it directly. Changes will be saved automatically.",
+      "extraExpenses": "Extra Expenses",
+      "extraExpensesSubtitle": "Additional costs linked to this trip",
+      "noExpenses": "No extra expenses recorded yet",
+      "expenseTotal": "Total Extra Expenses",
+      "ratesApproximate": "(converted at approximate rates)",
+      "expenseDeleted": "Expense deleted successfully",
+      "failedToDeleteExpense": "Failed to delete expense",
       "whatsappActions": "WhatsApp Actions",
       "sendUpdatesTo": "Send updates to {clientName}",
       "clientPhoneRequiredWarning": "Client phone number is required to send WhatsApp messages",
@@ -4187,7 +4194,9 @@
     "breakdownByServiceType": "Breakdown by Service Type",
     "items": "items",
     "note": "Note:",
-    "noteText": "Tips and water are typically pass-through costs with no margin. Transportation, guides, and entrances carry the standard {marginPercent}% markup."
+    "noteText": "Tips and water are typically pass-through costs with no margin. Transportation, guides, and entrances carry the standard {marginPercent}% markup.",
+    "extraExpenses": "Extra Expenses",
+    "extraExpensesNote": "Extra expenses are operational costs that reduce margin"
   },
   "resourceAssignment": {
     "loadingResources": "Loading resources...",

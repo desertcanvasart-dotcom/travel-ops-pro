@@ -12,6 +12,7 @@ import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ItineraryPL from '@/app/components/ItineraryPL'
+import ItineraryExpenses from '@/app/components/ItineraryExpenses'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -126,6 +127,10 @@ export default function ViewItineraryPage() {
   const [savingCostMode, setSavingCostMode] = useState(false)
   const [savingServiceCost, setSavingServiceCost] = useState(false)
   const [costModeChanged, setCostModeChanged] = useState(false)
+
+  // Expenses state
+  const [itineraryExpenses, setItineraryExpenses] = useState<any[]>([])
+  const [expenseRefreshTrigger, setExpenseRefreshTrigger] = useState(0)
 
   // Inclusions & Exclusions state
   const [editingInclusions, setEditingInclusions] = useState(false)
@@ -1226,7 +1231,26 @@ export default function ViewItineraryPage() {
         </div>
 
         {/* PROFIT & LOSS */}
-        {days.length > 0 && <ItineraryPL itineraryId={itinerary.id} totalCost={itinerary.total_cost} currency={itinerary.currency} marginPercent={25} days={days} />}
+        {days.length > 0 && <ItineraryPL
+          itineraryId={itinerary.id}
+          totalCost={itinerary.total_cost}
+          currency={itinerary.currency}
+          marginPercent={25}
+          days={days}
+          extraExpenses={itineraryExpenses.map(exp => ({
+            amount: exp.amount,
+            currency: exp.currency,
+            category: exp.category
+          }))}
+        />}
+
+        {/* EXTRA EXPENSES */}
+        <ItineraryExpenses
+          itineraryId={itinerary.id}
+          currency={itinerary.currency}
+          refreshTrigger={expenseRefreshTrigger}
+          onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
+        />
 
         {/* WHATSAPP ACTIONS */}
         <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">
@@ -1337,6 +1361,7 @@ export default function ViewItineraryPage() {
               itineraryId={itinerary.id}
               itineraryCode={itinerary.itinerary_code}
               clientName={itinerary.client_name}
+              onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
             />
             {existingBooking ? (
               <Link

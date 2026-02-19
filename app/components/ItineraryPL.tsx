@@ -9,6 +9,7 @@ import {
   ChevronUp
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { getFallbackRates, convertCurrency } from '@/lib/currency-service'
 
 interface Service {
   id: string
@@ -25,12 +26,19 @@ interface DayWithServices {
   services: Service[]
 }
 
+interface ExtraExpense {
+  amount: number
+  currency: string
+  category: string
+}
+
 interface ItineraryPLProps {
   itineraryId: string
   totalCost: number
   currency: string
   marginPercent?: number
   days: DayWithServices[]
+  extraExpenses?: ExtraExpense[]
 }
 
 interface PLBreakdown {
@@ -51,6 +59,7 @@ const SERVICE_ICONS: Record<string, string> = {
   tips: '💵',
   supplies: '💧',
   activity: '🎭',
+  extra_expenses: '💰',
   other: '📦'
 }
 
@@ -59,7 +68,8 @@ export default function ItineraryPL({
   totalCost,
   currency,
   marginPercent = 25,
-  days
+  days,
+  extraExpenses = []
 }: ItineraryPLProps) {
   const t = useTranslations('itineraryPL')
   const [expanded, setExpanded] = useState(false)
@@ -73,7 +83,7 @@ export default function ItineraryPL({
 
   useEffect(() => {
     calculatePL()
-  }, [days])
+  }, [days, extraExpenses])
 
   const calculatePL = () => {
     const byType: Record<string, PLBreakdown> = {}
@@ -107,10 +117,36 @@ export default function ItineraryPL({
       })
     })
 
+    // Add extra expenses (operational costs that reduce margin)
+    if (extraExpenses.length > 0) {
+      const fallbackRates = getFallbackRates(currency)
+      let extraTotal = 0
+
+      extraExpenses.forEach(exp => {
+        const converted = exp.currency === currency
+          ? Number(exp.amount)
+          : convertCurrency(Number(exp.amount), exp.currency, currency, fallbackRates)
+        extraTotal += converted
+      })
+
+      if (extraTotal > 0) {
+        byType['extra_expenses'] = {
+          service_type: 'extra_expenses',
+          supplier_cost: extraTotal,
+          client_price: extraTotal, // pass-through, no markup
+          margin: 0,
+          margin_percent: 0,
+          count: extraExpenses.length
+        }
+        totalSupplierCost += extraTotal
+        // Note: extra expenses do NOT increase client price — they reduce margin
+      }
+    }
+
     Object.values(byType).forEach(item => {
       item.margin = item.client_price - item.supplier_cost
-      item.margin_percent = item.supplier_cost > 0 
-        ? (item.margin / item.supplier_cost) * 100 
+      item.margin_percent = item.supplier_cost > 0
+        ? (item.margin / item.supplier_cost) * 100
         : 0
     })
 
@@ -252,7 +288,9 @@ export default function ItineraryPL({
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{icon}</span>
-                        <span className="text-sm font-medium text-gray-900 capitalize">{item.service_type.replace('_', ' ')}</span>
+                        <span className="text-sm font-medium text-gray-900 capitalize">
+                          {item.service_type === 'extra_expenses' ? t('extraExpenses') : item.service_type.replace('_', ' ')}
+                        </span>
                         <span className="text-xs text-gray-400">({item.count} {t('items')})</span>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
