@@ -27,7 +27,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data: data || [] })
+    // Map accommodation_rates fields to Resource interface expected by ResourceAssignmentV2
+    // The component expects 'name' but the table uses 'property_name'
+    const mappedData = (data || []).map((hotel: any) => ({
+      ...hotel,
+      name: hotel.property_name || hotel.name || 'Unknown Hotel',
+    }))
+
+    return NextResponse.json({ success: true, data: mappedData })
   } catch (error: any) {
     console.error('GET catch error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
