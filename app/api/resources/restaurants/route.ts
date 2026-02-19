@@ -34,7 +34,15 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data })
+    // Map meal_rates fields to Resource interface expected by ResourceAssignmentV2
+    // The component expects 'name' and 'city' but the table uses 'restaurant_name' and 'restaurant_city'
+    const mappedData = (data || []).map((restaurant: any) => ({
+      ...restaurant,
+      name: restaurant.restaurant_name || restaurant.name || 'Unknown Restaurant',
+      city: restaurant.restaurant_city || restaurant.city || null,
+    }))
+
+    return NextResponse.json({ success: true, data: mappedData })
   } catch (error: any) {
     console.error('Error fetching meal rates:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
