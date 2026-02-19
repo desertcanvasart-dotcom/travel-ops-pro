@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validate required fields
-    if (!body.category || !body.amount || !body.expense_date) {
+    // Validate required fields (use explicit null check for amount since 0 is falsy but valid)
+    if (!body.category || (body.amount == null || body.amount === '') || !body.expense_date) {
       return NextResponse.json(
         { error: 'Category, amount, and expense date are required' },
         { status: 400 }

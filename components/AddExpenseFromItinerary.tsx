@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Receipt } from 'lucide-react'
+import { X, Receipt, AlertCircle, CheckCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
 interface AddExpenseFromItineraryProps {
@@ -62,6 +62,8 @@ export default function AddExpenseFromItinerary({
   const tCommon = useTranslations('common')
   const [isOpen, setIsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [formData, setFormData] = useState<FormData>({
     category: '',
     description: '',
@@ -95,28 +97,51 @@ export default function AddExpenseFromItinerary({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
+    setErrorMessage(null)
+    setSuccessMessage(null)
 
     try {
+      const payload = {
+        ...formData,
+        itinerary_id: itineraryId
+      }
+      console.log('📤 Submitting expense:', payload)
+
       const response = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          itinerary_id: itineraryId
-        })
+        body: JSON.stringify(payload)
       })
 
+      console.log('📥 Response status:', response.status)
+
       if (response.ok) {
-        setIsOpen(false)
+        const data = await response.json()
+        console.log('✅ Expense created:', data)
+        setSuccessMessage(`Expense ${data.expense_number || ''} created successfully!`)
         resetForm()
         onExpenseAdded?.()
+        // Close modal after short delay so user sees success
+        setTimeout(() => {
+          setIsOpen(false)
+          setSuccessMessage(null)
+        }, 1500)
       } else {
-        const error = await response.json()
-        alert(error.error || t('failedToSave'))
+        let errorText = t('failedToSave')
+        try {
+          const errorData = await response.json()
+          errorText = errorData.error || errorText
+          console.error('❌ API error:', errorData)
+        } catch {
+          const text = await response.text()
+          console.error('❌ Non-JSON error response:', text.slice(0, 200))
+          errorText = `Server error (${response.status})`
+        }
+        setErrorMessage(errorText)
       }
-    } catch (error) {
-      console.error('Error saving expense:', error)
-      alert(t('failedToSave'))
+    } catch (error: any) {
+      console.error('❌ Network error saving expense:', error)
+      setErrorMessage(error.message || t('failedToSave'))
     } finally {
       setSaving(false)
     }
@@ -126,7 +151,7 @@ export default function AddExpenseFromItinerary({
     <>
       {/* Trigger Button */}
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => { setIsOpen(true); setErrorMessage(null); setSuccessMessage(null) }}
         className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#e8ede3] transition-colors"
       >
         <Receipt className="h-4 w-4" />
@@ -153,6 +178,23 @@ export default function AddExpenseFromItinerary({
             </div>
 
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
+              {/* Error/Success Messages */}
+              {errorMessage && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                  <p className="text-sm text-red-700">{errorMessage}</p>
+                  <button type="button" onClick={() => setErrorMessage(null)} className="ml-auto text-red-400 hover:text-red-600">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              {successMessage && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  <p className="text-sm text-green-700">{successMessage}</p>
+                </div>
+              )}
+
               {/* Category & Amount */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
