@@ -36,24 +36,64 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get resource details from suppliers table
-    const { data: resource, error: resourceError } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('id', resourceId)
-      .single()
+    // Get resource details — vehicles now reference transportation_rates (with linked supplier)
+    let resource: any = null
+    let resourcePhone: string | null = null
 
-    if (resourceError || !resource) {
-      console.error('❌ Resource error:', resourceError)
+    if (resourceType === 'vehicle') {
+      // Vehicle resource_id points to transportation_rates — look up the rate, then get supplier
+      const { data: rate, error: rateError } = await supabase
+        .from('transportation_rates')
+        .select('*, supplier:supplier_id (id, name, contact_phone, whatsapp, contact_email)')
+        .eq('id', resourceId)
+        .single()
+
+      if (rate?.supplier) {
+        resource = rate.supplier
+        resourcePhone = resource.contact_phone || resource.whatsapp || null
+      } else if (!rateError && rate) {
+        // Rate found but no supplier linked — use rate info
+        resource = { name: rate.supplier_name || resourceName || 'Transport Service' }
+        resourcePhone = null
+      } else {
+        // Backward compat: try direct supplier lookup (for old assignments)
+        const { data: supplierData } = await supabase
+          .from('suppliers')
+          .select('*')
+          .eq('id', resourceId)
+          .single()
+
+        if (supplierData) {
+          resource = supplierData
+          resourcePhone = resource.contact_phone || resource.whatsapp || resource.phone2
+        }
+      }
+    } else {
+      // All other types: direct supplier lookup
+      const { data: supplierData, error: resourceError } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('id', resourceId)
+        .single()
+
+      if (resourceError || !supplierData) {
+        console.error('❌ Resource error:', resourceError)
+        return NextResponse.json(
+          { success: false, error: 'Resource not found' },
+          { status: 404 }
+        )
+      }
+      resource = supplierData
+      resourcePhone = resource.contact_phone || resource.whatsapp || resource.phone2
+    }
+
+    if (!resource) {
       return NextResponse.json(
         { success: false, error: 'Resource not found' },
         { status: 404 }
       )
     }
 
-    // Use contact_phone or whatsapp field
-    const resourcePhone = resource.contact_phone || resource.whatsapp || resource.phone2
-    
     console.log('📱 Resource:', { name: resource.name, contact_phone: resource.contact_phone, whatsapp: resource.whatsapp })
 
     if (!resourcePhone) {
@@ -120,6 +160,22 @@ export async function POST(request: NextRequest) {
         `${notes ? `📝 *Notes:* ${notes}\n` : ''}\n` +
         `Please confirm receipt of this assignment.\n\n` +
         `${businessName} Operations`
+
+    } else if (resourceType === 'vehicle') {
+      // Strip tier metadata from notes for display
+      const displayNotes = notes?.replace(/^\[tier:\w+\]\s*/, '') || ''
+      message = `🚗 *${businessName} - Transport Assignment*\n\n` +
+        `Hello ${resource.name},\n\n` +
+        `Transport service needed:\n\n` +
+        `📋 *Service:* ${resourceName || 'Transport'}\n` +
+        `📅 *Date:* ${formatDate(startDate)}` +
+        `${endDate && endDate !== startDate ? ` - ${formatDate(endDate)}` : ''}\n` +
+        `👤 *Client:* ${itinerary.client_name || 'N/A'}\n` +
+        `👥 *Guests:* ${guestCount}\n` +
+        `${displayNotes ? `📝 *Notes:* ${displayNotes}\n` : ''}\n` +
+        `Please confirm availability.\n\n` +
+        `${businessName} Operations`
+
     } else {
       // Generic message for other resource types
       message = `📋 *${businessName} - Assignment*\n\n` +

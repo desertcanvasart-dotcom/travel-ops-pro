@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { getTransportRateForPax, getAllVehicleTiers } from '@/lib/transport-rate-utils'
+import type { VehicleRateResult } from '@/lib/transport-rate-utils'
 
 // Types
 interface Resource {
@@ -115,13 +117,26 @@ const RESOURCE_TYPES = [
     labelKey: 'vehicles',
     icon: Truck,
     color: 'green',
-    apiEndpoint: '/api/resources/vehicles',
-    nameField: 'name',
-    phoneField: 'phone',
-    displayField: (r: any) => `${r.name}${r.city ? ` - ${r.city}` : ''}${r.vehicle_types?.length ? ` (${r.vehicle_types.join(', ')})` : ''}`,
+    apiEndpoint: '/api/resources/transportation?activeOnly=true',
+    nameField: 'route_name',
+    phoneField: 'supplier.contact_phone',
+    displayField: (r: any) => {
+      const SERVICE_LABELS: Record<string, string> = {
+        'airport_transfer': 'Airport Transfer', 'day_tour': 'Day Tour', 'multi_day': 'Multi Day',
+        'city_transfer': 'City Transfer', 'intercity': 'Intercity', 'intercity_transfer': 'Intercity Transfer',
+        'half_day': 'Half Day', 'sound_light': 'Sound & Light', 'dinner_transfer': 'Dinner Transfer',
+        'sound_light_transfer': 'Sound & Light Transfer'
+      }
+      const label = r.route_name || SERVICE_LABELS[r.service_type] || r.service_type?.replace(/_/g, ' ') || r.service_code
+      const city = r.city || ''
+      const dest = r.destination_city ? ` → ${r.destination_city}` : ''
+      const supplier = r.supplier?.name || r.supplier_name || ''
+      return `${label} - ${city}${dest}${supplier ? ` (${supplier})` : ''}`
+    },
     canNotify: true,
     filterType: 'city',
-    cityField: 'city'
+    cityField: 'city',
+    isTransportRate: true
   },
   {
     key: 'hotel',
@@ -244,8 +259,16 @@ export default function ResourceAssignmentV2({
     start_date: startDate,
     end_date: endDate,
     notes: '',
-    quantity: 1
+    quantity: 1,
+    // Vehicle-specific (only used when activeTab === 'vehicle')
+    vehicle_tier: '' as string,
+    cost_eur: null as number | null,
+    cost_non_eur: null as number | null,
   })
+
+  // Vehicle tier selection state
+  const [selectedRateTiers, setSelectedRateTiers] = useState<VehicleRateResult[]>([])
+  const [autoSelectedTier, setAutoSelectedTier] = useState<VehicleRateResult | null>(null)
 
   // WhatsApp sending state
   const [sendingWhatsApp, setSendingWhatsApp] = useState<string | null>(null)
@@ -415,6 +438,48 @@ export default function ResourceAssignmentV2({
     return Array.from(cities).sort()
   }
 
+  // Handle vehicle (transportation rate) selection with auto tier logic
+  const handleVehicleResourceSelection = (resourceId: string) => {
+    const rate = (availableResources['vehicle'] || []).find(r => r.id === resourceId)
+    if (!rate) {
+      setSelectedRateTiers([])
+      setAutoSelectedTier(null)
+      setAddFormData(prev => ({
+        ...prev,
+        resource_id: resourceId,
+        vehicle_tier: '',
+        cost_eur: null,
+        cost_non_eur: null,
+      }))
+      return
+    }
+
+    const allTiers = getAllVehicleTiers(rate)
+    setSelectedRateTiers(allTiers)
+
+    const pax = numTravelers || 1
+    const recommended = getTransportRateForPax(rate, pax)
+    setAutoSelectedTier(recommended)
+
+    if (recommended) {
+      setAddFormData(prev => ({
+        ...prev,
+        resource_id: resourceId,
+        vehicle_tier: recommended.tier,
+        cost_eur: recommended.rateEur,
+        cost_non_eur: recommended.rateNonEur,
+      }))
+    } else {
+      setAddFormData(prev => ({
+        ...prev,
+        resource_id: resourceId,
+        vehicle_tier: allTiers.length > 0 ? allTiers[0].tier : '',
+        cost_eur: allTiers.length > 0 ? allTiers[0].rateEur : null,
+        cost_non_eur: allTiers.length > 0 ? allTiers[0].rateNonEur : null,
+      }))
+    }
+  }
+
   const handleAddResource = async () => {
     if (!addFormData.resource_id) {
       await dialog.alert('Missing Selection', 'Please select a resource', 'warning')
@@ -431,7 +496,29 @@ export default function ResourceAssignmentV2({
       let resourceName = selectedResource?.[activeType?.nameField || 'name'] || 'Unknown'
 
       // Add location context to the name
-      if (activeTab === 'airport_staff' && selectedResource?.airport_location) {
+      if (activeTab === 'vehicle' && selectedResource) {
+        // For vehicles (transportation rates): "Airport Transfer - Aswan · Sedan (Abdulrahman)"
+        const SERVICE_LABELS: Record<string, string> = {
+          'airport_transfer': 'Airport Transfer', 'day_tour': 'Day Tour', 'multi_day': 'Multi Day',
+          'city_transfer': 'City Transfer', 'intercity': 'Intercity', 'intercity_transfer': 'Intercity Transfer',
+          'half_day': 'Half Day', 'sound_light': 'Sound & Light', 'dinner_transfer': 'Dinner Transfer',
+          'sound_light_transfer': 'Sound & Light Transfer'
+        }
+        const serviceLabel = selectedResource.route_name ||
+          SERVICE_LABELS[selectedResource.service_type] ||
+          selectedResource.service_type?.replace(/_/g, ' ') ||
+          selectedResource.service_code
+        const city = selectedResource.city || ''
+        const dest = selectedResource.destination_city ? ` → ${selectedResource.destination_city}` : ''
+        const tierLabel = addFormData.vehicle_tier
+          ? addFormData.vehicle_tier.charAt(0).toUpperCase() + addFormData.vehicle_tier.slice(1)
+          : ''
+        const supplier = selectedResource.supplier?.name || selectedResource.supplier_name || ''
+
+        resourceName = `${serviceLabel} - ${city}${dest}`
+        if (tierLabel) resourceName += ` · ${tierLabel}`
+        if (supplier) resourceName += ` (${supplier})`
+      } else if (activeTab === 'airport_staff' && selectedResource?.airport_location) {
         resourceName += ` (${selectedResource.airport_location})`
       } else if (activeTab === 'hotel_staff' && selectedResource?.hotel?.name) {
         resourceName += ` - ${selectedResource.hotel.name}`
@@ -442,9 +529,14 @@ export default function ResourceAssignmentV2({
           'round_trip': 'Round Trip'
         }
         resourceName += ` (${routeLabels[selectedResource.route] || selectedResource.route})`
-      } else if (selectedResource?.city && ['guide', 'vehicle', 'hotel', 'restaurant'].includes(activeTab)) {
+      } else if (selectedResource?.city && ['guide', 'hotel', 'restaurant'].includes(activeTab)) {
         resourceName += ` (${selectedResource.city})`
       }
+
+      // Build notes — prepend tier metadata for vehicles
+      const notesPayload = activeTab === 'vehicle' && addFormData.vehicle_tier
+        ? `[tier:${addFormData.vehicle_tier}]${addFormData.notes ? ' ' + addFormData.notes : ''}`
+        : addFormData.notes
 
       const response = await fetch('/api/itinerary-resources', {
         method: 'POST',
@@ -456,8 +548,10 @@ export default function ResourceAssignmentV2({
           resource_name: resourceName,
           start_date: addFormData.start_date,
           end_date: addFormData.end_date,
-          notes: addFormData.notes,
+          notes: notesPayload,
           quantity: addFormData.quantity,
+          cost_eur: activeTab === 'vehicle' ? addFormData.cost_eur : undefined,
+          cost_non_eur: activeTab === 'vehicle' ? addFormData.cost_non_eur : undefined,
           status: 'confirmed'
         })
       })
@@ -577,8 +671,13 @@ export default function ResourceAssignmentV2({
       start_date: startDate,
       end_date: endDate,
       notes: '',
-      quantity: 1
+      quantity: 1,
+      vehicle_tier: '',
+      cost_eur: null,
+      cost_non_eur: null,
     })
+    setSelectedRateTiers([])
+    setAutoSelectedTier(null)
     resetModalFilters()
   }
 
@@ -722,6 +821,11 @@ export default function ResourceAssignmentV2({
                         }`}>
                           {resource.status}
                         </span>
+                        {resource.resource_type === 'vehicle' && resource.cost_eur != null && resource.cost_eur > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">
+                            EUR {resource.cost_eur.toFixed(2)}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
                         <span className="flex items-center gap-1">
@@ -952,7 +1056,13 @@ export default function ResourceAssignmentV2({
                 </label>
                 <select
                   value={addFormData.resource_id}
-                  onChange={(e) => setAddFormData({ ...addFormData, resource_id: e.target.value })}
+                  onChange={(e) => {
+                    if (activeTab === 'vehicle') {
+                      handleVehicleResourceSelection(e.target.value)
+                    } else {
+                      setAddFormData({ ...addFormData, resource_id: e.target.value })
+                    }
+                  }}
                   title={t('selectResource', { type: t(activeTypeConfig.labelKey).slice(0, -1) })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                 >
@@ -974,6 +1084,58 @@ export default function ResourceAssignmentV2({
                   </p>
                 )}
               </div>
+
+              {/* ===== VEHICLE TIER SELECTION ===== */}
+              {activeTab === 'vehicle' && addFormData.resource_id && selectedRateTiers.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Truck className="w-4 h-4 inline mr-1.5 text-green-600" />
+                    {t('vehicleTier') || 'Vehicle Tier'}
+                    {numTravelers && (
+                      <span className="text-xs text-gray-500 ml-2">
+                        ({t('autoSelectedForPax') || `auto-selected for ${numTravelers} travelers`})
+                      </span>
+                    )}
+                  </label>
+                  <select
+                    value={addFormData.vehicle_tier}
+                    onChange={(e) => {
+                      const tier = selectedRateTiers.find(t => t.tier === e.target.value)
+                      if (tier) {
+                        setAddFormData(prev => ({
+                          ...prev,
+                          vehicle_tier: tier.tier,
+                          cost_eur: tier.rateEur,
+                          cost_non_eur: tier.rateNonEur,
+                        }))
+                      }
+                    }}
+                    title={t('vehicleTier') || 'Vehicle Tier'}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent bg-white"
+                  >
+                    {selectedRateTiers.map((tier) => (
+                      <option key={tier.tier} value={tier.tier}>
+                        {tier.vehicleType} — EUR {tier.rateEur.toFixed(2)} ({tier.capacityMin}-{tier.capacityMax} pax)
+                        {tier.tier === autoSelectedTier?.tier ? ' \u2713 Recommended' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Rate display */}
+                  {addFormData.cost_eur != null && (
+                    <div className="mt-2 flex items-center gap-4 text-sm">
+                      <span className="text-green-700 font-medium">
+                        EUR {addFormData.cost_eur.toFixed(2)}
+                      </span>
+                      {addFormData.cost_non_eur != null && addFormData.cost_non_eur !== addFormData.cost_eur && (
+                        <span className="text-gray-500">
+                          / Non-EUR {addFormData.cost_non_eur.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Date Range */}
               <div className="grid grid-cols-2 gap-4">
