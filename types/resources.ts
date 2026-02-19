@@ -71,85 +71,57 @@ export interface Guide {
   }
   
   // ============================================
-  // VEHICLE TYPES
+  // VEHICLE / TRANSPORT SUPPLIER TYPES
   // ============================================
-  
+  // Vehicles are external transport suppliers (companies/drivers),
+  // not internally owned fleet. Managed via the Suppliers page.
+
+  export type TransportSupplierType = 'transport_company' | 'transport' | 'driver'
+
+  // Kept for backward compatibility with code that references VehicleType
   export type VehicleType = 'car' | 'van' | 'minibus' | 'bus' | 'suv'
-  
+
   export interface Vehicle {
     id: string
-    
+
     // Basic Information
-    name: string // "Toyota Hiace - White"
-    vehicle_type: VehicleType
-    make: string | null // Toyota, Mercedes
-    model: string | null
-    year: number | null
-    
-    // Identification
-    license_plate: string | null
-    registration_number: string | null
-    
-    // Capacity & Features
-    passenger_capacity: number
-    has_ac: boolean
-    has_wifi: boolean
-    is_luxury: boolean
-    
-    // Status & Availability
+    name: string
+    type: TransportSupplierType
+    city: string | null
+
+    // Contact
+    phone: string | null
+    whatsapp: string | null
+    email: string | null
+
+    // Capabilities
+    vehicle_types: string[] // ['Sedan', 'Minivan', 'Van', 'Bus']
+
+    // Status
     is_active: boolean
-    current_mileage: number | null
-    last_service_date: string | null // ISO date string
-    next_service_date: string | null // ISO date string
-    insurance_expiry: string | null // ISO date string
-    
-    // Costs
-    daily_rate: number | null
-    rate_per_km: number | null
-    
-    // Driver Assignment
-    default_driver_name: string | null
-    default_driver_phone: string | null
-    
-    // Notes & Documentation
     notes: string | null
-    photo_url: string | null
-    
+
     // Metadata
     created_at: string
     updated_at: string
   }
-  
+
   export interface VehicleFormData {
     name: string
-    vehicle_type: VehicleType
-    make?: string
-    model?: string
-    year?: number
-    license_plate?: string
-    registration_number?: string
-    passenger_capacity: number
-    has_ac: boolean
-    has_wifi: boolean
-    is_luxury: boolean
+    type: TransportSupplierType
+    city?: string
+    phone?: string
+    whatsapp?: string
+    email?: string
+    vehicle_types: string[]
     is_active: boolean
-    current_mileage?: number
-    last_service_date?: string
-    next_service_date?: string
-    insurance_expiry?: string
-    daily_rate?: number
-    rate_per_km?: number
-    default_driver_name?: string
-    default_driver_phone?: string
     notes?: string
-    photo_url?: string
   }
-  
+
   export interface VehicleWithBookings extends Vehicle {
     active_bookings: number
     upcoming_bookings: number
     total_revenue: number
-    utilization_rate: number // percentage
   }
   
   // ============================================
@@ -239,12 +211,9 @@ export interface Guide {
   
   export interface VehicleFilters {
     search?: string
-    vehicle_type?: VehicleType[]
-    min_capacity?: number
-    max_capacity?: number
-    has_ac?: boolean
-    has_wifi?: boolean
-    is_luxury?: boolean
+    type?: TransportSupplierType[]
+    city?: string
+    vehicle_types?: string[] // filter by available vehicle types
     is_active?: boolean
     availability_from?: string
     availability_to?: string
@@ -297,14 +266,13 @@ export interface Guide {
     active_vehicles: number
     inactive_vehicles: number
     vehicles_with_bookings: number
-    average_daily_rate: number
     most_used_vehicle: {
       id: string
       name: string
       booking_count: number
     } | null
-    vehicles_by_type: {
-      [key in VehicleType]: number
+    vehicles_by_supplier_type: {
+      [key in TransportSupplierType]?: number
     }
   }
   
@@ -348,12 +316,19 @@ export interface Guide {
   // CONSTANTS
   // ============================================
   
+  // Legacy vehicle types kept for backward compatibility
   export const VEHICLE_TYPES: { value: VehicleType; label: string }[] = [
     { value: 'car', label: 'Car' },
     { value: 'van', label: 'Van' },
     { value: 'minibus', label: 'Minibus' },
     { value: 'bus', label: 'Bus' },
     { value: 'suv', label: 'SUV' },
+  ]
+
+  export const TRANSPORT_SUPPLIER_TYPES: { value: TransportSupplierType; label: string }[] = [
+    { value: 'transport_company', label: 'Transport Company' },
+    { value: 'transport', label: 'Transport' },
+    { value: 'driver', label: 'Driver' },
   ]
   
   export const COMMON_LANGUAGES = [
@@ -395,7 +370,7 @@ export interface Guide {
   }
   
   export function isVehicle(resource: Guide | Vehicle): resource is Vehicle {
-    return 'vehicle_type' in resource
+    return 'vehicle_types' in resource
   }
   
   export function isValidVehicleType(type: string): type is VehicleType {
@@ -412,10 +387,17 @@ export interface Guide {
   }
   
   export function formatVehicleDisplay(vehicle: Vehicle): string {
-    return `${vehicle.name} - ${vehicle.passenger_capacity} pax`
+    const types = vehicle.vehicle_types?.length ? ` (${vehicle.vehicle_types.join(', ')})` : ''
+    const city = vehicle.city ? ` - ${vehicle.city}` : ''
+    return `${vehicle.name}${city}${types}`
   }
-  
+
   export function getVehicleTypeLabel(type: VehicleType): string {
     const vehicleType = VEHICLE_TYPES.find(v => v.value === type)
     return vehicleType?.label || type
+  }
+
+  export function getTransportSupplierTypeLabel(type: TransportSupplierType): string {
+    const supplierType = TRANSPORT_SUPPLIER_TYPES.find(t => t.value === type)
+    return supplierType?.label || type
   }

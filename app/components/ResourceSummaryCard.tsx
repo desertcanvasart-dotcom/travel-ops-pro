@@ -15,9 +15,11 @@ interface Guide {
 interface Vehicle {
   id: string
   name: string
-  vehicle_type: string
-  passenger_capacity: number
-  license_plate?: string
+  type?: string // transport_company | transport | driver
+  city?: string
+  contact_phone?: string
+  whatsapp?: string
+  vehicle_types?: string[] // ['Sedan', 'Minivan', 'Van', 'Bus']
 }
 
 interface ResourceSummaryCardProps {
@@ -63,9 +65,9 @@ export default function ResourceSummaryCard({
         }
       }
 
-      // Fetch vehicle details
+      // Fetch vehicle/transport supplier details
       if (vehicleId) {
-        const vehicleResponse = await fetch(`/api/vehicles/${vehicleId}`)
+        const vehicleResponse = await fetch(`/api/suppliers/${vehicleId}`)
         const vehicleData = await vehicleResponse.json()
         if (vehicleData.success) {
           setVehicle(vehicleData.data)
@@ -237,41 +239,63 @@ export default function ResourceSummaryCard({
                 </div>
               </div>
 
-              {/* Vehicle Info */}
+              {/* Vehicle/Transport Supplier Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h4 className="text-lg font-bold text-gray-900 mb-1">{vehicle.name}</h4>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Truck className="w-4 h-4 flex-shrink-0" />
-                      <span className="font-medium capitalize">{vehicle.vehicle_type}</span>
+                      <span className="font-medium capitalize">
+                        {vehicle.type === 'transport_company' ? 'Transport Company' : vehicle.type === 'driver' ? 'Driver' : 'Transport'}
+                      </span>
+                      {vehicle.city && (
+                        <>
+                          <span className="text-gray-400">•</span>
+                          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>{vehicle.city}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  {/* Capacity */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-green-600" />
-                      <div>
-                        <div className="text-xs text-gray-500">{t('capacity')}</div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {t('passengers', { count: vehicle.passenger_capacity })}
+                  {/* Vehicle Types */}
+                  {vehicle.vehicle_types && vehicle.vehicle_types.length > 0 && (
+                    <div className="flex items-start gap-2">
+                      <Truck className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-500 mb-1">{t('vehicleTypes') || 'Vehicle Types'}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {vehicle.vehicle_types.map((vt, index) => (
+                            <span
+                              key={index}
+                              className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full"
+                            >
+                              {vt}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     </div>
+                  )}
 
-                    {/* License Plate */}
-                    {vehicle.license_plate && (
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-gray-500">{t('licensePlate')}</div>
-                        <div className="px-3 py-1 bg-gray-900 text-white font-mono text-sm rounded">
-                          {vehicle.license_plate}
-                        </div>
+                  {/* Phone */}
+                  {(vehicle.contact_phone || vehicle.whatsapp) && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-500">{t('phone')}</div>
+                        <a
+                          href={`tel:${vehicle.contact_phone || vehicle.whatsapp}`}
+                          className="text-sm font-medium text-green-600 hover:text-green-700"
+                        >
+                          {vehicle.contact_phone || vehicle.whatsapp}
+                        </a>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Vehicle Notes */}
                   {vehicleNotes && (
