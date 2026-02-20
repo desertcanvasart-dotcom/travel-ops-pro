@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -199,6 +199,7 @@ export default function AttractionsContent() {
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
+  const activeLanguage = useLocale() // 'en' or 'ja'
 
   // Currency conversion
   const { currency, formatWithConversion } = useCurrency()
@@ -255,7 +256,8 @@ export default function AttractionsContent() {
   // Fetch attractions
   const fetchAttractions = async () => {
     try {
-      const response = await fetch('/api/rates/attractions')
+      const langParam = activeLanguage !== 'en' ? `?language=${activeLanguage}` : ''
+      const response = await fetch(`/api/rates/attractions${langParam}`)
       const data = await response.json()
       if (data.success) {
         setAttractions(data.data)
@@ -337,7 +339,6 @@ export default function AttractionsContent() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...attraction,
           is_addon: !attraction.is_addon
         })
       })
@@ -421,10 +422,11 @@ export default function AttractionsContent() {
       
       const method = editingAttraction ? 'PUT' : 'POST'
       
-      // Clean up empty supplier_id
+      // Clean up empty supplier_id and include language for version-aware saving
       const submitData = {
         ...formData,
-        supplier_id: formData.supplier_id || null
+        supplier_id: formData.supplier_id || null,
+        language: activeLanguage
       }
       
       const response = await fetch(url, {

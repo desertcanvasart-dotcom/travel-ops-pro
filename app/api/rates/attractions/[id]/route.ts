@@ -78,7 +78,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    
+
     const {
       service_code,
       attraction_name,
@@ -97,14 +97,86 @@ export async function PUT(
       is_active,
       is_addon,
       addon_note,
-      supplier_id
+      supplier_id,
+      language // optional: if non-English, save translatable fields to version table
     } = body
-    
-    // Build update object - only include fields that are provided
+
+    // If non-English language specified, save translatable fields to version table
+    if (language && language !== 'en') {
+      // Update non-translatable fields only in base record
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      }
+
+      if (service_code !== undefined) updateData.service_code = service_code
+      if (city !== undefined) updateData.city = city
+      if (fee_type !== undefined) updateData.fee_type = fee_type
+      if (eur_rate !== undefined) updateData.eur_rate = eur_rate
+      if (non_eur_rate !== undefined) updateData.non_eur_rate = non_eur_rate
+      if (egyptian_rate !== undefined) updateData.egyptian_rate = egyptian_rate
+      if (student_discount_percentage !== undefined) updateData.student_discount_percentage = student_discount_percentage
+      if (child_discount_percent !== undefined) updateData.child_discount_percent = child_discount_percent
+      if (season !== undefined) updateData.season = season
+      if (rate_valid_from !== undefined) updateData.rate_valid_from = rate_valid_from
+      if (rate_valid_to !== undefined) updateData.rate_valid_to = rate_valid_to
+      if (category !== undefined) updateData.category = category
+      // Do NOT update attraction_name or notes in base record for non-English
+      if (is_active !== undefined) updateData.is_active = is_active
+      if (is_addon !== undefined) updateData.is_addon = is_addon
+      if (addon_note !== undefined) updateData.addon_note = addon_note
+      if (supplier_id !== undefined) updateData.supplier_id = supplier_id || null
+
+      const { data, error } = await supabase
+        .from('entrance_fees')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('[Attraction API] Error updating base:', error)
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      }
+
+      // Upsert language version for translatable fields
+      const { data: existingVersion } = await supabase
+        .from('entrance_fee_versions')
+        .select('id')
+        .eq('entrance_fee_id', id)
+        .eq('language', language)
+        .single()
+
+      if (existingVersion) {
+        const versionUpdate: Record<string, any> = { updated_at: new Date().toISOString() }
+        if (attraction_name !== undefined) versionUpdate.attraction_name = attraction_name
+        if (notes !== undefined) versionUpdate.notes = notes
+        await supabase
+          .from('entrance_fee_versions')
+          .update(versionUpdate)
+          .eq('id', existingVersion.id)
+      } else {
+        await supabase
+          .from('entrance_fee_versions')
+          .insert({
+            entrance_fee_id: id,
+            language,
+            attraction_name: attraction_name || null,
+            notes: notes || null
+          })
+      }
+
+      return NextResponse.json({
+        success: true,
+        data,
+        message: `Attraction updated with ${language} version`
+      })
+    }
+
+    // English or no language: update base record directly (original behavior)
     const updateData: Record<string, any> = {
       updated_at: new Date().toISOString()
     }
-    
+
     if (service_code !== undefined) updateData.service_code = service_code
     if (attraction_name !== undefined) updateData.attraction_name = attraction_name
     if (city !== undefined) updateData.city = city
@@ -123,25 +195,25 @@ export async function PUT(
     if (is_addon !== undefined) updateData.is_addon = is_addon
     if (addon_note !== undefined) updateData.addon_note = addon_note
     if (supplier_id !== undefined) updateData.supplier_id = supplier_id || null
-    
+
     const { data, error } = await supabase
       .from('entrance_fees')
       .update(updateData)
       .eq('id', id)
       .select()
       .single()
-    
+
     if (error) {
       console.error('[Attraction API] Error updating:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       data,
       message: 'Attraction updated successfully'
     })
-    
+
   } catch (error: any) {
     console.error('[Attraction API] Error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

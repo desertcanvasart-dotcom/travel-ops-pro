@@ -45,39 +45,65 @@ export async function GET(request: NextRequest) {
     }
     
     const { data, error } = await query
-    
+
     if (error) {
       console.error('[Attractions API] Error fetching:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
-    
+
+    // Check for language parameter to merge versions
+    const language = searchParams.get('language')
+
+    // Build versions map if non-English language requested
+    let versionsMap: Record<string, { attraction_name?: string; notes?: string }> = {}
+    if (language && language !== 'en' && data && data.length > 0) {
+      const ids = data.map((item: any) => item.id)
+      const { data: versions } = await supabase
+        .from('entrance_fee_versions')
+        .select('entrance_fee_id, attraction_name, notes')
+        .in('entrance_fee_id', ids)
+        .eq('language', language)
+
+      if (versions) {
+        for (const v of versions) {
+          versionsMap[v.entrance_fee_id] = {
+            attraction_name: v.attraction_name,
+            notes: v.notes
+          }
+        }
+      }
+    }
+
     // Transform field names for frontend compatibility
-    const transformedData = data?.map(item => ({
-      id: item.id,
-      service_code: item.service_code || `ENT-${item.id?.substring(0, 6).toUpperCase()}`,
-      attraction_name: item.attraction_name,
-      city: item.city,
-      fee_type: item.fee_type || 'standard',
-      eur_rate: item.eur_rate,
-      non_eur_rate: item.non_eur_rate,
-      egyptian_rate: item.egyptian_rate,
-      student_discount_percentage: item.student_discount_percentage,
-      child_discount_percent: item.child_discount_percent,
-      season: item.season,
-      rate_valid_from: item.rate_valid_from,
-      rate_valid_to: item.rate_valid_to,
-      category: item.category,
-      notes: item.notes,
-      is_active: item.is_active !== false, // Default to true if not set
-      is_addon: item.is_addon || false,
-      addon_note: item.addon_note,
-      supplier_id: item.supplier_id,
-      created_at: item.created_at,
-      updated_at: item.updated_at
-    })) || []
-    
-    return NextResponse.json({ 
-      success: true, 
+    const transformedData = data?.map(item => {
+      const version = versionsMap[item.id]
+      return {
+        id: item.id,
+        service_code: item.service_code || `ENT-${item.id?.substring(0, 6).toUpperCase()}`,
+        attraction_name: version?.attraction_name || item.attraction_name,
+        city: item.city,
+        fee_type: item.fee_type || 'standard',
+        eur_rate: item.eur_rate,
+        non_eur_rate: item.non_eur_rate,
+        egyptian_rate: item.egyptian_rate,
+        student_discount_percentage: item.student_discount_percentage,
+        child_discount_percent: item.child_discount_percent,
+        season: item.season,
+        rate_valid_from: item.rate_valid_from,
+        rate_valid_to: item.rate_valid_to,
+        category: item.category,
+        notes: version?.notes ?? item.notes,
+        is_active: item.is_active !== false, // Default to true if not set
+        is_addon: item.is_addon || false,
+        addon_note: item.addon_note,
+        supplier_id: item.supplier_id,
+        created_at: item.created_at,
+        updated_at: item.updated_at
+      }
+    }) || []
+
+    return NextResponse.json({
+      success: true,
       data: transformedData,
       count: transformedData.length
     })
@@ -180,6 +206,29 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('[Attractions API] Error creating:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    // If creating/updating in non-English, also create a language version
+    const language = body.language
+    if (language && language !== 'en' && data) {
+      const feeId = data.id
+      const { data: existingVersion } = await supabase
+        .from('entrance_fee_versions')
+        .select('id')
+        .eq('entrance_fee_id', feeId)
+        .eq('language', language)
+        .single()
+
+      if (!existingVersion) {
+        await supabase
+          .from('entrance_fee_versions')
+          .insert({
+            entrance_fee_id: feeId,
+            language,
+            attraction_name: attraction_name || null,
+            notes: notes || null
+          })
+      }
     }
 
     return NextResponse.json({

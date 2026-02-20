@@ -206,7 +206,8 @@ export default function ItineraryEditorPage() {
   const params = useParams()
   const itineraryId = params?.id as string
   const supabase = createClient()
-  const activeLanguage = useLocale() // 'en' or 'ja'
+  const currentLocale = useLocale() // 'en' or 'ja'
+  const [activeLanguage, setActiveLanguage] = useState(currentLocale)
 
   // ============================================
   // STATE
@@ -250,11 +251,16 @@ export default function ItineraryEditorPage() {
   // LOAD DATA
   // ============================================
 
+  // Sync activeLanguage with locale provider (may change after mount)
+  useEffect(() => {
+    setActiveLanguage(currentLocale)
+  }, [currentLocale])
+
   useEffect(() => {
     loadItinerary()
     loadAttractions()
     loadSuppliers()
-  }, [itineraryId])
+  }, [itineraryId, activeLanguage])
 
   const loadItinerary = async () => {
     if (!itineraryId) return
@@ -691,7 +697,7 @@ export default function ItineraryEditorPage() {
 
       // 3. Save services if changed
       if (servicesChanged) {
-        console.log('💾 Saving services...')
+        console.log('💾 Saving services...', { activeLanguage, baseServiceDataKeys: Object.keys(baseServiceData) })
         
         // Delete services marked for deletion
         const toDelete = services.filter(s => s.isDeleted && !s.isNew)
@@ -738,23 +744,45 @@ export default function ItineraryEditorPage() {
 
         // Update existing services
         const toUpdate = services.filter(s => !s.isNew && !s.isDeleted)
+
+        // For non-English saves, fetch fresh base data from DB to avoid stale state
+        let freshBaseData: Record<string, { service_name: string; notes: string }> = {}
+        if (activeLanguage !== 'en' && toUpdate.length > 0) {
+          const updateIds = toUpdate.map(s => s.id).filter(id => !id.startsWith('new-'))
+          if (updateIds.length > 0) {
+            const { data: baseRecords } = await supabase
+              .from('itinerary_services')
+              .select('id, service_name, notes')
+              .in('id', updateIds)
+
+            if (baseRecords) {
+              for (const rec of baseRecords) {
+                freshBaseData[rec.id] = { service_name: rec.service_name, notes: rec.notes || '' }
+              }
+            }
+          }
+          console.log('🌐 Fresh base data fetched for', Object.keys(freshBaseData).length, 'services, activeLanguage:', activeLanguage)
+        }
+
         for (const service of toUpdate) {
           const { isNew, isDeleted, day_number, ...serviceData } = service
 
           if (activeLanguage !== 'en') {
             // For non-English: save translatable fields to version table,
-            // restore base English data for the main record
-            const base = baseServiceData[service.id]
+            // keep base English data intact in main record
             const translatedName = serviceData.service_name
             const translatedNotes = serviceData.notes
+            const base = freshBaseData[service.id]
 
-            // Restore English values for main record
+            console.log(`🌐 Service ${service.id}: lang=${activeLanguage}, hasBase=${!!base}, translatedName="${translatedName}", baseName="${base?.service_name}"`)
+
+            // Restore English values for main record so we don't overwrite them
             if (base) {
               serviceData.service_name = base.service_name
               serviceData.notes = base.notes
             }
 
-            // Update main record with non-translatable fields only
+            // Update main record (non-translatable fields like quantity, rate, etc.)
             const { error } = await supabase
               .from('itinerary_services')
               .update(serviceData)
@@ -763,7 +791,7 @@ export default function ItineraryEditorPage() {
             if (error) {
               console.error('Error updating service:', error)
             } else {
-              console.log(`✅ Service updated (base): ${serviceData.service_name}`)
+              console.log(`✅ Service base record preserved: ${serviceData.service_name}`)
             }
 
             // Upsert the language version for translatable fields
@@ -783,6 +811,7 @@ export default function ItineraryEditorPage() {
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', existingVersion.id)
+              console.log(`✅ Service version updated (${activeLanguage}): ${translatedName}`)
             } else {
               await supabase
                 .from('itinerary_service_versions')
@@ -792,8 +821,8 @@ export default function ItineraryEditorPage() {
                   service_name: translatedName,
                   notes: translatedNotes
                 })
+              console.log(`✅ Service version created (${activeLanguage}): ${translatedName}`)
             }
-            console.log(`✅ Service version saved (${activeLanguage}): ${translatedName}`)
           } else {
             // English: save directly to main record as before
             const { error } = await supabase
