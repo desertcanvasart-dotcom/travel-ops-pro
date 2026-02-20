@@ -258,7 +258,7 @@ export default function AttractionsContent() {
   const fetchAttractions = async () => {
     try {
       const langParam = activeLanguage !== 'en' ? `?language=${activeLanguage}` : ''
-      console.log('📥 Fetching attractions:', { activeLanguage, url: `/api/rates/attractions${langParam}` })
+      console.log('📥 Fetching attractions: lang=' + activeLanguage + ' url=/api/rates/attractions' + langParam)
       const response = await fetch(`/api/rates/attractions${langParam}`)
       const data = await response.json()
       if (data.success) {
@@ -438,7 +438,7 @@ export default function AttractionsContent() {
         supplier_id: formData.supplier_id || null,
         language: activeLanguage
       }
-      console.log('📤 Saving attraction:', { method, activeLanguage, attraction_name: submitData.attraction_name })
+      console.log('📤 Saving attraction: lang=' + activeLanguage + ' method=' + method + ' name=' + submitData.attraction_name)
       
       const response = await fetch(url, {
         method,
