@@ -179,3 +179,11 @@ export const VARIATION_DAILY_ITINERARY_TRANSLATION_FIELDS: TranslationFieldConfi
   { key: 'city', type: 'string' },
   { key: 'overnight_city', type: 'string' }
 ]
+
+/**
+ * Field configurations for itinerary service versions
+ */
+export const SERVICE_TRANSLATION_FIELDS: TranslationFieldConfig[] = [
+  { key: 'service_name', type: 'string' },
+  { key: 'notes', type: 'string' }
+]

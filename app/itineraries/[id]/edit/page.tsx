@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import {
@@ -206,6 +206,7 @@ export default function ItineraryEditorPage() {
   const params = useParams()
   const itineraryId = params?.id as string
   const supabase = createClient()
+  const activeLanguage = useLocale() // 'en' or 'ja'
 
   // ============================================
   // STATE
@@ -241,6 +242,9 @@ export default function ItineraryEditorPage() {
   // Suppliers state
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [supplierSearch, setSupplierSearch] = useState('')
+
+  // Track base (English) service data for language-aware saving
+  const [baseServiceData, setBaseServiceData] = useState<Record<string, { service_name: string; notes: string }>>({})
 
   // ============================================
   // LOAD DATA
@@ -308,11 +312,52 @@ export default function ItineraryEditorPage() {
         if (servicesError) {
           console.error('Error loading services:', servicesError)
         } else {
+          // Store base (English) service data for reference
+          const baseData: Record<string, { service_name: string; notes: string }> = {}
+          for (const s of (servicesData || [])) {
+            baseData[s.id] = { service_name: s.service_name, notes: s.notes || '' }
+          }
+          setBaseServiceData(baseData)
+
           // Add day_number to each service for display
-          const servicesWithDayNumber = (servicesData || []).map(service => {
+          let servicesWithDayNumber = (servicesData || []).map(service => {
             const day = daysData.find(d => d.id === service.itinerary_day_id)
             return { ...service, day_number: day?.day_number || 1 }
           })
+
+          // If language is not English, merge service versions
+          if (activeLanguage !== 'en') {
+            const serviceIds = servicesWithDayNumber.filter(s => s.id && !s.id.startsWith('new-')).map(s => s.id)
+            if (serviceIds.length > 0) {
+              const { data: serviceVersions } = await supabase
+                .from('itinerary_service_versions')
+                .select('itinerary_service_id, service_name, notes')
+                .in('itinerary_service_id', serviceIds)
+                .eq('language', activeLanguage)
+
+              if (serviceVersions && serviceVersions.length > 0) {
+                const versionMap: Record<string, { service_name?: string; notes?: string }> = {}
+                for (const sv of serviceVersions) {
+                  versionMap[sv.itinerary_service_id] = {
+                    service_name: sv.service_name,
+                    notes: sv.notes
+                  }
+                }
+                servicesWithDayNumber = servicesWithDayNumber.map(service => {
+                  const version = versionMap[service.id]
+                  if (version) {
+                    return {
+                      ...service,
+                      service_name: version.service_name || service.service_name,
+                      notes: version.notes ?? service.notes
+                    }
+                  }
+                  return service
+                })
+              }
+            }
+          }
+
           setServices(servicesWithDayNumber)
         }
       }
@@ -667,13 +712,26 @@ export default function ItineraryEditorPage() {
               .insert({ ...serviceData, itinerary_day_id: day.id })
               .select()
               .single()
-            
+
             if (error) {
               console.error('Error inserting service:', error)
             } else if (newService) {
               service.id = newService.id
               service.isNew = false
               console.log(`✅ Service inserted: ${service.service_name}`)
+
+              // If inserting in non-English, also create a language version
+              if (activeLanguage !== 'en') {
+                await supabase
+                  .from('itinerary_service_versions')
+                  .insert({
+                    itinerary_service_id: newService.id,
+                    language: activeLanguage,
+                    service_name: serviceData.service_name,
+                    notes: serviceData.notes
+                  })
+                console.log(`✅ Service version created (${activeLanguage}): ${serviceData.service_name}`)
+              }
             }
           }
         }
@@ -682,15 +740,72 @@ export default function ItineraryEditorPage() {
         const toUpdate = services.filter(s => !s.isNew && !s.isDeleted)
         for (const service of toUpdate) {
           const { isNew, isDeleted, day_number, ...serviceData } = service
-          const { error } = await supabase
-            .from('itinerary_services')
-            .update(serviceData)
-            .eq('id', service.id)
-          
-          if (error) {
-            console.error('Error updating service:', error)
+
+          if (activeLanguage !== 'en') {
+            // For non-English: save translatable fields to version table,
+            // restore base English data for the main record
+            const base = baseServiceData[service.id]
+            const translatedName = serviceData.service_name
+            const translatedNotes = serviceData.notes
+
+            // Restore English values for main record
+            if (base) {
+              serviceData.service_name = base.service_name
+              serviceData.notes = base.notes
+            }
+
+            // Update main record with non-translatable fields only
+            const { error } = await supabase
+              .from('itinerary_services')
+              .update(serviceData)
+              .eq('id', service.id)
+
+            if (error) {
+              console.error('Error updating service:', error)
+            } else {
+              console.log(`✅ Service updated (base): ${serviceData.service_name}`)
+            }
+
+            // Upsert the language version for translatable fields
+            const { data: existingVersion } = await supabase
+              .from('itinerary_service_versions')
+              .select('id')
+              .eq('itinerary_service_id', service.id)
+              .eq('language', activeLanguage)
+              .single()
+
+            if (existingVersion) {
+              await supabase
+                .from('itinerary_service_versions')
+                .update({
+                  service_name: translatedName,
+                  notes: translatedNotes,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingVersion.id)
+            } else {
+              await supabase
+                .from('itinerary_service_versions')
+                .insert({
+                  itinerary_service_id: service.id,
+                  language: activeLanguage,
+                  service_name: translatedName,
+                  notes: translatedNotes
+                })
+            }
+            console.log(`✅ Service version saved (${activeLanguage}): ${translatedName}`)
           } else {
-            console.log(`✅ Service updated: ${service.service_name}`)
+            // English: save directly to main record as before
+            const { error } = await supabase
+              .from('itinerary_services')
+              .update(serviceData)
+              .eq('id', service.id)
+
+            if (error) {
+              console.error('Error updating service:', error)
+            } else {
+              console.log(`✅ Service updated: ${service.service_name}`)
+            }
           }
         }
 

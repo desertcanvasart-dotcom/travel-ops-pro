@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/app/supabase'
-import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS } from '@/lib/translation-utils'
+import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS, SERVICE_TRANSLATION_FIELDS } from '@/lib/translation-utils'
 import type { Language } from '@/types/multilingual'
 
 const supabase = createClient()
@@ -80,6 +80,93 @@ async function translateItineraryDays(
   }
 
   return translatedDays
+}
+
+// Helper function to translate itinerary services
+async function translateItineraryServices(
+  itineraryId: string,
+  sourceLanguage: Language,
+  targetLanguage: Language
+) {
+  // Fetch all days for this itinerary to get their services
+  const { data: days, error: daysError } = await supabase
+    .from('itinerary_days')
+    .select('id')
+    .eq('itinerary_id', itineraryId)
+    .order('day_number', { ascending: true })
+
+  if (daysError || !days || days.length === 0) {
+    console.log('No days found for itinerary:', itineraryId)
+    return []
+  }
+
+  // Fetch all services across all days
+  const dayIds = days.map(d => d.id)
+  const { data: services, error: servicesError } = await supabase
+    .from('itinerary_services')
+    .select('id, service_name, notes')
+    .in('itinerary_day_id', dayIds)
+
+  if (servicesError || !services || services.length === 0) {
+    console.log('No services found for itinerary:', itineraryId)
+    return []
+  }
+
+  const translatedServices = []
+
+  for (const service of services) {
+    // Check if target version already exists for this service
+    const { data: existingServiceVersion } = await supabase
+      .from('itinerary_service_versions')
+      .select('id')
+      .eq('itinerary_service_id', service.id)
+      .eq('language', targetLanguage)
+      .single()
+
+    if (existingServiceVersion) {
+      console.log(`Service version already exists for service ${service.id} in ${targetLanguage}`)
+      continue
+    }
+
+    // Try to get source service version first
+    const { data: sourceServiceVersion } = await supabase
+      .from('itinerary_service_versions')
+      .select('*')
+      .eq('itinerary_service_id', service.id)
+      .eq('language', sourceLanguage)
+      .single()
+
+    // Use source version if available, otherwise use base service content
+    const sourceContent = sourceServiceVersion || service
+
+    // Translate the service content
+    const translatedContent = await translateFields(
+      sourceContent,
+      SERVICE_TRANSLATION_FIELDS,
+      sourceLanguage,
+      targetLanguage
+    )
+
+    // Create the service version
+    const { data: newServiceVersion, error: createServiceError } = await supabase
+      .from('itinerary_service_versions')
+      .insert({
+        itinerary_service_id: service.id,
+        language: targetLanguage,
+        service_name: translatedContent.service_name || sourceContent.service_name || null,
+        notes: translatedContent.notes || sourceContent.notes || null
+      })
+      .select()
+      .single()
+
+    if (createServiceError) {
+      console.error('Error creating service version:', createServiceError)
+    } else {
+      translatedServices.push(newServiceVersion)
+    }
+  }
+
+  return translatedServices
 }
 
 // POST - Copy existing version and translate to target language
@@ -166,8 +253,14 @@ export async function POST(
 
       if (createError) throw createError
 
-      // Also translate itinerary days
+      // Also translate itinerary days and services
       const translatedDays = await translateItineraryDays(
+        id,
+        'en' as Language,
+        targetLanguage as Language
+      )
+
+      const translatedServices = await translateItineraryServices(
         id,
         'en' as Language,
         targetLanguage as Language
@@ -177,6 +270,7 @@ export async function POST(
         success: true,
         data: newVersion,
         translatedDays,
+        translatedServices,
         translated: true,
         sourceLanguage: 'en',
         targetLanguage
@@ -210,8 +304,14 @@ export async function POST(
 
     if (createError) throw createError
 
-    // Also translate itinerary days
+    // Also translate itinerary days and services
     const translatedDays = await translateItineraryDays(
+      id,
+      sourceLanguage,
+      targetLanguage as Language
+    )
+
+    const translatedServices = await translateItineraryServices(
       id,
       sourceLanguage,
       targetLanguage as Language
@@ -221,6 +321,7 @@ export async function POST(
       success: true,
       data: newVersion,
       translatedDays,
+      translatedServices,
       translated: true,
       sourceLanguage,
       targetLanguage

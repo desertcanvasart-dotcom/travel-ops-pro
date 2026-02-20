@@ -39,6 +39,36 @@ export async function GET(
           console.error('Error fetching services for day:', servicesError)
         }
 
+        // Fetch language versions for services
+        let serviceVersionsMap: Record<string, { service_name?: string; notes?: string }> = {}
+        if (services && services.length > 0) {
+          const serviceIds = services.map((s: any) => s.id)
+          const { data: serviceVersions } = await supabase
+            .from('itinerary_service_versions')
+            .select('itinerary_service_id, service_name, notes')
+            .in('itinerary_service_id', serviceIds)
+            .eq('language', language)
+
+          if (serviceVersions) {
+            for (const sv of serviceVersions) {
+              serviceVersionsMap[sv.itinerary_service_id] = {
+                service_name: sv.service_name,
+                notes: sv.notes
+              }
+            }
+          }
+        }
+
+        // Merge service versions (version takes precedence)
+        const mergedServices = (services || []).map((service: any) => {
+          const version = serviceVersionsMap[service.id]
+          return {
+            ...service,
+            service_name: version?.service_name || service.service_name,
+            notes: version?.notes ?? service.notes
+          }
+        })
+
         // Fetch language version for this day
         const { data: dayVersion } = await supabase
           .from('itinerary_day_versions')
@@ -54,7 +84,7 @@ export async function GET(
           description: dayVersion?.description || day.description,
           city: dayVersion?.city || day.city,
           overnight_city: dayVersion?.overnight_city || day.overnight_city,
-          services: services || []
+          services: mergedServices
         }
       })
     )
