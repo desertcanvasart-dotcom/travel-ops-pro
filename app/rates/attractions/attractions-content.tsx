@@ -199,7 +199,8 @@ export default function AttractionsContent() {
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
-  const activeLanguage = useLocale() // 'en' or 'ja'
+  const currentLocale = useLocale() // may start as 'en' before provider mounts
+  const [activeLanguage, setActiveLanguage] = useState(currentLocale)
 
   // Currency conversion
   const { currency, formatWithConversion } = useCurrency()
@@ -257,6 +258,7 @@ export default function AttractionsContent() {
   const fetchAttractions = async () => {
     try {
       const langParam = activeLanguage !== 'en' ? `?language=${activeLanguage}` : ''
+      console.log('📥 Fetching attractions:', { activeLanguage, url: `/api/rates/attractions${langParam}` })
       const response = await fetch(`/api/rates/attractions${langParam}`)
       const data = await response.json()
       if (data.success) {
@@ -288,10 +290,18 @@ export default function AttractionsContent() {
     }
   }
 
+  // Sync activeLanguage when locale provider updates (SSR → client hydration)
+  useEffect(() => {
+    if (currentLocale !== activeLanguage) {
+      setActiveLanguage(currentLocale)
+    }
+  }, [currentLocale])
+
+  // Re-fetch attractions when language changes
   useEffect(() => {
     fetchAttractions()
     fetchSuppliers()
-    
+
     const editId = searchParams.get('edit')
     if (editId) {
       const attraction = attractions.find(a => a.id === editId)
@@ -299,7 +309,7 @@ export default function AttractionsContent() {
         handleEdit(attraction)
       }
     }
-  }, [searchParams])
+  }, [searchParams, activeLanguage])
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -428,6 +438,7 @@ export default function AttractionsContent() {
         supplier_id: formData.supplier_id || null,
         language: activeLanguage
       }
+      console.log('📤 Saving attraction:', { method, activeLanguage, attraction_name: submitData.attraction_name })
       
       const response = await fetch(url, {
         method,
