@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations, useLocale } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -194,13 +194,19 @@ function Pagination({
 // MAIN COMPONENT
 // ============================================
 
+// Read language directly from cookie (bypasses SSR timing issues with useLocale)
+function getLanguageFromCookie(): string {
+  if (typeof document === 'undefined') return 'en'
+  const match = document.cookie.match(/preferred_language=([^;]+)/)
+  return match?.[1] || 'en'
+}
+
 export default function AttractionsContent() {
   const t = useTranslations('rates.attractions')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
-  const currentLocale = useLocale() // may start as 'en' before provider mounts
-  const [activeLanguage, setActiveLanguage] = useState(currentLocale)
+  const [activeLanguage, setActiveLanguage] = useState('en')
 
   // Currency conversion
   const { currency, formatWithConversion } = useCurrency()
@@ -290,14 +296,14 @@ export default function AttractionsContent() {
     }
   }
 
-  // Sync activeLanguage when locale provider updates (SSR → client hydration)
+  // Read language from cookie on mount (bypasses SSR timing issues)
   useEffect(() => {
-    if (currentLocale !== activeLanguage) {
-      setActiveLanguage(currentLocale)
-    }
-  }, [currentLocale])
+    const lang = getLanguageFromCookie()
+    console.log('🌐 Cookie language:', lang)
+    setActiveLanguage(lang)
+  }, [])
 
-  // Re-fetch attractions when language changes
+  // Fetch attractions when language is set or searchParams change
   useEffect(() => {
     fetchAttractions()
     fetchSuppliers()
