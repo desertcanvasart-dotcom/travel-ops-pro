@@ -326,13 +326,12 @@ export async function POST(
       sourceLanguage,
       targetLanguage
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in copy-translate:', error)
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to translate and create version',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: `Failed to translate and create version: ${error?.message || 'Unknown error'}`
       },
       { status: 500 }
     )

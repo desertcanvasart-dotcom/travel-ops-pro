@@ -111,19 +111,27 @@ export async function POST(
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error inserting itinerary version:', error)
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Failed to create version: ${error.message || error.code || 'Unknown DB error'}`
+        },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
       data
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating itinerary version:', error)
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to create version',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: `Failed to create version: ${error?.message || 'Unknown error'}`
       },
       { status: 500 }
     )
