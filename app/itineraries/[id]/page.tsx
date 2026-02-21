@@ -168,9 +168,21 @@ export default function ViewItineraryPage() {
 
   const fetchDays = async (language: Language) => {
     try {
+      console.log(`📥 fetchDays called with language=${language}`)
       const daysResponse = await fetch(`/api/itineraries/${params.id}/days?language=${language}`)
       const daysData = await daysResponse.json()
       if (daysData.success) {
+        // Log debug info from server
+        if (daysData.debug) {
+          console.log('📊 Days API debug:', JSON.stringify(daysData.debug))
+        }
+        // Log first day title to verify translation
+        if (daysData.data && daysData.data.length > 0) {
+          console.log(`📋 First day title (lang=${language}): "${daysData.data[0].title}"`)
+          if (daysData.data[0].services?.length > 0) {
+            console.log(`📋 First service name (lang=${language}): "${daysData.data[0].services[0].service_name}"`)
+          }
+        }
         setDays(daysData.data)
       }
     } catch (err) {
@@ -877,6 +889,7 @@ export default function ViewItineraryPage() {
 
   // Get content for active language version
   const getVersionedContent = () => {
+    console.log(`🌐 getVersionedContent: activeLanguage=${activeLanguage}, hasVersions=${!!itinerary?.versions}, versionKeys=${Object.keys(itinerary?.versions || {})}`)
     if (!itinerary?.versions) {
       return {
         trip_name: itinerary?.trip_name || '',
@@ -889,6 +902,7 @@ export default function ViewItineraryPage() {
       }
     }
     const version = itinerary.versions[activeLanguage] || itinerary.versions['en']
+    console.log(`🌐 Version for ${activeLanguage}: trip_name="${version?.trip_name}", hasVersion=${!!version}`)
     if (version) {
       return {
         trip_name: version.trip_name || itinerary.trip_name,
@@ -947,12 +961,21 @@ export default function ViewItineraryPage() {
   const handleCopyAndTranslate = async (language: Language, forceRetranslate = false) => {
     setCreatingVersion(true)
     try {
+      console.log(`🔄 Copy & Translate: language=${language}, force=${forceRetranslate}`)
       const response = await fetch(`/api/itineraries/${params.id}/versions/copy-translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetLanguage: language, forceRetranslate })
       })
       const data = await response.json()
+      console.log('🔄 Copy & Translate response:', JSON.stringify({
+        success: data.success,
+        error: data.error,
+        translated: data.translated,
+        versionTripName: data.data?.trip_name,
+        translatedDaysCount: data.translatedDays?.length,
+        translatedServicesCount: data.translatedServices?.length
+      }))
       if (data.success) {
         // Refresh itinerary to get updated versions
         await fetchItinerary()

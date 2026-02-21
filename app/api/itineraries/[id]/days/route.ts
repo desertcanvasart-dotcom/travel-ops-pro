@@ -15,6 +15,7 @@ export async function GET(
     // Get language from query params (default to 'en')
     const { searchParams } = new URL(request.url)
     const language = searchParams.get('language') || 'en'
+    console.log(`[days-api] Fetching days for itinerary ${id}, language=${language}`)
 
     // Fetch all days for this itinerary
     const { data: days, error: daysError } = await supabase
@@ -70,12 +71,22 @@ export async function GET(
         })
 
         // Fetch language version for this day
-        const { data: dayVersion } = await supabase
+        const { data: dayVersion, error: dayVersionError } = await supabase
           .from('itinerary_day_versions')
           .select('title, description, city, overnight_city')
           .eq('itinerary_day_id', day.id)
           .eq('language', language)
           .single()
+
+        if (language !== 'en') {
+          console.log(`[days-api] Day ${day.day_number} (${day.id}): version found=${!!dayVersion}, error=${dayVersionError?.message || 'none'}`)
+          if (dayVersion) {
+            console.log(`[days-api] Day ${day.day_number} version title: "${dayVersion.title}"`)
+          }
+          // Check service versions found
+          const svCount = Object.keys(serviceVersionsMap).length
+          console.log(`[days-api] Day ${day.day_number}: ${services?.length || 0} services, ${svCount} service versions found`)
+        }
 
         // Merge version content with main day (version takes precedence)
         return {
@@ -89,10 +100,48 @@ export async function GET(
       })
     )
 
+    // Add diagnostic info for non-English languages
+    let debug: any = undefined
+    if (language !== 'en') {
+      // Quick check: how many day versions and service versions exist for this language?
+      const dayIds = (days || []).map(d => d.id)
+      const { count: dayVersionCount } = await supabase
+        .from('itinerary_day_versions')
+        .select('*', { count: 'exact', head: true })
+        .in('itinerary_day_id', dayIds)
+        .eq('language', language)
+
+      // Get all service IDs for this itinerary
+      const { data: allServices } = await supabase
+        .from('itinerary_services')
+        .select('id')
+        .in('itinerary_day_id', dayIds)
+
+      let serviceVersionCount = 0
+      if (allServices && allServices.length > 0) {
+        const { count } = await supabase
+          .from('itinerary_service_versions')
+          .select('*', { count: 'exact', head: true })
+          .in('itinerary_service_id', allServices.map(s => s.id))
+          .eq('language', language)
+        serviceVersionCount = count || 0
+      }
+
+      debug = {
+        language,
+        totalDays: days?.length || 0,
+        dayVersionsFound: dayVersionCount || 0,
+        totalServices: allServices?.length || 0,
+        serviceVersionsFound: serviceVersionCount
+      }
+      console.log('[days-api] Debug summary:', debug)
+    }
+
     return NextResponse.json({
       success: true,
       data: daysWithServices,
-      language
+      language,
+      debug
     })
   } catch (error) {
     console.error('Error fetching itinerary days:', error)
