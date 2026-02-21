@@ -1603,7 +1603,7 @@ export default function ViewItineraryPage() {
         {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
 
         {/* Inclusions & Exclusions Section */}
-        {currentLocale !== 'en' && !editingInclusions && !editingExclusions && (
+        {activeLanguage !== 'en' && !editingInclusions && !editingExclusions && (
           <div className="flex justify-end mt-6 mb-1">
             <button
               type="button"
@@ -1616,7 +1616,7 @@ export default function ViewItineraryPage() {
             </button>
           </div>
         )}
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${currentLocale === 'en' || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${activeLanguage === 'en' || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
           {/* Inclusions */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
             <div className="flex items-center justify-between mb-3">
