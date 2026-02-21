@@ -347,15 +347,35 @@ export async function POST(
       })
     }
 
-    // Translate the source version content
-    console.log('[copy-translate] Using source version as source. Source fields:', {
-      trip_name: sourceVersion.trip_name,
-      notes: sourceVersion.notes?.substring(0, 50),
-      language: sourceVersion.language
+    // Also fetch the base itinerary to fill in any missing fields from the version
+    const { data: baseItinerary } = await supabase
+      .from('itineraries')
+      .select('trip_name, notes, pickup_location, guide_notes, vehicle_notes, inclusions, exclusions')
+      .eq('id', id)
+      .single()
+
+    // Merge: version fields take precedence, but fall back to base itinerary for any missing/null fields
+    const mergedSource = {
+      trip_name: sourceVersion.trip_name || baseItinerary?.trip_name,
+      notes: sourceVersion.notes || baseItinerary?.notes,
+      pickup_location: sourceVersion.pickup_location || baseItinerary?.pickup_location,
+      guide_notes: sourceVersion.guide_notes || baseItinerary?.guide_notes,
+      vehicle_notes: sourceVersion.vehicle_notes || baseItinerary?.vehicle_notes,
+      inclusions: sourceVersion.inclusions || baseItinerary?.inclusions,
+      exclusions: sourceVersion.exclusions || baseItinerary?.exclusions
+    }
+
+    // Translate the source version content (merged with base itinerary)
+    console.log('[copy-translate] Merged source fields:', {
+      trip_name: mergedSource.trip_name,
+      notes: mergedSource.notes?.substring(0, 50),
+      pickup_location: mergedSource.pickup_location,
+      hasInclusions: !!mergedSource.inclusions,
+      hasExclusions: !!mergedSource.exclusions
     })
 
     const translatedContent = await translateFields(
-      sourceVersion,
+      mergedSource,
       ITINERARY_TRANSLATION_FIELDS,
       sourceLanguage,
       targetLanguage as Language
@@ -372,13 +392,13 @@ export async function POST(
       .insert({
         itinerary_id: id,
         language: targetLanguage,
-        trip_name: translatedContent.trip_name || sourceVersion.trip_name,
+        trip_name: translatedContent.trip_name || mergedSource.trip_name,
         notes: translatedContent.notes || null,
         pickup_location: translatedContent.pickup_location || null,
         guide_notes: translatedContent.guide_notes || null,
         vehicle_notes: translatedContent.vehicle_notes || null,
-        inclusions: translatedContent.inclusions || sourceVersion.inclusions || null,
-        exclusions: translatedContent.exclusions || sourceVersion.exclusions || null
+        inclusions: translatedContent.inclusions || mergedSource.inclusions || null,
+        exclusions: translatedContent.exclusions || mergedSource.exclusions || null
       })
       .select()
       .single()

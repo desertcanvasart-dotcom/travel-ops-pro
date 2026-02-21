@@ -106,11 +106,8 @@ export default function ViewItineraryPage() {
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
 
-  // Multilingual state - use cookie value for initial state
-  const [activeLanguage, setActiveLanguage] = useState<Language>(() => {
-    if (typeof document !== 'undefined') return getLanguageFromCookie()
-    return 'en'
-  })
+  // Multilingual state
+  const [activeLanguage, setActiveLanguage] = useState<Language>('en')
   const [creatingVersion, setCreatingVersion] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -151,6 +148,15 @@ export default function ViewItineraryPage() {
   const [savingInclusions, setSavingInclusions] = useState(false)
   const [translatingInclusions, setTranslatingInclusions] = useState(false)
 
+  // Sync language from cookie after hydration
+  useEffect(() => {
+    const cookieLang = getLanguageFromCookie()
+    console.log(`🍪 Cookie language on mount: ${cookieLang}, current activeLanguage: en`)
+    if (cookieLang !== 'en') {
+      setActiveLanguage(cookieLang)
+    }
+  }, [])
+
   useEffect(() => {
     if (params.id) {
       fetchItinerary()
@@ -162,6 +168,7 @@ export default function ViewItineraryPage() {
   // Fetch days when language changes
   useEffect(() => {
     if (params.id) {
+      console.log(`🔁 activeLanguage changed to: ${activeLanguage}, fetching days...`)
       fetchDays(activeLanguage)
     }
   }, [params.id, activeLanguage])
