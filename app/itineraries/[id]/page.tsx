@@ -90,7 +90,15 @@ export default function ViewItineraryPage() {
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
-  const currentLocale = useLocale() as Language
+  const intlLocale = useLocale() as Language
+
+  // Read language directly from cookie to avoid SSR timing issues with useLocale()
+  function getLanguageFromCookie(): Language {
+    if (typeof document === 'undefined') return 'en'
+    const match = document.cookie.match(/preferred_language=([^;]+)/)
+    const lang = match?.[1] as Language | undefined
+    return (lang === 'en' || lang === 'ja') ? lang : 'en'
+  }
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
@@ -98,8 +106,11 @@ export default function ViewItineraryPage() {
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
 
-  // Multilingual state
-  const [activeLanguage, setActiveLanguage] = useState<Language>(currentLocale)
+  // Multilingual state - use cookie value for initial state
+  const [activeLanguage, setActiveLanguage] = useState<Language>(() => {
+    if (typeof document !== 'undefined') return getLanguageFromCookie()
+    return 'en'
+  })
   const [creatingVersion, setCreatingVersion] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -919,6 +930,8 @@ export default function ViewItineraryPage() {
       if (data.success) {
         // Refresh itinerary to get updated versions
         await fetchItinerary()
+        // Always re-fetch days with the target language
+        await fetchDays(language)
         setActiveLanguage(language)
       } else {
         await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
@@ -931,18 +944,21 @@ export default function ViewItineraryPage() {
     }
   }
 
-  const handleCopyAndTranslate = async (language: Language) => {
+  const handleCopyAndTranslate = async (language: Language, forceRetranslate = false) => {
     setCreatingVersion(true)
     try {
       const response = await fetch(`/api/itineraries/${params.id}/versions/copy-translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetLanguage: language })
+        body: JSON.stringify({ targetLanguage: language, forceRetranslate })
       })
       const data = await response.json()
       if (data.success) {
         // Refresh itinerary to get updated versions
         await fetchItinerary()
+        // Always re-fetch days with the target language
+        // (setActiveLanguage may be a no-op if already set to this language)
+        await fetchDays(language)
         setActiveLanguage(language)
       } else {
         await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
@@ -1056,6 +1072,27 @@ export default function ViewItineraryPage() {
                 onCopyAndTranslate={() => handleCopyAndTranslate(activeLanguage)}
                 isLoading={creatingVersion}
               />
+            </div>
+          )}
+          {hasActiveVersion && activeLanguage !== 'en' && (
+            <div className="px-4 pb-3 flex justify-end">
+              <button
+                onClick={async () => {
+                  const confirmed = await dialog.confirm(
+                    'Re-translate',
+                    `This will delete the existing ${activeLanguage.toUpperCase()} version and re-translate from English. Continue?`,
+                    'warning'
+                  )
+                  if (confirmed) {
+                    handleCopyAndTranslate(activeLanguage, true)
+                  }
+                }}
+                disabled={creatingVersion}
+                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 disabled:opacity-50"
+              >
+                <Languages className="w-3.5 h-3.5" />
+                {creatingVersion ? 'Translating...' : 'Re-translate from English'}
+              </button>
             </div>
           )}
         </div>
