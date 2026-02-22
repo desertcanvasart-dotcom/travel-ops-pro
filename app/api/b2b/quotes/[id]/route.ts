@@ -39,7 +39,47 @@ export async function GET(
 
     if (error) {
       console.error('Error fetching quote:', error)
-      return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
+      // If the join fails (e.g. schema cache stale), try without itineraries join
+      const { data: fallbackData, error: fallbackError } = await supabaseAdmin
+        .from('tour_quotes')
+        .select(`
+          *,
+          tour_variations (
+            variation_name, variation_code, tier, group_type,
+            inclusions, exclusions,
+            tour_templates (
+              template_name, template_code, duration_days, duration_nights,
+              short_description
+            )
+          ),
+          b2b_partners (company_name, partner_code, contact_name, email)
+        `)
+        .eq('id', id)
+        .single()
+
+      if (fallbackError) {
+        console.error('Fallback also failed:', fallbackError)
+        return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
+      }
+
+      // Return data without itineraries join
+      const versionsRes = await supabaseAdmin
+        .from('quote_versions')
+        .select('*')
+        .eq('quote_id', id)
+      const vMap: Record<string, any> = {}
+      if (!versionsRes.error && versionsRes.data) {
+        versionsRes.data.forEach(v => { vMap[v.language] = v })
+      }
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...fallbackData,
+          itineraries: null,
+          available_languages: Object.keys(vMap),
+          versions: vMap
+        }
+      })
     }
 
     // Fetch language versions

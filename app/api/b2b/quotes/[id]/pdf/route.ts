@@ -640,12 +640,34 @@ export async function GET(
       .eq('id', id)
       .single()
 
+    let finalQuote = quote
     if (error || !quote) {
-      return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+      // Fallback without itineraries join if schema cache is stale
+      const fallback = await supabaseAdmin
+        .from('tour_quotes')
+        .select(`
+          *,
+          tour_variations (
+            variation_name, variation_code, tier, group_type,
+            inclusions, exclusions,
+            tour_templates (
+              template_name, template_code, duration_days, duration_nights,
+              short_description
+            )
+          ),
+          b2b_partners (company_name, partner_code, contact_name, email)
+        `)
+        .eq('id', id)
+        .single()
+
+      if (fallback.error || !fallback.data) {
+        return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+      }
+      finalQuote = { ...fallback.data, itineraries: null }
     }
 
     // Generate HTML
-    const html = generateQuoteHTML(quote)
+    const html = generateQuoteHTML(finalQuote)
 
     // Launch Puppeteer
     const browser = await puppeteer.launch({

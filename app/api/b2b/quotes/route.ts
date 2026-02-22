@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     // Get single quote by ID
     if (id) {
-      const { data, error } = await supabaseAdmin
+      let { data, error } = await supabaseAdmin
         .from('tour_quotes')
         .select(`
           *,
@@ -32,7 +32,20 @@ export async function GET(request: NextRequest) {
         .eq('id', id)
         .single()
 
-      if (error) throw error
+      // Fallback without itineraries join if schema cache is stale
+      if (error) {
+        const fallback = await supabaseAdmin
+          .from('tour_quotes')
+          .select(`
+            *,
+            tour_variations (variation_name, variation_code, tier, tour_templates (template_name, template_code, duration_days)),
+            b2b_partners (company_name, partner_code, contact_name, email)
+          `)
+          .eq('id', id)
+          .single()
+        if (fallback.error) throw fallback.error
+        data = { ...fallback.data, itineraries: null }
+      }
 
       // Fetch language versions
       const { data: versions, error: versionsError } = await supabaseAdmin
@@ -73,9 +86,27 @@ export async function GET(request: NextRequest) {
     if (partner_id) query = query.eq('partner_id', partner_id)
     if (status) query = query.eq('status', status)
 
-    const { data, error } = await query
+    let { data, error } = await query
 
-    if (error) throw error
+    // Fallback without itineraries join if schema cache is stale
+    if (error) {
+      let fallbackQuery = supabaseAdmin
+        .from('tour_quotes')
+        .select(`
+          *,
+          tour_variations (variation_name, variation_code, tier, tour_templates (template_name, template_code)),
+          b2b_partners (company_name, partner_code)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (partner_id) fallbackQuery = fallbackQuery.eq('partner_id', partner_id)
+      if (status) fallbackQuery = fallbackQuery.eq('status', status)
+
+      const fallback = await fallbackQuery
+      if (fallback.error) throw fallback.error
+      data = (fallback.data || []).map(q => ({ ...q, itineraries: null }))
+    }
 
     // Fetch language versions for all quotes
     const quoteIds = (data || []).map(q => q.id)
