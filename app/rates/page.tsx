@@ -827,6 +827,12 @@ export default function RatesPage() {
             >
               💵 {t('tabs.tips')} ({rates.tipping.length})
             </button>
+            <Link
+              href="/rates/fixed-costs"
+              className="px-3 py-2 text-xs font-semibold transition-all whitespace-nowrap text-gray-600 hover:text-blue-600 hover:bg-gray-50 flex items-center gap-1"
+            >
+              💧 Fixed Costs
+            </Link>
           </div>
         </div>
       </div>

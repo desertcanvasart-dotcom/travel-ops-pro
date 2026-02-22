@@ -11,6 +11,7 @@ import {
   getCruiseTransportRate
 } from '@/lib/auto-pricing-service'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
+import { getFixedDailyCosts } from '@/lib/fixed-costs'
 
 // ============================================
 // PRICING RATES (fetched from DB)
@@ -303,6 +304,10 @@ export async function createLandItineraryServices(
     if (!needsConversion || !exchangeRates) return eurAmount
     return Math.round(convertCurrency(eurAmount, 'EUR', currency, exchangeRates) * 100) / 100
   }
+
+  // Fetch configurable fixed daily costs (water, tips)
+  const fixedCosts = await getFixedDailyCosts()
+  const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
 
   const marginMultiplier = 1 + (marginPercent / 100)
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
@@ -899,16 +904,16 @@ export async function createLandItineraryServices(
       totalClientPrice += withMargin(dinnerCost)
     }
 
-    // Water (for touring days only)
+    // Water (for touring days only) — rate from fixed_daily_costs table
     if (!isTransferOnly && !isFreeDay) {
-      const waterCost = 2 * totalPax
+      const waterCost = waterRatePerPerson * totalPax
       services.push({
         service_type: 'supplies',
         service_code: 'WATER',
         service_name: 'Water Bottles',
         quantity: totalPax,
-        rate_eur: 2,
-        rate_non_eur: 2,
+        rate_eur: waterRatePerPerson,
+        rate_non_eur: waterRatePerPerson,
         total_cost: waterCost,
         client_price: withMargin(waterCost),
         notes: 'Bottled water'

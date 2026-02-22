@@ -36,6 +36,7 @@ import {
 import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai/prompt-builder'
 import { fetchAllPricingRates, createLandItineraryServices, fetchHotelsForCities } from '@/lib/ai/service-creation'
 import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclusions-builder'
+import { getFixedDailyCosts } from '@/lib/fixed-costs'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -402,6 +403,10 @@ export async function POST(request: NextRequest) {
     const marginMultiplier = 1 + (margin_percent / 100)
     const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
 
+    // Fetch configurable fixed daily costs (water, tips)
+    const fixedCosts = await getFixedDailyCosts()
+    const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
+
     // ============================================
     // CRUISE PATH (creative mode ONLY, cruise-package or cruise-land)
     // CRITICAL: Structured mode ALWAYS takes priority over cruise content library.
@@ -733,17 +738,17 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // --- SERVICE 6: Water (on touring days) ---
+          // --- SERVICE 6: Water (on touring days) — rate from fixed_daily_costs table ---
           if (!isSailingDay) {
-            const waterCost = 2 * totalPax
+            const waterCost = waterRatePerPerson * totalPax
             await supabase.from('itinerary_services').insert({
               itinerary_day_id: day.id,
               service_type: 'supplies',
               service_code: 'WATER',
               service_name: 'Water Bottles',
               quantity: totalPax,
-              rate_eur: 2,
-              rate_non_eur: 2,
+              rate_eur: waterRatePerPerson,
+              rate_non_eur: waterRatePerPerson,
               total_cost: waterCost,
               client_price: withMargin(waterCost),
               notes: 'Bottled water'

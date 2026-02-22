@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
+import { getFixedDailyCosts } from '@/lib/fixed-costs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -647,7 +648,8 @@ export async function POST(
     const skippedAddons: string[] = []
 
     const tipping = await getTippingRate(tier)
-    const waterRate = 2
+    const fixedCosts = await getFixedDailyCosts()
+    const waterRate = fixedCosts.waterPerPersonPerDay
     const roomsNeeded = Math.ceil(totalPax / 2)
 
     // Determine what to include based on package type
