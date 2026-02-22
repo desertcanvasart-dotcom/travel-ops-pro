@@ -517,6 +517,7 @@ export default function AutouraHomepage() {
               <a href="#features" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Features</a>
               <a href="#how-it-works" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">How It Works</a>
               <Link href="/integrations" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Integrations</Link>
+              <Link href="/docs" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Docs</Link>
               <Link href="/about" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">About</Link>
               <a 
                 href="https://calendly.com/autoura"
@@ -543,6 +544,7 @@ export default function AutouraHomepage() {
               <a href="#features" className="block text-sm text-stone-600 hover:text-stone-900 py-2">Features</a>
               <a href="#how-it-works" className="block text-sm text-stone-600 hover:text-stone-900 py-2">How It Works</a>
               <Link href="/integrations" className="block text-sm text-stone-600 hover:text-stone-900 py-2">Integrations</Link>
+              <Link href="/docs" className="block text-sm text-stone-600 hover:text-stone-900 py-2">Docs</Link>
               <Link href="/about" className="block text-sm text-stone-600 hover:text-stone-900 py-2">About</Link>
               <a 
                 href="https://calendly.com/autoura"
@@ -1022,6 +1024,7 @@ export default function AutouraHomepage() {
             </div>
             <div className="flex items-center gap-6 sm:gap-8 text-sm text-stone-500">
               <Link href="/about" className="hover:text-stone-700 transition-colors">About</Link>
+              <Link href="/docs" className="hover:text-stone-700 transition-colors">Docs</Link>
               <Link href="/integrations" className="hover:text-stone-700 transition-colors">Integrations</Link>
               <Link href="/privacy" className="hover:text-stone-700 transition-colors">Privacy</Link>
               <Link href="/terms" className="hover:text-stone-700 transition-colors">Terms</Link>
