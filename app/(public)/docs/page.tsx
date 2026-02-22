@@ -12,6 +12,7 @@ import {
   FolderOpen,
   Settings,
   Lightbulb,
+  MailPlus,
 } from 'lucide-react'
 
 const SECTIONS = [
@@ -28,9 +29,15 @@ const SECTIONS = [
     description: 'Your home base with quick stats, actions, and recent activity.',
   },
   {
+    href: '/docs/communication',
+    icon: MessageCircle,
+    title: 'Communication',
+    description: 'WhatsApp inbox, AI parser, and email management.',
+  },
+  {
     href: '/docs/clients',
     icon: Users,
-    title: 'Clients',
+    title: 'Clients (CRM)',
     description: 'Add, search, and manage client profiles, notes, and follow-ups.',
   },
   {
@@ -58,12 +65,6 @@ const SECTIONS = [
     description: 'Log trip costs, track commissions, and view profit & loss.',
   },
   {
-    href: '/docs/communication',
-    icon: MessageCircle,
-    title: 'Communication',
-    description: 'WhatsApp inbox, AI parser, and email management.',
-  },
-  {
     href: '/docs/tours-rates',
     icon: Globe,
     title: 'Tours & Rates',
@@ -74,6 +75,12 @@ const SECTIONS = [
     icon: FolderOpen,
     title: 'Resources & Documents',
     description: 'Manage guides, vehicles, hotels, and generate documents.',
+  },
+  {
+    href: '/docs/message-templates',
+    icon: MailPlus,
+    title: 'Message Templates',
+    description: 'Create and send pre-designed messages via WhatsApp and email.',
   },
   {
     href: '/docs/team-settings',

@@ -21,20 +21,22 @@ import {
   Settings,
   Lightbulb,
   Camera,
-  BookOpen
+  BookOpen,
+  MailPlus
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { href: '/docs/getting-started', label: 'Getting Started', icon: Rocket },
   { href: '/docs/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/docs/clients', label: 'Clients', icon: Users },
+  { href: '/docs/communication', label: 'Communication', icon: MessageCircle },
+  { href: '/docs/clients', label: 'Clients (CRM)', icon: Users },
   { href: '/docs/itineraries', label: 'Itineraries', icon: Map },
   { href: '/docs/bookings', label: 'Bookings', icon: CalendarCheck },
   { href: '/docs/invoices-payments', label: 'Invoices & Payments', icon: FileText },
   { href: '/docs/expenses-commissions', label: 'Expenses & Commissions', icon: Wallet },
-  { href: '/docs/communication', label: 'Communication', icon: MessageCircle },
   { href: '/docs/tours-rates', label: 'Tours & Rates', icon: Globe },
   { href: '/docs/resources-documents', label: 'Resources & Documents', icon: FolderOpen },
+  { href: '/docs/message-templates', label: 'Message Templates', icon: MailPlus },
   { href: '/docs/team-settings', label: 'Team & Settings', icon: Settings },
   { href: '/docs/workflows', label: 'Workflows & Tips', icon: Lightbulb },
 ]

@@ -128,10 +128,10 @@ export default function ResourcesDocumentsPage() {
           Tours &amp; Rates
         </Link>
         <Link
-          href="/docs/team-settings"
+          href="/docs/message-templates"
           className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
         >
-          Next: Team &amp; Settings
+          Next: Message Templates
           <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
