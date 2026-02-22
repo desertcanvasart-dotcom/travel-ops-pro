@@ -220,6 +220,7 @@ export default function TransportationContent() {
   const [formData, setFormData] = useState<FormData>(initialFormData)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showRouteDropdown, setShowRouteDropdown] = useState(false)
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -1243,19 +1244,58 @@ export default function TransportationContent() {
                   </div>
                 </div>
 
-                {/* Route Name - Descriptive label for this service */}
-                <div>
+                {/* Route Name - Combobox with existing names + custom entry */}
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-600 mb-1.5">
                     Route / Service Name
                   </label>
-                  <input
-                    type="text"
-                    value={formData.route_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, route_name: e.target.value }))}
-                    placeholder="e.g., Karnak & Luxor Temples tour transport"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Descriptive name shown on cards and in itineraries. Leave empty to auto-generate.</p>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={formData.route_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, route_name: e.target.value }))}
+                      onFocus={() => setShowRouteDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowRouteDropdown(false), 200)}
+                      placeholder="e.g., Karnak & Luxor Temples tour transport"
+                      className="w-full px-3 py-2 pr-8 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRouteDropdown(!showRouteDropdown)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {showRouteDropdown && (() => {
+                    const existingNames = [...new Set(
+                      rates
+                        .map(r => r.route_name)
+                        .filter((n): n is string => !!n && n.trim() !== '')
+                    )].sort()
+                    const filtered = formData.route_name.trim()
+                      ? existingNames.filter(n => n.toLowerCase().includes(formData.route_name.toLowerCase()))
+                      : existingNames
+                    if (filtered.length === 0) return null
+                    return (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {filtered.map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, route_name: name }))
+                              setShowRouteDropdown(false)
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-[#647C47]/10 text-gray-700 border-b border-gray-50 last:border-b-0"
+                          >
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                  <p className="text-xs text-gray-400 mt-1">Select an existing route or type a new name. Leave empty to auto-generate.</p>
                 </div>
 
                 {/* City / Route */}
