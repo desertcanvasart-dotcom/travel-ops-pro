@@ -21,27 +21,46 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    
+    const { searchParams } = new URL(request.url)
+    const language = searchParams.get('language') || 'en'
+
     const { data, error } = await supabase
       .from('entrance_fees')
       .select('*')
       .eq('id', id)
       .single()
-    
+
     if (error) {
       console.error('[Attraction API] Error fetching:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
-    
+
     if (!data) {
       return NextResponse.json({ success: false, error: 'Attraction not found' }, { status: 404 })
     }
-    
+
+    // Merge language version if non-English
+    let versionName = null
+    let versionNotes = null
+    if (language !== 'en') {
+      const { data: version } = await supabase
+        .from('entrance_fee_versions')
+        .select('attraction_name, notes')
+        .eq('entrance_fee_id', id)
+        .eq('language', language)
+        .single()
+
+      if (version) {
+        versionName = version.attraction_name
+        versionNotes = version.notes
+      }
+    }
+
     // Transform for frontend
     const transformed = {
       id: data.id,
       service_code: data.service_code,
-      attraction_name: data.attraction_name,
+      attraction_name: versionName || data.attraction_name,
       city: data.city,
       fee_type: data.fee_type,
       eur_rate: data.eur_rate,
@@ -53,7 +72,7 @@ export async function GET(
       rate_valid_from: data.rate_valid_from,
       rate_valid_to: data.rate_valid_to,
       category: data.category,
-      notes: data.notes,
+      notes: versionNotes ?? data.notes,
       is_active: data.is_active !== false,
       is_addon: data.is_addon || false,
       addon_note: data.addon_note,
@@ -61,9 +80,9 @@ export async function GET(
       created_at: data.created_at,
       updated_at: data.updated_at
     }
-    
+
     return NextResponse.json({ success: true, data: transformed })
-    
+
   } catch (error: any) {
     console.error('[Attraction API] Error:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })

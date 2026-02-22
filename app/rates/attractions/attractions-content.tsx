@@ -263,7 +263,7 @@ export default function AttractionsContent() {
   // Fetch attractions
   const fetchAttractions = async () => {
     try {
-      const langParam = activeLanguage !== 'en' ? `?language=${activeLanguage}` : ''
+      const langParam = `?language=${activeLanguage || 'en'}`
       console.log('📥 Fetching attractions: lang=' + activeLanguage + ' url=/api/rates/attractions' + langParam)
       const response = await fetch(`/api/rates/attractions${langParam}`)
       const data = await response.json()
@@ -355,7 +355,8 @@ export default function AttractionsContent() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          is_addon: !attraction.is_addon
+          is_addon: !attraction.is_addon,
+          language: activeLanguage || 'en'
         })
       })
       

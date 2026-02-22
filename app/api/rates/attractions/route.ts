@@ -52,11 +52,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Check for language parameter to merge versions
-    const language = searchParams.get('language')
+    const language = searchParams.get('language') || 'en'
 
-    // Build versions map if non-English language requested
+    // Build versions map for non-English languages
     let versionsMap: Record<string, { attraction_name?: string; notes?: string }> = {}
-    if (language && language !== 'en' && data && data.length > 0) {
+    if (language !== 'en' && data && data.length > 0) {
       const ids = data.map((item: any) => item.id)
       const { data: versions } = await supabase
         .from('entrance_fee_versions')
