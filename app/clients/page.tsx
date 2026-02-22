@@ -187,21 +187,24 @@ export default function ClientsPage() {
 
   const confirmDelete = async () => {
     if (!deleteModal.clientId) return
-    
+
     try {
       setDeleting(true)
-      const { error } = await supabase
-        .from('clients')
-        .delete()
-        .eq('id', deleteModal.clientId)
+      const response = await fetch(`/api/clients/${deleteModal.clientId}`, {
+        method: 'DELETE',
+      })
 
-      if (error) throw error
-      
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete client')
+      }
+
       closeDeleteModal()
       fetchClients()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting client:', error)
-      await dialog.alert(t('error'), t('failedToDelete'), 'warning')
+      await dialog.alert(t('error'), error.message || t('failedToDelete'), 'warning')
     } finally {
       setDeleting(false)
     }

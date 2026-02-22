@@ -204,6 +204,39 @@ export async function DELETE(
       }
     }
 
+    // Delete email conversations linked to this client
+    const { data: emailConvs, error: emailConvError } = await supabaseAdmin
+      .from('email_conversations')
+      .select('id')
+      .eq('client_id', id)
+
+    if (emailConvError) {
+      console.error('Error checking email_conversations:', emailConvError)
+      // Don't block if table doesn't exist
+    }
+
+    if (emailConvs && emailConvs.length > 0) {
+      // Unlink or delete email conversations
+      // We set client_id to null to preserve email history while removing the FK constraint
+      const { error: unlinkEmailError } = await supabaseAdmin
+        .from('email_conversations')
+        .update({ client_id: null })
+        .eq('client_id', id)
+
+      if (unlinkEmailError) {
+        console.error('Error unlinking email conversations:', unlinkEmailError)
+        // If unlinking fails, try deleting
+        const { error: deleteEmailConvError } = await supabaseAdmin
+          .from('email_conversations')
+          .delete()
+          .eq('client_id', id)
+
+        if (deleteEmailConvError) {
+          console.error('Error deleting email conversations:', deleteEmailConvError)
+        }
+      }
+    }
+
     // Now delete the client
     const { error } = await supabaseAdmin
       .from('clients')
