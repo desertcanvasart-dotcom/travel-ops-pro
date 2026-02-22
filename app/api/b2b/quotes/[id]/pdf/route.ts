@@ -39,16 +39,16 @@ function generateQuoteHTML(quote: any): string {
   <title>${quote.quote_number} - Quote</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', 'Noto Sans JP', sans-serif;
       font-size: 10pt;
       line-height: 1.5;
       color: #1f2937;
