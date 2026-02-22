@@ -99,6 +99,40 @@ export async function PATCH(
   }
 }
 
+// Helper: safely delete or unlink records from a table by client_id
+async function cleanupTable(
+  table: string,
+  clientId: string,
+  mode: 'delete' | 'unlink' = 'delete'
+): Promise<void> {
+  try {
+    if (mode === 'unlink') {
+      const { error } = await supabaseAdmin
+        .from(table)
+        .update({ client_id: null })
+        .eq('client_id', clientId)
+      if (error) {
+        console.warn(`Could not unlink ${table}, trying delete:`, error.message)
+        // Fallback to delete
+        const { error: delErr } = await supabaseAdmin
+          .from(table)
+          .delete()
+          .eq('client_id', clientId)
+        if (delErr) console.warn(`Could not delete ${table}:`, delErr.message)
+      }
+    } else {
+      const { error } = await supabaseAdmin
+        .from(table)
+        .delete()
+        .eq('client_id', clientId)
+      if (error) console.warn(`Could not delete from ${table}:`, error.message)
+    }
+  } catch (e) {
+    // Table may not exist — ignore
+    console.warn(`Cleanup ${table} skipped:`, e)
+  }
+}
+
 // DELETE - Delete client
 export async function DELETE(
   request: NextRequest,
@@ -107,17 +141,12 @@ export async function DELETE(
   try {
     const { id } = await params
 
-    // First, check if client has any related records
-    // Check for itineraries
-    const { data: itineraries, error: itinError } = await supabaseAdmin
+    // Hard-block: check for itineraries (important business data)
+    const { data: itineraries } = await supabaseAdmin
       .from('itineraries')
       .select('id')
       .eq('client_id', id)
       .limit(1)
-
-    if (itinError) {
-      console.error('Error checking itineraries:', itinError)
-    }
 
     if (itineraries && itineraries.length > 0) {
       return NextResponse.json(
@@ -126,17 +155,12 @@ export async function DELETE(
       )
     }
 
-    // Check for invoices
-    const { data: invoices, error: invError } = await supabaseAdmin
+    // Hard-block: check for invoices (financial data)
+    const { data: invoices } = await supabaseAdmin
       .from('invoices')
       .select('id')
       .eq('client_id', id)
       .limit(1)
-
-    if (invError) {
-      console.error('Error checking invoices:', invError)
-      // Don't block if table doesn't exist
-    }
 
     if (invoices && invoices.length > 0) {
       return NextResponse.json(
@@ -145,97 +169,30 @@ export async function DELETE(
       )
     }
 
-    // Check for follow_ups
-    const { data: followUps, error: fuError } = await supabaseAdmin
-      .from('follow_ups')
-      .select('id')
-      .eq('client_id', id)
-      .limit(1)
-
-    if (fuError) {
-      console.error('Error checking follow_ups:', fuError)
-      // Don't block if table doesn't exist
-    }
-
-    // If there are follow-ups, delete them first (they're not critical)
-    if (followUps && followUps.length > 0) {
-      const { error: deleteFollowUpsError } = await supabaseAdmin
-        .from('follow_ups')
-        .delete()
-        .eq('client_id', id)
-
-      if (deleteFollowUpsError) {
-        console.error('Error deleting follow-ups:', deleteFollowUpsError)
-      }
-    }
-
-    // Check for WhatsApp conversations
-    const { data: conversations, error: convError } = await supabaseAdmin
+    // Clean up WhatsApp: delete messages first, then conversations
+    const { data: waConvs } = await supabaseAdmin
       .from('whatsapp_conversations')
       .select('id')
       .eq('client_id', id)
-      .limit(1)
 
-    if (convError) {
-      console.error('Error checking conversations:', convError)
-      // Don't block if table doesn't exist
-    }
-
-    // Delete WhatsApp conversations if any
-    if (conversations && conversations.length > 0) {
-      // First delete messages
-      const { error: deleteMessagesError } = await supabaseAdmin
+    if (waConvs && waConvs.length > 0) {
+      await supabaseAdmin
         .from('whatsapp_messages')
         .delete()
-        .in('conversation_id', conversations.map(c => c.id))
-
-      if (deleteMessagesError) {
-        console.error('Error deleting messages:', deleteMessagesError)
-      }
-
-      // Then delete conversations
-      const { error: deleteConvError } = await supabaseAdmin
-        .from('whatsapp_conversations')
-        .delete()
-        .eq('client_id', id)
-
-      if (deleteConvError) {
-        console.error('Error deleting conversations:', deleteConvError)
-      }
+        .in('conversation_id', waConvs.map(c => c.id))
     }
 
-    // Delete email conversations linked to this client
-    const { data: emailConvs, error: emailConvError } = await supabaseAdmin
-      .from('email_conversations')
-      .select('id')
-      .eq('client_id', id)
-
-    if (emailConvError) {
-      console.error('Error checking email_conversations:', emailConvError)
-      // Don't block if table doesn't exist
-    }
-
-    if (emailConvs && emailConvs.length > 0) {
-      // Unlink or delete email conversations
-      // We set client_id to null to preserve email history while removing the FK constraint
-      const { error: unlinkEmailError } = await supabaseAdmin
-        .from('email_conversations')
-        .update({ client_id: null })
-        .eq('client_id', id)
-
-      if (unlinkEmailError) {
-        console.error('Error unlinking email conversations:', unlinkEmailError)
-        // If unlinking fails, try deleting
-        const { error: deleteEmailConvError } = await supabaseAdmin
-          .from('email_conversations')
-          .delete()
-          .eq('client_id', id)
-
-        if (deleteEmailConvError) {
-          console.error('Error deleting email conversations:', deleteEmailConvError)
-        }
-      }
-    }
+    // Clean up all related tables (delete or unlink as appropriate)
+    // These run in parallel for speed — each is independent
+    await Promise.allSettled([
+      cleanupTable('follow_ups', id),
+      cleanupTable('whatsapp_conversations', id),
+      cleanupTable('client_preferences', id),
+      cleanupTable('client_notes', id),
+      cleanupTable('commissions', id, 'unlink'),
+      cleanupTable('template_send_log', id, 'unlink'),
+      cleanupTable('email_conversations', id, 'unlink'),
+    ])
 
     // Now delete the client
     const { error } = await supabaseAdmin
@@ -245,15 +202,17 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting client:', error)
-      
-      // Check if it's a foreign key constraint error
+
+      // If there's STILL a FK constraint, log the detail for debugging
       if (error.code === '23503') {
+        const detail = error.details || error.message
+        console.error('FK constraint detail:', detail)
         return NextResponse.json(
-          { error: 'Cannot delete client due to related records. Please remove all related data first.' },
+          { error: `Cannot delete client: a related record still exists. Detail: ${detail}` },
           { status: 400 }
         )
       }
-      
+
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
