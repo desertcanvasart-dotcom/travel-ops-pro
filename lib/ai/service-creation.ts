@@ -243,6 +243,7 @@ export async function createLandItineraryServices(
     includeLunch: boolean
     includeDinner: boolean
     includeAccommodation: boolean
+    includeGuide?: boolean  // Global guide override: true=always include, false=never include, undefined=per-day AI decision
     skipPricing: boolean
     marginPercent: number
     startDate: string
@@ -257,7 +258,7 @@ export async function createLandItineraryServices(
     itineraryId, itineraryData, rates, startDateObj, durationDays,
     effectivePackageType, effectiveCity, totalPax, isEuroPassport,
     tier, language, includeLunch, includeDinner, includeAccommodation,
-    skipPricing, marginPercent, startDate, currency = 'EUR',
+    includeGuide, skipPricing, marginPercent, startDate, currency = 'EUR',
   } = params
 
   // Fetch exchange rates for currency conversion
@@ -306,7 +307,9 @@ export async function createLandItineraryServices(
     // Cruise day detection: trust AI output OR force based on package type
     const isCruiseDay = dayData.is_cruise_day || dayData.accommodation_type === 'cruise'
       || (effectivePackageType === 'cruise-package' && !isLastDay && !isTransferOnly)
-    const dayNeedsGuide = dayData.guide_required !== false && !isTransferOnly && !isFreeDay
+    const dayNeedsGuide = includeGuide !== undefined
+      ? (includeGuide && !isTransferOnly && !isFreeDay)  // Global override from user
+      : (dayData.guide_required !== false && !isTransferOnly && !isFreeDay)  // Per-day AI decision
     const dayIncludesLunch = isFreeDay ? false : (dayData.includes_lunch ?? includeLunch)
     const dayIncludesDinner = dayData.includes_dinner ?? includeDinner
     const includesHotelForDay = !isLastDay && includeAccommodation && !isCruiseDay && (dayData.includes_hotel !== false)

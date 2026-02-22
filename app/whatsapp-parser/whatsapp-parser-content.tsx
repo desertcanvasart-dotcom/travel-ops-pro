@@ -13,7 +13,8 @@ import {
   Crown, Star, Settings, Check, X, Hotel, Plane, Car, Ship,
   Sun, Map, Building2, Package, Anchor, Clock, BadgeCheck,
   Percent, Languages, ChevronDown, ChevronUp, Info, Edit3, Save,
-  Zap, Pencil, FileText, Wand2, ListChecks, AlertTriangle, Plus
+  Zap, Pencil, FileText, Wand2, ListChecks, AlertTriangle, Plus,
+  UserCheck, UserX
 } from 'lucide-react'
 import Link from 'next/link'
 import { type PackageType, PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
@@ -870,6 +871,8 @@ function WhatsAppParserContent() {
   const [selectedTier, setSelectedTier] = useState<string>('standard')
   // UPDATED: Default to land-package
   const [packageType, setPackageType] = useState<PackageType>('land-package')
+  // Guide toggle: true = include guide, false = exclude guide
+  const [includeGuide, setIncludeGuide] = useState<boolean>(true)
 
   const [generationMode, setGenerationMode] = useState<GenerationMode>('edit')
   
@@ -1355,6 +1358,7 @@ function WhatsAppParserContent() {
           margin_percent: userPreferences.default_margin_percent,
           currency: effectiveCurrency,
           is_euro_passport: data.is_euro_passport,
+          include_guide: includeGuide,
           skip_pricing: generationMode === 'edit',
           input_mode_override: inputMode,
           is_structured_input: data.is_structured_input,
@@ -1730,6 +1734,42 @@ function WhatsAppParserContent() {
                         </button>
                       )
                     })}
+                  </div>
+                </div>
+
+                {/* Guide Service Toggle */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                      <User className="w-4 h-4 text-purple-500" />
+                      {t('guideService') || 'Guide Service'}
+                    </h3>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIncludeGuide(true)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          includeGuide
+                            ? 'bg-primary-600 text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-500 hover:bg-primary-50 hover:text-primary-700'
+                        }`}
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        {t('includeGuide') || 'Include Guide'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIncludeGuide(false)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          !includeGuide
+                            ? 'bg-red-600 text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600'
+                        }`}
+                      >
+                        <UserX className="w-3.5 h-3.5" />
+                        {t('excludeGuide') || 'Exclude Guide'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 

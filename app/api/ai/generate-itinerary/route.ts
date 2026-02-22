@@ -228,6 +228,7 @@ export async function POST(request: NextRequest) {
       include_lunch = true,
       include_dinner = false,
       include_accommodation = true,
+      include_guide,  // undefined = per-day AI decision, true = always, false = never
       margin_percent = userPrefs.default_margin_percent,
       currency = userPrefs.default_currency,
       cost_mode = userPrefs.default_cost_mode,
@@ -574,7 +575,9 @@ export async function POST(request: NextRequest) {
           const dayOvernight = dayData.overnight || `On board - ${dayData.city}`
           const isLastDay = dayData.day_number === duration_days
           const isSailingDay = dayData.is_sailing_day || false
-          const dayNeedsGuide = !isSailingDay && (dayData.attractions?.length > 0 || dayData.guide_required !== false)
+          const dayNeedsGuide = include_guide !== undefined
+            ? (include_guide && !isSailingDay)  // Global override from user
+            : (!isSailingDay && (dayData.attractions?.length > 0 || dayData.guide_required !== false))
 
           const { data: day, error: dayError } = await supabase
             .from('itinerary_days')
@@ -1012,6 +1015,7 @@ export async function POST(request: NextRequest) {
       includeLunch: include_lunch,
       includeDinner: include_dinner,
       includeAccommodation: includeAccommodationFinal,
+      includeGuide: include_guide,
       skipPricing: skip_pricing,
       marginPercent: margin_percent,
       startDate: start_date,
