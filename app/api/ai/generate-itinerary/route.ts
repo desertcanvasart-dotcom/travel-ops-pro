@@ -254,11 +254,11 @@ export async function POST(request: NextRequest) {
     // guideLanguage = what language the guide speaks (from nationality or explicit request)
     //   → Used for: guide pricing, guide services, inclusions text
     // contentLanguage = what language the itinerary content is written in
-    //   → ALWAYS English (the generated content is always in English)
-    //   → Exception: Japanese clients get Japanese content (market requirement)
+    //   → ALWAYS English by default
+    //   → Users can create translated versions manually via the multilingual system
     // ============================================
     const guideLanguage = language || 'English'
-    const contentLanguage = guideLanguage === 'Japanese' ? 'Japanese' : 'English'
+    const contentLanguage = 'English'
     const tier: ServiceTier = raw_tier ? normalizeTier(raw_tier) : budget_level !== 'standard' ? normalizeTier(budget_level) : userPrefs.default_tier
 
     if (!isValidDate(start_date)) {
