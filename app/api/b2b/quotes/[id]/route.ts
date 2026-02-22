@@ -31,7 +31,8 @@ export async function GET(
             short_description
           )
         ),
-        b2b_partners (company_name, partner_code, contact_name, email)
+        b2b_partners (company_name, partner_code, contact_name, email),
+        itineraries (id, trip_name, itinerary_code, total_days, tier, start_date, end_date)
       `)
       .eq('id', id)
       .single()

@@ -471,11 +471,11 @@ function generateQuoteHTML(quote: any): string {
     
     <!-- Tour Banner -->
     <div class="tour-banner">
-      <h2>${template?.template_name || 'Tour Package'}</h2>
-      <p>${variation?.variation_name || ''}</p>
+      <h2>${template?.template_name || quote.trip_name || 'Tour Package'}</h2>
+      <p>${variation?.variation_name || (quote.source === 'whatsapp_b2b' ? 'Custom Tour (WhatsApp)' : '')}</p>
       <div class="tour-meta">
         <div class="tour-meta-item">
-          📅 ${template?.duration_days || '-'} Days / ${template?.duration_nights || '-'} Nights
+          📅 ${template?.duration_days || quote.itineraries?.total_days || '-'} Days / ${template?.duration_nights || (quote.itineraries?.total_days ? quote.itineraries.total_days - 1 : '-')} Nights
         </div>
         <div class="tour-meta-item">
           👥 ${quote.num_adults} Pax${quote.tour_leader_included ? ' (+1 TL)' : ''}
@@ -634,7 +634,8 @@ export async function GET(
             short_description
           )
         ),
-        b2b_partners (company_name, partner_code, contact_name, email)
+        b2b_partners (company_name, partner_code, contact_name, email),
+        itineraries (trip_name, itinerary_code, total_days, tier)
       `)
       .eq('id', id)
       .single()

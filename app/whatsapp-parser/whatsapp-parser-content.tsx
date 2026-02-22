@@ -14,7 +14,7 @@ import {
   Sun, Map, Building2, Package, Anchor, Clock, BadgeCheck,
   Percent, Languages, ChevronDown, ChevronUp, Info, Edit3, Save,
   Zap, Pencil, FileText, Wand2, ListChecks, AlertTriangle, Plus,
-  UserCheck, UserX
+  UserCheck, UserX, Eye
 } from 'lucide-react'
 import Link from 'next/link'
 import { type PackageType, PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
@@ -889,6 +889,7 @@ function WhatsAppParserContent() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStep, setGenerationStep] = useState<GenerationStep>('idle')
   const [generatedItinerary, setGeneratedItinerary] = useState<any>(null)
+  const [generatedQuote, setGeneratedQuote] = useState<any>(null)
 
   const [fromInbox, setFromInbox] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
@@ -1359,7 +1360,7 @@ function WhatsAppParserContent() {
           currency: effectiveCurrency,
           is_euro_passport: data.is_euro_passport,
           include_guide: includeGuide,
-          skip_pricing: generationMode === 'edit',
+          skip_pricing: generationMode === 'edit' || isB2BMode,
           input_mode_override: inputMode,
           is_structured_input: data.is_structured_input,
           extracted_days: data.extracted_days,
@@ -1377,7 +1378,35 @@ function WhatsAppParserContent() {
       setGenerationStep('complete')
       setGeneratedItinerary(result.data)
 
-      if (generationMode === 'edit' && result.data?.redirect_to) {
+      // B2B Mode: Create B2B quote from the draft itinerary
+      if (isB2BMode && result.data?.id) {
+        try {
+          setGenerationStep('finalizing')
+          const quoteRes = await fetch('/api/b2b/quote-from-itinerary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              itinerary_id: result.data.id,
+              partner_id: selectedPartnerId,
+              margin_percent: userPreferences.default_margin_percent,
+              tour_leader_included: false,
+              is_eur_passport: data.is_euro_passport !== false,
+              language: data.conversation_language === 'Japanese' ? 'Japanese' : 'English',
+            })
+          })
+          const quoteResult = await quoteRes.json()
+          if (quoteResult.success) {
+            setGeneratedQuote(quoteResult.data)
+            console.log('✅ B2B Quote created:', quoteResult.data.quote_number)
+          } else {
+            console.error('⚠️ B2B Quote creation failed:', quoteResult.error)
+          }
+        } catch (quoteErr: any) {
+          console.error('⚠️ B2B Quote creation error:', quoteErr.message)
+        }
+      }
+
+      if (!isB2BMode && generationMode === 'edit' && result.data?.redirect_to) {
         setTimeout(() => {
           router.push(result.data.redirect_to)
         }, 500)
@@ -2037,8 +2066,55 @@ function WhatsAppParserContent() {
                   )}
                 </div>
 
-                {/* Success States */}
-                {generatedItinerary && generationMode === 'quick' && (
+                {/* B2B Quote Success State */}
+                {isB2BMode && generatedQuote && generatedItinerary && (
+                  <div ref={itinerarySuccessRef} className="bg-indigo-50 border-2 border-indigo-300 rounded-xl p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center">
+                        <Building2 className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-indigo-800">B2B Quote Created</h3>
+                        <p className="text-sm text-indigo-600">
+                          {generatedQuote.quote_number} • {generatedQuote.trip_name}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mb-3 bg-white rounded-lg p-3 border border-indigo-200">
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Total Cost</p>
+                        <p className="text-sm font-bold text-gray-900">€{generatedQuote.total_cost?.toFixed(2)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Selling Price</p>
+                        <p className="text-sm font-bold text-indigo-700">€{generatedQuote.selling_price?.toFixed(2)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">Per Person</p>
+                        <p className="text-sm font-bold text-indigo-700">€{generatedQuote.price_per_person?.toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/b2b/quotes/${generatedQuote.id}`)}
+                        className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2"
+                      >
+                        View B2B Quote <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
+                        className="px-4 py-2.5 border border-indigo-300 bg-white rounded-lg hover:bg-indigo-50 flex items-center gap-2 text-sm text-indigo-700"
+                      >
+                        <Eye className="w-4 h-4" /> View Draft
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* B2C Success States (hidden when B2B mode) */}
+                {!isB2BMode && generatedItinerary && generationMode === 'quick' && (
                   <div ref={itinerarySuccessRef} className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
@@ -2070,7 +2146,7 @@ function WhatsAppParserContent() {
                   </div>
                 )}
 
-                {generatedItinerary && generationMode === 'edit' && (
+                {!isB2BMode && generatedItinerary && generationMode === 'edit' && (
                   <div ref={itinerarySuccessRef} className="bg-primary-50 border-2 border-primary-300 rounded-xl p-4">
                     <div className="flex items-center gap-3">
                       <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />

@@ -47,6 +47,68 @@ export async function POST(
       )
     }
 
+    // ============================================
+    // PATH A: WhatsApp-parsed quote (itinerary already exists)
+    // ============================================
+    if (quote.itinerary_id) {
+      // Update the existing draft itinerary with B2B pricing
+      const partnerInfo = quote.b2b_partners as { id: string; company_name: string; partner_code: string; commission_percent: number } | null
+
+      const { error: updateError } = await supabaseAdmin
+        .from('itineraries')
+        .update({
+          status: 'quoted',
+          total_cost: quote.selling_price,
+          total_revenue: quote.selling_price,
+          supplier_cost: quote.total_cost,
+          profit: quote.margin_amount,
+          margin_percent: quote.margin_percent,
+          deposit_amount: Math.round((quote.selling_price || 0) * 0.3),
+          balance_due: Math.round((quote.selling_price || 0) * 0.7),
+          payment_status: 'not_paid',
+          partner_id: quote.partner_id || null,
+          partner_commission_percent: partnerInfo?.commission_percent || 0,
+          source: 'b2b_custom',
+          notes: `Converted from B2B quote ${quote.quote_number}`,
+        })
+        .eq('id', quote.itinerary_id)
+
+      if (updateError) {
+        console.error('Failed to update itinerary:', updateError)
+        return NextResponse.json({ error: 'Failed to update itinerary' }, { status: 500 })
+      }
+
+      // Fetch itinerary code for response
+      const { data: existingItinerary } = await supabaseAdmin
+        .from('itineraries')
+        .select('itinerary_code')
+        .eq('id', quote.itinerary_id)
+        .single()
+
+      // Mark quote as converted
+      await supabaseAdmin
+        .from('tour_quotes')
+        .update({
+          status: 'converted',
+          converted_to_itinerary_id: quote.itinerary_id,
+          converted_at: new Date().toISOString()
+        })
+        .eq('id', id)
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          itinerary_id: quote.itinerary_id,
+          itinerary_code: existingItinerary?.itinerary_code || '',
+          quote_number: quote.quote_number,
+          message: 'Quote converted — existing itinerary updated with B2B pricing'
+        }
+      })
+    }
+
+    // ============================================
+    // PATH B: Template-based quote (create new itinerary)
+    // ============================================
     const template = quote.tour_variations?.tour_templates
     const variation = quote.tour_variations
 
@@ -100,7 +162,7 @@ export async function POST(
         itinerary_code: itineraryCode,
         client_id: clientId,
         client_name: quote.client_name || 'B2B Client',
-        trip_name: template?.template_name || 'Tour Package',
+        trip_name: template?.template_name || quote.trip_name || 'Tour Package',
         start_date: startDate.toISOString().split('T')[0],
         end_date: endDate.toISOString().split('T')[0],
         total_days: template?.duration_days || 1,
@@ -133,7 +195,7 @@ export async function POST(
 
     // Create itinerary days
     const tourDays = template?.tour_days || []
-    
+
     for (let dayNum = 1; dayNum <= (template?.duration_days || 1); dayNum++) {
       const tourDay = tourDays.find((d: any) => d.day_number === dayNum)
       const dayDate = new Date(startDate)
@@ -156,7 +218,7 @@ export async function POST(
       if (!itinDay) continue
 
       const servicesSnapshot = quote.services_snapshot || []
-      
+
       for (const service of servicesSnapshot) {
         if (service.day_number && service.day_number !== dayNum) continue
         if (!service.day_number && dayNum > 1) continue

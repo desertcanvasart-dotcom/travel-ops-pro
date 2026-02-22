@@ -27,6 +27,8 @@ interface Quote {
   price_per_person: number
   status: string
   created_at: string
+  trip_name: string | null
+  source: string | null
   tour_variations: {
     variation_name: string
     tour_templates: {
@@ -36,6 +38,12 @@ interface Quote {
   b2b_partners: {
     company_name: string
     partner_code: string
+  } | null
+  itineraries: {
+    trip_name: string
+    itinerary_code: string
+    total_days: number
+    tier: string
   } | null
   available_languages: Language[]
 }
@@ -117,6 +125,8 @@ export default function QuotesListPage() {
       quote.quote_number.toLowerCase().includes(search) ||
       quote.client_name?.toLowerCase().includes(search) ||
       quote.tour_variations?.tour_templates?.template_name.toLowerCase().includes(search) ||
+      quote.trip_name?.toLowerCase().includes(search) ||
+      quote.itineraries?.trip_name?.toLowerCase().includes(search) ||
       quote.b2b_partners?.company_name.toLowerCase().includes(search)
     )
   })
@@ -220,8 +230,16 @@ export default function QuotesListPage() {
                     <p className="text-xs text-gray-500">{formatDate(quote.created_at)}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{quote.tour_variations?.tour_templates?.template_name || t('unknown')}</p>
-                    <p className="text-xs text-gray-500">{quote.tour_variations?.variation_name || ''}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">
+                      {quote.tour_variations?.tour_templates?.template_name
+                        || quote.trip_name
+                        || quote.itineraries?.trip_name
+                        || t('unknown')}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {quote.tour_variations?.variation_name
+                        || (quote.source === 'whatsapp_b2b' ? '📱 WhatsApp Parsed' : '')}
+                    </p>
                   </td>
                   <td className="px-4 py-3">
                     {quote.client_name ? <p className="text-sm">{quote.client_name}</p> : <p className="text-sm text-gray-400 italic">{t('noClient')}</p>}

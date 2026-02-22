@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import {
   ArrowLeft, FileText, Download, Send, Calendar, Users,
   Building2, Loader2, Globe, Mail, Phone, User, Clock, CheckCircle2,
-  XCircle, TrendingUp
+  XCircle, TrendingUp, Eye
 } from 'lucide-react'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
@@ -20,7 +20,10 @@ import type { Language } from '@/types/multilingual'
 interface Quote {
   id: string
   quote_number: string
-  variation_id: string
+  variation_id: string | null
+  itinerary_id: string | null
+  trip_name: string | null
+  source: string | null
   partner_id: string | null
   client_name: string | null
   client_email: string | null
@@ -64,6 +67,15 @@ interface Quote {
     partner_code: string
     contact_name: string | null
     email: string | null
+  } | null
+  itineraries: {
+    id: string
+    trip_name: string
+    itinerary_code: string
+    total_days: number
+    tier: string
+    start_date: string
+    end_date: string
   } | null
   available_languages: Language[]
   versions: Record<string, {
@@ -249,7 +261,15 @@ export default function QuoteDetailPage() {
   const template = quote.tour_variations?.tour_templates
   const variation = quote.tour_variations
   const partner = quote.b2b_partners
+  const itinerarySource = quote.itineraries
   const services = quote.services_snapshot || []
+
+  // Derive display values from either template or itinerary
+  const displayName = template?.template_name || quote.trip_name || itinerarySource?.trip_name || t('tourPackage')
+  const displaySubtitle = variation?.variation_name || (quote.source === 'whatsapp_b2b' ? '📱 WhatsApp Parsed' : '')
+  const displayTier = variation?.tier || itinerarySource?.tier || null
+  const displayDurationDays = template?.duration_days || itinerarySource?.total_days || null
+  const displayDurationNights = template?.duration_nights || (displayDurationDays ? displayDurationDays - 1 : null)
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -269,6 +289,14 @@ export default function QuoteDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {itinerarySource && (
+            <Link
+              href={`/itineraries/${itinerarySource.id}`}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700"
+            >
+              <Eye className="w-4 h-4" />View Itinerary
+            </Link>
+          )}
           <a
             href={`/api/b2b/quotes/${quote.id}/pdf`}
             target="_blank"
@@ -286,12 +314,12 @@ export default function QuoteDetailPage() {
           <div className="bg-white rounded-lg border p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{template?.template_name || t('tourPackage')}</h2>
-                <p className="text-sm text-gray-500">{variation?.variation_name}</p>
+                <h2 className="text-lg font-semibold text-gray-900">{displayName}</h2>
+                <p className="text-sm text-gray-500">{displaySubtitle}</p>
               </div>
-              {variation?.tier && (
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getTierBadge(variation.tier)}`}>
-                  {variation.tier.charAt(0).toUpperCase() + variation.tier.slice(1)}
+              {displayTier && (
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${getTierBadge(displayTier)}`}>
+                  {displayTier.charAt(0).toUpperCase() + displayTier.slice(1)}
                 </span>
               )}
             </div>
@@ -299,7 +327,7 @@ export default function QuoteDetailPage() {
             <div className="grid grid-cols-4 gap-4">
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">{t('duration')}</p>
-                <p className="text-sm font-semibold">{template?.duration_days || '-'}D / {template?.duration_nights || '-'}N</p>
+                <p className="text-sm font-semibold">{displayDurationDays || '-'}D / {displayDurationNights || '-'}N</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">{t('travelers')}</p>

@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
         .select(`
           *,
           tour_variations (variation_name, variation_code, tier, tour_templates (template_name, template_code, duration_days)),
-          b2b_partners (company_name, partner_code, contact_name, email)
+          b2b_partners (company_name, partner_code, contact_name, email),
+          itineraries (id, trip_name, itinerary_code, total_days, tier, start_date, end_date)
         `)
         .eq('id', id)
         .single()
@@ -63,7 +64,8 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         tour_variations (variation_name, variation_code, tier, tour_templates (template_name, template_code)),
-        b2b_partners (company_name, partner_code)
+        b2b_partners (company_name, partner_code),
+        itineraries (trip_name, itinerary_code, total_days, tier)
       `)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -114,6 +116,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       variation_id,
+      itinerary_id,
+      trip_name,
       partner_id,
       client_name,
       client_email,
@@ -142,8 +146,8 @@ export async function POST(request: NextRequest) {
       created_by
     } = body
 
-    if (!variation_id) {
-      return NextResponse.json({ success: false, error: 'variation_id is required' }, { status: 400 })
+    if (!variation_id && !itinerary_id) {
+      return NextResponse.json({ success: false, error: 'variation_id or itinerary_id is required' }, { status: 400 })
     }
 
     if (!total_cost || !selling_price) {
@@ -158,7 +162,10 @@ export async function POST(request: NextRequest) {
     const { data: quote, error } = await supabaseAdmin
       .from('tour_quotes')
       .insert({
-        variation_id,
+        variation_id: variation_id || null,
+        itinerary_id: itinerary_id || null,
+        trip_name: trip_name || null,
+        source: itinerary_id ? 'whatsapp_b2b' : 'b2b_template',
         partner_id: partner_id || null,
         client_name,
         client_email,
