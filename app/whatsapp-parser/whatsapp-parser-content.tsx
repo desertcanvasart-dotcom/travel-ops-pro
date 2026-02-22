@@ -2080,19 +2080,10 @@ function WhatsAppParserContent() {
                         </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 mb-3 bg-white rounded-lg p-3 border border-indigo-200">
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">Total Cost</p>
-                        <p className="text-sm font-bold text-gray-900">€{generatedQuote.total_cost?.toFixed(2)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">Selling Price</p>
-                        <p className="text-sm font-bold text-indigo-700">€{generatedQuote.selling_price?.toFixed(2)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500">Per Person</p>
-                        <p className="text-sm font-bold text-indigo-700">€{generatedQuote.price_per_person?.toFixed(2)}</p>
-                      </div>
+                    <div className="flex items-center gap-2 mb-3 bg-white rounded-lg p-3 border border-indigo-200">
+                      <p className="text-sm text-gray-600">
+                        {generatedQuote.services_count || 0} services • Ready for B2B pricing in calculator
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <button
