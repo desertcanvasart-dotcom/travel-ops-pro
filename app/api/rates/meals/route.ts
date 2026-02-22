@@ -46,7 +46,25 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    const newRate = {
+    // Discover actual table columns by fetching one row
+    const { data: sampleRow } = await supabaseAdmin
+      .from('meal_rates')
+      .select('*')
+      .limit(1)
+      .single()
+
+    // Known columns from the sample row (or fallback to core columns)
+    const tableColumns = sampleRow
+      ? new Set(Object.keys(sampleRow))
+      : new Set([
+          'service_code', 'restaurant_name', 'meal_type', 'cuisine_type',
+          'city', 'base_rate_eur', 'base_rate_non_eur', 'season',
+          'rate_valid_from', 'rate_valid_to', 'supplier_id', 'supplier_name',
+          'tier', 'notes', 'is_active'
+        ])
+
+    // Build the rate object, only including columns that exist in the table
+    const allFields: Record<string, any> = {
       service_code: body.service_code || `MEAL-${Date.now().toString(36).toUpperCase()}`,
       restaurant_name: body.restaurant_name,
       meal_type: body.meal_type || null,
@@ -68,6 +86,17 @@ export async function POST(request: NextRequest) {
       notes: body.notes || null,
       is_active: body.is_active !== false
     }
+
+    // Filter to only columns that exist in the table (skip id, created_at, updated_at — auto-managed)
+    const newRate: Record<string, any> = {}
+    for (const [col, val] of Object.entries(allFields)) {
+      if (tableColumns.has(col)) {
+        newRate[col] = val
+      }
+    }
+
+    console.log('[Meal Rate POST] Table columns:', [...tableColumns].join(', '))
+    console.log('[Meal Rate POST] Payload:', JSON.stringify(newRate))
 
     // Check for existing rate with same natural key
     let existingQuery = supabaseAdmin
@@ -91,7 +120,7 @@ export async function POST(request: NextRequest) {
       // Update existing record
       const result = await supabaseAdmin
         .from('meal_rates')
-        .update({ ...newRate, updated_at: new Date().toISOString() })
+        .update({ ...newRate, ...(tableColumns.has('updated_at') ? { updated_at: new Date().toISOString() } : {}) })
         .eq('id', existing[0].id)
         .select('*')
         .single()
@@ -109,7 +138,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (error) {
-      console.error('POST meal_rates error:', error)
+      console.error('POST meal_rates error:', error, 'payload:', newRate)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 

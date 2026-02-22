@@ -39,69 +39,69 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
-    // Build update object from all provided fields
-    const updateData: Record<string, any> = {
-      updated_at: new Date().toISOString()
+    // First, fetch the existing record to discover actual table columns
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('meal_rates')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !existing) {
+      console.error('PUT meal_rate: record not found:', fetchError)
+      return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 })
     }
 
-    if (body.service_code !== undefined) updateData.service_code = body.service_code
-    if (body.restaurant_name !== undefined) updateData.restaurant_name = body.restaurant_name
-    if (body.meal_type !== undefined) updateData.meal_type = body.meal_type || null
-    if (body.cuisine_type !== undefined) updateData.cuisine_type = body.cuisine_type || null
-    if (body.restaurant_type !== undefined) updateData.restaurant_type = body.restaurant_type || null
-    if (body.city !== undefined) updateData.city = body.city || null
-    if (body.base_rate_eur !== undefined) updateData.base_rate_eur = parseFloat(body.base_rate_eur) || 0
-    if (body.base_rate_non_eur !== undefined) updateData.base_rate_non_eur = parseFloat(body.base_rate_non_eur) || 0
-    if (body.season !== undefined) updateData.season = body.season || null
-    if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
-    if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
-    if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
-    if (body.supplier_name !== undefined) updateData.supplier_name = body.supplier_name || null
-    if (body.tier !== undefined) updateData.tier = body.tier || null
-    if (body.meal_category !== undefined) updateData.meal_category = body.meal_category || null
-    if (body.dietary_options !== undefined) updateData.dietary_options = body.dietary_options || []
-    if (body.per_person_rate !== undefined) updateData.per_person_rate = body.per_person_rate
-    if (body.minimum_pax !== undefined) updateData.minimum_pax = body.minimum_pax ? parseInt(body.minimum_pax) : null
-    if (body.notes !== undefined) updateData.notes = body.notes || null
-    if (body.is_active !== undefined) updateData.is_active = body.is_active
+    // Only update columns that actually exist in the table (based on fetched record keys)
+    const existingColumns = new Set(Object.keys(existing))
+    const updateData: Record<string, any> = {}
 
-    console.log(`[Meal Rate PUT] Updating ${id}:`, JSON.stringify(updateData))
+    // Map body fields to update data, only if the column exists in the table
+    const fieldMap: Record<string, (val: any) => any> = {
+      service_code: (v) => v,
+      restaurant_name: (v) => v,
+      meal_type: (v) => v || null,
+      cuisine_type: (v) => v || null,
+      restaurant_type: (v) => v || null,
+      city: (v) => v || null,
+      base_rate_eur: (v) => parseFloat(v) || 0,
+      base_rate_non_eur: (v) => parseFloat(v) || 0,
+      season: (v) => v || null,
+      rate_valid_from: (v) => v || null,
+      rate_valid_to: (v) => v || null,
+      supplier_id: (v) => v || null,
+      supplier_name: (v) => v || null,
+      tier: (v) => v || null,
+      meal_category: (v) => v || null,
+      dietary_options: (v) => v || [],
+      per_person_rate: (v) => v,
+      minimum_pax: (v) => v ? parseInt(v) : null,
+      notes: (v) => v || null,
+      is_active: (v) => v,
+    }
 
-    // Try full update first
-    let { data, error } = await supabaseAdmin
+    for (const [field, transform] of Object.entries(fieldMap)) {
+      if (body[field] !== undefined && existingColumns.has(field)) {
+        updateData[field] = transform(body[field])
+      }
+    }
+
+    // Always set updated_at if the column exists
+    if (existingColumns.has('updated_at')) {
+      updateData.updated_at = new Date().toISOString()
+    }
+
+    console.log(`[Meal Rate PUT] Updating ${id}. Table columns: [${[...existingColumns].join(', ')}]. Update payload:`, JSON.stringify(updateData))
+
+    const { data, error } = await supabaseAdmin
       .from('meal_rates')
       .update(updateData)
       .eq('id', id)
       .select('*')
       .single()
 
-    // If failed (likely unknown column), retry with only core columns
     if (error) {
-      console.warn('PUT meal_rate full update failed, retrying with core fields:', error.message)
-      const coreData: Record<string, any> = {}
-      const coreColumns = [
-        'service_code', 'restaurant_name', 'meal_type', 'cuisine_type',
-        'city', 'base_rate_eur', 'base_rate_non_eur', 'season',
-        'rate_valid_from', 'rate_valid_to', 'supplier_id', 'supplier_name',
-        'tier', 'notes', 'is_active', 'updated_at'
-      ]
-      for (const col of coreColumns) {
-        if (updateData[col] !== undefined) coreData[col] = updateData[col]
-      }
-
-      const retry = await supabaseAdmin
-        .from('meal_rates')
-        .update(coreData)
-        .eq('id', id)
-        .select('*')
-        .single()
-
-      if (retry.error) {
-        console.error('PUT meal_rate retry also failed:', retry.error, 'coreData:', coreData)
-        return NextResponse.json({ success: false, error: retry.error.message }, { status: 500 })
-      }
-
-      data = retry.data
+      console.error('PUT meal_rate update failed:', error, 'updateData:', updateData)
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })

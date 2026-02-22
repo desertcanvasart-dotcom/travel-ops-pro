@@ -283,6 +283,7 @@ export default function MealRatesContent() {
 
   const handleAddNew = () => {
     setEditingRate(null)
+    setError(null)
     setFormData({
       service_code: generateServiceCode(),
       restaurant_name: '',
@@ -310,6 +311,7 @@ export default function MealRatesContent() {
 
   const handleEdit = (rate: MealRate) => {
     setEditingRate(rate)
+    setError(null)
     setFormData({
       service_code: rate.service_code || '',
       restaurant_name: rate.restaurant_name || '',
