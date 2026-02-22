@@ -46,7 +46,11 @@ export async function GET(request: NextRequest) {
     const email = await getUserEmail(tokens.access_token)
 
     // Calculate token expiry
-    const expiryDate = new Date(Date.now() + (tokens.expiry_date || 3600 * 1000))
+    // tokens.expiry_date from Google OAuth is an absolute UNIX timestamp in ms
+    // If missing, default to 1 hour from now
+    const expiryDate = tokens.expiry_date
+      ? new Date(tokens.expiry_date)
+      : new Date(Date.now() + 3600 * 1000)
 
     // Upsert token record
     const { error: dbError } = await supabase

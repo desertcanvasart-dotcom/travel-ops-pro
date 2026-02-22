@@ -51,7 +51,8 @@ import {
   Package,
   Briefcase,
   Tags,
-  Globe
+  Globe,
+  Mail
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -122,6 +123,7 @@ const navigationConfig: NavConfig[] = [
     roles: ['admin', 'manager', 'agent'],
     items: [
       { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
+      { labelKey: 'emailInbox', href: '/inbox', icon: Mail },
       { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: Send },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
     ]
