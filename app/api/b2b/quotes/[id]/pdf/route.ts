@@ -715,7 +715,7 @@ export async function GET(
     return new NextResponse(Buffer.from(pdf), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${quote.quote_number}.pdf"`,
+        'Content-Disposition': `attachment; filename="${finalQuote.quote_number}.pdf"`,
       },
     })
 

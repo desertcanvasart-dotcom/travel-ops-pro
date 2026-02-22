@@ -268,7 +268,9 @@ export default function QuoteDetailPage() {
   const displayName = template?.template_name || quote.trip_name || itinerarySource?.trip_name || t('tourPackage')
   const displaySubtitle = variation?.variation_name || (quote.source === 'whatsapp_b2b' ? '📱 WhatsApp Parsed' : '')
   const displayTier = variation?.tier || itinerarySource?.tier || null
-  const displayDurationDays = template?.duration_days || itinerarySource?.total_days || null
+  // Calculate duration from services snapshot as last resort
+  const snapshotMaxDay = services.length > 0 ? Math.max(...services.map((s: any) => s.day_number || 0)) : 0
+  const displayDurationDays = template?.duration_days || itinerarySource?.total_days || (snapshotMaxDay > 0 ? snapshotMaxDay : null)
   const displayDurationNights = template?.duration_nights || (displayDurationDays ? displayDurationDays - 1 : null)
 
   return (

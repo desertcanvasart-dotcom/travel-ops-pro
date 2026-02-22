@@ -1360,7 +1360,7 @@ function WhatsAppParserContent() {
           currency: effectiveCurrency,
           is_euro_passport: data.is_euro_passport,
           include_guide: includeGuide,
-          skip_pricing: generationMode === 'edit' || isB2BMode,
+          skip_pricing: generationMode === 'edit',
           input_mode_override: inputMode,
           is_structured_input: data.is_structured_input,
           extracted_days: data.extracted_days,
