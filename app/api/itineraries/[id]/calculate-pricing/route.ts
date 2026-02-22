@@ -351,34 +351,79 @@ async function getEntranceFee(attractionName: string, isEuroPassport: boolean): 
 }
 
 async function getMealRate(city: string, mealType: 'lunch' | 'dinner', tier: string) {
-  const { data: rate } = await supabaseAdmin
+  const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
+
+  // Try to find a meal rate matching city + meal_type + tier
+  // Fallback cascade: city+type+tier → city+type → type only → any active
+  let rate: any = null
+
+  // 1. Best match: city + meal_type + tier
+  const { data: exactMatch } = await supabaseAdmin
     .from('meal_rates')
     .select('*')
     .eq('is_active', true)
+    .ilike('city', city)
+    .ilike('meal_type', mealType)
+    .eq('tier', tier)
     .limit(1)
     .single()
+  rate = exactMatch
 
-  const tierMultiplier: Record<string, number> = {
-    'budget': 0.8, 'standard': 1.0, 'deluxe': 1.3, 'luxury': 1.6
+  // 2. City + meal_type (any tier)
+  if (!rate) {
+    const { data: cityTypeMatch } = await supabaseAdmin
+      .from('meal_rates')
+      .select('*')
+      .eq('is_active', true)
+      .ilike('city', city)
+      .ilike('meal_type', mealType)
+      .limit(1)
+      .single()
+    rate = cityTypeMatch
+  }
+
+  // 3. Meal type only (any city)
+  if (!rate) {
+    const { data: typeMatch } = await supabaseAdmin
+      .from('meal_rates')
+      .select('*')
+      .eq('is_active', true)
+      .ilike('meal_type', mealType)
+      .limit(1)
+      .single()
+    rate = typeMatch
+  }
+
+  // 4. Any active meal rate
+  if (!rate) {
+    const { data: anyMatch } = await supabaseAdmin
+      .from('meal_rates')
+      .select('*')
+      .eq('is_active', true)
+      .limit(1)
+      .single()
+    rate = anyMatch
   }
 
   if (rate) {
-    const baseRate = mealType === 'lunch' 
-      ? (rate.lunch_rate_eur || 12) 
-      : (rate.dinner_rate_eur || 18)
-    return {
-      rate: Math.round(baseRate * (tierMultiplier[tier] || 1)),
-      supplier_name: null,
-      name: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} - ${city}`,
-      code: mealType === 'lunch' ? 'LUNCH' : 'DINNER'
+    const baseRate = rate.base_rate_eur || 0
+    if (baseRate > 0) {
+      return {
+        rate: baseRate,
+        supplier_name: rate.supplier_name || rate.restaurant_name || null,
+        name: `${mealLabel} - ${rate.restaurant_name || city}`,
+        code: rate.service_code || (mealType === 'lunch' ? 'LUNCH' : 'DINNER')
+      }
     }
   }
 
+  // Hardcoded fallback only if no meal rates exist at all
+  console.warn(`⚠️ [Pricing] No meal rate found for ${mealType} in ${city} — using fallback €${mealType === 'lunch' ? 12 : 18}/person`)
   const fallback = mealType === 'lunch' ? 12 : 18
   return {
-    rate: Math.round(fallback * (tierMultiplier[tier] || 1)),
+    rate: fallback,
     supplier_name: null,
-    name: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} - ${city}`,
+    name: `${mealLabel} - ${city}`,
     code: mealType === 'lunch' ? 'LUNCH' : 'DINNER'
   }
 }

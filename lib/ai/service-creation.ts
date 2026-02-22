@@ -16,6 +16,18 @@ import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type Exchang
 // PRICING RATES (fetched from DB)
 // ============================================
 
+export interface MealRateRecord {
+  id: string
+  restaurant_name: string
+  meal_type?: string
+  city?: string
+  base_rate_eur: number
+  base_rate_non_eur: number
+  supplier_name?: string
+  service_code?: string
+  tier?: string
+}
+
 export interface PricingRates {
   vehiclePerDay: number
   vehicleTypeName: string
@@ -27,8 +39,9 @@ export interface PricingRates {
   guidePerDay: number
   selectedGuide: any
   allEntranceFees: any[]
-  lunchRate: number
-  dinnerRate: number
+  lunchRate: number       // Fallback flat rate (kept for backward compat)
+  dinnerRate: number      // Fallback flat rate (kept for backward compat)
+  allMealRates: MealRateRecord[]  // All active meal rates for per-city lookup
   airportServiceRate: number
   hotelServiceRate: number
   hotelRate: number
@@ -118,12 +131,18 @@ export async function fetchAllPricingRates(
   // Entrance fees
   const { data: allEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
 
-  // Meal rates
-  const { data: mealRates } = await supabase.from('meal_rates').select('*').eq('is_active', true).limit(1)
-  const lunchRate = toNumber(mealRates?.[0]?.lunch_rate_eur, 0)
-  const dinnerRate = toNumber(mealRates?.[0]?.dinner_rate_eur, 0)
-  if (!lunchRate) console.warn('⚠️ No lunch rate found in meal_rates — lunch will be €0')
-  if (!dinnerRate) console.warn('⚠️ No dinner rate found in meal_rates — dinner will be €0')
+  // Meal rates — fetch ALL active rates for per-city lookup
+  const { data: allMealRates } = await supabase.from('meal_rates').select('*').eq('is_active', true)
+  const lunchRates = (allMealRates || []).filter((r: any) => r.meal_type?.toLowerCase() === 'lunch')
+  const dinnerRates = (allMealRates || []).filter((r: any) => r.meal_type?.toLowerCase() === 'dinner')
+  // Flat fallback rate: average of all lunch/dinner rates, or hardcoded if none
+  const lunchRate = lunchRates.length > 0
+    ? lunchRates.reduce((sum: number, r: any) => sum + toNumber(r.base_rate_eur, 0), 0) / lunchRates.length
+    : 12
+  const dinnerRate = dinnerRates.length > 0
+    ? dinnerRates.reduce((sum: number, r: any) => sum + toNumber(r.base_rate_eur, 0), 0) / dinnerRates.length
+    : 18
+  if (!allMealRates?.length) console.warn('⚠️ No meal rates found in meal_rates table')
 
   // Airport services
   const { data: airportServicesData } = await supabase.from('airport_services').select('*').eq('is_active', true)
@@ -205,6 +224,7 @@ export async function fetchAllPricingRates(
     allEntranceFees: allEntranceFees || [],
     lunchRate,
     dinnerRate,
+    allMealRates: (allMealRates || []) as MealRateRecord[],
     airportServiceRate,
     hotelServiceRate,
     hotelRate,
@@ -286,6 +306,55 @@ export async function createLandItineraryServices(
 
   const marginMultiplier = 1 + (marginPercent / 100)
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
+
+  // Helper: find best meal rate for a city + meal type
+  const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null } => {
+    const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
+    const allMeals = rates.allMealRates || []
+    const typeMatches = allMeals.filter(r => r.meal_type?.toLowerCase() === mealType)
+
+    // 1. Best: city + meal_type
+    const cityMatch = typeMatches.find(r => r.city?.toLowerCase() === city.toLowerCase())
+    if (cityMatch && cityMatch.base_rate_eur > 0) {
+      return {
+        rate: cityMatch.base_rate_eur,
+        name: `${mealLabel} - ${cityMatch.restaurant_name || city}`,
+        code: cityMatch.service_code || mealType.toUpperCase(),
+        supplierName: cityMatch.supplier_name || cityMatch.restaurant_name || null
+      }
+    }
+
+    // 2. Any meal of this type
+    const anyType = typeMatches.find(r => r.base_rate_eur > 0)
+    if (anyType) {
+      return {
+        rate: anyType.base_rate_eur,
+        name: `${mealLabel} - ${anyType.restaurant_name || city}`,
+        code: anyType.service_code || mealType.toUpperCase(),
+        supplierName: anyType.supplier_name || anyType.restaurant_name || null
+      }
+    }
+
+    // 3. Any active meal rate at all
+    const anyMeal = allMeals.find(r => r.base_rate_eur > 0)
+    if (anyMeal) {
+      return {
+        rate: anyMeal.base_rate_eur,
+        name: `${mealLabel} - ${anyMeal.restaurant_name || city}`,
+        code: anyMeal.service_code || mealType.toUpperCase(),
+        supplierName: anyMeal.supplier_name || anyMeal.restaurant_name || null
+      }
+    }
+
+    // 4. Fallback flat rate
+    const fallback = mealType === 'lunch' ? rates.lunchRate : rates.dinnerRate
+    return {
+      rate: fallback,
+      name: `${mealLabel} - ${city}`,
+      code: mealType.toUpperCase(),
+      supplierName: null
+    }
+  }
 
   let totalSupplierCost = 0
   let totalClientPrice = 0
@@ -792,37 +861,39 @@ export async function createLandItineraryServices(
       }
     }
 
-    // Lunch (only if included for this day)
+    // Lunch (only if included for this day) — city-aware lookup
     if (dayIncludesLunch) {
-      const lunchCost = rates.lunchRate * totalPax
+      const lunch = findMealRate(currentCity, 'lunch')
+      const lunchCost = lunch.rate * totalPax
       services.push({
         service_type: 'meal',
-        service_code: 'LUNCH',
-        service_name: 'Lunch',
+        service_code: lunch.code,
+        service_name: lunch.name,
         quantity: totalPax,
-        rate_eur: rates.lunchRate,
-        rate_non_eur: rates.lunchRate,
+        rate_eur: lunch.rate,
+        rate_non_eur: lunch.rate,
         total_cost: lunchCost,
         client_price: withMargin(lunchCost),
-        notes: 'Lunch at local restaurant'
+        notes: lunch.supplierName ? `Lunch at ${lunch.supplierName}` : 'Lunch at local restaurant'
       })
       totalSupplierCost += lunchCost
       totalClientPrice += withMargin(lunchCost)
     }
 
-    // Dinner (only if included for this day)
+    // Dinner (only if included for this day) — city-aware lookup
     if (dayIncludesDinner) {
-      const dinnerCost = rates.dinnerRate * totalPax
+      const dinner = findMealRate(currentCity, 'dinner')
+      const dinnerCost = dinner.rate * totalPax
       services.push({
         service_type: 'meal',
-        service_code: 'DINNER',
-        service_name: 'Dinner',
+        service_code: dinner.code,
+        service_name: dinner.name,
         quantity: totalPax,
-        rate_eur: rates.dinnerRate,
-        rate_non_eur: rates.dinnerRate,
+        rate_eur: dinner.rate,
+        rate_non_eur: dinner.rate,
         total_cost: dinnerCost,
         client_price: withMargin(dinnerCost),
-        notes: 'Dinner'
+        notes: dinner.supplierName ? `Dinner at ${dinner.supplierName}` : 'Dinner'
       })
       totalSupplierCost += dinnerCost
       totalClientPrice += withMargin(dinnerCost)
