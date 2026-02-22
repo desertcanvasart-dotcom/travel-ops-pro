@@ -83,10 +83,10 @@ const DIETARY_OPTIONS = [
 ]
 
 const TIERS = [
-  { value: 'Budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
-  { value: 'Standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
-  { value: 'Deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
-  { value: 'Luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
+  { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
+  { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
+  { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
+  { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
 ]
 
 interface Supplier {
@@ -201,7 +201,7 @@ export default function MealRatesContent() {
     rate_valid_to: nextYear,
     supplier_id: '',
     supplier_name: '',
-    tier: 'Standard',
+    tier: 'standard',
     meal_category: '',
     dietary_options: [] as string[],
     per_person_rate: true,
@@ -298,7 +298,7 @@ export default function MealRatesContent() {
       rate_valid_to: nextYear,
       supplier_id: selectedSupplier || '',
       supplier_name: '',
-      tier: 'Standard',
+      tier: 'standard',
       meal_category: '',
       dietary_options: [],
       per_person_rate: true,
@@ -326,7 +326,7 @@ export default function MealRatesContent() {
       rate_valid_to: rate.rate_valid_to || nextYear,
       supplier_id: rate.supplier_id || '',
       supplier_name: rate.supplier_name || '',
-      tier: (TIERS.find(t => t.value.toLowerCase() === (rate.tier || '').toLowerCase())?.value) || 'Standard',
+      tier: (TIERS.find(t => t.value === (rate.tier || '').toLowerCase())?.value) || 'standard',
       meal_category: rate.meal_category || '',
       dietary_options: rate.dietary_options || [],
       per_person_rate: rate.per_person_rate !== false,
