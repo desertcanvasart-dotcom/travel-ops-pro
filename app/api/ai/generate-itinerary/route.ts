@@ -1015,6 +1015,7 @@ export async function POST(request: NextRequest) {
       skipPricing: skip_pricing,
       marginPercent: margin_percent,
       startDate: start_date,
+      currency: effectiveCurrency,
     })
 
 

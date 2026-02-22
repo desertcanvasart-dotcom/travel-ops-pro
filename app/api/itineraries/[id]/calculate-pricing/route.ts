@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { fetchExchangeRates, convertCurrency, type ExchangeRates } from '@/lib/currency-service'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -550,6 +551,22 @@ export async function POST(
 
     const currency = itinerary?.currency || userPrefs?.default_currency || DEFAULT_CURRENCY
 
+    // Fetch exchange rates for currency conversion
+    const needsConversion = currency !== 'EUR'
+    let exchangeRates: ExchangeRates | null = null
+    if (needsConversion) {
+      try {
+        exchangeRates = await fetchExchangeRates('EUR')
+        console.log(`[Pricing] Currency conversion: EUR → ${currency}, rate: ${exchangeRates.rates[currency] || 'N/A'}`)
+      } catch (e) {
+        console.warn('[Pricing] Failed to fetch exchange rates, prices will remain in EUR:', e)
+      }
+    }
+    const toTargetCurrency = (eurAmount: number): number => {
+      if (!needsConversion || !exchangeRates) return eurAmount
+      return Math.round(convertCurrency(eurAmount, 'EUR', currency, exchangeRates) * 100) / 100
+    }
+
     // Get existing days (to get their IDs)
     const { data: existingDays, error: daysError } = await supabaseAdmin
       .from('itinerary_days')
@@ -776,11 +793,19 @@ export async function POST(
       }
     }
 
+    // Convert service prices to target currency before inserting
+    const convertedServices = allServices.map(svc => ({
+      ...svc,
+      total_cost: toTargetCurrency(svc.total_cost),
+      client_price: toTargetCurrency(svc.client_price),
+      // rate_eur and rate_non_eur stay in EUR as source of truth
+    }))
+
     // Insert services
-    if (allServices.length > 0) {
+    if (convertedServices.length > 0) {
       const { error: insertError } = await supabaseAdmin
         .from('itinerary_services')
-        .insert(allServices)
+        .insert(convertedServices)
 
       if (insertError) {
         console.error('[Pricing] Insert error:', insertError)
@@ -788,19 +813,23 @@ export async function POST(
       }
     }
 
+    // Convert totals to target currency
+    const convertedSupplierCost = toTargetCurrency(totalSupplierCost)
+    const convertedClientPrice = toTargetCurrency(totalClientPrice)
+
     // Calculate profit
-    const profit = totalClientPrice - totalSupplierCost
-    const actualMarginPercent = totalSupplierCost > 0 
-      ? ((profit / totalSupplierCost) * 100).toFixed(1) 
+    const profit = convertedClientPrice - convertedSupplierCost
+    const actualMarginPercent = convertedSupplierCost > 0
+      ? ((profit / convertedSupplierCost) * 100).toFixed(1)
       : '0'
 
     // Update itinerary totals
     await supabaseAdmin
       .from('itineraries')
       .update({
-        total_cost: totalClientPrice,
-        total_revenue: totalClientPrice,
-        supplier_cost: totalSupplierCost,
+        total_cost: convertedClientPrice,
+        total_revenue: convertedClientPrice,
+        supplier_cost: convertedSupplierCost,
         profit: profit,
         margin_percent: marginPercent,
         tier: tier,
@@ -811,8 +840,8 @@ export async function POST(
       })
       .eq('id', itineraryId)
 
-    console.log(`[Pricing] Complete: Cost €${totalSupplierCost.toFixed(2)} → Client €${totalClientPrice.toFixed(2)} (${marginPercent}% margin = €${profit.toFixed(2)} profit)`)
-    
+    console.log(`[Pricing] Complete: Cost ${currency} ${convertedSupplierCost.toFixed(2)} → Client ${currency} ${convertedClientPrice.toFixed(2)} (${marginPercent}% margin = ${currency} ${profit.toFixed(2)} profit)`)
+
     if (skippedAddons.length > 0) {
       console.log(`[Pricing] Skipped ${skippedAddons.length} add-ons: ${skippedAddons.join(', ')}`)
     }
@@ -820,8 +849,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       itinerary_id: itineraryId,
-      supplier_cost: totalSupplierCost,
-      total_cost: totalClientPrice,
+      supplier_cost: convertedSupplierCost,
+      total_cost: convertedClientPrice,
       profit: profit,
       margin: profit,
       margin_percent: marginPercent,

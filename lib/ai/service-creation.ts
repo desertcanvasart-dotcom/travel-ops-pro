@@ -10,6 +10,7 @@ import {
   findCruiseTransportRule,
   getCruiseTransportRate
 } from '@/lib/auto-pricing-service'
+import { fetchExchangeRates, convertCurrency, type ExchangeRates } from '@/lib/currency-service'
 
 // ============================================
 // PRICING RATES (fetched from DB)
@@ -245,6 +246,7 @@ export async function createLandItineraryServices(
     skipPricing: boolean
     marginPercent: number
     startDate: string
+    currency?: string  // Target currency for client-facing prices (default: EUR)
   }
 ): Promise<{
   createdDays: CreateDayServicesResult[]
@@ -255,8 +257,26 @@ export async function createLandItineraryServices(
     itineraryId, itineraryData, rates, startDateObj, durationDays,
     effectivePackageType, effectiveCity, totalPax, isEuroPassport,
     tier, language, includeLunch, includeDinner, includeAccommodation,
-    skipPricing, marginPercent, startDate,
+    skipPricing, marginPercent, startDate, currency = 'EUR',
   } = params
+
+  // Fetch exchange rates for currency conversion
+  let exchangeRates: ExchangeRates | null = null
+  const needsConversion = currency !== 'EUR'
+  if (needsConversion) {
+    try {
+      exchangeRates = await fetchExchangeRates('EUR')
+      console.log(`[Service Creation] Currency conversion: EUR → ${currency}, rate: ${exchangeRates.rates[currency] || 'N/A'}`)
+    } catch (e) {
+      console.warn('[Service Creation] Failed to fetch exchange rates, prices will remain in EUR:', e)
+    }
+  }
+
+  // Convert EUR amount to target currency
+  const toTargetCurrency = (eurAmount: number): number => {
+    if (!needsConversion || !exchangeRates) return eurAmount
+    return Math.round(convertCurrency(eurAmount, 'EUR', currency, exchangeRates) * 100) / 100
+  }
 
   const marginMultiplier = 1 + (marginPercent / 100)
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
@@ -910,11 +930,14 @@ export async function createLandItineraryServices(
       landCruiseTransportAdded = true
     }
 
-    // Insert all services
+    // Insert all services (convert total_cost and client_price to target currency)
     for (const svc of services) {
       await supabase.from('itinerary_services').insert({
         itinerary_day_id: day.id,
-        ...svc
+        ...svc,
+        // Convert client-facing prices to target currency; rate_eur/rate_non_eur stay in EUR
+        total_cost: toTargetCurrency(svc.total_cost),
+        client_price: toTargetCurrency(svc.client_price),
       })
     }
 
@@ -922,7 +945,12 @@ export async function createLandItineraryServices(
     previousDayData = dayData
   }
 
-  return { createdDays, totalSupplierCost, totalClientPrice }
+  // Convert totals to target currency
+  return {
+    createdDays,
+    totalSupplierCost: toTargetCurrency(totalSupplierCost),
+    totalClientPrice: toTargetCurrency(totalClientPrice),
+  }
 }
 
 // ============================================
