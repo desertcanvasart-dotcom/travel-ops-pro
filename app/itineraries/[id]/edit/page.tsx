@@ -34,7 +34,9 @@ import {
   Receipt,
   Download,
   Eye,
-  Send
+  Send,
+  UserCheck,
+  UserX
 } from 'lucide-react'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
@@ -499,10 +501,22 @@ export default function ItineraryEditorPage() {
   }
 
   const updateDayService = (dayId: string, service: keyof DayService, value: boolean) => {
-    setDays(prev => prev.map(day => 
+    setDays(prev => prev.map(day =>
       day.id === dayId ? { ...day, services: { ...day.services, [service]: value } } : day
     ))
   }
+
+  // Toggle guide for ALL days at once
+  const setGuideForAllDays = (includeGuide: boolean) => {
+    setDays(prev => prev.map(day => ({
+      ...day,
+      services: { ...day.services, guide: includeGuide }
+    })))
+  }
+
+  // Determine current guide status: true if ALL days include guide
+  const allDaysHaveGuide = days.length > 0 && days.every(d => d.services.guide)
+  const noDaysHaveGuide = days.length > 0 && days.every(d => !d.services.guide)
 
   const addAttraction = (dayId: string, attractionName: string) => {
     setDays(prev => prev.map(day => {
@@ -1206,6 +1220,40 @@ export default function ItineraryEditorPage() {
             ))}
           </div>
         )}
+
+        {/* GUIDE TOGGLE */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-gray-900">{t('guideService') || 'Guide Service'}:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setGuideForAllDays(true)}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  allDaysHaveGuide
+                    ? 'bg-[#647C47] text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-[#e8ede3] hover:text-[#4a5c35]'
+                }`}
+              >
+                <UserCheck size={16} />
+                {t('includeGuide') || 'Include Guide'}
+              </button>
+              <button
+                onClick={() => setGuideForAllDays(false)}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  noDaysHaveGuide
+                    ? 'bg-red-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600'
+                }`}
+              >
+                <UserX size={16} />
+                {t('excludeGuide') || 'Exclude Guide'}
+              </button>
+            </div>
+            {!allDaysHaveGuide && !noDaysHaveGuide && (
+              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">{t('mixedGuide') || 'Mixed (per-day)'}</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* MAIN CONTENT - TWO COLUMNS */}

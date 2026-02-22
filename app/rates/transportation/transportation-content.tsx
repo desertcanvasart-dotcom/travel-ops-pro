@@ -99,6 +99,7 @@ const VEHICLE_TIERS = [
 
 interface FormData {
   service_code: string
+  route_name: string
   service_type: string
   city: string
   destination_city: string
@@ -125,6 +126,7 @@ interface FormData {
 
 const initialFormData: FormData = {
   service_code: '',
+  route_name: '',
   service_type: 'airport_transfer',
   city: '',
   destination_city: '',
@@ -354,6 +356,7 @@ export default function TransportationContent() {
     setError(null)
     setFormData({
       service_code: rate.service_code,
+      route_name: rate.route_name || '',
       service_type: rate.service_type,
       city: rate.city,
       destination_city: rate.destination_city || '',
@@ -415,6 +418,7 @@ export default function TransportationContent() {
       // Build submission with parsed numeric rates
       const submitData: Record<string, any> = {
         service_code: formData.service_code,
+        route_name: formData.route_name || null,
         service_type: formData.service_type,
         city: formData.city,
         destination_city: formData.destination_city || null,
@@ -1237,6 +1241,21 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
                     />
                   </div>
+                </div>
+
+                {/* Route Name - Descriptive label for this service */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                    Route / Service Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.route_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, route_name: e.target.value }))}
+                    placeholder="e.g., Karnak & Luxor Temples tour transport"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Descriptive name shown on cards and in itineraries. Leave empty to auto-generate.</p>
                 </div>
 
                 {/* City / Route */}
