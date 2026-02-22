@@ -92,12 +92,47 @@ export async function PUT(
 
     console.log(`[Meal Rate PUT] Updating ${id}. Table columns: [${[...existingColumns].join(', ')}]. Update payload:`, JSON.stringify(updateData))
 
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('meal_rates')
       .update(updateData)
       .eq('id', id)
       .select('*')
       .single()
+
+    // If a check constraint fails (e.g. tier_check), retry without the offending field
+    if (error && error.code === '23514') {
+      console.warn('PUT meal_rate check constraint failed:', error.message, '— retrying without constrained fields')
+
+      // Identify which constraint failed and remove that field
+      const constraintField = error.message.includes('tier_check') ? 'tier'
+        : error.message.includes('meal_category') ? 'meal_category'
+        : error.message.includes('restaurant_type') ? 'restaurant_type'
+        : null
+
+      if (constraintField && updateData[constraintField] !== undefined) {
+        delete updateData[constraintField]
+        console.log(`[Meal Rate PUT] Retrying without "${constraintField}":`, JSON.stringify(updateData))
+
+        const retry = await supabaseAdmin
+          .from('meal_rates')
+          .update(updateData)
+          .eq('id', id)
+          .select('*')
+          .single()
+
+        if (retry.error) {
+          console.error('PUT meal_rate retry also failed:', retry.error)
+          return NextResponse.json({ success: false, error: retry.error.message }, { status: 500 })
+        }
+
+        // Log the constraint issue so we can fix form values
+        console.warn(`[Meal Rate PUT] Succeeded without "${constraintField}". The value "${body[constraintField]}" is not allowed by the DB constraint. Please update the allowed values in Supabase or the form.`)
+        return NextResponse.json({ success: true, data: retry.data, warning: `The "${constraintField}" value "${body[constraintField]}" is not allowed by the database. The record was saved without updating that field.` })
+      }
+
+      console.error('PUT meal_rate check constraint failed and could not identify field:', error)
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
 
     if (error) {
       console.error('PUT meal_rate update failed:', error, 'updateData:', updateData)

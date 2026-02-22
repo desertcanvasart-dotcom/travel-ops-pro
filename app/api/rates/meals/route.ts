@@ -35,6 +35,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
+    // Log distinct tier values currently in the table for diagnostics
+    const { data: tierValues } = await supabaseAdmin
+      .from('meal_rates')
+      .select('tier')
+    const distinctTiers = [...new Set((tierValues || []).map((r: any) => r.tier).filter(Boolean))]
+    if (distinctTiers.length > 0) {
+      console.log('[Meal Rates GET] Distinct tier values in DB:', distinctTiers.join(', '))
+    }
+
     return NextResponse.json({ success: true, data: data || [] })
   } catch (error: any) {
     console.error('GET meal_rates catch error:', error)
