@@ -1244,7 +1244,7 @@ export default function TransportationContent() {
                   </div>
                 </div>
 
-                {/* Route Name - Combobox with existing names + custom entry */}
+                {/* Route Name - Combobox with existing + suggested names */}
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-600 mb-1.5">
                     Route / Service Name
@@ -1253,7 +1253,10 @@ export default function TransportationContent() {
                     <input
                       type="text"
                       value={formData.route_name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, route_name: e.target.value }))}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, route_name: e.target.value }))
+                        setShowRouteDropdown(true)
+                      }}
                       onFocus={() => setShowRouteDropdown(true)}
                       onBlur={() => setTimeout(() => setShowRouteDropdown(false), 200)}
                       placeholder="e.g., Karnak & Luxor Temples tour transport"
@@ -1268,26 +1271,112 @@ export default function TransportationContent() {
                     </button>
                   </div>
                   {showRouteDropdown && (() => {
+                    // Collect existing route names from saved rates
                     const existingNames = [...new Set(
                       rates
                         .map(r => r.route_name)
                         .filter((n): n is string => !!n && n.trim() !== '')
                     )].sort()
-                    const filtered = formData.route_name.trim()
-                      ? existingNames.filter(n => n.toLowerCase().includes(formData.route_name.toLowerCase()))
-                      : existingNames
+
+                    // Build suggested names based on the selected city
+                    const cityRoutes: Record<string, string[]> = {
+                      'Luxor': [
+                        'Karnak & Luxor Temples',
+                        'Valley of the Kings & Queens',
+                        'West Bank Full Day Tour',
+                        'East Bank Full Day Tour',
+                        'Luxor Full Day Tour (East & West Bank)',
+                        'Hatshepsut Temple & Valley of the Kings',
+                        'Sound & Light Show Karnak',
+                        'Luxor Airport Transfer',
+                        'Luxor to Hurghada Transfer',
+                        'Luxor to Aswan Transfer',
+                        'Luxor to Marsa Alam Transfer',
+                      ],
+                      'Cairo': [
+                        'Pyramids & Sphinx Tour',
+                        'Pyramids, Sphinx & Egyptian Museum',
+                        'Old Cairo & Khan El Khalili',
+                        'Islamic Cairo Walking Tour',
+                        'Coptic Cairo Tour',
+                        'Grand Egyptian Museum (GEM)',
+                        'Saqqara & Memphis Tour',
+                        'Saqqara, Memphis & Dahshur',
+                        'Cairo Full Day Tour',
+                        'Cairo Airport Transfer',
+                        'Cairo to Alexandria Transfer',
+                        'Sound & Light Show Pyramids',
+                      ],
+                      'Aswan': [
+                        'Philae Temple & High Dam',
+                        'Aswan Full Day Tour',
+                        'Nubian Village Tour',
+                        'Abu Simbel Day Trip',
+                        'Aswan Airport Transfer',
+                        'Aswan to Luxor Transfer',
+                        'Aswan to Abu Simbel Transfer',
+                        'Felucca Ride Transfer',
+                      ],
+                      'Alexandria': [
+                        'Alexandria Full Day Tour',
+                        'Bibliotheca Alexandrina & Citadel',
+                        'Alexandria City Tour',
+                        'Cairo to Alexandria Transfer',
+                        'Alexandria Airport Transfer',
+                      ],
+                      'Hurghada': [
+                        'Hurghada Airport Transfer',
+                        'Hurghada to Luxor Transfer',
+                        'Hurghada City Tour',
+                      ],
+                      'Sharm El Sheikh': [
+                        'Sharm Airport Transfer',
+                        'St. Catherine Day Trip',
+                        'Ras Mohammed Tour',
+                      ],
+                    }
+
+                    const suggested = cityRoutes[formData.city] || []
+
+                    // Merge existing + suggested, deduplicate
+                    const allOptions = [...new Set([...existingNames, ...suggested])].sort()
+
+                    const searchText = formData.route_name.trim().toLowerCase()
+                    const filtered = searchText
+                      ? allOptions.filter(n => n.toLowerCase().includes(searchText))
+                      : allOptions
+
                     if (filtered.length === 0) return null
                     return (
                       <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                        {filtered.map((name) => (
+                        {existingNames.length > 0 && !searchText && (
+                          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 bg-gray-50 border-b border-gray-100 uppercase tracking-wide">Existing Routes</div>
+                        )}
+                        {filtered.filter(n => existingNames.includes(n)).map((name) => (
                           <button
-                            key={name}
+                            key={`existing-${name}`}
                             type="button"
                             onClick={() => {
                               setFormData(prev => ({ ...prev, route_name: name }))
                               setShowRouteDropdown(false)
                             }}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-[#647C47]/10 text-gray-700 border-b border-gray-50 last:border-b-0"
+                          >
+                            {name}
+                          </button>
+                        ))}
+                        {suggested.length > 0 && filtered.some(n => !existingNames.includes(n)) && !searchText && (
+                          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 bg-gray-50 border-b border-gray-100 uppercase tracking-wide">Suggested for {formData.city || 'selected city'}</div>
+                        )}
+                        {filtered.filter(n => !existingNames.includes(n)).map((name) => (
+                          <button
+                            key={`suggested-${name}`}
+                            type="button"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, route_name: name }))
+                              setShowRouteDropdown(false)
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-[#647C47]/10 text-gray-600 border-b border-gray-50 last:border-b-0"
                           >
                             {name}
                           </button>
