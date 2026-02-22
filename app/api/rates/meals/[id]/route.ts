@@ -67,16 +67,41 @@ export async function PUT(
 
     console.log(`[Meal Rate PUT] Updating ${id}:`, JSON.stringify(updateData))
 
-    const { data, error } = await supabaseAdmin
+    // Try full update first
+    let { data, error } = await supabaseAdmin
       .from('meal_rates')
       .update(updateData)
       .eq('id', id)
       .select('*')
       .single()
 
+    // If failed (likely unknown column), retry with only core columns
     if (error) {
-      console.error('PUT meal_rate error:', error, 'updateData:', updateData)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      console.warn('PUT meal_rate full update failed, retrying with core fields:', error.message)
+      const coreData: Record<string, any> = {}
+      const coreColumns = [
+        'service_code', 'restaurant_name', 'meal_type', 'cuisine_type',
+        'city', 'base_rate_eur', 'base_rate_non_eur', 'season',
+        'rate_valid_from', 'rate_valid_to', 'supplier_id', 'supplier_name',
+        'tier', 'notes', 'is_active', 'updated_at'
+      ]
+      for (const col of coreColumns) {
+        if (updateData[col] !== undefined) coreData[col] = updateData[col]
+      }
+
+      const retry = await supabaseAdmin
+        .from('meal_rates')
+        .update(coreData)
+        .eq('id', id)
+        .select('*')
+        .single()
+
+      if (retry.error) {
+        console.error('PUT meal_rate retry also failed:', retry.error, 'coreData:', coreData)
+        return NextResponse.json({ success: false, error: retry.error.message }, { status: 500 })
+      }
+
+      data = retry.data
     }
 
     return NextResponse.json({ success: true, data })

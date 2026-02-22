@@ -152,6 +152,7 @@ export default function MealRatesContent() {
   const [showModal, setShowModal] = useState(false)
   const [editingRate, setEditingRate] = useState<MealRate | null>(null)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'table' | 'cards' | 'compact'>('table')
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
@@ -334,8 +335,8 @@ export default function MealRatesContent() {
     setShowModal(true)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    e?.preventDefault()
     if (saving) return  // Prevent double-submit
 
     setSaving(true)
@@ -346,26 +347,55 @@ export default function MealRatesContent() {
 
       const method = editingRate ? 'PUT' : 'POST'
 
+      // Only send fields that the DB expects
+      const payload = {
+        service_code: formData.service_code,
+        restaurant_name: formData.restaurant_name,
+        meal_type: formData.meal_type || null,
+        cuisine_type: formData.cuisine_type || null,
+        restaurant_type: formData.restaurant_type || null,
+        city: formData.city || null,
+        base_rate_eur: parseFloat(String(formData.base_rate_eur)) || 0,
+        base_rate_non_eur: parseFloat(String(formData.base_rate_non_eur)) || 0,
+        season: formData.season || null,
+        rate_valid_from: formData.rate_valid_from || null,
+        rate_valid_to: formData.rate_valid_to || null,
+        supplier_id: formData.supplier_id || null,
+        supplier_name: formData.supplier_name || null,
+        tier: formData.tier || null,
+        meal_category: formData.meal_category || null,
+        dietary_options: formData.dietary_options || [],
+        per_person_rate: formData.per_person_rate,
+        minimum_pax: formData.minimum_pax || null,
+        notes: formData.notes || null,
+        is_active: formData.is_active,
+      }
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       })
 
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        console.error('Save meal rate failed:', { status: response.status, data, formData })
-        showNotification('error', 'Error', data.error || 'Failed to save rate')
+        const errorMsg = data.error || 'Failed to save rate'
+        console.error('Save meal rate failed:', { status: response.status, error: errorMsg, payload })
+        showNotification('error', 'Error', errorMsg)
+        setError(errorMsg)
         return
       }
 
       showNotification('success', 'Success', editingRate ? 'Meal rate updated successfully!' : 'Meal rate created successfully!')
       setShowModal(false)
+      setError(null)
       fetchRates()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving rate:', error)
-      showNotification('error', 'Error', 'Failed to save rate. Please try again.')
+      const errorMsg = error?.message || 'Failed to save rate. Please try again.'
+      showNotification('error', 'Error', errorMsg)
+      setError(errorMsg)
     } finally {
       setSaving(false)
     }
@@ -1273,6 +1303,13 @@ export default function MealRatesContent() {
                 </label>
               </div>
             </form>
+
+            {error && (
+              <div className="mx-4 mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
               <button
