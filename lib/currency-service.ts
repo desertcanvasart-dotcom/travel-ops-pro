@@ -27,9 +27,13 @@ let cachedRates: ExchangeRates | null = null
 let cacheTimestamp: number = 0
 const CACHE_DURATION = 60 * 60 * 1000 // 1 hour in milliseconds
 
+// Track whether we're using fallback rates
+let usingFallback = false
+export function isUsingFallbackRates(): boolean { return usingFallback }
+
 /**
  * Fetch latest exchange rates from Frankfurter API
- * Uses USD as base currency
+ * Uses EUR as base currency (since all rates are stored in EUR)
  */
 export async function fetchExchangeRates(baseCurrency: string = 'USD'): Promise<ExchangeRates> {
   // Check cache first
@@ -64,43 +68,50 @@ export async function fetchExchangeRates(baseCurrency: string = 'USD'): Promise<
     // Update cache
     cachedRates = rates
     cacheTimestamp = now
+    usingFallback = false
 
     return rates
   } catch (error) {
-    console.error('Error fetching exchange rates:', error)
+    console.error('⚠️ Error fetching exchange rates — using fallback:', error)
 
     // Return fallback rates if API fails
+    usingFallback = true
     return getFallbackRates(baseCurrency)
   }
 }
 
 /**
- * Fallback rates in case API is unavailable
- * These are approximate rates and should only be used as backup
+ * Fallback rates in case API is unavailable.
+ * Based on ECB rates as of February 2026.
+ * EUR is the reference base since all our rates are stored in EUR.
+ *
+ * IMPORTANT: Update these periodically to stay accurate.
+ * Last updated: 2026-02-22
+ * Source: ECB reference rates via Frankfurter API
  */
 export function getFallbackRates(baseCurrency: string): ExchangeRates {
-  // Approximate rates as of early 2026 (USD as reference)
-  const usdRates: Record<string, number> = {
-    USD: 1,
-    EUR: 0.92,
-    GBP: 0.79,
-    EGP: 50.5
+  // EUR-based rates as of Feb 22, 2026 (ECB reference)
+  const eurRates: Record<string, number> = {
+    EUR: 1,
+    USD: 1.1782,
+    GBP: 0.8737,
+    EGP: 56.00
   }
 
-  if (baseCurrency === 'USD') {
+  if (baseCurrency === 'EUR') {
     return {
-      base: 'USD',
+      base: 'EUR',
       date: new Date().toISOString().split('T')[0],
-      rates: usdRates
+      rates: eurRates
     }
   }
 
   // Convert rates to different base
-  const baseRate = usdRates[baseCurrency] || 1
+  const baseRateInEur = eurRates[baseCurrency] || 1
   const convertedRates: Record<string, number> = {}
 
-  for (const [currency, rate] of Object.entries(usdRates)) {
-    convertedRates[currency] = rate / baseRate
+  for (const [currency, eurRate] of Object.entries(eurRates)) {
+    convertedRates[currency] = eurRate / baseRateInEur
   }
 
   return {

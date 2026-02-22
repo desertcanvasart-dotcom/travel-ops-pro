@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { fetchExchangeRates, convertCurrency, type ExchangeRates } from '@/lib/currency-service'
+import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -557,7 +557,12 @@ export async function POST(
     if (needsConversion) {
       try {
         exchangeRates = await fetchExchangeRates('EUR')
-        console.log(`[Pricing] Currency conversion: EUR → ${currency}, rate: ${exchangeRates.rates[currency] || 'N/A'}`)
+        const rate = exchangeRates.rates[currency]
+        if (isUsingFallbackRates()) {
+          console.warn(`⚠️ [Pricing] Using FALLBACK exchange rates! EUR → ${currency} = ${rate || 'N/A'}. Live API unavailable.`)
+        } else {
+          console.log(`[Pricing] Currency conversion: EUR → ${currency}, rate: ${rate || 'N/A'} (live)`)
+        }
       } catch (e) {
         console.warn('[Pricing] Failed to fetch exchange rates, prices will remain in EUR:', e)
       }
@@ -859,6 +864,7 @@ export async function POST(
       services_count: allServices.length,
       per_person: Math.round(totalClientPrice / totalPax * 100) / 100,
       preferences_used: !!userPrefs,
+      using_fallback_rates: needsConversion && isUsingFallbackRates(),
       // Report skipped add-ons
       skipped_addons: skippedAddons,
       skipped_addons_count: skippedAddons.length,

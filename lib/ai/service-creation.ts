@@ -10,7 +10,7 @@ import {
   findCruiseTransportRule,
   getCruiseTransportRate
 } from '@/lib/auto-pricing-service'
-import { fetchExchangeRates, convertCurrency, type ExchangeRates } from '@/lib/currency-service'
+import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
 
 // ============================================
 // PRICING RATES (fetched from DB)
@@ -266,7 +266,12 @@ export async function createLandItineraryServices(
   if (needsConversion) {
     try {
       exchangeRates = await fetchExchangeRates('EUR')
-      console.log(`[Service Creation] Currency conversion: EUR → ${currency}, rate: ${exchangeRates.rates[currency] || 'N/A'}`)
+      const rate = exchangeRates.rates[currency]
+      if (isUsingFallbackRates()) {
+        console.warn(`⚠️ [Service Creation] Using FALLBACK exchange rates! EUR → ${currency} = ${rate || 'N/A'}. Live API unavailable.`)
+      } else {
+        console.log(`[Service Creation] Currency conversion: EUR → ${currency}, rate: ${rate || 'N/A'} (live)`)
+      }
     } catch (e) {
       console.warn('[Service Creation] Failed to fetch exchange rates, prices will remain in EUR:', e)
     }
