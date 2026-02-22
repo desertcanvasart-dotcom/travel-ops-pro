@@ -23,7 +23,8 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
@@ -150,6 +151,7 @@ export default function MealRatesContent() {
   // UI State
   const [showModal, setShowModal] = useState(false)
   const [editingRate, setEditingRate] = useState<MealRate | null>(null)
+  const [saving, setSaving] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'cards' | 'compact'>('table')
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
@@ -334,7 +336,9 @@ export default function MealRatesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return  // Prevent double-submit
 
+    setSaving(true)
     try {
       const url = editingRate
         ? `/api/rates/meals/${editingRate.id}`
@@ -351,6 +355,7 @@ export default function MealRatesContent() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
+        console.error('Save meal rate failed:', { status: response.status, data, formData })
         showNotification('error', 'Error', data.error || 'Failed to save rate')
         return
       }
@@ -361,6 +366,8 @@ export default function MealRatesContent() {
     } catch (error) {
       console.error('Error saving rate:', error)
       showNotification('error', 'Error', 'Failed to save rate. Please try again.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -1276,11 +1283,12 @@ export default function MealRatesContent() {
                 {tCommon('cancel')}
               </button>
               <button
-                onClick={handleSubmit}
-                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+                type="submit"
+                disabled={saving}
+                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Check className="w-4 h-4" />
-                {editingRate ? tCommon('updateRate') : tCommon('createRate')}
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {saving ? tCommon('saving') || 'Saving...' : (editingRate ? tCommon('updateRate') : tCommon('createRate'))}
               </button>
             </div>
           </div>

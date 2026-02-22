@@ -39,7 +39,10 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
-    const updateData: Record<string, any> = {}
+    // Build update object from all provided fields
+    const updateData: Record<string, any> = {
+      updated_at: new Date().toISOString()
+    }
 
     if (body.service_code !== undefined) updateData.service_code = body.service_code
     if (body.restaurant_name !== undefined) updateData.restaurant_name = body.restaurant_name
@@ -62,6 +65,8 @@ export async function PUT(
     if (body.notes !== undefined) updateData.notes = body.notes || null
     if (body.is_active !== undefined) updateData.is_active = body.is_active
 
+    console.log(`[Meal Rate PUT] Updating ${id}:`, JSON.stringify(updateData))
+
     const { data, error } = await supabaseAdmin
       .from('meal_rates')
       .update(updateData)
@@ -70,7 +75,7 @@ export async function PUT(
       .single()
 
     if (error) {
-      console.error('PUT meal_rate error:', error)
+      console.error('PUT meal_rate error:', error, 'updateData:', updateData)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
