@@ -671,11 +671,13 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Error parsing conversation:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    // Include actual error details so client can show useful info
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to analyze conversation',
-        message: error instanceof Error ? error.message : 'Unknown error'
+      {
+        success: false,
+        error: `Failed to analyze conversation: ${errorMessage}`,
+        message: errorMessage
       },
       { status: 500 }
     )

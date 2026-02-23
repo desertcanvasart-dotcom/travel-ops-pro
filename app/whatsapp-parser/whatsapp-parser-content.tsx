@@ -909,6 +909,7 @@ function WhatsAppParserContent() {
   const [isCreatingPartner, setIsCreatingPartner] = useState(false)
 
   const itinerarySuccessRef = useRef<HTMLDivElement>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
 
   // ============================================
   // COMPUTED VALUES
@@ -1179,6 +1180,9 @@ function WhatsAppParserContent() {
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed')
+      setTimeout(() => {
+        errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
     } finally {
       setIsAnalyzing(false)
     }
@@ -1315,6 +1319,9 @@ function WhatsAppParserContent() {
 
     } catch (err: any) {
       setError(err.message || 'Failed to create client')
+      setTimeout(() => {
+        errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
     } finally {
       setIsCreatingClient(false)
     }
@@ -1396,9 +1403,31 @@ function WhatsAppParserContent() {
             console.log('✅ B2B Template created:', templateResult.data.template_code)
           } else {
             console.error('⚠️ B2B Template creation failed:', templateResult.error)
+            // Still show success with itinerary link as fallback
+            setGeneratedQuote({
+              template_id: null,
+              template_code: '',
+              template_name: result.data.trip_name || 'Custom Tour',
+              variation_id: null,
+              variation_code: '',
+              variation_name: 'Template creation failed — use Tour Manager',
+              itinerary_id: result.data.id,
+              _fallback: true,
+            })
           }
         } catch (templateErr: any) {
           console.error('⚠️ B2B Template creation error:', templateErr.message)
+          // Still show success with itinerary link as fallback
+          setGeneratedQuote({
+            template_id: null,
+            template_code: '',
+            template_name: result.data.trip_name || 'Custom Tour',
+            variation_id: null,
+            variation_code: '',
+            variation_name: 'Template creation failed — use Tour Manager',
+            itinerary_id: result.data.id,
+            _fallback: true,
+          })
         }
       }
 
@@ -1416,6 +1445,9 @@ function WhatsAppParserContent() {
     } catch (err: any) {
       setError(err.message || 'Generation failed')
       setGenerationStep('idle')
+      setTimeout(() => {
+        errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
     } finally {
       setIsGenerating(false)
     }
@@ -1587,7 +1619,7 @@ function WhatsAppParserContent() {
           <div className="col-span-7 space-y-4">
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+              <div ref={errorRef} className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-red-800">{t('error')}</p>
@@ -2064,35 +2096,51 @@ function WhatsAppParserContent() {
 
                 {/* B2B Quote Success State */}
                 {isB2BMode && generatedQuote && generatedItinerary && (
-                  <div ref={itinerarySuccessRef} className="bg-indigo-50 border-2 border-indigo-300 rounded-xl p-4">
+                  <div ref={itinerarySuccessRef} className={`border-2 rounded-xl p-4 ${generatedQuote._fallback ? 'bg-amber-50 border-amber-300' : 'bg-indigo-50 border-indigo-300'}`}>
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${generatedQuote._fallback ? 'bg-amber-500' : 'bg-indigo-500'}`}>
                         <Building2 className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-base font-bold text-indigo-800">B2B Tour Template Created</h3>
-                        <p className="text-sm text-indigo-600">
-                          {generatedQuote.template_code} • {generatedQuote.template_name}
+                        <h3 className={`text-base font-bold ${generatedQuote._fallback ? 'text-amber-800' : 'text-indigo-800'}`}>
+                          {generatedQuote._fallback ? 'B2B Itinerary Created' : 'B2B Tour Template Created'}
+                        </h3>
+                        <p className={`text-sm ${generatedQuote._fallback ? 'text-amber-600' : 'text-indigo-600'}`}>
+                          {generatedQuote._fallback
+                            ? generatedQuote.template_name
+                            : `${generatedQuote.template_code} • ${generatedQuote.template_name}`}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 mb-3 bg-white rounded-lg p-3 border border-indigo-200">
+                    <div className={`flex items-center gap-2 mb-3 bg-white rounded-lg p-3 border ${generatedQuote._fallback ? 'border-amber-200' : 'border-indigo-200'}`}>
                       <p className="text-sm text-gray-600">
-                        {generatedQuote.variation_name} • Ready for B2B pricing in calculator
+                        {generatedQuote._fallback
+                          ? 'Itinerary created. Open Tour Manager to create a template and price via the B2B calculator.'
+                          : `${generatedQuote.variation_name} • Ready for B2B pricing in calculator`}
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/b2b/calculator/${generatedQuote.variation_id}`)}
-                        className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2"
-                      >
-                        Open B2B Calculator <ChevronRight className="w-4 h-4" />
-                      </button>
+                      {generatedQuote.variation_id ? (
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/b2b/calculator/${generatedQuote.variation_id}`)}
+                          className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2"
+                        >
+                          Open B2B Calculator <ChevronRight className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
+                          className="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 flex items-center justify-center gap-2"
+                        >
+                          View Itinerary <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => router.push('/tours/manage')}
-                        className="px-4 py-2.5 border border-indigo-300 bg-white rounded-lg hover:bg-indigo-50 flex items-center gap-2 text-sm text-indigo-700"
+                        className={`px-4 py-2.5 border bg-white rounded-lg flex items-center gap-2 text-sm ${generatedQuote._fallback ? 'border-amber-300 hover:bg-amber-50 text-amber-700' : 'border-indigo-300 hover:bg-indigo-50 text-indigo-700'}`}
                       >
                         <Eye className="w-4 h-4" /> Tour Manager
                       </button>
