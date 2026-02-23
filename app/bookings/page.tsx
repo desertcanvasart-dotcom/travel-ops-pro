@@ -196,13 +196,12 @@ export default function BookingsPage() {
       <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
               placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none"
+              className="w-full pl-3 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none"
             />
           </div>
           <div className="flex items-center gap-2">

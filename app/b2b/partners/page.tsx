@@ -211,8 +211,7 @@ export default function B2BPartnersPage() {
       {/* Search */}
       <div className="bg-white rounded-lg border p-4 mb-6 flex gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder={t('searchPlaceholder')} className="w-full pl-10 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none" />
+          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder={t('searchPlaceholder')} className="w-full pl-3 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none" />
         </div>
         <button onClick={() => setShowInactive(!showInactive)} className={`px-4 py-2 text-sm rounded-lg font-medium ${showInactive ? 'bg-gray-100 border text-gray-700' : 'bg-green-50 border border-green-200 text-green-700'}`}>
           {showInactive ? t('showAll') : t('activeOnly')}

@@ -1539,7 +1539,7 @@ export default function ItineraryEditorPage() {
                                     </div>
                                     
                                     {/* Row 2: Supplier Selection - Full Width */}
-                                    <div className="flex items-center gap-2 pl-10">
+                                    <div className="flex items-center gap-2 pl-3">
                                       <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
                                         📦 {t('supplier')}:
                                       </label>
@@ -1578,7 +1578,7 @@ export default function ItineraryEditorPage() {
                                     </div>
 
                                     {/* Row 3: Qty, Rate, Total, Actions */}
-                                    <div className="flex items-center gap-3 pl-10">
+                                    <div className="flex items-center gap-3 pl-3">
                                       <div className="flex items-center gap-1">
                                         <label className="text-xs text-gray-500">{t('qty')}:</label>
                                         <input
@@ -1835,13 +1835,12 @@ export default function ItineraryEditorPage() {
             </div>
             <div className="p-4">
               <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
                   placeholder={t('searchAttractionsPlaceholder')}
                   value={attractionSearch}
                   onChange={(e) => setAttractionSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#647C47]"
+                  className="w-full pl-3 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#647C47]"
                 />
               </div>
               
