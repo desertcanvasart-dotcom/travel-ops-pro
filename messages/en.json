@@ -3949,6 +3949,7 @@
     },
     "status": {
       "draft": "Draft",
+      "quoted": "Quoted",
       "sent": "Sent",
       "confirmed": "Confirmed",
       "completed": "Completed",
@@ -4012,6 +4013,7 @@
       "quotedAmountLabel": "Quoted Amount",
       "status": {
         "draft": "Draft",
+        "quoted": "Quoted",
         "sent": "Sent",
         "confirmed": "Confirmed",
         "completed": "Completed",

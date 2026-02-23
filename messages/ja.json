@@ -4966,6 +4966,7 @@
     },
     "status": {
       "draft": "下書き",
+      "quoted": "見積済み",
       "sent": "送信済み",
       "confirmed": "確定",
       "completed": "完了",
@@ -5029,6 +5030,7 @@
       "quotedAmountLabel": "見積金額",
       "status": {
         "draft": "下書き",
+        "quoted": "見積済み",
         "sent": "送信済み",
         "confirmed": "確定",
         "completed": "完了",

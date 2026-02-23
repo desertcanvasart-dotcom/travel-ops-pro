@@ -55,6 +55,7 @@ interface Summary {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   draft: { label: 'Draft', color: 'text-gray-600', bg: 'bg-gray-100' },
+  quoted: { label: 'Quoted', color: 'text-amber-600', bg: 'bg-amber-100' },
   sent: { label: 'Sent', color: 'text-blue-600', bg: 'bg-blue-100' },
   confirmed: { label: 'Confirmed', color: 'text-green-600', bg: 'bg-green-100' },
   completed: { label: 'Completed', color: 'text-purple-600', bg: 'bg-purple-100' },
