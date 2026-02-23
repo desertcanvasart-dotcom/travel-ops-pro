@@ -23,10 +23,20 @@ export async function GET(request: NextRequest) {
     const supabase = createClient()
 
     // Fetch itineraries with their language versions
-    const { data: itineraries, error } = await supabase
+    const { searchParams } = new URL(request.url)
+    const includeB2B = searchParams.get('include_b2b') === 'true'
+
+    let query = supabase
       .from('itineraries')
       .select('*')
       .order('created_at', { ascending: false })
+
+    // By default, exclude B2B itineraries from the list
+    if (!includeB2B) {
+      query = query.not('source', 'eq', 'b2b_custom')
+    }
+
+    const { data: itineraries, error } = await query
 
     if (error) {
       console.error('❌ Database error:', error)

@@ -1378,31 +1378,27 @@ function WhatsAppParserContent() {
       setGenerationStep('complete')
       setGeneratedItinerary(result.data)
 
-      // B2B Mode: Create B2B quote from the draft itinerary
+      // B2B Mode: Create tour template + variation from itinerary for B2B calculator
       if (isB2BMode && result.data?.id) {
         try {
           setGenerationStep('finalizing')
-          const quoteRes = await fetch('/api/b2b/quote-from-itinerary', {
+          const templateRes = await fetch('/api/b2b/create-template-from-itinerary', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               itinerary_id: result.data.id,
-              partner_id: selectedPartnerId,
-              margin_percent: userPreferences.default_margin_percent,
-              tour_leader_included: false,
-              is_eur_passport: data.is_euro_passport !== false,
-              language: data.conversation_language === 'Japanese' ? 'Japanese' : 'English',
+              tier: selectedTier || 'standard',
             })
           })
-          const quoteResult = await quoteRes.json()
-          if (quoteResult.success) {
-            setGeneratedQuote(quoteResult.data)
-            console.log('✅ B2B Quote created:', quoteResult.data.quote_number)
+          const templateResult = await templateRes.json()
+          if (templateResult.success) {
+            setGeneratedQuote(templateResult.data)
+            console.log('✅ B2B Template created:', templateResult.data.template_code)
           } else {
-            console.error('⚠️ B2B Quote creation failed:', quoteResult.error)
+            console.error('⚠️ B2B Template creation failed:', templateResult.error)
           }
-        } catch (quoteErr: any) {
-          console.error('⚠️ B2B Quote creation error:', quoteErr.message)
+        } catch (templateErr: any) {
+          console.error('⚠️ B2B Template creation error:', templateErr.message)
         }
       }
 
@@ -2074,31 +2070,31 @@ function WhatsAppParserContent() {
                         <Building2 className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-base font-bold text-indigo-800">B2B Quote Created</h3>
+                        <h3 className="text-base font-bold text-indigo-800">B2B Tour Template Created</h3>
                         <p className="text-sm text-indigo-600">
-                          {generatedQuote.quote_number} • {generatedQuote.trip_name}
+                          {generatedQuote.template_code} • {generatedQuote.template_name}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mb-3 bg-white rounded-lg p-3 border border-indigo-200">
                       <p className="text-sm text-gray-600">
-                        {generatedQuote.services_count || 0} services • Ready for B2B pricing in calculator
+                        {generatedQuote.variation_name} • Ready for B2B pricing in calculator
                       </p>
                     </div>
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => router.push(`/b2b/quotes/${generatedQuote.id}`)}
+                        onClick={() => router.push(`/b2b/calculator/${generatedQuote.variation_id}`)}
                         className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2"
                       >
-                        View B2B Quote <ChevronRight className="w-4 h-4" />
+                        Open B2B Calculator <ChevronRight className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
+                        onClick={() => router.push('/tours/manage')}
                         className="px-4 py-2.5 border border-indigo-300 bg-white rounded-lg hover:bg-indigo-50 flex items-center gap-2 text-sm text-indigo-700"
                       >
-                        <Eye className="w-4 h-4" /> View Draft
+                        <Eye className="w-4 h-4" /> Tour Manager
                       </button>
                     </div>
                   </div>
