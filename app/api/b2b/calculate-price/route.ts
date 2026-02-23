@@ -270,7 +270,7 @@ async function selectGuideFromB2CTable(language: string = 'English', tier: strin
     if (!anyGuide || anyGuide.length === 0) return null
     
     return {
-      rate: anyGuide[0].daily_rate || 55,
+      rate: anyGuide[0].daily_rate || 0,
       name: anyGuide[0].name || 'Guide',
       id: anyGuide[0].id
     }
@@ -280,7 +280,7 @@ async function selectGuideFromB2CTable(language: string = 'English', tier: strin
   let selectedGuide = guides.find((g: any) => g.tier === tier) || guides[0]
 
   return {
-    rate: selectedGuide.daily_rate || 55,
+    rate: selectedGuide.daily_rate || 0,
     name: selectedGuide.name || 'Guide',
     id: selectedGuide.id
   }
@@ -333,14 +333,14 @@ async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ 
     if (!anyHotel || anyHotel.length === 0) return null
 
     return {
-      rate: anyHotel[0].rate_double_eur || 80,
+      rate: anyHotel[0].rate_double_eur || 0,
       name: anyHotel[0].name || 'Hotel',
       id: anyHotel[0].id
     }
   }
 
   return {
-    rate: hotels[0].rate_double_eur || 80,
+    rate: hotels[0].rate_double_eur || 0,
     name: hotels[0].name || 'Hotel',
     id: hotels[0].id
   }
@@ -777,9 +777,9 @@ export async function POST(request: NextRequest) {
 
             if (mealRate) {
               if (service.service_name?.toLowerCase().includes('dinner')) {
-                unitCost = mealRate.dinner_rate_eur || 18
+                unitCost = mealRate.dinner_rate_eur || 0
               } else {
-                unitCost = mealRate.lunch_rate_eur || 12
+                unitCost = mealRate.lunch_rate_eur || 0
               }
               lineTotal = unitCost * num_pax
               effectiveQuantityMode = 'per_pax'

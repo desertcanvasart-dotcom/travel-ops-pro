@@ -167,7 +167,7 @@ async function getTransportationRate(city: string, tier: string, pax: number) {
 
     if (tierResult) {
       return {
-        rate: tierResult.rateEur || 50,
+        rate: tierResult.rateEur || 0,
         supplier_id: rate.supplier_id || null,
         supplier_name: rate.supplier_name || null,
         name: `${tierResult.vehicleType} - ${city}`,
@@ -188,7 +188,7 @@ async function getTransportationRate(city: string, tier: string, pax: number) {
 
   if (vehicle) {
     return {
-      rate: vehicle.daily_rate_eur || 50,
+      rate: vehicle.daily_rate_eur || 0,
       supplier_id: vehicle.id,
       supplier_name: vehicle.company_name || null,
       name: `${vehicle.vehicle_type} - ${city}`,
@@ -196,14 +196,10 @@ async function getTransportationRate(city: string, tier: string, pax: number) {
     }
   }
 
-  // Fallback
-  const fallback: Record<string, number> = {
-    'Cairo': 52, 'Giza': 52, 'Luxor': 45, 'Aswan': 45,
-    'Alexandria': 60, 'Hurghada': 55
-  }
-  
+  // No DB rate found — return 0 so the gap is visible
+  console.warn(`⚠️ [Pricing] No vehicle rate found for ${city} (pax: ${pax}) — returning €0`)
   return {
-    rate: fallback[city] || 50,
+    rate: 0,
     supplier_id: null,
     supplier_name: null,
     name: `Vehicle - ${city}`,
@@ -223,7 +219,7 @@ async function getGuideRate(city: string, tier: string, language: string = 'Engl
 
   if (rate) {
     return {
-      rate: rate.base_rate_eur || rate.full_day_rate_eur || 50,
+      rate: rate.base_rate_eur || rate.full_day_rate_eur || 0,
       supplier_id: rate.supplier_id || null,
       supplier_name: rate.guide_name || null,
       name: `${language} Speaking Guide - ${city}`,
@@ -242,7 +238,7 @@ async function getGuideRate(city: string, tier: string, language: string = 'Engl
 
   if (guide) {
     return {
-      rate: guide.daily_rate_eur || 55,
+      rate: guide.daily_rate_eur || 0,
       supplier_id: guide.id,
       supplier_name: guide.name || null,
       name: `${language} Speaking Guide - ${city}`,
@@ -250,9 +246,10 @@ async function getGuideRate(city: string, tier: string, language: string = 'Engl
     }
   }
 
-  // Fallback
+  // No DB rate found — return 0 so the gap is visible
+  console.warn(`⚠️ [Pricing] No guide rate found for ${language} in ${city} — returning €0`)
   return {
-    rate: 50,
+    rate: 0,
     supplier_id: null,
     supplier_name: null,
     name: `${language} Speaking Guide - ${city}`,
@@ -418,9 +415,9 @@ async function getMealRate(city: string, mealType: 'lunch' | 'dinner', tier: str
     }
   }
 
-  // Hardcoded fallback only if no meal rates exist at all
-  console.warn(`⚠️ [Pricing] No meal rate found for ${mealType} in ${city} — using fallback €${mealType === 'lunch' ? 12 : 18}/person`)
-  const fallback = mealType === 'lunch' ? 12 : 18
+  // No DB rate found — return 0 so the gap is visible
+  console.warn(`⚠️ [Pricing] No meal rate found for ${mealType} in ${city} — returning €0`)
+  const fallback = 0
   return {
     rate: fallback,
     supplier_name: null,
@@ -442,7 +439,7 @@ async function getHotelRate(city: string, tier: string) {
 
   if (hotel) {
     return {
-      rate: hotel.rate_double_eur || 80,
+      rate: hotel.rate_double_eur || 0,
       supplier_id: hotel.id,
       supplier_name: hotel.name,
       name: `${hotel.name} - Double Room`,
@@ -462,7 +459,7 @@ async function getHotelRate(city: string, tier: string) {
 
   if (anyHotel) {
     return {
-      rate: anyHotel.rate_double_eur || 80,
+      rate: anyHotel.rate_double_eur || 0,
       supplier_id: anyHotel.id,
       supplier_name: anyHotel.name,
       name: `${anyHotel.name} - Double Room`,
@@ -470,12 +467,10 @@ async function getHotelRate(city: string, tier: string) {
     }
   }
 
-  const fallbackRates: Record<string, number> = {
-    'budget': 45, 'standard': 80, 'deluxe': 120, 'luxury': 180
-  }
-
+  // No DB rate found — return 0 so the gap is visible
+  console.warn(`⚠️ [Pricing] No hotel rate found for ${city} (tier: ${tier}) — returning €0`)
   return {
-    rate: fallbackRates[tier] || 80,
+    rate: 0,
     supplier_id: null,
     supplier_name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Hotel`,
     name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Hotel - ${city}`,
@@ -489,7 +484,7 @@ async function getTippingRate(tier: string) {
     .select('*')
     .eq('is_active', true)
 
-  let dailyTips = 15
+  let dailyTips = 0
   if (rates && rates.length > 0) {
     dailyTips = rates.reduce((sum, t) => {
       if (t.rate_unit === 'per_day') {
@@ -497,7 +492,9 @@ async function getTippingRate(tier: string) {
       }
       return sum
     }, 0)
-    if (dailyTips === 0) dailyTips = 15
+  }
+  if (dailyTips === 0) {
+    console.warn(`⚠️ [Pricing] No tipping rates found in database — returning €0`)
   }
 
   const tierMultiplier: Record<string, number> = {

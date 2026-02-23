@@ -164,7 +164,7 @@ async function selectGuideFromB2CTable(language: string = 'English', tier: strin
     if (!anyGuide || anyGuide.length === 0) return null
 
     return {
-      rate: anyGuide[0].daily_rate || 55,
+      rate: anyGuide[0].daily_rate || 0,
       name: anyGuide[0].name || 'Guide',
       id: anyGuide[0].id
     }
@@ -173,7 +173,7 @@ async function selectGuideFromB2CTable(language: string = 'English', tier: strin
   let selectedGuide = guides.find((g: any) => g.tier === tier) || guides[0]
 
   return {
-    rate: selectedGuide.daily_rate || 55,
+    rate: selectedGuide.daily_rate || 0,
     name: selectedGuide.name || 'Guide',
     id: selectedGuide.id
   }
@@ -223,7 +223,7 @@ async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ 
 
     if (!anyHotel || anyHotel.length === 0) return null
 
-    const dblRate = anyHotel[0].rate_double_eur || 80
+    const dblRate = anyHotel[0].rate_double_eur || 0
     return {
       rate: dblRate,
       singleRate: anyHotel[0].rate_single_eur || dblRate,
@@ -232,7 +232,7 @@ async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ 
     }
   }
 
-  const dblRate = hotels[0].rate_double_eur || 80
+  const dblRate = hotels[0].rate_double_eur || 0
   return {
     rate: dblRate,
     singleRate: hotels[0].rate_single_eur || dblRate,
@@ -409,9 +409,9 @@ export async function POST(request: NextRequest) {
 
           if (mealRate) {
             if (serviceName.toLowerCase().includes('dinner')) {
-              unitCost = mealRate.dinner_rate_eur || mealRate.base_rate_eur || 18
+              unitCost = mealRate.dinner_rate_eur || mealRate.base_rate_eur || 0
             } else {
-              unitCost = mealRate.lunch_rate_eur || mealRate.base_rate_eur || 12
+              unitCost = mealRate.lunch_rate_eur || mealRate.base_rate_eur || 0
             }
             lineTotal = unitCost * numPax
             quantityMode = 'per_pax'
@@ -450,7 +450,7 @@ export async function POST(request: NextRequest) {
     if (tour_leader_included) {
       const guide = await selectGuideFromB2CTable(language, tier)
       const vehicle = await selectVehicleFromB2CTable(numPax + 1, tier)
-      const guideRate = guide?.rate || 55
+      const guideRate = guide?.rate || 0
       const vehicleDiff = vehicle ? (vehicle.rate - (await selectVehicleFromB2CTable(numPax, tier))?.rate || 0) : 0
       const touringDays = (days || []).filter((d: any) =>
         (d.itinerary_services || []).some((s: any) => s.service_type === 'guide' || s.service_type === 'entrance')

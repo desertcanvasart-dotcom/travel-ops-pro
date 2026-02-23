@@ -300,7 +300,7 @@ const SPECIAL_VEHICLE_CITIES: Record<string, VehicleType> = {
   'edfu': 'Horse Carriage'
 }
 
-// Default rates (fallback)
+// Default rates (all zeroed out — missing DB rates surface as €0 with console warnings)
 const DEFAULT_RATES: Record<ServiceTier, {
   hotelPPD: number
   hotelSingleSupp: number
@@ -315,56 +315,20 @@ const DEFAULT_RATES: Record<ServiceTier, {
   vehicle: number
 }> = {
   budget: {
-    hotelPPD: 35,
-    hotelSingleSupp: 25,
-    cruisePPDNight: 80,
-    cruiseSingleSuppNight: 60,
-    guide: 45,
-    lunch: 10,
-    dinner: 15,
-    tips: 12,
-    airportService: 20,
-    hotelService: 10,
-    vehicle: 40
+    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
+    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
   },
   standard: {
-    hotelPPD: 50,
-    hotelSingleSupp: 40,
-    cruisePPDNight: 120,
-    cruiseSingleSuppNight: 96,
-    guide: 55,
-    lunch: 12,
-    dinner: 18,
-    tips: 15,
-    airportService: 25,
-    hotelService: 15,
-    vehicle: 55
+    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
+    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
   },
   deluxe: {
-    hotelPPD: 80,
-    hotelSingleSupp: 60,
-    cruisePPDNight: 180,
-    cruiseSingleSuppNight: 120,
-    guide: 70,
-    lunch: 16,
-    dinner: 24,
-    tips: 18,
-    airportService: 35,
-    hotelService: 20,
-    vehicle: 75
+    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
+    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
   },
   luxury: {
-    hotelPPD: 120,
-    hotelSingleSupp: 100,
-    cruisePPDNight: 300,
-    cruiseSingleSuppNight: 200,
-    guide: 90,
-    lunch: 20,
-    dinner: 30,
-    tips: 22,
-    airportService: 50,
-    hotelService: 30,
-    vehicle: 100
+    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
+    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
   }
 }
 
@@ -1033,8 +997,8 @@ export async function getMealRates(
     }
 
     return {
-      lunch: Math.round((mealRate.lunch_rate_eur || 12) * multipliers[tier]),
-      dinner: Math.round((mealRate.dinner_rate_eur || 18) * multipliers[tier])
+      lunch: Math.round((mealRate.lunch_rate_eur || 0) * multipliers[tier]),
+      dinner: Math.round((mealRate.dinner_rate_eur || 0) * multipliers[tier])
     }
   } catch (err) {
     return {

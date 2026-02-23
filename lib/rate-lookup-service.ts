@@ -626,7 +626,7 @@ export async function lookupRates(
           .ilike('city', params.city || 'Cairo')
           .limit(1)
 
-        let ratePerDay = toNumber(suitableVehicle.daily_rate_eur, 50)
+        let ratePerDay = toNumber(suitableVehicle.daily_rate_eur, 0)
         if (vehicleRates && vehicleRates.length > 0) {
           const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
           const tierResult = getTransportRateForPax(vehicleRates[0], params.pax)
@@ -690,8 +690,8 @@ export async function lookupRates(
         .limit(1)
 
       const dailyRate = guideRates && guideRates.length > 0
-        ? toNumber(guideRates[0].base_rate_eur, 55)
-        : toNumber(selectedGuide.daily_rate_eur, 55)
+        ? toNumber(guideRates[0].base_rate_eur, 0)
+        : toNumber(selectedGuide.daily_rate_eur, 0)
 
       result.guide = {
         id: selectedGuide.id,
@@ -716,7 +716,7 @@ export async function lookupRates(
           id: rate.id,
           name: `${params.language} Speaking Guide`,
           languages: [params.language],
-          daily_rate_eur: toNumber(rate.base_rate_eur, 55),
+          daily_rate_eur: toNumber(rate.base_rate_eur, 0),
           tier: 'standard',
           is_preferred: false
         }
@@ -806,8 +806,8 @@ export async function lookupRates(
           id: restaurant.id,
           name: restaurant.name,
           city: restaurant.city,
-          lunch_rate_eur: Math.round(toNumber(restaurant.lunch_rate_eur, 12) * tierMultiplier),
-          dinner_rate_eur: Math.round(toNumber(restaurant.dinner_rate_eur, 18) * tierMultiplier),
+          lunch_rate_eur: Math.round(toNumber(restaurant.lunch_rate_eur, 0) * tierMultiplier),
+          dinner_rate_eur: Math.round(toNumber(restaurant.dinner_rate_eur, 0) * tierMultiplier),
           tier: restaurant.tier,
           is_preferred: restaurant.is_preferred || false
         }
@@ -825,8 +825,8 @@ export async function lookupRates(
             id: meal.id,
             name: `${tier.charAt(0).toUpperCase() + tier.slice(1)} Restaurant`,
             city: params.city || 'Cairo',
-            lunch_rate_eur: Math.round(toNumber(meal.lunch_rate_eur, 12) * tierMultiplier),
-            dinner_rate_eur: Math.round(toNumber(meal.dinner_rate_eur, 18) * tierMultiplier),
+            lunch_rate_eur: Math.round(toNumber(meal.lunch_rate_eur, 0) * tierMultiplier),
+            dinner_rate_eur: Math.round(toNumber(meal.dinner_rate_eur, 0) * tierMultiplier),
             tier: tier,
             is_preferred: false
           }
@@ -941,7 +941,7 @@ export async function lookupRates(
           airport_name: rate?.airport_name || params.airport_code,
           service_type: params.airport_service_type || 'meet_greet',
           direction: 'both',
-          rate_eur: rate ? toNumber(rate.rate_eur, 25) : 25,
+          rate_eur: rate ? toNumber(rate.rate_eur, 0) : 0,
           tier: staff.tier,
           is_preferred: staff.is_preferred || false
         }
@@ -987,7 +987,7 @@ export async function lookupRates(
           service_code: staff.id,
           service_type: 'full_service',
           hotel_category: tier,
-          rate_eur: rate ? toNumber(rate.rate_eur, 15) : 15,
+          rate_eur: rate ? toNumber(rate.rate_eur, 0) : 0,
           tier: staff.tier,
           is_preferred: staff.is_preferred || false
         }
