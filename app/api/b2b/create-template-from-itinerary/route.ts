@@ -102,9 +102,9 @@ export async function POST(request: NextRequest) {
     // 5. Extract cities from days
     const cities = [...new Set(days.map(d => d.city || d.overnight_location).filter(Boolean))]
 
-    // 6. Determine tour type
-    const hasCruise = templateItinerary.some(d => d.is_cruise_day)
-    const tourType = hasCruise ? 'cruise_land' : 'multi_day_tour'
+    // 6. Determine tour type (valid values: day_tour, multi_day, stopover)
+    const totalDays = itinerary.total_days || days.length
+    const tourType = totalDays <= 1 ? 'day_tour' : 'multi_day'
 
     // 7. Generate template code
     const cityPrefix = (cities[0] || 'EGY').substring(0, 3).toUpperCase()

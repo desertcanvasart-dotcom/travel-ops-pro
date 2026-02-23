@@ -5121,6 +5121,8 @@
     "tourTypes": {
       "day_tour": "Day Tour",
       "multi_day": "Multi-Day Tour",
+      "multi_day_tour": "Multi-Day Tour",
+      "cruise_land": "Cruise & Land",
       "stopover": "Stopover Tour"
     },
     "physicalLevels": {

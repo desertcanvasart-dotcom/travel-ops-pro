@@ -5452,6 +5452,8 @@
     "tourTypes": {
       "day_tour": "日帰りツアー",
       "multi_day": "複数日ツアー",
+      "multi_day_tour": "複数日ツアー",
+      "cruise_land": "クルーズ＆陸上",
       "stopover": "ストップオーバーツアー"
     },
     "physicalLevels": {
