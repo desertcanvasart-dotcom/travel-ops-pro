@@ -650,7 +650,7 @@ export async function POST(
     const tipping = await getTippingRate(tier)
     const fixedCosts = await getFixedDailyCosts()
     const waterRate = fixedCosts.waterPerPersonPerDay
-    const roomsNeeded = Math.ceil(totalPax / 2)
+    // rate_double_eur is per-person (double occupancy), no rooms calculation needed
 
     // Determine what to include based on package type
     let includeAccommodation = true
@@ -825,20 +825,20 @@ export async function POST(
       const isLastDay = day.day_number === days.length
       if (services.hotel && overnight_city && includeAccommodation && !isLastDay) {
         const hotel = await getHotelRate(overnight_city, tier)
-        const hotelTotal = hotel.rate * roomsNeeded
+        const hotelTotal = hotel.rate * totalPax
         const hotelClient = applyMarkup(hotelTotal, marginPercent)
         allServices.push({
           itinerary_day_id: dayId,
           service_type: 'accommodation',
           service_code: hotel.code,
-          service_name: `${hotel.supplier_name} (${roomsNeeded} room${roomsNeeded > 1 ? 's' : ''})`,
+          service_name: `${hotel.supplier_name} (PPD × ${totalPax} pax)`,
           supplier_name: hotel.supplier_name,
-          quantity: roomsNeeded,
+          quantity: totalPax,
           rate_eur: hotel.rate,
           rate_non_eur: hotel.rate,
           total_cost: hotelTotal,
           client_price: hotelClient,
-          notes: `Overnight at ${overnight_city}`
+          notes: `Overnight at ${overnight_city} - per person double occupancy`
         })
         totalSupplierCost += hotelTotal
         totalClientPrice += hotelClient

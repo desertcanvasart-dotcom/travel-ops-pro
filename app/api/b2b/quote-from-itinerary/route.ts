@@ -201,7 +201,8 @@ async function getEntranceFee(attractionName: string, isEurPassport: boolean): P
   }
 }
 
-async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
+// rate_double_eur and rate_single_eur are per-person rates (not per-room)
+async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ rate: number; singleRate: number; name: string; id: string } | null> {
   const { data: hotels, error } = await supabaseAdmin
     .from('hotel_contacts')
     .select('id, name, rate_double_eur, rate_single_eur, city, tier, is_preferred')
@@ -222,15 +223,19 @@ async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ 
 
     if (!anyHotel || anyHotel.length === 0) return null
 
+    const dblRate = anyHotel[0].rate_double_eur || 80
     return {
-      rate: anyHotel[0].rate_double_eur || 80,
+      rate: dblRate,
+      singleRate: anyHotel[0].rate_single_eur || dblRate,
       name: anyHotel[0].name || 'Hotel',
       id: anyHotel[0].id
     }
   }
 
+  const dblRate = hotels[0].rate_double_eur || 80
   return {
-    rate: hotels[0].rate_double_eur || 80,
+    rate: dblRate,
+    singleRate: hotels[0].rate_single_eur || dblRate,
     name: hotels[0].name || 'Hotel',
     id: hotels[0].id
   }
@@ -380,16 +385,15 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Accommodation (hotel)
+        // Accommodation (hotel) - rate_double_eur is per-person (double occupancy)
         if (serviceType === 'hotel' || serviceType === 'accommodation') {
           const dayCity = day.city || day.overnight_location || 'Cairo'
           const hotel = await getHotelRate(dayCity, tier)
           if (hotel) {
-            const roomsNeeded = Math.ceil(numPax / 2)
             unitCost = hotel.rate
-            lineTotal = hotel.rate * roomsNeeded
-            quantityMode = 'per_room'
-            pricingNote = `${hotel.name}: €${hotel.rate}/room × ${roomsNeeded}`
+            lineTotal = hotel.rate * numPax
+            quantityMode = 'per_pax'
+            pricingNote = `${hotel.name}: €${hotel.rate}/pax (double occupancy)`
             rateSource = 'hotel_contacts'
           }
         }
@@ -431,7 +435,7 @@ export async function POST(request: NextRequest) {
           rate_type: serviceType,
           rate_source: rateSource,
           quantity_mode: quantityMode,
-          quantity: quantityMode === 'per_pax' ? numPax : (quantityMode === 'per_room' ? Math.ceil(numPax / 2) : 1),
+          quantity: quantityMode === 'per_pax' ? numPax : 1,
           unit_cost: Math.round(unitCost * 100) / 100,
           line_total: Math.round(lineTotal * 100) / 100,
           is_optional: false,
@@ -467,9 +471,8 @@ export async function POST(request: NextRequest) {
       const dayCity = day.city || day.overnight_location || 'Cairo'
       const hotel = await getHotelRate(dayCity, tier)
       if (hotel) {
-        // Single supplement = difference between single and double rate
-        const singleRate = (hotel as any).rate_single_eur || hotel.rate * 1.5
-        singleSupplement += singleRate - hotel.rate
+        // Single supplement = single rate - double rate (both per-person)
+        singleSupplement += hotel.singleRate - hotel.rate
       }
     }
 

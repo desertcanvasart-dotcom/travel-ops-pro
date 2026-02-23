@@ -1310,17 +1310,17 @@ export async function calculatePricingFromRates(
   }
 
   // ============================================
-  // 5. ACCOMMODATION (Per Room Per Night)
+  // 5. ACCOMMODATION (Per Person Per Night - Double Occupancy)
   // ============================================
   if (rates.hotel && params.include_accommodation) {
     const nights = duration_days > 1 ? duration_days - 1 : 0
-    const roomsNeeded = Math.ceil(pax / 2)
-    const ratePerNight = toNumber(rates.hotel.rate_double_eur, 0)
-    
+    // rate_double_eur is per-person (double occupancy), not per-room
+    const ratePerPersonPerNight = toNumber(rates.hotel.rate_double_eur, 0)
+
     result.breakdown.accommodation = {
-      total: ratePerNight * roomsNeeded * nights,
-      per_night: ratePerNight,
-      rooms: roomsNeeded,
+      total: ratePerPersonPerNight * pax * nights,
+      per_night: ratePerPersonPerNight,
+      rooms: pax, // pax count (rate is per-person, not per-room)
       nights: nights,
       is_preferred: rates.hotel.is_preferred
     }

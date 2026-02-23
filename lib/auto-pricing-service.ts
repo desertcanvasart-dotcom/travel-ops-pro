@@ -802,9 +802,10 @@ export async function getCruiseRates(
     }
 
     const cruise = cruises[0]
-    const ppdTrip = cruise.rate_double_eur / 2
+    // rate_double_eur is already per-person (double occupancy)
+    const ppdTrip = cruise.rate_double_eur
     const ppdNight = ppdTrip / cruise.duration_nights
-    const singleSuppTrip = cruise.rate_single_eur - ppdTrip
+    const singleSuppTrip = cruise.rate_single_eur - cruise.rate_double_eur
     const singleSuppNight = singleSuppTrip / cruise.duration_nights
 
     console.log(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
@@ -861,8 +862,9 @@ export async function getHotelRates(
       }
 
       const hotel = anyHotel[0]
-      const ppd = hotel.rate_double_eur / 2
-      const singleSupp = (hotel.rate_single_eur || hotel.rate_double_eur) - ppd
+      // rate_double_eur is already per-person (double occupancy)
+      const ppd = hotel.rate_double_eur
+      const singleSupp = (hotel.rate_single_eur || hotel.rate_double_eur) - hotel.rate_double_eur
 
       return {
         hotelName: hotel.name,
@@ -872,8 +874,9 @@ export async function getHotelRates(
     }
 
     const hotel = hotels[0]
-    const ppd = hotel.rate_double_eur / 2
-    const singleSupp = (hotel.rate_single_eur || hotel.rate_double_eur) - ppd
+    // rate_double_eur is already per-person (double occupancy)
+    const ppd = hotel.rate_double_eur
+    const singleSupp = (hotel.rate_single_eur || hotel.rate_double_eur) - hotel.rate_double_eur
 
     console.log(`✅ Hotel: ${hotel.name} | PPD/night: €${ppd.toFixed(2)} | SingleSupp/night: €${singleSupp.toFixed(2)}`)
 

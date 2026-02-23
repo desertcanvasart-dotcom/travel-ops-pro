@@ -725,15 +725,15 @@ export async function POST(request: NextRequest) {
           }
 
           case 'accommodation': {
+            // rate_double_eur is per-person (double occupancy), not per-room
             const hotel = await getHotelRate(service.city || 'Cairo', effectiveTier)
             if (hotel) {
-              const roomsNeeded = Math.ceil(num_pax / 2)
               unitCost = hotel.rate
-              lineTotal = hotel.rate * roomsNeeded
-              effectiveQuantityMode = 'per_room'
-              pricingNote = `${hotel.name}: €${hotel.rate}/room × ${roomsNeeded}`
+              lineTotal = hotel.rate * num_pax
+              effectiveQuantityMode = 'per_pax'
+              pricingNote = `${hotel.name}: €${hotel.rate}/pax (double occupancy)`
               rateSource = 'hotel_contacts'
-              console.log(`✅ Hotel from B2C: ${hotel.name} -> €${hotel.rate}/room`)
+              console.log(`✅ Hotel from B2C: ${hotel.name} -> €${hotel.rate}/pax`)
             }
             break
           }
