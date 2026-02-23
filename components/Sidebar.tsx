@@ -142,6 +142,18 @@ const navigationConfig: NavConfig[] = [
     ]
   },
   {
+    titleKey: 'b2b',
+    key: 'b2b',
+    roles: ['admin', 'manager'],
+    items: [
+      { labelKey: 'tourBuilder', href: '/tours/manage', icon: LayoutTemplate },
+      { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
+      { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
+      { labelKey: 'quotes', href: '/b2b/quotes', icon: FileText },
+      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
+    ]
+  },
+  {
     titleKey: 'ratesPricing',
     key: 'rates',
     roles: ['admin', 'manager'],
@@ -192,18 +204,6 @@ const navigationConfig: NavConfig[] = [
     roles: ['admin', 'manager'],
     items: [
       { labelKey: 'reports', href: '/financial-reports', icon: BarChart3 },
-    ]
-  },
-  {
-    titleKey: 'b2b',
-    key: 'b2b',
-    roles: ['admin', 'manager'],
-    items: [
-      { labelKey: 'tourBuilder', href: '/tours/manage', icon: LayoutTemplate },
-      { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
-      { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
-      { labelKey: 'quotes', href: '/b2b/quotes', icon: FileText },
-      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },
   {
