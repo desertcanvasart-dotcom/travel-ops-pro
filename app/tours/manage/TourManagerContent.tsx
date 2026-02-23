@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import React, { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 import {
   Map,
   Plus,
@@ -778,6 +779,7 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
 
 export default function TourManagerContent() {
   const t = useTranslations('tours')
+  const { confirmDelete } = useConfirmDialog()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [templates, setTemplates] = useState<TourTemplate[]>([])
   const [themes, setThemes] = useState<TourTheme[]>([])  // Renamed from categories
@@ -1214,7 +1216,8 @@ export default function TourManagerContent() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This will also delete all variations and days.`)) return
+    const confirmed = await confirmDelete(name, `This will permanently delete "${name}" including all its variations and days.`)
+    if (!confirmed) return
     
     try {
       const response = await fetch(`/api/tours/templates/${id}`, {
