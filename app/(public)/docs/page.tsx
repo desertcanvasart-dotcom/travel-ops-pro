@@ -13,6 +13,13 @@ import {
   Settings,
   Lightbulb,
   MailPlus,
+  Wand2,
+  Calculator,
+  Briefcase,
+  ClipboardList,
+  FileCheck,
+  Bell,
+  TrendingUp,
 } from 'lucide-react'
 
 const SECTIONS = [
@@ -41,10 +48,40 @@ const SECTIONS = [
     description: 'Add, search, and manage client profiles, notes, and follow-ups.',
   },
   {
+    href: '/docs/itinerary-creation',
+    icon: Wand2,
+    title: 'Itinerary Creation',
+    description: 'AI-powered itinerary generation from WhatsApp conversations and emails.',
+  },
+  {
     href: '/docs/itineraries',
     icon: Map,
     title: 'Itineraries',
     description: 'Build day-by-day trip plans with pricing, services, and PDF export.',
+  },
+  {
+    href: '/docs/b2c-pricing',
+    icon: Calculator,
+    title: 'B2C Pricing',
+    description: 'Calculate itinerary pricing with automatic rate lookup and service costing.',
+  },
+  {
+    href: '/docs/b2b-pricing',
+    icon: Briefcase,
+    title: 'B2B Pricing',
+    description: 'B2B price calculator with rate sheets, pax tables, and single supplement.',
+  },
+  {
+    href: '/docs/tour-programs',
+    icon: ClipboardList,
+    title: 'Tour Programs Manager',
+    description: 'Create and manage tour templates, variations, and the template-to-pricing flow.',
+  },
+  {
+    href: '/docs/b2b-quotes',
+    icon: FileCheck,
+    title: 'B2B Quotes',
+    description: 'Save, manage, and export B2B quotes with PDF generation.',
   },
   {
     href: '/docs/bookings',
@@ -63,6 +100,18 @@ const SECTIONS = [
     icon: Wallet,
     title: 'Expenses & Commissions',
     description: 'Log trip costs, track commissions, and view profit & loss.',
+  },
+  {
+    href: '/docs/profit-loss',
+    icon: TrendingUp,
+    title: 'Profit & Loss',
+    description: 'Per-trip and aggregate P&L reports with supplier cost vs. client revenue analysis.',
+  },
+  {
+    href: '/docs/followups-reminders',
+    icon: Bell,
+    title: 'Follow-ups & Reminders',
+    description: 'Schedule follow-ups, set reminders, and never miss a client touchpoint.',
   },
   {
     href: '/docs/tours-rates',

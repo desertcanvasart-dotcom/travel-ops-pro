@@ -22,7 +22,14 @@ import {
   Lightbulb,
   Camera,
   BookOpen,
-  MailPlus
+  MailPlus,
+  Wand2,
+  Calculator,
+  Briefcase,
+  ClipboardList,
+  FileCheck,
+  Bell,
+  TrendingUp,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -30,10 +37,17 @@ const NAV_ITEMS = [
   { href: '/docs/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/docs/communication', label: 'Communication', icon: MessageCircle },
   { href: '/docs/clients', label: 'Clients (CRM)', icon: Users },
+  { href: '/docs/itinerary-creation', label: 'Itinerary Creation', icon: Wand2 },
   { href: '/docs/itineraries', label: 'Itineraries', icon: Map },
+  { href: '/docs/b2c-pricing', label: 'B2C Pricing', icon: Calculator },
+  { href: '/docs/b2b-pricing', label: 'B2B Pricing', icon: Briefcase },
+  { href: '/docs/tour-programs', label: 'Tour Programs Manager', icon: ClipboardList },
+  { href: '/docs/b2b-quotes', label: 'B2B Quotes', icon: FileCheck },
   { href: '/docs/bookings', label: 'Bookings', icon: CalendarCheck },
   { href: '/docs/invoices-payments', label: 'Invoices & Payments', icon: FileText },
   { href: '/docs/expenses-commissions', label: 'Expenses & Commissions', icon: Wallet },
+  { href: '/docs/profit-loss', label: 'Profit & Loss', icon: TrendingUp },
+  { href: '/docs/followups-reminders', label: 'Follow-ups & Reminders', icon: Bell },
   { href: '/docs/tours-rates', label: 'Tours & Rates', icon: Globe },
   { href: '/docs/resources-documents', label: 'Resources & Documents', icon: FolderOpen },
   { href: '/docs/message-templates', label: 'Message Templates', icon: MailPlus },
