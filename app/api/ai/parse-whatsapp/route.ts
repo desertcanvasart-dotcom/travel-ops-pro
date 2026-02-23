@@ -823,6 +823,18 @@ CRITICAL RULES
 6. Mark attractions with (OUTSIDE) in photo_stops array
 7. If flight code is mentioned (MS956@05:10), extract it
 8. Count total days from NTS pattern: 2+3+3 = 8 nights = 9 days
+9. OVERNIGHT CITY DETERMINATION (CRITICAL):
+   - overnight_city = the city where the traveler SLEEPS that night, NOT where they visit during the day
+   - For day trips (e.g., "CAI/ALX/CAI", "visit X and return to Y", "back to Y"):
+     * overnight_city = the BASE CITY they return to sleep in
+     * Example: Day trip to Alexandria from Cairo → city: "Alexandria", overnight_city: "Cairo"
+   - For city-to-city transfers (e.g., "CAI/ASW"):
+     * overnight_city = the DESTINATION city (where they arrive and sleep)
+   - For NTS patterns (e.g., "3NTS HRG"):
+     * overnight_city = the city in the NTS notation for all those nights
+   - For cruise days: overnight_city = the port city or "Nile Cruise"
+   - Look for clues: "return to", "back to", "night at", "overnight in", "stay at [Hotel] in [City]"
+   - If unsure, overnight_city = the LAST city mentioned in the day's route
 
 =================================================================
 EMAIL FORMAT DETECTION (CRITICAL)
@@ -887,7 +899,7 @@ Return ONLY valid JSON:
       "title": "Day 1: Arrival & Alexandria Day Trip",
       "city": "Cairo",
       "cities_visited": ["Cairo", "Alexandria"],
-      "overnight_city": "Cairo",
+      "overnight_city": "Cairo (WHERE THEY SLEEP - not Alexandria despite visiting it! They RETURN to Cairo)",
       "is_arrival": true,
       "is_departure": false,
       "is_transfer_only": false,
