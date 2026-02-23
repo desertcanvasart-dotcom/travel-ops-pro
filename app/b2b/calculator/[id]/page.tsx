@@ -1,18 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText } from 'lucide-react'
+import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp } from 'lucide-react'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
 // File: app/b2b/calculator/[id]/page.tsx
-// 
+//
 // Updated: Added +0/+1 Tour Leader toggle
 // Updated: Added Single Supplement display
 // Updated: Added Save Quote functionality
+// Updated: Collapsible day-grouped cost breakdown
+// Updated: Single supplement in rate sheet + CSV
+// Updated: Dynamic pax range for rate sheet
 // ============================================
 
 interface PricingResult {
@@ -36,6 +39,9 @@ interface PricingResult {
     quantity: number
     unit_cost: number
     line_total: number
+    day_number: number | null
+    pricing_note?: string
+    is_optional?: boolean
   }>
   subtotal_cost: number
   total_cost: number
@@ -86,6 +92,14 @@ export default function TourPriceCalculator() {
   const [includeOptionals, setIncludeOptionals] = useState(false)
   const [tourLeaderIncluded, setTourLeaderIncluded] = useState(false)
 
+  // Rate sheet range
+  const [paxFrom, setPaxFrom] = useState(1)
+  const [paxTo, setPaxTo] = useState(10)
+
+  // Cost breakdown day grouping
+  const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set())
+  const [allDaysExpanded, setAllDaysExpanded] = useState(true)
+
   // Save Quote state
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -117,6 +131,26 @@ export default function TourPriceCalculator() {
     }
   }
 
+  const toggleDay = (day: number) => {
+    setExpandedDays(prev => {
+      const next = new Set(prev)
+      if (next.has(day)) next.delete(day)
+      else next.add(day)
+      return next
+    })
+  }
+
+  const toggleAllDays = () => {
+    if (allDaysExpanded) {
+      setExpandedDays(new Set())
+      setAllDaysExpanded(false)
+    } else if (result) {
+      const allDays = [...new Set(result.services.map(s => s.day_number ?? -1))]
+      setExpandedDays(new Set(allDays))
+      setAllDaysExpanded(true)
+    }
+  }
+
   const calculatePrice = async () => {
     setLoading(true)
     setError(null)
@@ -136,7 +170,13 @@ export default function TourPriceCalculator() {
         })
       })
       const data = await res.json()
-      if (data.success) setResult(data.data)
+      if (data.success) {
+        setResult(data.data)
+        // Initialize all days as expanded
+        const dayNumbers = [...new Set((data.data.services || []).map((s: any) => s.day_number ?? -1))]
+        setExpandedDays(new Set(dayNumbers))
+        setAllDaysExpanded(true)
+      }
       else setError(data.error || t('failedToCalculate'))
     } catch (err) {
       setError(t('failedToCalculate'))
@@ -161,10 +201,11 @@ export default function TourPriceCalculator() {
         })
       })
       const data = await res.json()
-      
+
       if (data.success && data.data.pax_pricing_table) {
+        const singleSupplement = data.data.single_supplement || 0
         const sheet: RateSheetRow[] = data.data.pax_pricing_table
-          .filter((row: any) => row.numPax <= 10)
+          .filter((row: any) => row.numPax >= paxFrom && row.numPax <= paxTo)
           .map((row: any) => {
             const pricing = tourLeaderIncluded ? row.withLeader : row.withoutLeader
             return {
@@ -172,7 +213,8 @@ export default function TourPriceCalculator() {
               total_cost: pricing.totalCost,
               margin_amount: pricing.marginAmount,
               selling_price: pricing.sellingPrice,
-              price_per_person: pricing.pricePerPerson
+              price_per_person: pricing.pricePerPerson,
+              single_supplement: singleSupplement
             }
           })
         setRateSheet(sheet)
@@ -188,10 +230,10 @@ export default function TourPriceCalculator() {
 
   const handleSaveQuote = async () => {
     if (!result) return
-    
+
     setSaving(true)
     setError(null)
-    
+
     try {
       const res = await fetch('/api/b2b/quotes', {
         method: 'POST',
@@ -220,9 +262,9 @@ export default function TourPriceCalculator() {
           notes: quoteForm.notes || null
         })
       })
-      
+
       const data = await res.json()
-      
+
       if (data.success) {
         setSavedQuote({
           id: data.data.id,
@@ -251,13 +293,14 @@ export default function TourPriceCalculator() {
   const exportToCSV = () => {
     if (rateSheet.length === 0) return
     const tourLeaderSuffix = tourLeaderIncluded ? ' (+1 TL)' : ' (+0)'
-    const headers = ['Passengers', 'Total Cost (€)', 'Margin (€)', 'Selling Price (€)', 'Per Person (€)']
+    const headers = ['Passengers', 'Total Cost (\u20AC)', 'Margin (\u20AC)', 'Selling Price (\u20AC)', 'Per Person (\u20AC)', 'Single Supplement (\u20AC)']
     const rows = rateSheet.map(row => [
       row.pax,
       row.total_cost.toFixed(2),
       row.margin_amount.toFixed(2),
       row.selling_price.toFixed(2),
-      row.price_per_person.toFixed(2)
+      row.price_per_person.toFixed(2),
+      (row.single_supplement || 0).toFixed(2)
     ])
     const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
@@ -277,6 +320,23 @@ export default function TourPriceCalculator() {
     }
     return styles[season] || 'bg-gray-100 text-gray-700'
   }
+
+  // Group services by day for cost breakdown
+  const groupedServices = result ? (() => {
+    const grouped: Record<number, typeof result.services> = {}
+    for (const svc of result.services) {
+      const key = svc.day_number ?? -1
+      if (!grouped[key]) grouped[key] = []
+      grouped[key].push(svc)
+    }
+    return Object.entries(grouped)
+      .map(([k, v]) => ({ dayNum: Number(k), services: v }))
+      .sort((a, b) => {
+        if (a.dayNum === -1) return 1
+        if (b.dayNum === -1) return -1
+        return a.dayNum - b.dayNum
+      })
+  })() : []
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -444,18 +504,54 @@ export default function TourPriceCalculator() {
                 )}
               </button>
 
-              {/* Generate Rate Sheet Button */}
-              <button
-                onClick={generateRateSheet}
-                disabled={generatingSheet}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 border text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
-              >
-                {generatingSheet ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" />{t('generating')}</>
-                ) : (
-                  <><FileSpreadsheet className="w-4 h-4" />{t('generateRateSheet')}</>
-                )}
-              </button>
+              {/* Rate Sheet Range & Generate */}
+              <div className="border-t pt-4 mt-2 space-y-3">
+                <p className="text-sm font-medium text-gray-700">{t('rateSheetRange')}</p>
+                <div className="flex gap-3 items-center">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-1">{t('paxFrom')}</label>
+                    <input
+                      type="number"
+                      value={paxFrom}
+                      onChange={(e) => {
+                        const val = Math.max(1, Math.min(40, parseInt(e.target.value) || 1))
+                        setPaxFrom(val)
+                        if (val > paxTo) setPaxTo(val)
+                      }}
+                      min={1}
+                      max={40}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm"
+                    />
+                  </div>
+                  <span className="text-gray-400 pt-5">&mdash;</span>
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-1">{t('paxTo')}</label>
+                    <input
+                      type="number"
+                      value={paxTo}
+                      onChange={(e) => {
+                        const val = Math.max(1, Math.min(40, parseInt(e.target.value) || 1))
+                        setPaxTo(val)
+                        if (val < paxFrom) setPaxFrom(val)
+                      }}
+                      min={1}
+                      max={40}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={generateRateSheet}
+                  disabled={generatingSheet}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+                >
+                  {generatingSheet ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" />{t('generating')}</>
+                  ) : (
+                    <><FileSpreadsheet className="w-4 h-4" />{t('generateRateSheetDynamic', { from: paxFrom, to: paxTo })}</>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -495,7 +591,7 @@ export default function TourPriceCalculator() {
                   <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
                     <strong>{t('group')}:</strong> {t('totalPax', { total: result.num_pax, paying: result.num_paying_pax })}
                     {result.tour_leader_cost && (
-                      <span className="ml-2">• <strong>{t('tlCost')}:</strong> €{result.tour_leader_cost.toFixed(2)}</span>
+                      <span className="ml-2">&bull; <strong>{t('tlCost')}:</strong> &euro;{result.tour_leader_cost.toFixed(2)}</span>
                     )}
                   </div>
                 )}
@@ -503,19 +599,19 @@ export default function TourPriceCalculator() {
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('totalCost')}</p>
-                    <p className="text-xl font-bold">€{result.total_cost.toFixed(2)}</p>
+                    <p className="text-xl font-bold">&euro;{result.total_cost.toFixed(2)}</p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('margin')} ({result.margin_percent}%)</p>
-                    <p className="text-xl font-bold text-green-600">€{result.margin_amount.toFixed(2)}</p>
+                    <p className="text-xl font-bold text-green-600">&euro;{result.margin_amount.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}</p>
-                    <p className="text-xl font-bold text-[#647C47]">€{result.selling_price.toFixed(2)}</p>
+                    <p className="text-xl font-bold text-[#647C47]">&euro;{result.selling_price.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('perPerson')}</p>
-                    <p className="text-xl font-bold text-[#647C47]">€{result.price_per_person.toFixed(2)}</p>
+                    <p className="text-xl font-bold text-[#647C47]">&euro;{result.price_per_person.toFixed(2)}</p>
                   </div>
                 </div>
 
@@ -527,7 +623,7 @@ export default function TourPriceCalculator() {
                         {t('singleSupplement')}
                       </span>
                       <span className="text-lg font-bold text-amber-700">
-                        €{result.single_supplement.toFixed(2)}
+                        &euro;{result.single_supplement.toFixed(2)}
                       </span>
                     </div>
                     <p className="text-xs text-amber-600 mt-1">
@@ -548,9 +644,18 @@ export default function TourPriceCalculator() {
                 </div>
               </div>
 
-              {/* Cost Breakdown Table */}
+              {/* Cost Breakdown Table - Grouped by Day */}
               <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h3 className="text-base font-semibold mb-4">{t('costBreakdown')}</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold">{t('costBreakdown')}</h3>
+                  <button
+                    onClick={toggleAllDays}
+                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                  >
+                    {allDaysExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {allDaysExpanded ? t('collapseAll') : t('expandAll')}
+                  </button>
+                </div>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
@@ -562,46 +667,83 @@ export default function TourPriceCalculator() {
                       <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableTotal')}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
-                    {result.services.map((service, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-2">{service.service_name}</td>
-                        <td className="px-4 py-2 text-center">
-                          <span className={`px-2 py-0.5 rounded text-xs ${
-                            service.rate_source === 'stored'
-                              ? 'bg-gray-100'
-                              : service.rate_source === 'manual'
-                              ? 'bg-yellow-100 text-yellow-700'
-                              : 'bg-green-100 text-green-700'
-                          }`}>
-                            {service.rate_type || service.rate_source}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-center text-gray-500">{service.quantity_mode}</td>
-                        <td className="px-4 py-2 text-right">{service.quantity}</td>
-                        <td className="px-4 py-2 text-right">€{service.unit_cost.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right font-medium">€{service.line_total.toFixed(2)}</td>
-                      </tr>
-                    ))}
+                  <tbody>
+                    {groupedServices.map(({ dayNum, services: daySvcs }) => {
+                      const dayTotal = daySvcs.reduce((sum, s) => sum + s.line_total, 0)
+                      const isExpanded = expandedDays.has(dayNum)
+                      const dayLabel = dayNum === -1 ? t('generalServices') : t('dayNumber', { day: dayNum })
+
+                      return (
+                        <Fragment key={dayNum}>
+                          {/* Day header row */}
+                          <tr
+                            className="bg-gray-100 cursor-pointer hover:bg-gray-200 transition-colors"
+                            onClick={() => toggleDay(dayNum)}
+                          >
+                            <td colSpan={5} className="px-4 py-2 font-medium text-gray-800">
+                              <div className="flex items-center gap-2">
+                                {isExpanded
+                                  ? <ChevronUp className="w-4 h-4 text-gray-500" />
+                                  : <ChevronDown className="w-4 h-4 text-gray-500" />
+                                }
+                                {dayLabel}
+                                <span className="text-xs text-gray-500 font-normal">
+                                  ({daySvcs.length} {daySvcs.length === 1 ? t('service') : t('services')})
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-right font-medium text-gray-700">
+                              &euro;{dayTotal.toFixed(2)}
+                            </td>
+                          </tr>
+                          {/* Individual service rows */}
+                          {isExpanded && daySvcs.map((service, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50 border-b border-gray-100">
+                              <td className="px-4 py-2 pl-10">
+                                <div>{service.service_name}</div>
+                                {service.pricing_note && (
+                                  <div className="text-xs text-gray-400 mt-0.5">{service.pricing_note}</div>
+                                )}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  service.rate_source === 'stored'
+                                    ? 'bg-gray-100'
+                                    : service.rate_source === 'manual'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-green-100 text-green-700'
+                                }`}>
+                                  {service.rate_type || service.rate_source}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-center text-gray-500">{service.quantity_mode}</td>
+                              <td className="px-4 py-2 text-right">{service.quantity}</td>
+                              <td className="px-4 py-2 text-right">&euro;{service.unit_cost.toFixed(2)}</td>
+                              <td className="px-4 py-2 text-right font-medium">&euro;{service.line_total.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      )
+                    })}
                   </tbody>
                   <tfoot className="bg-gray-50 font-medium">
                     <tr>
                       <td colSpan={5} className="px-4 py-2 text-right">{t('subtotal')}:</td>
-                      <td className="px-4 py-2 text-right">€{result.subtotal_cost.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">&euro;{result.subtotal_cost.toFixed(2)}</td>
                     </tr>
                     {result.tour_leader_included && result.tour_leader_cost && (
                       <tr>
                         <td colSpan={5} className="px-4 py-2 text-right text-blue-600">{t('tourLeaderCost')}:</td>
-                        <td className="px-4 py-2 text-right text-blue-600">€{result.tour_leader_cost.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right text-blue-600">&euro;{result.tour_leader_cost.toFixed(2)}</td>
                       </tr>
                     )}
                     <tr>
                       <td colSpan={5} className="px-4 py-2 text-right text-green-600">{t('margin')} ({result.margin_percent}%):</td>
-                      <td className="px-4 py-2 text-right text-green-600">€{result.margin_amount.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-green-600">&euro;{result.margin_amount.toFixed(2)}</td>
                     </tr>
                     <tr className="text-lg">
                       <td colSpan={5} className="px-4 py-2 text-right text-[#647C47]">{t('total')}:</td>
-                      <td className="px-4 py-2 text-right text-[#647C47]">€{result.selling_price.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-[#647C47]">&euro;{result.selling_price.toFixed(2)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -634,6 +776,7 @@ export default function TourPriceCalculator() {
                     <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableMargin')}</th>
                     <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableSelling')}</th>
                     <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tablePerPerson')}</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('tableSingleSupp')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -643,10 +786,13 @@ export default function TourPriceCalculator() {
                         {row.pax}
                         {tourLeaderIncluded && <span className="text-xs text-blue-500 ml-1">(+1)</span>}
                       </td>
-                      <td className="px-4 py-2 text-right">€{row.total_cost.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right text-green-600">€{row.margin_amount.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-medium">€{row.selling_price.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-[#647C47]">€{row.price_per_person.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">&euro;{row.total_cost.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-green-600">&euro;{row.margin_amount.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right font-medium">&euro;{row.selling_price.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right font-bold text-[#647C47]">&euro;{row.price_per_person.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-amber-600">
+                        {row.single_supplement ? `\u20AC${row.single_supplement.toFixed(2)}` : '\u2014'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -669,7 +815,7 @@ export default function TourPriceCalculator() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="p-6 space-y-4">
               {/* Partner Selection */}
               <div>
@@ -775,7 +921,7 @@ export default function TourPriceCalculator() {
                 </div>
                 <div className="flex justify-between pt-2 border-t mt-2">
                   <span className="text-gray-600">{t('summarySellingPrice')}:</span>
-                  <span className="font-bold text-[#647C47]">€{result?.selling_price.toFixed(2)}</span>
+                  <span className="font-bold text-[#647C47]">&euro;{result?.selling_price.toFixed(2)}</span>
                 </div>
               </div>
             </div>

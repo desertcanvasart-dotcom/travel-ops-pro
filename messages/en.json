@@ -5473,7 +5473,18 @@
     "saving": "Saving...",
     "failedToCalculate": "Failed to calculate price",
     "failedToGenerateSheet": "Failed to generate rate sheet",
-    "failedToSaveQuote": "Failed to save quote"
+    "failedToSaveQuote": "Failed to save quote",
+    "collapseAll": "Collapse All",
+    "expandAll": "Expand All",
+    "dayNumber": "Day {day}",
+    "generalServices": "General Services",
+    "service": "service",
+    "services": "services",
+    "tableSingleSupp": "Single Supp.",
+    "rateSheetRange": "Rate Sheet Range",
+    "paxFrom": "From (pax)",
+    "paxTo": "To (pax)",
+    "generateRateSheetDynamic": "Generate Rate Sheet ({from}-{to} pax)"
   },
   "bookings": {
     "title": "Bookings",

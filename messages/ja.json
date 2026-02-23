@@ -6250,7 +6250,18 @@
     "saving": "保存中...",
     "failedToCalculate": "料金の計算に失敗しました",
     "failedToGenerateSheet": "料金表の生成に失敗しました",
-    "failedToSaveQuote": "見積りの保存に失敗しました"
+    "failedToSaveQuote": "見積りの保存に失敗しました",
+    "collapseAll": "すべて閉じる",
+    "expandAll": "すべて展開",
+    "dayNumber": "{day}日目",
+    "generalServices": "一般サービス",
+    "service": "サービス",
+    "services": "サービス",
+    "tableSingleSupp": "シングル追加",
+    "rateSheetRange": "料金表範囲",
+    "paxFrom": "開始（人数）",
+    "paxTo": "終了（人数）",
+    "generateRateSheetDynamic": "料金表を生成（{from}-{to}名）"
   },
   "bookings": {
     "title": "予約管理",
