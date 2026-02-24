@@ -219,6 +219,7 @@
     "airportServices": "Airport Services",
     "hotelServices": "Hotel Services",
     "tipping": "Tipping",
+    "fixedCosts": "Fixed Costs",
     "guides": "Guides",
     "finance": "Finance",
     "invoices": "Invoices",

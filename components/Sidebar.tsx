@@ -52,7 +52,8 @@ import {
   Briefcase,
   Tags,
   Globe,
-  Mail
+  Mail,
+  Droplets
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -172,6 +173,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'airportServices', href: '/rates/airport-services', icon: Plane },
       { labelKey: 'hotelServices', href: '/rates/hotel-services', icon: ConciergeBell },
       { labelKey: 'tipping', href: '/rates/tipping', icon: DollarSign },
+      { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
     ]
   },
   {
