@@ -30,11 +30,29 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    const newCost = {
+    // Discover actual table columns
+    const { data: sampleRow } = await supabaseAdmin
+      .from('fixed_daily_costs')
+      .select('*')
+      .limit(1)
+      .single()
+    const tableColumns = sampleRow
+      ? new Set(Object.keys(sampleRow))
+      : new Set(['cost_type', 'cost_per_person_per_day', 'is_active'])
+
+    const allFields: Record<string, any> = {
       cost_type: body.cost_type,
       cost_per_person_per_day: parseFloat(body.cost_per_person_per_day) || 0,
       description: body.description || null,
       is_active: body.is_active !== false,
+    }
+
+    // Only include columns that exist in the table
+    const newCost: Record<string, any> = {}
+    for (const [col, val] of Object.entries(allFields)) {
+      if (tableColumns.has(col)) {
+        newCost[col] = val
+      }
     }
 
     const { data, error } = await supabaseAdmin
@@ -65,11 +83,22 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing id' }, { status: 400 })
     }
 
-    const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
-    if (updateFields.cost_type !== undefined) updateData.cost_type = updateFields.cost_type
-    if (updateFields.cost_per_person_per_day !== undefined) updateData.cost_per_person_per_day = parseFloat(updateFields.cost_per_person_per_day) || 0
-    if (updateFields.description !== undefined) updateData.description = updateFields.description || null
-    if (updateFields.is_active !== undefined) updateData.is_active = updateFields.is_active
+    // Discover actual table columns from the existing record
+    const { data: existing } = await supabaseAdmin
+      .from('fixed_daily_costs')
+      .select('*')
+      .eq('id', id)
+      .single()
+    const tableColumns = existing
+      ? new Set(Object.keys(existing))
+      : new Set(['cost_type', 'cost_per_person_per_day', 'is_active'])
+
+    const updateData: Record<string, any> = {}
+    if (tableColumns.has('updated_at')) updateData.updated_at = new Date().toISOString()
+    if (updateFields.cost_type !== undefined && tableColumns.has('cost_type')) updateData.cost_type = updateFields.cost_type
+    if (updateFields.cost_per_person_per_day !== undefined && tableColumns.has('cost_per_person_per_day')) updateData.cost_per_person_per_day = parseFloat(updateFields.cost_per_person_per_day) || 0
+    if (updateFields.description !== undefined && tableColumns.has('description')) updateData.description = updateFields.description || null
+    if (updateFields.is_active !== undefined && tableColumns.has('is_active')) updateData.is_active = updateFields.is_active
 
     const { data, error } = await supabaseAdmin
       .from('fixed_daily_costs')
