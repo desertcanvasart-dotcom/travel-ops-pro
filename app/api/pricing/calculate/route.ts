@@ -135,15 +135,18 @@ export async function POST(request: NextRequest) {
     const guide_cost_per_day = guide.base_rate_eur
 
     // ============================================
-    // STEP 3: GET FIXED DAILY COSTS
+    // STEP 3: GET FIXED DAILY COSTS + TIPPING
     // ============================================
     const { data: fixedCosts } = await supabase
       .from('fixed_daily_costs')
       .select('*')
       .eq('is_active', true)
 
-    const tips_per_day = fixedCosts?.find((c: any) => c.cost_type === 'Daily Tips')?.cost_per_person_per_day || 5
     const water_per_day = fixedCosts?.find((c: any) => c.cost_type === 'Water Bottle')?.cost_per_person_per_day || 2
+
+    // Tips from tipping_rates table (single source of truth)
+    const { getDailyTippingRate } = await import('@/lib/tipping-utils')
+    const tips_per_day = await getDailyTippingRate(supabase, 'standard')
 
     // ============================================
     // STEP 4: CALCULATE GROUP COSTS

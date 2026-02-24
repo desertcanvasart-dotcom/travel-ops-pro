@@ -37,6 +37,7 @@ import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai
 import { fetchAllPricingRates, createLandItineraryServices, fetchHotelsForCities } from '@/lib/ai/service-creation'
 import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclusions-builder'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
+import { getDailyTippingRate } from '@/lib/tipping-utils'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -476,10 +477,8 @@ export async function POST(request: NextRequest) {
         const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate, 0) : 0
         if (!cruiseGuidePerDay) console.warn(`⚠️ No cruise guide rate found at all — guide will be €0`)
 
-        // Fetch tipping rates
-        const { data: cruiseTippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
-        let cruiseDailyTips = cruiseTippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 0
-        if (!cruiseDailyTips) console.warn('⚠️ No cruise tipping rates found')
+        // Fetch tipping rates (from tipping_rates table, tier-adjusted)
+        const cruiseDailyTips = await getDailyTippingRate(supabase, tier)
 
         // Fetch entrance fees
         const { data: cruiseEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)

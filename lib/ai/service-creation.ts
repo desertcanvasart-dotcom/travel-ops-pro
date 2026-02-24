@@ -12,6 +12,7 @@ import {
 } from '@/lib/auto-pricing-service'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
+import { getDailyTippingRate } from '@/lib/tipping-utils'
 
 // Normalize attraction names from AI output to canonical database names
 function normalizeAttractionForMatch(name: string): string {
@@ -268,10 +269,8 @@ export async function fetchAllPricingRates(
     }
   }
 
-  // Tipping rates
-  const { data: tippingRates } = await supabase.from('tipping_rates').select('*').eq('is_active', true)
-  const dailyTips = tippingRates?.reduce((sum: number, t: any) => t.rate_unit === 'per_day' ? sum + toNumber(t.rate_eur, 0) : sum, 0) || 0
-  if (!dailyTips) console.warn('⚠️ No tipping rates found — tips will be €0')
+  // Tipping rates (from tipping_rates table, tier-adjusted)
+  const dailyTips = await getDailyTippingRate(supabase, tier)
 
   return {
     vehiclePerDay,

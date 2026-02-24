@@ -1064,34 +1064,11 @@ export async function getHotelServiceRate(
 }
 
 /**
- * Get tipping rate per day
+ * Get tipping rate per day (delegates to shared tipping-utils)
  */
 export async function getTippingRate(tier: ServiceTier): Promise<number> {
-  try {
-    const { data: rates } = await supabaseAdmin
-      .from('tipping_rates')
-      .select('rate_eur, rate_unit')
-      .eq('is_active', true)
-
-    if (!rates || rates.length === 0) {
-      return DEFAULT_RATES[tier].tips
-    }
-
-    const dailyTotal = rates.reduce((sum, r) => 
-      r.rate_unit === 'per_day' ? sum + (r.rate_eur || 0) : sum, 0
-    )
-
-    const multipliers: Record<ServiceTier, number> = {
-      budget: 0.8,
-      standard: 1.0,
-      deluxe: 1.2,
-      luxury: 1.5
-    }
-
-    return Math.round(dailyTotal * multipliers[tier]) || DEFAULT_RATES[tier].tips
-  } catch (err) {
-    return DEFAULT_RATES[tier].tips
-  }
+  const { getDailyTippingRate } = await import('@/lib/tipping-utils')
+  return getDailyTippingRate(supabaseAdmin, tier)
 }
 
 // ============================================

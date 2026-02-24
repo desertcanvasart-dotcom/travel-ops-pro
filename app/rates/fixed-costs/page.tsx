@@ -21,14 +21,10 @@ const COST_TYPE_CONFIG: Record<string, { icon: any; color: string; bgColor: stri
     label: 'Water Bottles',
     hint: 'Bottled water provided daily per person during touring days',
   },
-  'Daily Tips': {
-    icon: Coins,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-100',
-    label: 'Daily Tips',
-    hint: 'Daily tips per person for guides, drivers, and service staff',
-  },
 }
+
+// Tips are managed via Rates > Tipping (tipping_rates table), not here
+const HIDDEN_COST_TYPES = ['Daily Tips']
 
 export default function FixedCostsPage() {
   const [costs, setCosts] = useState<FixedCost[]>([])
@@ -173,7 +169,7 @@ export default function FixedCostsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Fixed Daily Costs</h1>
-            <p className="text-sm text-gray-600">Per-person daily rates for water, tips, and other fixed costs included in every itinerary</p>
+            <p className="text-sm text-gray-600">Per-person daily rates for water and other fixed costs included in every itinerary</p>
           </div>
         </div>
         <button
@@ -190,7 +186,7 @@ export default function FixedCostsPage() {
         <AlertTriangle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-medium">These rates are used in all pricing calculations</p>
-          <p className="text-blue-600 mt-1">Water and tips are pass-through costs with no profit margin applied. Changes here will affect all new itinerary pricing calculations.</p>
+          <p className="text-blue-600 mt-1">Water is a pass-through cost with no profit margin applied. Changes here will affect all new itinerary pricing calculations. Tips are managed separately under Rates &gt; Tipping.</p>
         </div>
       </div>
 
@@ -200,7 +196,7 @@ export default function FixedCostsPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
             <Settings className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No fixed costs configured</h3>
-            <p className="text-sm text-gray-600 mb-4">Add water bottle and daily tips rates to include them in itinerary pricing.</p>
+            <p className="text-sm text-gray-600 mb-4">Add water bottle rates and other fixed costs to include them in itinerary pricing.</p>
             <button
               onClick={() => setShowAddForm(true)}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#566b3c]"
@@ -210,7 +206,7 @@ export default function FixedCostsPage() {
             </button>
           </div>
         ) : (
-          costs.map((cost) => {
+          costs.filter(c => !HIDDEN_COST_TYPES.includes(c.cost_type)).map((cost) => {
             const config = COST_TYPE_CONFIG[cost.cost_type] || {
               icon: Coins,
               color: 'text-gray-600',

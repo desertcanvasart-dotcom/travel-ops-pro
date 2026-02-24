@@ -19,8 +19,8 @@ const VALID_TIERS: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
 const TIER_MULTIPLIERS: Record<ServiceTier, number> = {
   'budget': 0.8,
   'standard': 1.0,
-  'deluxe': 1.3,
-  'luxury': 1.6
+  'deluxe': 1.2,
+  'luxury': 1.5
 }
 
 // ============================================

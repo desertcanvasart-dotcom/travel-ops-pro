@@ -479,33 +479,9 @@ async function getHotelRate(city: string, tier: string) {
 }
 
 async function getTippingRate(tier: string) {
-  const { data: rates } = await supabaseAdmin
-    .from('tipping_rates')
-    .select('*')
-    .eq('is_active', true)
-
-  let dailyTips = 0
-  if (rates && rates.length > 0) {
-    dailyTips = rates.reduce((sum, t) => {
-      if (t.rate_unit === 'per_day') {
-        return sum + (t.rate_eur || 0)
-      }
-      return sum
-    }, 0)
-  }
-  if (dailyTips === 0) {
-    console.warn(`⚠️ [Pricing] No tipping rates found in database — returning €0`)
-  }
-
-  const tierMultiplier: Record<string, number> = {
-    'budget': 0.8, 'standard': 1.0, 'deluxe': 1.2, 'luxury': 1.5
-  }
-
-  return {
-    rate: Math.round(dailyTips * (tierMultiplier[tier] || 1)),
-    name: 'Daily Tips',
-    code: 'DAILY-TIPS'
-  }
+  const { getDailyTippingRate } = await import('@/lib/tipping-utils')
+  const rate = await getDailyTippingRate(supabaseAdmin, tier)
+  return { rate, name: 'Daily Tips', code: 'DAILY-TIPS' }
 }
 
 // ============================================

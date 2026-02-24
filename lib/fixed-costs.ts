@@ -8,21 +8,22 @@ const supabaseAdmin = createClient(
 // Default fallback values (used when DB has no data)
 const DEFAULTS = {
   'Water Bottle': 2,
-  'Daily Tips': 5,
 }
 
 export interface FixedDailyCosts {
   waterPerPersonPerDay: number
-  tipsPerPersonPerDay: number
 }
 
 let cachedCosts: { data: FixedDailyCosts; fetchedAt: number } | null = null
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
- * Fetch fixed daily costs (water bottles, tips) from the database.
+ * Fetch fixed daily costs (water bottles) from the database.
  * Uses a 5-minute in-memory cache to avoid repeated DB queries.
  * Falls back to hardcoded defaults if DB is unavailable.
+ *
+ * NOTE: Tipping is handled separately via tipping_rates table.
+ * Use getDailyTippingRate() from lib/tipping-utils.ts for tips.
  */
 export async function getFixedDailyCosts(): Promise<FixedDailyCosts> {
   // Return cached if still fresh
@@ -40,7 +41,6 @@ export async function getFixedDailyCosts(): Promise<FixedDailyCosts> {
       console.warn('[FixedCosts] DB query failed, using defaults:', error.message)
       return {
         waterPerPersonPerDay: DEFAULTS['Water Bottle'],
-        tipsPerPersonPerDay: DEFAULTS['Daily Tips'],
       }
     }
 
@@ -51,7 +51,6 @@ export async function getFixedDailyCosts(): Promise<FixedDailyCosts> {
 
     const costs: FixedDailyCosts = {
       waterPerPersonPerDay: findRate('Water Bottle'),
-      tipsPerPersonPerDay: findRate('Daily Tips'),
     }
 
     cachedCosts = { data: costs, fetchedAt: Date.now() }
@@ -60,7 +59,6 @@ export async function getFixedDailyCosts(): Promise<FixedDailyCosts> {
     console.warn('[FixedCosts] Exception fetching costs, using defaults:', err.message)
     return {
       waterPerPersonPerDay: DEFAULTS['Water Bottle'],
-      tipsPerPersonPerDay: DEFAULTS['Daily Tips'],
     }
   }
 }
