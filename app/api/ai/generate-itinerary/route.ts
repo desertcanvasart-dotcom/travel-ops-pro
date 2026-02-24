@@ -1028,20 +1028,51 @@ export async function POST(request: NextRequest) {
     })
 
 
-    const { createdDays, totalSupplierCost, totalClientPrice } = serviceResult
+    const { createdDays, totalSupplierCost, totalClientPrice, mealSelections } = serviceResult
 
-    // Update pricing totals (inclusions/exclusions were already set in the INSERT)
+    // Rebuild inclusions with actual restaurant names from service creation
+    const updatedIncExc = buildInclusionsExclusions({
+      packageType: effectivePackageType as PackageType,
+      tier,
+      includeLunch: include_lunch,
+      includeDinner: include_dinner,
+      includeAccommodation: includeAccommodationFinal,
+      isCruise: cruiseDetection.isCruise,
+      language: guideLanguage,
+      hotelName: rates.hotelName || undefined,
+      hasAirportTransfer: effectivePackageType === 'full-package' ||
+        effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land',
+      attractions: [...new Set(allAttractions)],
+      citiesVisited: [...allCities],
+      totalDays: duration_days,
+      numAdults: num_adults,
+      numChildren: num_children,
+      vehicleType: rates.vehicleTypeName || undefined,
+      hotelsPerCity,
+      domesticFlights: itineraryDetails.domesticFlights.length > 0
+        ? itineraryDetails.domesticFlights : undefined,
+      intercityTransfers: itineraryDetails.intercityTransfers.length > 0
+        ? itineraryDetails.intercityTransfers : undefined,
+      mealSelections: mealSelections.length > 0 ? mealSelections : undefined,
+    })
+
+    // Update pricing totals AND inclusions with actual restaurant names
+    const updatePayload: Record<string, any> = {
+      inclusions: updatedIncExc.inclusions,
+      exclusions: updatedIncExc.exclusions,
+    }
     if (!skip_pricing) {
-      const { error: updateError } = await supabase.from('itineraries').update({
-        total_cost: totalClientPrice,
-        total_revenue: totalClientPrice,
-        supplier_cost: totalSupplierCost,
-        profit: totalClientPrice - totalSupplierCost,
-        status: 'quoted'
-      }).eq('id', itinerary.id)
-      if (updateError) {
-        console.error('❌ Failed to update itinerary pricing:', updateError)
-      }
+      updatePayload.total_cost = totalClientPrice
+      updatePayload.total_revenue = totalClientPrice
+      updatePayload.supplier_cost = totalSupplierCost
+      updatePayload.profit = totalClientPrice - totalSupplierCost
+      updatePayload.status = 'quoted'
+    }
+    const { error: updateError } = await supabase.from('itineraries')
+      .update(updatePayload)
+      .eq('id', itinerary.id)
+    if (updateError) {
+      console.error('❌ Failed to update itinerary pricing/inclusions:', updateError)
     }
 
     console.log('🎉 Land tour itinerary complete!', {

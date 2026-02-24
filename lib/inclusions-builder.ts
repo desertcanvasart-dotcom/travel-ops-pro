@@ -31,6 +31,8 @@ export interface InclusionsBuilderInput {
   hotelsPerCity?: Array<{ city: string; hotelName: string; nights: number }>
   domesticFlights?: Array<{ from: string; to: string }>
   intercityTransfers?: Array<{ from: string; to: string }>
+  /** Per-city meal restaurant selections from service creation */
+  mealSelections?: Array<{ city: string; mealType: 'lunch' | 'dinner'; restaurantName: string }>
 }
 
 export interface InclusionsBuilderOutput {
@@ -156,6 +158,7 @@ export function buildInclusionsExclusions(input: InclusionsBuilderInput): Inclus
     hotelsPerCity,
     domesticFlights,
     intercityTransfers,
+    mealSelections,
   } = input
 
   const inclusions: string[] = []
@@ -251,25 +254,49 @@ export function buildInclusionsExclusions(input: InclusionsBuilderInput): Inclus
     inclusions.push('Entrance fees to all sites mentioned in the itinerary')
   }
 
-  // 9. Meals
+  // 9. Meals — use actual restaurant names when available
+  const buildMealInclusion = (mealType: 'lunch' | 'dinner', suffix?: string) => {
+    const label = mealType === 'lunch' ? 'Lunch' : 'Dinner'
+
+    // Collect unique restaurant names per city for this meal type
+    const selections = (mealSelections || []).filter(m => m.mealType === mealType)
+    const uniqueByCity = new Map<string, string>()
+    for (const s of selections) {
+      if (!uniqueByCity.has(s.city)) {
+        uniqueByCity.set(s.city, s.restaurantName)
+      }
+    }
+
+    if (uniqueByCity.size > 0) {
+      // Build restaurant-specific lines like "Lunch at Andrea Restaurant, Cairo"
+      const parts: string[] = []
+      for (const [city, restaurant] of uniqueByCity) {
+        parts.push(`${label} at ${restaurant}, ${city}`)
+      }
+      if (parts.length === 1) {
+        inclusions.push(`Daily ${parts[0].toLowerCase()}${suffix ? ` ${suffix}` : ''}`)
+      } else {
+        // Multiple cities — list each
+        for (const part of parts) {
+          inclusions.push(part + (suffix ? ` ${suffix}` : ''))
+        }
+      }
+    } else {
+      // Fallback: no restaurant data available
+      inclusions.push(`Daily ${label.toLowerCase()} at selected restaurants${suffix ? ` ${suffix}` : ''}`)
+    }
+  }
+
   if (isCruise) {
     inclusions.push('All meals on board the Nile Cruise (breakfast, lunch, dinner)')
     // For cruise-land, land meals are separate
     if (packageType === 'cruise-land') {
-      if (includeLunch) {
-        inclusions.push('Daily lunch at selected restaurants (land tour days)')
-      }
-      if (includeDinner) {
-        inclusions.push('Daily dinner at selected restaurants (land tour days)')
-      }
+      if (includeLunch) buildMealInclusion('lunch', '(land tour days)')
+      if (includeDinner) buildMealInclusion('dinner', '(land tour days)')
     }
   } else {
-    if (includeLunch) {
-      inclusions.push('Daily lunch at selected restaurants')
-    }
-    if (includeDinner) {
-      inclusions.push('Daily dinner at selected restaurants')
-    }
+    if (includeLunch) buildMealInclusion('lunch')
+    if (includeDinner) buildMealInclusion('dinner')
   }
 
   // 10. Bottled water

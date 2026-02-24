@@ -308,6 +308,12 @@ export interface CreateDayServicesResult {
   overnightCity: string | null
 }
 
+export interface MealSelection {
+  city: string
+  mealType: 'lunch' | 'dinner'
+  restaurantName: string
+}
+
 export async function createLandItineraryServices(
   supabase: any,
   params: {
@@ -335,6 +341,7 @@ export async function createLandItineraryServices(
   createdDays: CreateDayServicesResult[]
   totalSupplierCost: number
   totalClientPrice: number
+  mealSelections: MealSelection[]
 }> {
   const {
     itineraryId, itineraryData, rates, startDateObj, durationDays,
@@ -432,6 +439,7 @@ export async function createLandItineraryServices(
   let totalClientPrice = 0
   let landCruiseTransportAdded = false
   const createdDays: CreateDayServicesResult[] = []
+  const mealSelections: MealSelection[] = []
   let previousDayData: any = null // Track previous day for intercity detection
 
   const allDays = itineraryData.days || []
@@ -950,6 +958,7 @@ export async function createLandItineraryServices(
     if (dayIncludesLunch) {
       const lunch = findMealRate(currentCity, 'lunch')
       const lunchCost = lunch.rate * totalPax
+      const lunchRestaurant = lunch.supplierName || null
       services.push({
         service_type: 'meal',
         service_code: lunch.code,
@@ -959,8 +968,11 @@ export async function createLandItineraryServices(
         rate_non_eur: lunch.rate,
         total_cost: lunchCost,
         client_price: withMargin(lunchCost),
-        notes: lunch.supplierName ? `Lunch at ${lunch.supplierName}` : 'Lunch at local restaurant'
+        notes: lunchRestaurant ? `Lunch at ${lunchRestaurant}` : 'Lunch at local restaurant'
       })
+      if (lunchRestaurant) {
+        mealSelections.push({ city: currentCity, mealType: 'lunch', restaurantName: lunchRestaurant })
+      }
       totalSupplierCost += lunchCost
       totalClientPrice += withMargin(lunchCost)
     }
@@ -969,6 +981,7 @@ export async function createLandItineraryServices(
     if (dayIncludesDinner) {
       const dinner = findMealRate(currentCity, 'dinner')
       const dinnerCost = dinner.rate * totalPax
+      const dinnerRestaurant = dinner.supplierName || null
       services.push({
         service_type: 'meal',
         service_code: dinner.code,
@@ -978,8 +991,11 @@ export async function createLandItineraryServices(
         rate_non_eur: dinner.rate,
         total_cost: dinnerCost,
         client_price: withMargin(dinnerCost),
-        notes: dinner.supplierName ? `Dinner at ${dinner.supplierName}` : 'Dinner'
+        notes: dinnerRestaurant ? `Dinner at ${dinnerRestaurant}` : 'Dinner'
       })
+      if (dinnerRestaurant) {
+        mealSelections.push({ city: currentCity, mealType: 'dinner', restaurantName: dinnerRestaurant })
+      }
       totalSupplierCost += dinnerCost
       totalClientPrice += withMargin(dinnerCost)
     }
@@ -1114,6 +1130,7 @@ export async function createLandItineraryServices(
     createdDays,
     totalSupplierCost: toTargetCurrency(totalSupplierCost),
     totalClientPrice: toTargetCurrency(totalClientPrice),
+    mealSelections,
   }
 }
 
