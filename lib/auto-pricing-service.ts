@@ -1064,11 +1064,19 @@ export async function getHotelServiceRate(
 }
 
 /**
- * Get tipping rate per day (delegates to shared tipping-utils)
+ * Get tipping rate per day (flat total — backward compat for simple callers)
  */
 export async function getTippingRate(tier: ServiceTier): Promise<number> {
   const { getDailyTippingRate } = await import('@/lib/tipping-utils')
   return getDailyTippingRate(supabaseAdmin, tier)
+}
+
+/**
+ * Get itemized tipping rates for context-aware per-role lookups
+ */
+async function getItemizedTips(tier: ServiceTier) {
+  const { getItemizedTippingRates } = await import('@/lib/tipping-utils')
+  return getItemizedTippingRates(supabaseAdmin, tier)
 }
 
 // ============================================
@@ -1513,7 +1521,7 @@ export async function calculateDayBasedPricing(
 
   const guideRate = await getGuideRate(language, tier)
   const mealRates = await getMealRates(tier)
-  const tippingRate = await getTippingRate(tier)
+  const tippingRates = await getItemizedTips(tier)
   const waterCostPerPax = 2
 
   // ============================================
@@ -1567,22 +1575,41 @@ export async function calculateDayBasedPricing(
       })
     }
 
-    // ----- TIPPING (fixed per day, when guide present) -----
-    if (hasSightseeing) {
-      fixedCosts += tippingRate
-      services.push({
-        id: `day${day.day}-tips`,
-        dayNumber: day.day,
-        serviceType: 'tips',
-        serviceName: 'Daily Tips',
-        quantity: 1,
-        quantityMode: 'fixed',
-        unitCost: tippingRate,
-        lineTotal: tippingRate,
-        rateSource: 'tipping_rates',
-        isPerPax: false,
-        isOptional: false
-      })
+    // ----- TIPPING (context-aware per-role) -----
+    const { determineTipRolesForDay, formatTipServiceName } = await import('@/lib/tipping-utils')
+    const hasAirportToday = day.services.airport_arrival || day.services.airport_departure
+    const airportCount = (day.services.airport_arrival ? 1 : 0) + (day.services.airport_departure ? 1 : 0)
+    const hasHotelNight = day.accommodation_type === 'hotel'
+    const isTransferOnlyDay = !hasSightseeing && hasAirportToday
+    const dayTipRoles = determineTipRolesForDay({
+      hasGuide: hasSightseeing,
+      hasDriver: !day.is_cruise_day,
+      hasAirportService: hasAirportToday,
+      airportServiceCount: airportCount,
+      hasHotelNight,
+      isCruiseDay: day.is_cruise_day || false,
+      isTransferOnly: isTransferOnlyDay,
+      isFreeDay: false,
+    })
+    for (const tipRole of dayTipRoles) {
+      const tipRate = tippingRates.getRate(tipRole.role, tipRole.context)
+      if (tipRate > 0) {
+        const totalTipCost = tipRate * tipRole.quantity
+        fixedCosts += totalTipCost
+        services.push({
+          id: `day${day.day}-tips-${tipRole.role}`,
+          dayNumber: day.day,
+          serviceType: 'tips',
+          serviceName: formatTipServiceName(tipRole.role, tipRole.context),
+          quantity: tipRole.quantity,
+          quantityMode: 'fixed',
+          unitCost: tipRate,
+          lineTotal: totalTipCost,
+          rateSource: 'tipping_rates',
+          isPerPax: false,
+          isOptional: false
+        })
+      }
     }
 
     // ----- AIRPORT SERVICES (fixed per service) -----

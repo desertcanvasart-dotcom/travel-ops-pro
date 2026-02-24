@@ -12,7 +12,13 @@ import {
 } from '@/lib/auto-pricing-service'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
-import { getDailyTippingRate } from '@/lib/tipping-utils'
+import {
+  getItemizedTippingRates,
+  determineTipRolesForDay,
+  formatTipServiceName,
+  formatTipNotes,
+  type ItemizedTippingRates,
+} from '@/lib/tipping-utils'
 
 // Normalize attraction names from AI output to canonical database names
 function normalizeAttractionForMatch(name: string): string {
@@ -99,7 +105,7 @@ export interface PricingRates {
   hotelRate: number
   hotelName: string | null
   selectedHotel: any
-  dailyTips: number
+  tippingRates: ItemizedTippingRates
 }
 
 export async function fetchAllPricingRates(
@@ -269,8 +275,8 @@ export async function fetchAllPricingRates(
     }
   }
 
-  // Tipping rates (from tipping_rates table, tier-adjusted)
-  const dailyTips = await getDailyTippingRate(supabase, tier)
+  // Tipping rates (from tipping_rates table, tier-adjusted, per-role)
+  const tippingRates = await getItemizedTippingRates(supabase, tier)
 
   return {
     vehiclePerDay,
@@ -291,7 +297,7 @@ export async function fetchAllPricingRates(
     hotelRate,
     hotelName: hotelName_final,
     selectedHotel,
-    dailyTips,
+    tippingRates,
   }
 }
 
@@ -578,6 +584,37 @@ export async function createLandItineraryServices(
       })
       totalSupplierCost += rates.transferRate
       totalClientPrice += withMargin(rates.transferRate)
+
+      // Departure day tips (porter at airport + driver for transfer)
+      const departureTipRoles = determineTipRolesForDay({
+        hasGuide: false,
+        hasDriver: true,
+        hasAirportService: true,
+        airportServiceCount: 1,
+        hasHotelNight: false,
+        isCruiseDay: false,
+        isTransferOnly: true,
+        isFreeDay: false,
+      })
+      for (const tipRole of departureTipRoles) {
+        const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context)
+        if (tipRate > 0) {
+          const totalTipCost = tipRate * tipRole.quantity
+          departureServices.push({
+            service_type: 'tips',
+            service_code: `TIPS-${tipRole.role.toUpperCase()}`,
+            service_name: formatTipServiceName(tipRole.role, tipRole.context),
+            quantity: tipRole.quantity,
+            rate_eur: tipRate,
+            rate_non_eur: tipRate,
+            total_cost: totalTipCost,
+            client_price: withMargin(totalTipCost),
+            notes: formatTipNotes(tipRole.role, tipRole.context, tipRole.quantity)
+          })
+          totalSupplierCost += totalTipCost
+          totalClientPrice += withMargin(totalTipCost)
+        }
+      }
 
       // Insert all departure services
       for (const svc of departureServices) {
@@ -869,21 +906,37 @@ export async function createLandItineraryServices(
       })
       totalSupplierCost += rates.guidePerDay
       totalClientPrice += withMargin(rates.guidePerDay)
+    }
 
-      // Tips (only when guide is present)
-      services.push({
-        service_type: 'tips',
-        service_code: 'TIPS',
-        service_name: 'Daily Tips',
-        quantity: 1,
-        rate_eur: rates.dailyTips,
-        rate_non_eur: rates.dailyTips,
-        total_cost: rates.dailyTips,
-        client_price: withMargin(rates.dailyTips),
-        notes: 'Driver and guide tips'
-      })
-      totalSupplierCost += rates.dailyTips
-      totalClientPrice += withMargin(rates.dailyTips)
+    // Context-aware tips — roles determined by what services are on this day
+    const dayTipRoles = determineTipRolesForDay({
+      hasGuide: dayNeedsGuide,
+      hasDriver: !isFreeDay && !isCruiseDay,
+      hasAirportService: hasAirportOnThisDay,
+      airportServiceCount: isDomesticFlight ? 2 : (hasAirportOnThisDay ? 1 : 0),
+      hasHotelNight: includesHotelForDay,
+      isCruiseDay,
+      isTransferOnly,
+      isFreeDay,
+    })
+    for (const tipRole of dayTipRoles) {
+      const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context)
+      if (tipRate > 0) {
+        const totalTipCost = tipRate * tipRole.quantity
+        services.push({
+          service_type: 'tips',
+          service_code: `TIPS-${tipRole.role.toUpperCase()}`,
+          service_name: formatTipServiceName(tipRole.role, tipRole.context),
+          quantity: tipRole.quantity,
+          rate_eur: tipRate,
+          rate_non_eur: tipRate,
+          total_cost: totalTipCost,
+          client_price: withMargin(totalTipCost),
+          notes: formatTipNotes(tipRole.role, tipRole.context, tipRole.quantity)
+        })
+        totalSupplierCost += totalTipCost
+        totalClientPrice += withMargin(totalTipCost)
+      }
     }
 
     // Entrance fees — all attractions get fees by default, except photo_stops (outside only)

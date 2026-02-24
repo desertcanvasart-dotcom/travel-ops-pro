@@ -478,10 +478,9 @@ async function getHotelRate(city: string, tier: string) {
   }
 }
 
-async function getTippingRate(tier: string) {
-  const { getDailyTippingRate } = await import('@/lib/tipping-utils')
-  const rate = await getDailyTippingRate(supabaseAdmin, tier)
-  return { rate, name: 'Daily Tips', code: 'DAILY-TIPS' }
+async function getItemizedTips(tier: string) {
+  const { getItemizedTippingRates } = await import('@/lib/tipping-utils')
+  return getItemizedTippingRates(supabaseAdmin, tier)
 }
 
 // ============================================
@@ -620,7 +619,10 @@ export async function POST(
     // NEW: Track skipped add-ons for reporting
     const skippedAddons: string[] = []
 
-    const tipping = await getTippingRate(tier)
+    const tippingRates = await getItemizedTips(tier)
+
+    // Determine which package types include airport services
+    const hasAirportPackage = ['full-package', 'cruise-package', 'cruise-land'].includes(package_type)
     const fixedCosts = await getFixedDailyCosts()
     const waterRate = fixedCosts.waterPerPersonPerDay
     // rate_double_eur is per-person (double occupancy), no rooms calculation needed
@@ -777,25 +779,44 @@ export async function POST(
       totalSupplierCost += waterTotal
       totalClientPrice += waterTotal
 
-      // TIPS (standard inclusion)
-      const tipsClient = applyMarkup(tipping.rate, marginPercent)
-      allServices.push({
-        itinerary_day_id: dayId,
-        service_type: 'tips',
-        service_code: tipping.code,
-        service_name: tipping.name,
-        quantity: 1,
-        rate_eur: tipping.rate,
-        rate_non_eur: tipping.rate,
-        total_cost: tipping.rate,
-        client_price: tipsClient,
-        notes: 'Driver and guide tips'
+      // TIPS (context-aware per-role)
+      const { determineTipRolesForDay, formatTipServiceName, formatTipNotes } = await import('@/lib/tipping-utils')
+      const isFirstDay = day.day_number === 1
+      const isLastDay = day.day_number === days.length
+      const hasAirportToday = hasAirportPackage && (isFirstDay || isLastDay)
+      const dayTipRoles = determineTipRolesForDay({
+        hasGuide: services.guide,
+        hasDriver: true,
+        hasAirportService: hasAirportToday,
+        airportServiceCount: hasAirportToday ? 1 : 0,
+        hasHotelNight: services.hotel && !isLastDay,
+        isCruiseDay: false,
+        isTransferOnly: !services.guide && (isFirstDay || isLastDay),
+        isFreeDay: false,
       })
-      totalSupplierCost += tipping.rate
-      totalClientPrice += tipsClient
+      for (const tipRole of dayTipRoles) {
+        const tipRate = tippingRates.getRate(tipRole.role, tipRole.context)
+        if (tipRate > 0) {
+          const totalTipCost = tipRate * tipRole.quantity
+          const tipClient = applyMarkup(totalTipCost, marginPercent)
+          allServices.push({
+            itinerary_day_id: dayId,
+            service_type: 'tips',
+            service_code: `TIPS-${tipRole.role.toUpperCase()}`,
+            service_name: formatTipServiceName(tipRole.role, tipRole.context),
+            quantity: tipRole.quantity,
+            rate_eur: tipRate,
+            rate_non_eur: tipRate,
+            total_cost: totalTipCost,
+            client_price: tipClient,
+            notes: formatTipNotes(tipRole.role, tipRole.context, tipRole.quantity)
+          })
+          totalSupplierCost += totalTipCost
+          totalClientPrice += tipClient
+        }
+      }
 
       // HOTEL
-      const isLastDay = day.day_number === days.length
       if (services.hotel && overnight_city && includeAccommodation && !isLastDay) {
         const hotel = await getHotelRate(overnight_city, tier)
         const hotelTotal = hotel.rate * totalPax

@@ -37,7 +37,12 @@ import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai
 import { fetchAllPricingRates, createLandItineraryServices, fetchHotelsForCities } from '@/lib/ai/service-creation'
 import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclusions-builder'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
-import { getDailyTippingRate } from '@/lib/tipping-utils'
+import {
+  getItemizedTippingRates,
+  determineTipRolesForDay,
+  formatTipServiceName,
+  formatTipNotes,
+} from '@/lib/tipping-utils'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -477,8 +482,8 @@ export async function POST(request: NextRequest) {
         const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate, 0) : 0
         if (!cruiseGuidePerDay) console.warn(`⚠️ No cruise guide rate found at all — guide will be €0`)
 
-        // Fetch tipping rates (from tipping_rates table, tier-adjusted)
-        const cruiseDailyTips = await getDailyTippingRate(supabase, tier)
+        // Fetch tipping rates (from tipping_rates table, tier-adjusted, per-role)
+        const cruiseTippingRates = await getItemizedTippingRates(supabase, tier)
 
         // Fetch entrance fees
         const { data: cruiseEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
@@ -675,22 +680,38 @@ export async function POST(request: NextRequest) {
             totalSupplierCost += cruiseGuidePerDay
             totalClientPrice += withMargin(cruiseGuidePerDay)
 
-            // --- SERVICE 4: Tips (when guide is present) ---
-            await supabase.from('itinerary_services').insert({
-              itinerary_day_id: day.id,
-              service_type: 'tips',
-              service_code: 'TIPS',
-              service_name: 'Daily Tips',
-              quantity: 1,
-              rate_eur: cruiseDailyTips,
-              rate_non_eur: cruiseDailyTips,
-              total_cost: cruiseDailyTips,
-              client_price: withMargin(cruiseDailyTips),
-              notes: 'Driver and guide tips'
-            })
+          }
 
-            totalSupplierCost += cruiseDailyTips
-            totalClientPrice += withMargin(cruiseDailyTips)
+          // --- SERVICE 4: Context-aware tips for cruise day ---
+          const cruiseDayTipRoles = determineTipRolesForDay({
+            hasGuide: dayNeedsGuide,
+            hasDriver: false,            // cruise has bundled transport, no separate driver
+            hasAirportService: false,
+            airportServiceCount: 0,
+            hasHotelNight: false,         // cruise accommodation is bundled
+            isCruiseDay: true,
+            isTransferOnly: false,
+            isFreeDay: false,
+          })
+          for (const tipRole of cruiseDayTipRoles) {
+            const tipRate = cruiseTippingRates.getRate(tipRole.role, tipRole.context)
+            if (tipRate > 0) {
+              const totalTipCost = tipRate * tipRole.quantity
+              await supabase.from('itinerary_services').insert({
+                itinerary_day_id: day.id,
+                service_type: 'tips',
+                service_code: `TIPS-${tipRole.role.toUpperCase()}`,
+                service_name: formatTipServiceName(tipRole.role, tipRole.context),
+                quantity: tipRole.quantity,
+                rate_eur: tipRate,
+                rate_non_eur: tipRate,
+                total_cost: totalTipCost,
+                client_price: withMargin(totalTipCost),
+                notes: formatTipNotes(tipRole.role, tipRole.context, tipRole.quantity)
+              })
+              totalSupplierCost += totalTipCost
+              totalClientPrice += withMargin(totalTipCost)
+            }
           }
 
           // --- SERVICE 5: Entrance Fees (all attractions get fees, except photo_stops) ---
