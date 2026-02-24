@@ -77,6 +77,7 @@ export async function PUT(
       minimum_pax: (v) => v ? parseInt(v) : null,
       notes: (v) => v || null,
       is_active: (v) => v,
+      is_preferred: (v) => v === true,
     }
 
     for (const [field, transform] of Object.entries(fieldMap)) {

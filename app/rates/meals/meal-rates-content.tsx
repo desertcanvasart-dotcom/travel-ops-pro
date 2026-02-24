@@ -24,7 +24,8 @@ import {
   CheckCircle,
   XCircle,
   Info,
-  Loader2
+  Loader2,
+  Star
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
@@ -118,6 +119,7 @@ interface MealRate {
   minimum_pax?: number
   notes?: string
   is_active: boolean
+  is_preferred?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -207,7 +209,8 @@ export default function MealRatesContent() {
     per_person_rate: true,
     minimum_pax: 1,
     notes: '',
-    is_active: true
+    is_active: true,
+    is_preferred: false
   })
 
   // Fetch rates
@@ -304,7 +307,8 @@ export default function MealRatesContent() {
       per_person_rate: true,
       minimum_pax: 1,
       notes: '',
-      is_active: true
+      is_active: true,
+      is_preferred: false
     })
     setShowModal(true)
   }
@@ -332,7 +336,8 @@ export default function MealRatesContent() {
       per_person_rate: rate.per_person_rate !== false,
       minimum_pax: rate.minimum_pax || 1,
       notes: rate.notes || '',
-      is_active: rate.is_active
+      is_active: rate.is_active,
+      is_preferred: rate.is_preferred || false
     })
     setShowModal(true)
   }
@@ -371,6 +376,7 @@ export default function MealRatesContent() {
         minimum_pax: formData.minimum_pax || null,
         notes: formData.notes || null,
         is_active: formData.is_active,
+        is_preferred: formData.is_preferred,
       }
 
       const response = await fetch(url, {
@@ -813,7 +819,10 @@ export default function MealRatesContent() {
                       <div className="flex items-center gap-2">
                         <Utensils className="w-4 h-4 text-orange-500" />
                         <div>
-                          <span className="text-sm font-semibold text-gray-900">{rate.restaurant_name}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm font-semibold text-gray-900">{rate.restaurant_name}</span>
+                            {rate.is_preferred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
+                          </div>
                           <p className="text-xs text-gray-500">{rate.service_code}</p>
                         </div>
                       </div>
@@ -876,6 +885,7 @@ export default function MealRatesContent() {
                   <div className="flex items-center gap-2">
                     <Utensils className="w-5 h-5 text-orange-500" />
                     <span className="font-semibold text-gray-900">{rate.restaurant_name}</span>
+                    {rate.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
@@ -928,6 +938,7 @@ export default function MealRatesContent() {
                 <div className="flex items-center gap-4">
                   <Utensils className="w-4 h-4 text-orange-500" />
                   <span className="font-medium text-gray-900">{rate.restaurant_name}</span>
+                  {rate.is_preferred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
                   <span className="text-sm text-gray-500">{rate.city || '—'}</span>
                   {rate.meal_type && (
                     <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
@@ -1292,7 +1303,7 @@ export default function MealRatesContent() {
                 />
               </div>
 
-              <div>
+              <div className="flex flex-col gap-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1302,6 +1313,17 @@ export default function MealRatesContent() {
                   />
                   <span className="text-sm font-medium text-gray-900">{tCommon('activeForBookings')}</span>
                 </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_preferred}
+                    onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
+                    className="w-4 h-4 text-amber-500 border-gray-300 rounded"
+                  />
+                  <Star className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm font-medium text-gray-900">{t('preferredRestaurant')}</span>
+                </label>
+                <p className="text-xs text-gray-500 ml-6">{t('preferredRestaurantHint')}</p>
               </div>
             </form>
 

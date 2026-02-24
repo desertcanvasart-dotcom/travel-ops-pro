@@ -3695,6 +3695,8 @@
       "perPerson": "1名あたり",
       "perGroup": "グループあたり",
       "minimumPax": "最少人数",
+      "preferredRestaurant": "優先レストラン",
+      "preferredRestaurantHint": "優先レストランは、同じカテゴリ内で自動価格設定時に優先的に選択されます。",
       "linkToSupplier": "サプライヤーをリンク",
       "validFrom": "有効開始日",
       "validTo": "有効終了日",

@@ -2532,7 +2532,9 @@
       "dietaryOptions": "Dietary Options",
       "perPerson": "per person",
       "perPersonRate": "Per Person Rate",
-      "minimumPax": "Minimum Pax"
+      "minimumPax": "Minimum Pax",
+      "preferredRestaurant": "Preferred Restaurant",
+      "preferredRestaurantHint": "Preferred restaurants are picked first when auto-pricing within the same category."
     },
     "hotels": {
       "title": "Hotel Rates",

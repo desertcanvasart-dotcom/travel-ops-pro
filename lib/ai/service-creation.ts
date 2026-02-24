@@ -76,6 +76,7 @@ export interface MealRateRecord {
   supplier_name?: string
   service_code?: string
   tier?: string
+  is_preferred?: boolean
 }
 
 export interface PricingRates {
@@ -373,67 +374,49 @@ export async function createLandItineraryServices(
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
 
   // Helper: find best meal rate for a city + meal type, respecting tier
+  // Within each matching step, preferred restaurants (is_preferred=true) are picked first
   const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null } => {
     const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
     const allMeals = rates.allMealRates || []
     const typeMatches = allMeals.filter(r => r.meal_type?.toLowerCase() === mealType)
 
-    // 1. Best: city + meal_type + tier
-    const cityTierMatch = typeMatches.find(r =>
+    // Helper: from a list of candidates, pick preferred first, then any
+    const pickBest = (candidates: MealRateRecord[]): MealRateRecord | undefined => {
+      const valid = candidates.filter(r => r.base_rate_eur > 0)
+      return valid.find(r => r.is_preferred) || valid[0]
+    }
+
+    const formatResult = (match: MealRateRecord) => ({
+      rate: match.base_rate_eur,
+      name: `${mealLabel} - ${match.restaurant_name || city}`,
+      code: match.service_code || mealType.toUpperCase(),
+      supplierName: match.supplier_name || match.restaurant_name || null
+    })
+
+    // 1. Best: city + meal_type + tier (prefer preferred)
+    const cityTierCandidates = typeMatches.filter(r =>
       r.city?.toLowerCase() === city.toLowerCase() && r.tier?.toLowerCase() === tier
     )
-    if (cityTierMatch && cityTierMatch.base_rate_eur > 0) {
-      return {
-        rate: cityTierMatch.base_rate_eur,
-        name: `${mealLabel} - ${cityTierMatch.restaurant_name || city}`,
-        code: cityTierMatch.service_code || mealType.toUpperCase(),
-        supplierName: cityTierMatch.supplier_name || cityTierMatch.restaurant_name || null
-      }
-    }
+    const cityTierMatch = pickBest(cityTierCandidates)
+    if (cityTierMatch) return formatResult(cityTierMatch)
 
-    // 2. City + meal_type (any tier)
-    const cityMatch = typeMatches.find(r => r.city?.toLowerCase() === city.toLowerCase() && r.base_rate_eur > 0)
-    if (cityMatch) {
-      return {
-        rate: cityMatch.base_rate_eur,
-        name: `${mealLabel} - ${cityMatch.restaurant_name || city}`,
-        code: cityMatch.service_code || mealType.toUpperCase(),
-        supplierName: cityMatch.supplier_name || cityMatch.restaurant_name || null
-      }
-    }
+    // 2. City + meal_type, any tier (prefer preferred)
+    const cityCandidates = typeMatches.filter(r => r.city?.toLowerCase() === city.toLowerCase())
+    const cityMatch = pickBest(cityCandidates)
+    if (cityMatch) return formatResult(cityMatch)
 
-    // 3. Same tier, any city
-    const tierMatch = typeMatches.find(r => r.tier?.toLowerCase() === tier && r.base_rate_eur > 0)
-    if (tierMatch) {
-      return {
-        rate: tierMatch.base_rate_eur,
-        name: `${mealLabel} - ${tierMatch.restaurant_name || city}`,
-        code: tierMatch.service_code || mealType.toUpperCase(),
-        supplierName: tierMatch.supplier_name || tierMatch.restaurant_name || null
-      }
-    }
+    // 3. Same tier, any city (prefer preferred)
+    const tierCandidates = typeMatches.filter(r => r.tier?.toLowerCase() === tier)
+    const tierMatch = pickBest(tierCandidates)
+    if (tierMatch) return formatResult(tierMatch)
 
-    // 4. Any meal of this type
-    const anyType = typeMatches.find(r => r.base_rate_eur > 0)
-    if (anyType) {
-      return {
-        rate: anyType.base_rate_eur,
-        name: `${mealLabel} - ${anyType.restaurant_name || city}`,
-        code: anyType.service_code || mealType.toUpperCase(),
-        supplierName: anyType.supplier_name || anyType.restaurant_name || null
-      }
-    }
+    // 4. Any meal of this type (prefer preferred)
+    const anyType = pickBest(typeMatches)
+    if (anyType) return formatResult(anyType)
 
-    // 5. Any active meal rate at all
-    const anyMeal = allMeals.find(r => r.base_rate_eur > 0)
-    if (anyMeal) {
-      return {
-        rate: anyMeal.base_rate_eur,
-        name: `${mealLabel} - ${anyMeal.restaurant_name || city}`,
-        code: anyMeal.service_code || mealType.toUpperCase(),
-        supplierName: anyMeal.supplier_name || anyMeal.restaurant_name || null
-      }
-    }
+    // 5. Any active meal rate at all (prefer preferred)
+    const anyMeal = pickBest(allMeals)
+    if (anyMeal) return formatResult(anyMeal)
 
     // 6. Fallback flat rate
     const fallback = mealType === 'lunch' ? rates.lunchRate : rates.dinnerRate
