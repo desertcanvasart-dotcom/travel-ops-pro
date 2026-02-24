@@ -147,35 +147,46 @@ export async function fetchAllPricingRates(
     console.warn(`⚠️ No airport transfer rate found for ${effectiveCity}, ${totalPax} pax — transfer will be €0`)
   }
 
-  // Guides — 3-tier fallback:
-  // 1. Exact match: language + tier
-  // 2. Language match: any tier
-  // 3. Final fallback: any active guide at same tier (use their rate as baseline)
-  const { data: guides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(5)
-  let selectedGuide = guides?.[0]
-  if (!selectedGuide) {
-    // Fallback 2: any active guide for this language (ignore tier)
-    const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('is_active', true).contains('languages', [language]).limit(1)
-    selectedGuide = fallbackGuides?.[0]
+  // Guides — check guide_rates table first (where rates are managed via UI),
+  // then fall back to guides table (supplier contacts with daily_rate)
+  let guidePerDay = 0
+  let selectedGuide: any = null
+
+  // PRIORITY 1: Check guide_rates table (managed via Rates > Tour Guides UI)
+  const { data: guideRates } = await supabase
+    .from('guide_rates')
+    .select('*')
+    .eq('is_active', true)
+    .eq('guide_language', language)
+    .limit(1)
+
+  if (guideRates?.length) {
+    guidePerDay = toNumber(guideRates[0].base_rate_eur, 0)
+    selectedGuide = { name: guideRates[0].guide_name || `${language} Speaking Guide`, id: guideRates[0].id }
+    console.log(`✅ Guide rate from guide_rates: €${guidePerDay}/day (${language})`)
   }
-  if (!selectedGuide) {
-    // Fallback 3: any active guide at this tier (ignore language) — use their rate as baseline
-    // This prevents $0 guide costs when no guide speaks the requested language
-    const { data: anyTierGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).limit(1)
-    selectedGuide = anyTierGuides?.[0]
-    if (selectedGuide) {
-      console.warn(`⚠️ No ${language}-speaking guide found — using ${selectedGuide.name || 'generic'} guide rate as baseline`)
+
+  // PRIORITY 2: Fall back to guides table (supplier contacts)
+  if (!guidePerDay) {
+    const { data: guides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(5)
+    selectedGuide = guides?.[0]
+    if (!selectedGuide) {
+      const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('is_active', true).contains('languages', [language]).limit(1)
+      selectedGuide = fallbackGuides?.[0]
     }
-  }
-  if (!selectedGuide) {
-    // Last resort: any active guide at all
-    const { data: anyGuides } = await supabase.from('guides').select('*').eq('is_active', true).limit(1)
-    selectedGuide = anyGuides?.[0]
-    if (selectedGuide) {
-      console.warn(`⚠️ No guide found for ${language}/${tier} — using ${selectedGuide.name || 'generic'} guide rate as last resort`)
+    if (!selectedGuide) {
+      const { data: anyTierGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).limit(1)
+      selectedGuide = anyTierGuides?.[0]
+      if (selectedGuide) console.warn(`⚠️ No ${language}-speaking guide found — using ${selectedGuide.name || 'generic'} guide rate`)
     }
+    if (!selectedGuide) {
+      const { data: anyGuides } = await supabase.from('guides').select('*').eq('is_active', true).limit(1)
+      selectedGuide = anyGuides?.[0]
+      if (selectedGuide) console.warn(`⚠️ No guide found for ${language}/${tier} — using ${selectedGuide.name || 'generic'} as last resort`)
+    }
+    guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate, 0) : 0
   }
-  const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate, 0) : 0
+
   if (!guidePerDay) console.warn(`⚠️ No guide rate found at all — guide will be €0`)
 
   // Entrance fees
@@ -188,10 +199,10 @@ export async function fetchAllPricingRates(
   // Flat fallback rate: average of all lunch/dinner rates, or hardcoded if none
   const lunchRate = lunchRates.length > 0
     ? lunchRates.reduce((sum: number, r: any) => sum + toNumber(r.base_rate_eur, 0), 0) / lunchRates.length
-    : 12
+    : 0
   const dinnerRate = dinnerRates.length > 0
     ? dinnerRates.reduce((sum: number, r: any) => sum + toNumber(r.base_rate_eur, 0), 0) / dinnerRates.length
-    : 18
+    : 0
   if (!allMealRates?.length) console.warn('⚠️ No meal rates found in meal_rates table')
 
   // Airport services
@@ -361,15 +372,28 @@ export async function createLandItineraryServices(
   const marginMultiplier = 1 + (marginPercent / 100)
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
 
-  // Helper: find best meal rate for a city + meal type
+  // Helper: find best meal rate for a city + meal type, respecting tier
   const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null } => {
     const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
     const allMeals = rates.allMealRates || []
     const typeMatches = allMeals.filter(r => r.meal_type?.toLowerCase() === mealType)
 
-    // 1. Best: city + meal_type
-    const cityMatch = typeMatches.find(r => r.city?.toLowerCase() === city.toLowerCase())
-    if (cityMatch && cityMatch.base_rate_eur > 0) {
+    // 1. Best: city + meal_type + tier
+    const cityTierMatch = typeMatches.find(r =>
+      r.city?.toLowerCase() === city.toLowerCase() && r.tier?.toLowerCase() === tier
+    )
+    if (cityTierMatch && cityTierMatch.base_rate_eur > 0) {
+      return {
+        rate: cityTierMatch.base_rate_eur,
+        name: `${mealLabel} - ${cityTierMatch.restaurant_name || city}`,
+        code: cityTierMatch.service_code || mealType.toUpperCase(),
+        supplierName: cityTierMatch.supplier_name || cityTierMatch.restaurant_name || null
+      }
+    }
+
+    // 2. City + meal_type (any tier)
+    const cityMatch = typeMatches.find(r => r.city?.toLowerCase() === city.toLowerCase() && r.base_rate_eur > 0)
+    if (cityMatch) {
       return {
         rate: cityMatch.base_rate_eur,
         name: `${mealLabel} - ${cityMatch.restaurant_name || city}`,
@@ -378,7 +402,18 @@ export async function createLandItineraryServices(
       }
     }
 
-    // 2. Any meal of this type
+    // 3. Same tier, any city
+    const tierMatch = typeMatches.find(r => r.tier?.toLowerCase() === tier && r.base_rate_eur > 0)
+    if (tierMatch) {
+      return {
+        rate: tierMatch.base_rate_eur,
+        name: `${mealLabel} - ${tierMatch.restaurant_name || city}`,
+        code: tierMatch.service_code || mealType.toUpperCase(),
+        supplierName: tierMatch.supplier_name || tierMatch.restaurant_name || null
+      }
+    }
+
+    // 4. Any meal of this type
     const anyType = typeMatches.find(r => r.base_rate_eur > 0)
     if (anyType) {
       return {
@@ -389,7 +424,7 @@ export async function createLandItineraryServices(
       }
     }
 
-    // 3. Any active meal rate at all
+    // 5. Any active meal rate at all
     const anyMeal = allMeals.find(r => r.base_rate_eur > 0)
     if (anyMeal) {
       return {
@@ -400,7 +435,7 @@ export async function createLandItineraryServices(
       }
     }
 
-    // 4. Fallback flat rate
+    // 6. Fallback flat rate
     const fallback = mealType === 'lunch' ? rates.lunchRate : rates.dinnerRate
     return {
       rate: fallback,
