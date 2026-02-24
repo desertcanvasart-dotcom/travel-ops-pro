@@ -473,7 +473,7 @@ export async function POST(request: NextRequest) {
           cruiseGuide = fallback3?.[0]
           if (cruiseGuide) console.warn(`⚠️ No cruise guide for ${guideLanguage}/${tier} — using last resort rate`)
         }
-        const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate_eur, 0) : 0
+        const cruiseGuidePerDay = cruiseGuide ? toNumber(cruiseGuide.daily_rate, 0) : 0
         if (!cruiseGuidePerDay) console.warn(`⚠️ No cruise guide rate found at all — guide will be €0`)
 
         // Fetch tipping rates

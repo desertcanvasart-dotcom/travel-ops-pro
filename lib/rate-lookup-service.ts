@@ -626,7 +626,7 @@ export async function lookupRates(
           .ilike('city', params.city || 'Cairo')
           .limit(1)
 
-        let ratePerDay = toNumber(suitableVehicle.daily_rate_eur, 0)
+        let ratePerDay = toNumber(suitableVehicle.daily_rate, 0)
         if (vehicleRates && vehicleRates.length > 0) {
           const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
           const tierResult = getTransportRateForPax(vehicleRates[0], params.pax)
@@ -691,7 +691,7 @@ export async function lookupRates(
 
       const dailyRate = guideRates && guideRates.length > 0
         ? toNumber(guideRates[0].base_rate_eur, 0)
-        : toNumber(selectedGuide.daily_rate_eur, 0)
+        : toNumber(selectedGuide.daily_rate, 0)
 
       result.guide = {
         id: selectedGuide.id,

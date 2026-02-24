@@ -13,6 +13,55 @@ import {
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
 
+// Normalize attraction names from AI output to canonical database names
+function normalizeAttractionForMatch(name: string): string {
+  const normalized = name.toLowerCase().replace(/^the /, '').trim()
+  const nameMap: Record<string, string> = {
+    'grand egyptian museum': 'Grand Egyptian Museum',
+    'gem': 'Grand Egyptian Museum',
+    'giza museum': 'Grand Egyptian Museum',
+    'new grand egyptian museum': 'Grand Egyptian Museum',
+    'egyptian museum': 'Egyptian Museum',
+    'cairo museum': 'Egyptian Museum',
+    'pyramids of giza': 'Giza Plateau',
+    'pyramids': 'Giza Plateau',
+    'pyramid': 'Giza Plateau',
+    'great pyramids': 'Giza Plateau',
+    'giza pyramids': 'Giza Plateau',
+    'giza plateau': 'Giza Plateau',
+    'sphinx': 'Giza Plateau',
+    'great sphinx': 'Giza Plateau',
+    'karnak': 'Karnak Temple',
+    'karnak temple': 'Karnak Temple',
+    'luxor temple': 'Luxor Temple',
+    'valley of kings': 'Valley of the Kings',
+    'valley of the kings': 'Valley of the Kings',
+    'hatshepsut': 'Hatshepsut Temple',
+    'hatshepsut temple': 'Hatshepsut Temple',
+    'colossi of memnon': 'Colossi of Memnon',
+    'edfu': 'Edfu Temple',
+    'edfu temple': 'Edfu Temple',
+    'kom ombo': 'Kom Ombo Temple',
+    'kom ombo temple': 'Kom Ombo Temple',
+    'philae': 'Philae Temple',
+    'philae temple': 'Philae Temple',
+    'high dam': 'Aswan High Dam',
+    'aswan high dam': 'Aswan High Dam',
+    'aswan dam': 'Aswan High Dam',
+    'unfinished obelisk': 'Unfinished Obelisk',
+    'abu simbel': 'Abu Simbel',
+    'citadel': 'Saladin Citadel',
+    'saladin citadel': 'Saladin Citadel',
+    'khan el khalili': 'Khan El Khalili',
+    'khan el-khalili': 'Khan El Khalili',
+    "pompey's pillar": "Pompey's Pillar",
+    'qaitbay': 'Qaitbay Citadel',
+    'qaitbay citadel': 'Qaitbay Citadel',
+    'nubian village': 'Nubian Village',
+  }
+  return nameMap[normalized] || name
+}
+
 // ============================================
 // PRICING RATES (fetched from DB)
 // ============================================
@@ -126,7 +175,7 @@ export async function fetchAllPricingRates(
       console.warn(`⚠️ No guide found for ${language}/${tier} — using ${selectedGuide.name || 'generic'} guide rate as last resort`)
     }
   }
-  const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate_eur, 0) : 0
+  const guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate, 0) : 0
   if (!guidePerDay) console.warn(`⚠️ No guide rate found at all — guide will be €0`)
 
   // Entrance fees
@@ -826,10 +875,23 @@ export async function createLandItineraryServices(
           continue
         }
 
-        const fee = rates.allEntranceFees.find((ef: any) =>
-          ef.attraction_name.toLowerCase().includes(attr.toLowerCase()) ||
-          attr.toLowerCase().includes(ef.attraction_name.toLowerCase())
+        // Normalize attraction name for better matching
+        const normalizedAttr = normalizeAttractionForMatch(attr)
+
+        // Find best match: prefer exact match, then longest partial match
+        let fee = rates.allEntranceFees.find((ef: any) =>
+          ef.attraction_name.toLowerCase() === normalizedAttr.toLowerCase()
         )
+        if (!fee) {
+          // Partial match — sort by name length DESC to prefer "Grand Egyptian Museum" over "Egyptian Museum"
+          const sortedFees = [...(rates.allEntranceFees || [])].sort(
+            (a: any, b: any) => (b.attraction_name?.length || 0) - (a.attraction_name?.length || 0)
+          )
+          fee = sortedFees.find((ef: any) =>
+            ef.attraction_name.toLowerCase().includes(normalizedAttr.toLowerCase()) ||
+            normalizedAttr.toLowerCase().includes(ef.attraction_name.toLowerCase())
+          )
+        }
 
         if (fee) {
           // Check if it's an add-on (should be excluded from automatic pricing)

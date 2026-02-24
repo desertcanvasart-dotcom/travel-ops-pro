@@ -188,7 +188,7 @@ async function getTransportationRate(city: string, tier: string, pax: number) {
 
   if (vehicle) {
     return {
-      rate: vehicle.daily_rate_eur || 0,
+      rate: vehicle.daily_rate || 0,
       supplier_id: vehicle.id,
       supplier_name: vehicle.company_name || null,
       name: `${vehicle.vehicle_type} - ${city}`,
@@ -238,7 +238,7 @@ async function getGuideRate(city: string, tier: string, language: string = 'Engl
 
   if (guide) {
     return {
-      rate: guide.daily_rate_eur || 0,
+      rate: guide.daily_rate || 0,
       supplier_id: guide.id,
       supplier_name: guide.name || null,
       name: `${language} Speaking Guide - ${city}`,

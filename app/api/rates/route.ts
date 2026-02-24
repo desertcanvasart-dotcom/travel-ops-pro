@@ -151,10 +151,10 @@ export async function GET(request: NextRequest) {
           city: 'Cairo',
           tour_duration: 'full_day',
           notes: `${guide.name} - ${guide.certification_number || ''}`,
-          base_rate_eur: guide.daily_rate_eur || guide.daily_rate || 0,
-          base_rate_non_eur: guide.daily_rate_eur || guide.daily_rate || 0,
-          eur_rate: guide.daily_rate_eur || guide.daily_rate || 0,
-          non_eur_rate: guide.daily_rate_eur || guide.daily_rate || 0
+          base_rate_eur: guide.daily_rate || 0,
+          base_rate_non_eur: guide.daily_rate || 0,
+          eur_rate: guide.daily_rate || 0,
+          non_eur_rate: guide.daily_rate || 0
         }))
         error = guideResult.error
         break

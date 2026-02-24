@@ -379,7 +379,7 @@ export async function getTemplateWithPricing(
         accommodation:hotel_contacts(id, name, rate_double_eur),
         lunch_meal:restaurant_contacts!lunch_meal_id(id, name, lunch_rate_eur),
         dinner_meal:restaurant_contacts!dinner_meal_id(id, name, dinner_rate_eur),
-        guide:guides(id, name, daily_rate_eur)
+        guide:guides(id, name, daily_rate)
       `)
       .eq('tour_id', templateId)
       .order('day_number', { ascending: true })
