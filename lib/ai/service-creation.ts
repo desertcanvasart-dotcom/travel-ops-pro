@@ -213,15 +213,15 @@ export async function fetchAllPricingRates(
     : 0
   if (!allMealRates?.length) console.warn('⚠️ No meal rates found in meal_rates table')
 
-  // Airport services
-  const { data: airportServicesData } = await supabase.from('airport_services').select('*').eq('is_active', true)
+  // Airport services (airport_staff_rates table — managed via Rates > Airport Services UI)
+  const { data: airportServicesData } = await supabase.from('airport_staff_rates').select('*').eq('is_active', true)
   const airportServiceRate = airportServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
-  if (!airportServiceRate) console.warn('⚠️ No airport service rates found — airport service will be €0')
+  if (!airportServiceRate) console.warn('⚠️ No airport service rates found in airport_staff_rates — airport service will be €0')
 
-  // Hotel services
-  const { data: hotelServicesData } = await supabase.from('hotel_services').select('*').eq('is_active', true)
+  // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
+  const { data: hotelServicesData } = await supabase.from('hotel_staff_rates').select('*').eq('is_active', true)
   const hotelServiceRate = hotelServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
-  if (!hotelServiceRate) console.warn('⚠️ No hotel service rates found — hotel service will be €0')
+  if (!hotelServiceRate) console.warn('⚠️ No hotel service rates found in hotel_staff_rates — hotel service will be €0')
 
   // Accommodation
   let hotelRate = 0
@@ -464,8 +464,9 @@ export async function createLandItineraryServices(
     const dayNeedsGuide = includeGuide !== undefined
       ? (includeGuide && !isTransferOnly && !isFreeDay)  // Global override from user
       : (dayData.guide_required !== false && !isTransferOnly && !isFreeDay)  // Per-day AI decision
-    const dayIncludesLunch = isFreeDay ? false : (dayData.includes_lunch ?? includeLunch)
-    const dayIncludesDinner = dayData.includes_dinner ?? includeDinner
+    // Cruise days: all meals included in cruise rate (Full Board) — no separate meal services
+    const dayIncludesLunch = (isFreeDay || isCruiseDay) ? false : (dayData.includes_lunch ?? includeLunch)
+    const dayIncludesDinner = isCruiseDay ? false : (dayData.includes_dinner ?? includeDinner)
     const includesHotelForDay = !isLastDay && includeAccommodation && !isCruiseDay && (dayData.includes_hotel !== false)
 
     // Airport & flight detection helpers
@@ -535,7 +536,8 @@ export async function createLandItineraryServices(
     if (skipPricing) continue
 
     // Handle departure day - transfer + airport/hotel services
-    if (dayData.is_departure && isTransferOnly) {
+    // On cruise days, the bundled cruise transport covers transfers + airport staff + check-out
+    if (dayData.is_departure && isTransferOnly && !isCruiseDay) {
       const departureServices: any[] = []
 
       // Airport service (international departure)
@@ -627,7 +629,8 @@ export async function createLandItineraryServices(
     const services: any[] = []
 
     // Airport Services (for arrivals/departures/domestic flights)
-    if (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info) {
+    // Skip on cruise days — bundled cruise transport covers airport staff + transfers
+    if (!isCruiseDay && (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info)) {
       if (isDomesticFlight) {
         // Domestic flight: airport services at BOTH departure and arrival airports
         services.push({
@@ -709,8 +712,9 @@ export async function createLandItineraryServices(
       }
     }
 
-    // Hotel Services (for check-in/check-out)
-    if ((dayData.needs_hotel_service || dayData.is_arrival || dayData.is_departure) && !isFreeDay) {
+    // Hotel Services (for check-in/check-out — hotels only, not cruise)
+    // On cruise days, check-in/check-out assistance is included in the bundled cruise transport
+    if (!isCruiseDay && (dayData.needs_hotel_service || dayData.is_arrival || dayData.is_departure) && !isFreeDay) {
       const isCruiseService = dayData.accommodation_type === 'cruise' || dayData.is_cruise_day
       services.push({
         service_type: 'hotel_service',
@@ -1052,8 +1056,8 @@ export async function createLandItineraryServices(
       totalClientPrice += withMargin(dinnerCost)
     }
 
-    // Water (for touring days only) — rate from fixed_daily_costs table
-    if (!isTransferOnly && !isFreeDay) {
+    // Water (for touring days only, not on cruise — included on board)
+    if (!isTransferOnly && !isFreeDay && !isCruiseDay) {
       const waterCost = waterRatePerPerson * totalPax
       services.push({
         service_type: 'supplies',
