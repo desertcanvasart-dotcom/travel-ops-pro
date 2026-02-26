@@ -13,8 +13,6 @@ import {
   Trash2,
   X,
   Check,
-  Download,
-  Upload,
   LayoutGrid,
   List,
   Table2,
@@ -725,57 +723,6 @@ export default function HotelsContent() {
     }
   }
 
-  // Export to CSV
-  const handleExportCSV = () => {
-    const headers = [
-      'Service Code', 'Hotel Name', 'City', 'Board Basis', 'Tier',
-      'Contact Name', 'Contact Email', 'Contact Phone', 'Reservations Email', 'Reservations Phone',
-      'Low PP Dbl EUR', 'Low Sgl Supp EUR', 'Low Tpl Red EUR',
-      'High PP Dbl EUR', 'High Sgl Supp EUR', 'High Tpl Red EUR',
-      'Peak PP Dbl EUR', 'Peak Sgl Supp EUR', 'Peak Tpl Red EUR',
-      'Valid From', 'Valid To', 'Company/Supplier', 'Active'
-    ]
-    
-    const rows = filteredRates.map(r => [
-      r.service_code,
-      r.property_name,
-      r.city || '',
-      r.board_basis || '',
-      r.tier || '',
-      r.contact_name || '',
-      r.contact_email || '',
-      r.contact_phone || '',
-      r.reservations_email || '',
-      r.reservations_phone || '',
-      r.pp_double_eur || '',
-      r.single_supp_eur || '',
-      r.triple_red_eur || '',
-      r.high_pp_double_eur || '',
-      r.high_single_supp_eur || '',
-      r.high_triple_red_eur || '',
-      r.peak_pp_double_eur || '',
-      r.peak_single_supp_eur || '',
-      r.peak_triple_red_eur || '',
-      r.rate_valid_from || '',
-      r.rate_valid_to || '',
-      r.supplier?.name || r.supplier_name || '',
-      r.is_active ? 'Yes' : 'No'
-    ])
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `hotels_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    
-    showToast('success', t('messages.exportSuccess', { count: filteredRates.length }))
-  }
-
   // Filter rates
   const filteredRates = rates.filter(rate => {
     const matchesSearch = searchTerm === '' || 
@@ -852,13 +799,6 @@ export default function HotelsContent() {
                 <Building2 className="w-4 h-4" />
                 {t('hotelCompanies')}
               </Link>
-              <button
-                onClick={handleExportCSV}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                <Download className="w-4 h-4" />
-                {tCommon('export')}
-              </button>
               <BulkRateImportExport tableName="accommodation_rates" onImportComplete={fetchRates} />
               <button
                 onClick={handleAddNew}

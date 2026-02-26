@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getGmailClient, refreshAccessToken, getUserEmail } from '@/lib/gmail'
+import { getAuthenticatedGmail, GmailAuthError, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -72,50 +72,29 @@ export async function POST(request: NextRequest) {
 
     console.log('[Email Sync] Starting sync for user:', user_id)
 
-    // Get Gmail tokens for this user
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', user_id)
-      .single()
+    // Get authenticated Gmail client (handles token fetch + refresh)
+    let gmail, userEmail: string
+    try {
+      const auth = await getAuthenticatedGmail(user_id)
+      gmail = auth.gmail
+      userEmail = auth.emailAddress
 
-    console.log('[Email Sync] Token lookup result:', { hasToken: !!tokenData, error: tokenError?.message })
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json({
-        error: 'Gmail not connected. Please connect your Gmail account first.',
-        success: false
-      }, { status: 400 })
-    }
-
-    // Check if token needs refresh
-    let accessToken = tokenData.access_token
-    const refreshToken = tokenData.refresh_token
-    let userEmail = tokenData.email_address
-
-    console.log('[Email Sync] User email from DB:', userEmail, 'Token expiry:', tokenData.token_expiry)
-
-    // If email_address is not stored, fetch it from Gmail
-    if (!userEmail) {
-      console.log('[Email Sync] User email not stored, fetching from Gmail...')
-      try {
-        userEmail = await getUserEmail(accessToken)
-        console.log('[Email Sync] Fetched user email:', userEmail)
-
-        // Update the stored token with the email
+      // If email_address wasn't stored yet, fetch it
+      if (!userEmail) {
+        console.log('[Email Sync] User email not stored, fetching from Gmail...')
+        userEmail = (await getUserEmail(auth.accessToken)) || ''
         if (userEmail) {
           await supabase
             .from('gmail_tokens')
             .update({ email_address: userEmail, updated_at: new Date().toISOString() })
             .eq('user_id', user_id)
         }
-      } catch (emailError: any) {
-        console.error('[Email Sync] Failed to fetch user email:', emailError.message)
-        return NextResponse.json({
-          error: 'Could not determine your Gmail address. Please reconnect your Gmail account.',
-          success: false
-        }, { status: 400 })
       }
+    } catch (err) {
+      if (err instanceof GmailAuthError) {
+        return NextResponse.json({ error: err.message, success: false }, { status: 401 })
+      }
+      throw err
     }
 
     if (!userEmail) {
@@ -125,32 +104,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    if (tokenData.token_expiry && new Date(tokenData.token_expiry) < new Date()) {
-      console.log('[Email Sync] Token expired, refreshing...')
-      try {
-        const newCredentials = await refreshAccessToken(refreshToken)
-        accessToken = newCredentials.access_token!
-        console.log('[Email Sync] Token refreshed successfully')
-
-        // Update stored token
-        await supabase
-          .from('gmail_tokens')
-          .update({
-            access_token: accessToken,
-            token_expiry: newCredentials.expiry_date
-              ? new Date(newCredentials.expiry_date).toISOString()
-              : null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', user_id)
-      } catch (refreshError: any) {
-        console.error('[Email Sync] Token refresh failed:', refreshError.message)
-        return NextResponse.json({
-          error: 'Failed to refresh Gmail token. Please reconnect your Gmail account.',
-          success: false
-        }, { status: 401 })
-      }
-    }
+    console.log('[Email Sync] Using email:', userEmail)
 
     // Update sync state to running
     await supabase
@@ -160,8 +114,6 @@ export async function POST(request: NextRequest) {
         sync_status: 'running',
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' })
-
-    const gmail = getGmailClient(accessToken, refreshToken)
 
     // Build query for Gmail API - use simpler query that matches working email inbox
     // Format date as YYYY/MM/DD for Gmail search

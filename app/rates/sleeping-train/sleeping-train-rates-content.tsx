@@ -13,7 +13,6 @@ import {
   Trash2,
   X,
   Check,
-  Download,
   MapPin,
   Clock,
   ChevronLeft,
@@ -453,13 +452,6 @@ export default function SleepingTrainRatesContent() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {/* Export CSV */}}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-          >
-            <Download className="w-4 h-4" />
-            {t('export')}
-          </button>
           <BulkRateImportExport tableName="sleeping_train_rates" onImportComplete={fetchRates} />
           <button
             onClick={handleAddNew}

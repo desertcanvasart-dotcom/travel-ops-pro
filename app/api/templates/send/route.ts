@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedGmail, GmailAuthError, sendEmail as gmailSendEmail } from '@/lib/gmail'
+import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,34 +11,35 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      templateId, 
-      channel, 
+    const {
+      templateId,
+      channel,
       clientId,      // Legacy - for clients
       recipientId,   // New - for any recipient
       recipientType, // New - 'client', 'hotel', 'cruise', 'transport', 'guide'
-      recipient, 
-      subject, 
-      body: messageBody 
+      recipient,
+      subject,
+      body: messageBody,
+      userId,        // Required for email channel
     } = body
 
     if (!messageBody || !recipient) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Message body and recipient are required' 
+      return NextResponse.json({
+        success: false,
+        error: 'Message body and recipient are required'
       }, { status: 400 })
     }
 
     let result
-    
+
     if (channel === 'email') {
-      result = await sendEmail(recipient, subject, messageBody)
+      result = await sendEmail(recipient, subject, messageBody, userId)
     } else if (channel === 'whatsapp') {
       result = await sendWhatsApp(recipient, messageBody)
     } else {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Invalid channel' 
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid channel'
       }, { status: 400 })
     }
 
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
     if (recipientType && recipientId) {
       logEntry.recipient_type = recipientType
       logEntry.recipient_id = recipientId
-      
+
       // Also set client_id if it's a client (for backwards compatibility)
       if (recipientType === 'client') {
         logEntry.client_id = recipientId
@@ -81,7 +84,7 @@ export async function POST(request: NextRequest) {
 
       await supabase
         .from('message_templates')
-        .update({ 
+        .update({
           usage_count: (template?.usage_count || 0) + 1,
           last_used_at: new Date().toISOString()
         })
@@ -89,138 +92,80 @@ export async function POST(request: NextRequest) {
     }
 
     if (!result.success) {
-      return NextResponse.json({ 
-        success: false, 
-        error: result.error 
+      return NextResponse.json({
+        success: false,
+        error: result.error
       }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: `Message sent via ${channel}` 
+    return NextResponse.json({
+      success: true,
+      message: `Message sent via ${channel}`
     })
 
   } catch (error) {
     console.error('Template send error:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Internal server error' 
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error'
     }, { status: 500 })
   }
 }
 
 // ============================================
-// EMAIL SENDING (via Gmail API)
+// EMAIL SENDING (via Gmail OAuth API)
 // ============================================
 
-async function sendEmail(to: string, subject: string, body: string): Promise<{ success: boolean; error?: string }> {
+async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  userId?: string
+): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get Gmail tokens from database
-    const { data: tokens } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .limit(1)
-      .single()
+    // If no userId provided, look up the first connected Gmail account
+    let effectiveUserId = userId
+    if (!effectiveUserId) {
+      const { data: tokens } = await supabase
+        .from('gmail_tokens')
+        .select('user_id')
+        .limit(1)
+        .single()
 
-    if (!tokens) {
-      // Fallback: Try internal email API if exists
-      const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/gmail/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to,
-          subject,
-          body,
-          isHtml: false,
-        }),
-      })
-
-      if (response.ok) {
-        return { success: true }
+      if (!tokens) {
+        return {
+          success: false,
+          error: 'Gmail not connected. Please connect your Gmail account in Settings.'
+        }
       }
-
-      return { 
-        success: false, 
-        error: 'Gmail not connected. Please connect your Gmail account in Settings.' 
-      }
+      effectiveUserId = tokens.user_id
     }
 
-    // Use Gmail API
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/gmail/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to,
-        subject,
-        body,
-        isHtml: false,
-      }),
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      return { success: false, error: error.message || 'Failed to send email' }
-    }
+    // Use the centralized Gmail auth helper
+    const { accessToken, refreshToken } = await getAuthenticatedGmail(effectiveUserId!)
+    await gmailSendEmail(accessToken, refreshToken, to, subject, body)
 
     return { success: true }
-
   } catch (error: any) {
+    if (error instanceof GmailAuthError) {
+      return { success: false, error: error.message }
+    }
     console.error('Email send error:', error)
     return { success: false, error: error.message || 'Failed to send email' }
   }
 }
 
 // ============================================
-// WHATSAPP SENDING (via Twilio)
+// WHATSAPP SENDING (via lib/twilio-whatsapp)
 // ============================================
 
-async function sendWhatsApp(to: string, body: string): Promise<{ success: boolean; error?: string }> {
+async function sendWhatsApp(
+  to: string,
+  body: string
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID
-    const authToken = process.env.TWILIO_AUTH_TOKEN
-    const fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886'
-
-    if (!accountSid || !authToken) {
-      return { 
-        success: false, 
-        error: 'WhatsApp (Twilio) not configured. Please add Twilio credentials.' 
-      }
-    }
-
-    // Format phone number for WhatsApp
-    let formattedTo = to.replace(/\s+/g, '').replace(/[^\d+]/g, '')
-    if (!formattedTo.startsWith('+')) {
-      formattedTo = '+' + formattedTo
-    }
-    formattedTo = `whatsapp:${formattedTo}`
-
-    const response = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          From: fromNumber,
-          To: formattedTo,
-          Body: body,
-        }),
-      }
-    )
-
-    if (!response.ok) {
-      const error = await response.json()
-      console.error('Twilio error:', error)
-      return { 
-        success: false, 
-        error: error.message || 'Failed to send WhatsApp message' 
-      }
-    }
-
-    return { success: true }
-
+    const result = await sendWhatsAppMessage({ to, body })
+    return { success: result.success, error: result.error }
   } catch (error: any) {
     console.error('WhatsApp send error:', error)
     return { success: false, error: error.message || 'Failed to send WhatsApp message' }

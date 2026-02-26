@@ -6,6 +6,79 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 )
 
+// Supabase admin client for token management
+import { createClient } from '@supabase/supabase-js'
+
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+export interface AuthenticatedGmail {
+  gmail: ReturnType<typeof google.gmail>
+  accessToken: string
+  refreshToken: string
+  emailAddress: string
+}
+
+/**
+ * Get an authenticated Gmail client for a user.
+ * Handles: token fetch → expiry check → refresh → DB update.
+ * Eliminates the duplicated token-refresh pattern across routes.
+ */
+export async function getAuthenticatedGmail(userId: string): Promise<AuthenticatedGmail> {
+  const supabase = getSupabaseAdmin()
+
+  const { data: tokenData, error: tokenError } = await supabase
+    .from('gmail_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .single()
+
+  if (tokenError || !tokenData) {
+    throw new GmailAuthError('Gmail not connected. Please connect your Gmail account first.')
+  }
+
+  let accessToken = tokenData.access_token
+  const refreshToken = tokenData.refresh_token
+  const emailAddress = tokenData.email_address || ''
+
+  // Check if token is expired and refresh if needed
+  if (tokenData.token_expiry && new Date(tokenData.token_expiry) <= new Date()) {
+    try {
+      const newCredentials = await refreshAccessToken(refreshToken)
+      accessToken = newCredentials.access_token!
+
+      await supabase
+        .from('gmail_tokens')
+        .update({
+          access_token: newCredentials.access_token,
+          token_expiry: new Date(newCredentials.expiry_date || Date.now() + 3600000).toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+    } catch (refreshError: any) {
+      throw new GmailAuthError('Failed to refresh Gmail token. Please reconnect your Gmail account.')
+    }
+  }
+
+  const gmail = getGmailClient(accessToken, refreshToken)
+
+  return { gmail, accessToken, refreshToken, emailAddress }
+}
+
+/**
+ * Custom error class for Gmail authentication issues
+ */
+export class GmailAuthError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'GmailAuthError'
+  }
+}
+
 // Scopes for Gmail access
 export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',

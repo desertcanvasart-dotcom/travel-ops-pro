@@ -25,9 +25,11 @@ import {
   findCruiseContent,
   fetchContentLibrary,
   fetchWritingRules,
-  buildContentContext,
   buildWritingRulesContext,
   fetchAttractionsList,
+  buildAttractionContentMap,
+  buildRichContentContext,
+  logContentUsage,
 } from '@/lib/ai/content-library'
 import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai/prompt-builder'
 import { fetchAllPricingRates, createLandItineraryServices, fetchHotelsForCities } from '@/lib/ai/service-creation'
@@ -410,6 +412,11 @@ export async function POST(request: NextRequest) {
 
         console.log('🎉 Cruise itinerary complete!')
 
+        // Log content library usage for cruise path
+        if (cruiseContent.found && cruiseContent.content?.id) {
+          logContentUsage(supabaseAdmin, [cruiseContent.content.id], tier, itinerary.id, 'cruise_generation')
+        }
+
         // Auto-create language version
         const cruiseTripName = cruiseContent.variation.title || cruiseContent.content.name
         await createLanguageVersions(supabase, itinerary.id, cruiseTripName, contentLanguage, createdCruiseDays)
@@ -456,9 +463,12 @@ export async function POST(request: NextRequest) {
     const searchCities = cities.length > 0 ? cities : [effectiveCity]
     const contentLibrary = await fetchContentLibrary(supabaseAdmin, tier, searchCities, interests)
     const writingRules = await fetchWritingRules(supabaseAdmin)
-    const contentContext = buildContentContext(contentLibrary)
-    const writingContext = buildWritingRulesContext(writingRules)
     const attractionNames = await fetchAttractionsList(supabase)
+
+    // Build rich content map (full descriptions, not truncated) and format for prompts
+    const contentMap = buildAttractionContentMap(contentLibrary)
+    const { context: contentContext, matchedContentIds } = buildRichContentContext(contentMap, attractionNames)
+    const writingContext = buildWritingRulesContext(writingRules)
 
     // Determine inclusions based on package type
     let includeAccommodationFinal = include_accommodation
@@ -496,7 +506,8 @@ export async function POST(request: NextRequest) {
           language: contentLanguage,
           attractionNames,
           writingRules,
-          packageType: effectivePackageType
+          packageType: effectivePackageType,
+          contentContext,
         }
       )
     } else {
@@ -721,6 +732,11 @@ export async function POST(request: NextRequest) {
       supplierCost: totalSupplierCost,
       clientPrice: totalClientPrice
     })
+
+    // Log content library usage for land path
+    if (matchedContentIds.length > 0) {
+      logContentUsage(supabaseAdmin, matchedContentIds, tier, itinerary.id, 'land_generation')
+    }
 
     // Auto-create language version
     const createdLandDays = createdDays.map(d => ({

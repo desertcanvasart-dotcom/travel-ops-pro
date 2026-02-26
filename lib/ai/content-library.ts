@@ -345,3 +345,144 @@ export async function fetchAttractionsList(supabase: any): Promise<string[]> {
     return []
   }
 }
+
+// ============================================
+// RICH CONTENT MAP (for deep AI integration)
+// ============================================
+
+export interface AttractionContent {
+  contentId: string
+  name: string
+  title: string
+  description: string
+  highlights: string[]
+  inclusions: string[]
+  category: string
+}
+
+/**
+ * Build a lookup map of content items indexed by lowercase name.
+ * Preserves full tier-specific descriptions without truncation.
+ */
+export function buildAttractionContentMap(
+  content: ContentItem[]
+): Map<string, AttractionContent> {
+  const map = new Map<string, AttractionContent>()
+  for (const item of content) {
+    if (!item.name) continue
+    map.set(item.name.toLowerCase(), {
+      contentId: item.id,
+      name: item.name,
+      title: item.title,
+      description: item.description,
+      highlights: item.highlights || [],
+      inclusions: item.inclusions || [],
+      category: item.category_name,
+    })
+  }
+  return map
+}
+
+/**
+ * Build a rich, prompt-friendly content context from the content map.
+ * Prioritizes attractions that match the canonical entrance_fees names
+ * (since those are the ones that actually appear in itineraries).
+ *
+ * @param contentMap   Attraction content indexed by name
+ * @param attractionNames  Canonical attraction names from entrance_fees
+ * @param maxCharBudget  Max characters for the content section (~750 tokens at 3000 chars)
+ * @returns  { context: prompt string, matchedContentIds: IDs for usage logging }
+ */
+export function buildRichContentContext(
+  contentMap: Map<string, AttractionContent>,
+  attractionNames: string[],
+  maxCharBudget: number = 3000
+): { context: string; matchedContentIds: string[] } {
+  const matchedContentIds: string[] = []
+  const sections: string[] = []
+  let charCount = 0
+
+  // First pass: match canonical attraction names to content items (highest priority)
+  for (const attrName of attractionNames) {
+    const key = attrName.toLowerCase()
+    const content = contentMap.get(key)
+    if (!content || !content.description) continue
+
+    const highlightsStr = content.highlights.length > 0
+      ? `\n  Highlights: ${content.highlights.join(' | ')}`
+      : ''
+    const section = `\n[${content.name}] (${content.category}):\n  ${content.description}${highlightsStr}`
+
+    if (charCount + section.length > maxCharBudget) break
+
+    sections.push(section)
+    matchedContentIds.push(content.contentId)
+    charCount += section.length
+  }
+
+  // Second pass: add remaining content items not yet matched
+  for (const [, content] of contentMap) {
+    if (matchedContentIds.includes(content.contentId)) continue
+    if (!content.description) continue
+
+    const highlightsStr = content.highlights.length > 0
+      ? `\n  Highlights: ${content.highlights.join(' | ')}`
+      : ''
+    const section = `\n[${content.name}] (${content.category}):\n  ${content.description}${highlightsStr}`
+
+    if (charCount + section.length > maxCharBudget) break
+
+    sections.push(section)
+    matchedContentIds.push(content.contentId)
+    charCount += section.length
+  }
+
+  if (sections.length === 0) {
+    return { context: '', matchedContentIds: [] }
+  }
+
+  const context = `\n\nCURATED CONTENT LIBRARY (use these descriptions when writing about these sites):\n${sections.join('\n')}`
+
+  console.log(`📚 Rich content context: ${sections.length} items, ${charCount} chars, ${matchedContentIds.length} content IDs`)
+
+  return { context, matchedContentIds }
+}
+
+// ============================================
+// CONTENT USAGE LOGGING (server-side)
+// ============================================
+
+/**
+ * Log which content library items were used during itinerary generation.
+ * Server-side version that accepts a supabase client parameter.
+ */
+export async function logContentUsage(
+  supabase: any,
+  contentIds: string[],
+  tier: string,
+  itineraryId: string,
+  context: string = 'itinerary_generation'
+): Promise<void> {
+  if (contentIds.length === 0) return
+  try {
+    const { data: variations } = await supabase
+      .from('content_variations')
+      .select('id, content_id')
+      .in('content_id', contentIds)
+      .eq('tier', tier)
+
+    if (!variations || variations.length === 0) return
+
+    const logs = variations.map((v: any) => ({
+      content_id: v.content_id,
+      variation_id: v.id,
+      itinerary_id: itineraryId,
+      context,
+    }))
+
+    await supabase.from('content_usage_log').insert(logs)
+    console.log(`📊 Logged content usage: ${logs.length} items for itinerary ${itineraryId}`)
+  } catch (err) {
+    console.warn('⚠️ Failed to log content usage:', err)
+  }
+}

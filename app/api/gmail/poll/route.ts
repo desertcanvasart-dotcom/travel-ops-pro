@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,46 +19,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
     }
 
-    // Get user's Gmail tokens
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
+    // Get authenticated Gmail client (handles token fetch + refresh)
+    let auth
+    try {
+      auth = await getAuthenticatedGmail(userId)
+    } catch (err) {
+      if (err instanceof GmailAuthError) {
+        return NextResponse.json({ error: err.message }, { status: 401 })
+      }
+      throw err
     }
 
-    // Set up OAuth2 client
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    )
-
-    oauth2Client.setCredentials({
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-    })
-
-    // Check if token needs refresh
-    if (new Date(tokenData.token_expiry) < new Date()) {
-      const { credentials } = await oauth2Client.refreshAccessToken()
-      
-      await supabase
-        .from('gmail_tokens')
-        .update({
-          access_token: credentials.access_token,
-          token_expiry: new Date(credentials.expiry_date!).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-
-      oauth2Client.setCredentials(credentials)
-    }
-
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+    const { gmail, emailAddress } = auth
+    const userEmail = emailAddress?.toLowerCase()
 
     // If no historyId, get the current one
     if (!historyId) {
@@ -119,7 +92,7 @@ export async function GET(request: NextRequest) {
 
         // Label changes
         if (item.labelsAdded || item.labelsRemoved) {
-          const messageId = item.labelsAdded?.[0]?.message?.id || 
+          const messageId = item.labelsAdded?.[0]?.message?.id ||
                            item.labelsRemoved?.[0]?.message?.id
 
           if (messageId) {
@@ -134,7 +107,6 @@ export async function GET(request: NextRequest) {
 
       // Fetch details for new messages
       const newMessages = []
-      const userEmail = tokenData.email_address?.toLowerCase()
 
       for (const messageId of newMessageIds.slice(0, 10)) { // Limit to 10
         try {
@@ -331,30 +303,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
     }
 
-    // Get user's Gmail tokens
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
+    // Get authenticated Gmail client (handles token fetch + refresh)
+    let gmail
+    try {
+      const auth = await getAuthenticatedGmail(userId)
+      gmail = auth.gmail
+    } catch (err) {
+      if (err instanceof GmailAuthError) {
+        return NextResponse.json({ error: err.message }, { status: 401 })
+      }
+      throw err
     }
-
-    // Set up OAuth2 client
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    )
-
-    oauth2Client.setCredentials({
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-    })
-
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
     // Get unread count
     const unreadList = await gmail.users.messages.list({

@@ -30,9 +30,10 @@ export async function generateFromStructuredInput(
     attractionNames: string[]
     writingRules: WritingRule[]
     packageType?: PackageType
+    contentContext?: string
   }
 ): Promise<any> {
-  const { tier, totalPax, language, attractionNames, writingRules, packageType } = params
+  const { tier, totalPax, language, attractionNames, writingRules, packageType, contentContext } = params
   const writingContext = buildWritingRulesContext(writingRules)
 
   // Calculate expected number of days
@@ -205,6 +206,16 @@ Write ALL content (trip_name, title, description) in ${language}.
 - Do NOT use Japanese, Arabic, or any non-Latin characters
 - City names in English
 `}
+═══════════════════════════════════════════════════════════════
+📝 DESCRIPTION WRITING GUIDELINES
+═══════════════════════════════════════════════════════════════
+When writing the "description" field for each day, use the curated descriptions
+below as source material. Adapt them to fit the day's specific activities but
+preserve the brand voice and key factual details from the content library.
+Do NOT invent details for attractions that have curated content available.
+
+${contentContext || 'Write professional 2-3 sentence descriptions.'}
+${writingContext}
 ═══════════════════════════════════════════════════════════════
 📤 OUTPUT FORMAT (Return ONLY valid JSON)
 ═══════════════════════════════════════════════════════════════
@@ -406,10 +417,17 @@ CITIES: ${cities.length > 0 ? cities.join(', ') : effectiveCity}
 ${interests.length > 0 ? `INTERESTS: ${interests.join(', ')}` : ''}
 ${specialRequests.length > 0 ? `SPECIAL REQUESTS: ${specialRequests.join(', ')}` : ''}
 
-AVAILABLE ATTRACTIONS (use EXACT names):
+AVAILABLE ATTRACTIONS (use EXACT names from this list):
 ${attractionNames.join(', ')}
 ${contentContext}
 ${writingContext}
+
+CONTENT USAGE RULE:
+When describing attractions listed in the CURATED CONTENT LIBRARY above,
+use the provided descriptions and highlights as the basis for your writing.
+Adapt the curated text to fit naturally within the day narrative, but preserve
+the brand voice, key details, and factual information. Do NOT invent descriptions
+for attractions that have curated content available.
 
 PACKAGE INCLUDES:
 - Transportation: Yes (private vehicle)

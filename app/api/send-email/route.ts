@@ -1,94 +1,193 @@
 import { NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
+import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { generateEmailTemplate } from '@/lib/communication-utils'
+import { google } from 'googleapis'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(request: Request) {
   try {
-    const { 
+    const body = await request.json()
+    const {
+      // Itinerary email fields
       itineraryId,
-      clientName, 
+      clientName,
       clientEmail,
       itineraryCode,
       tripName,
       totalCost,
       currency,
-      pdfBase64 
-    } = await request.json()
+      pdfBase64,
+      // Generic email fields (used by cron/reminders)
+      to,
+      subject: customSubject,
+      html: customHtml,
+    } = body
 
-    if (!clientEmail) {
+    const recipientEmail = clientEmail || to
+    if (!recipientEmail) {
       return NextResponse.json(
-        { success: false, error: 'Client email is required' },
+        { success: false, error: 'Recipient email is required' },
         { status: 400 }
       )
     }
 
-    // Create transporter using Gmail
-    // Note: User needs to set up App Password in Gmail settings
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER || 'info@travel2egypt.org',
-        pass: process.env.GMAIL_APP_PASSWORD // App-specific password
-      }
-    })
+    // Determine subject and body
+    let emailSubject: string
+    let emailBody: string
 
-    // Generate email HTML
-    const emailHtml = generateEmailTemplate(
-      clientName,
-      itineraryCode,
-      tripName,
-      totalCost,
-      currency
-    )
-
-    // Email options
-    const mailOptions = {
-      from: {
-        name: 'Islam Mohamed - Travel2Egypt.org',
-        address: process.env.GMAIL_USER || 'info@travel2egypt.org'
-      },
-      to: clientEmail,
-      bcc: process.env.GMAIL_USER || 'info@travel2egypt.org', // BCC to yourself
-      subject: `Your Egypt Tour Itinerary - ${tripName} (${itineraryCode})`,
-      html: emailHtml,
-      attachments: pdfBase64 ? [{
-        filename: `${itineraryCode}_${clientName.replace(/\s+/g, '_')}.pdf`,
-        content: pdfBase64,
-        encoding: 'base64'
-      }] : []
+    if (customSubject && customHtml) {
+      // Generic email (reminders, cron, etc.)
+      emailSubject = customSubject
+      emailBody = customHtml
+    } else if (clientName && itineraryCode && tripName) {
+      // Itinerary email with PDF
+      emailSubject = `Your Egypt Tour Itinerary - ${tripName} (${itineraryCode})`
+      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency)
+    } else {
+      return NextResponse.json(
+        { success: false, error: 'Missing email content parameters' },
+        { status: 400 }
+      )
     }
 
-    // Send email
-    const info = await transporter.sendMail(mailOptions)
+    // Get first connected Gmail account (system-level sending)
+    const { data: tokenRecord } = await supabase
+      .from('gmail_tokens')
+      .select('user_id')
+      .limit(1)
+      .single()
 
-    return NextResponse.json({
-      success: true,
-      messageId: info.messageId,
-      message: 'Email sent successfully'
-    })
-
-  } catch (error) {
-    console.error('Error sending email:', error)
-    
-    // Check if it's an authentication error
-    if (error instanceof Error && error.message.includes('Invalid login')) {
+    if (!tokenRecord) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Email authentication failed. Please configure Gmail App Password.',
-          details: 'Go to Gmail Settings → Security → App Passwords to generate one.'
+        {
+          success: false,
+          error: 'Gmail not connected. Please connect your Gmail account in Settings.',
+          details: 'No Gmail OAuth tokens found. Connect Gmail from the Settings page.'
         },
         { status: 401 }
       )
     }
 
+    // Get authenticated Gmail client via centralized helper
+    let gmail
+    try {
+      const auth = await getAuthenticatedGmail(tokenRecord.user_id)
+      gmail = auth.gmail
+    } catch (err) {
+      if (err instanceof GmailAuthError) {
+        return NextResponse.json(
+          { success: false, error: err.message },
+          { status: 401 }
+        )
+      }
+      throw err
+    }
+
+    // Build email with or without PDF attachment
+    let rawEmail: string
+
+    if (pdfBase64) {
+      const filename = itineraryCode && clientName
+        ? `${itineraryCode}_${clientName.replace(/\s+/g, '_')}.pdf`
+        : 'itinerary.pdf'
+      rawEmail = buildEmailWithAttachment(recipientEmail, emailSubject, emailBody, filename, pdfBase64)
+    } else {
+      rawEmail = buildSimpleEmail(recipientEmail, emailSubject, emailBody)
+    }
+
+    // Send via Gmail API
+    const response = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw: rawEmail },
+    })
+
+    return NextResponse.json({
+      success: true,
+      messageId: response.data.id,
+      message: 'Email sent successfully'
+    })
+
+  } catch (error) {
+    console.error('Error sending email:', error)
+
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Failed to send email',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )
   }
+}
+
+// ============================================
+// EMAIL BUILDING HELPERS
+// ============================================
+
+function buildSimpleEmail(to: string, subject: string, body: string): string {
+  const fromAddress = process.env.GMAIL_USER || 'info@travel2egypt.org'
+  const fromName = 'Islam Mohamed - Travel2Egypt.org'
+
+  const emailLines = [
+    `From: ${fromName} <${fromAddress}>`,
+    `To: ${to}`,
+    `Bcc: ${fromAddress}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    body,
+  ]
+
+  return Buffer.from(emailLines.join('\r\n'))
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+function buildEmailWithAttachment(
+  to: string,
+  subject: string,
+  body: string,
+  filename: string,
+  attachmentBase64: string
+): string {
+  const fromAddress = process.env.GMAIL_USER || 'info@travel2egypt.org'
+  const fromName = 'Islam Mohamed - Travel2Egypt.org'
+  const boundary = `boundary_${Date.now()}`
+
+  const emailParts = [
+    `From: ${fromName} <${fromAddress}>`,
+    `To: ${to}`,
+    `Bcc: ${fromAddress}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(body).toString('base64'),
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${filename}"`,
+    'Content-Transfer-Encoding: base64',
+    `Content-Disposition: attachment; filename="${filename}"`,
+    '',
+    attachmentBase64,
+    `--${boundary}--`,
+  ]
+
+  return Buffer.from(emailParts.join('\r\n'))
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }

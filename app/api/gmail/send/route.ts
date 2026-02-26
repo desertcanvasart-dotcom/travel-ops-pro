@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { refreshAccessToken } from '@/lib/gmail'
-import { google } from 'googleapis'
+import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
 )
 
 interface Attachment {
@@ -28,41 +21,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Get user's tokens
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
+    // Get authenticated Gmail client (handles token fetch + refresh)
+    let gmail, emailAddress: string
+    try {
+      const auth = await getAuthenticatedGmail(userId)
+      gmail = auth.gmail
+      emailAddress = auth.emailAddress
+    } catch (err) {
+      if (err instanceof GmailAuthError) {
+        return NextResponse.json({ error: err.message }, { status: 401 })
+      }
+      throw err
     }
-
-    let { access_token, refresh_token, token_expiry } = tokenData
-
-    // Check if token is expired
-    if (new Date(token_expiry) <= new Date()) {
-      const newTokens = await refreshAccessToken(refresh_token)
-      access_token = newTokens.access_token!
-
-      await supabase
-        .from('gmail_tokens')
-        .update({
-          access_token: newTokens.access_token,
-          token_expiry: new Date(newTokens.expiry_date || Date.now() + 3600000).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-    }
-
-    // Set credentials
-    oauth2Client.setCredentials({
-      access_token,
-      refresh_token,
-    })
-
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
     // Build email with or without attachments
     let rawEmail: string
@@ -137,7 +107,7 @@ export async function POST(request: NextRequest) {
             message_id: sentMessageId,
             thread_id: sentThreadId,
             direction: 'outbound',
-            from_address: tokenData.email_address,
+            from_address: emailAddress,
             to_addresses: [to],
             subject: subject,
             body_html: body,
