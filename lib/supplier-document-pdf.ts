@@ -64,6 +64,17 @@ interface SupplierDocument {
     unit_rate: number
     total_cost: number
   }[]
+  // Meal specific
+  selected_meals?: {
+    rate_id: string
+    service_code: string
+    restaurant_name: string
+    meal_type: string
+    city: string
+    quantity: number
+    unit_rate: number
+    total_cost: number
+  }[]
 }
 
 // Brand colors - lighter, more professional palette
@@ -441,7 +452,7 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
 
   // ==================== SERVICES TABLE ====================
   
-  const hasServices = (doc.services && doc.services.length > 0) || (doc.selected_attractions && doc.selected_attractions.length > 0) || (doc.selected_routes && doc.selected_routes.length > 0)
+  const hasServices = (doc.services && doc.services.length > 0) || (doc.selected_attractions && doc.selected_attractions.length > 0) || (doc.selected_routes && doc.selected_routes.length > 0) || (doc.selected_meals && doc.selected_meals.length > 0)
   
   if (hasServices) {
     pdf.setFontSize(9)
@@ -465,8 +476,8 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     
     y += 12
     
-    // Use selected_routes for transport, selected_attractions for entrance fees, otherwise use services
-    const items = doc.selected_routes || doc.selected_attractions || doc.services || []
+    // Use selected_routes for transport, selected_meals for meals, selected_attractions for entrance fees, otherwise use services
+    const items = doc.selected_routes || doc.selected_meals || doc.selected_attractions || doc.services || []
     
     items.forEach((item: any, idx: number) => {
       const isOdd = idx % 2 === 0
@@ -480,7 +491,7 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
       pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
       
       // Get item name
-      const itemName = item.route_name || item.attraction_name || item.service_name || item.service_type || 'Service'
+      const itemName = item.route_name || item.restaurant_name || item.attraction_name || item.service_name || item.service_type || 'Service'
       const itemCity = item.city ? ` (${item.city})` : ''
       pdf.text((itemName + itemCity).substring(0, 60), margin + 4, y + 6.5)
 

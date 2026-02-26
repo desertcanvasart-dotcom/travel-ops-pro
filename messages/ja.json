@@ -1978,6 +1978,23 @@
         "intercityTransfer": "都市間送迎",
         "dinnerTransfer": "ディナー送迎",
         "soundLightTransfer": "音と光のショー送迎"
+      },
+      "meals": "食事",
+      "restaurantName": "レストラン",
+      "mealType": "種類",
+      "totalMealCost": "食事合計",
+      "noMealsSelected": "食事が選択されていません",
+      "noMealsHint": "以下の利用可能なオプションから食事を選択してください",
+      "availableMeals": "利用可能な食事",
+      "searchMealsPlaceholder": "レストランまたは食事タイプを検索...",
+      "noMealsFound": "食事が見つかりません",
+      "mealTypes": {
+        "breakfast": "朝食",
+        "lunch": "昼食",
+        "dinner": "夕食",
+        "brunch": "ブランチ",
+        "fullBoard": "フルボード",
+        "halfBoard": "ハーフボード"
       }
     },
     "contract": {
@@ -6531,6 +6548,23 @@
       "intercityTransfer": "都市間送迎",
       "dinnerTransfer": "ディナー送迎",
       "soundLightTransfer": "音と光のショー送迎"
+    },
+    "meals": "食事",
+    "restaurantName": "レストラン",
+    "mealType": "種類",
+    "totalMealCost": "食事合計",
+    "noMealsSelected": "食事が選択されていません",
+    "noMealsHint": "以下の利用可能なオプションから食事を選択してください",
+    "availableMeals": "利用可能な食事",
+    "searchMealsPlaceholder": "レストランまたは食事タイプを検索...",
+    "noMealsFound": "食事が見つかりません",
+    "mealTypes": {
+      "breakfast": "朝食",
+      "lunch": "昼食",
+      "dinner": "夕食",
+      "brunch": "ブランチ",
+      "fullBoard": "フルボード",
+      "halfBoard": "ハーフボード"
     }
   },
   "supplierDocumentDetail": {

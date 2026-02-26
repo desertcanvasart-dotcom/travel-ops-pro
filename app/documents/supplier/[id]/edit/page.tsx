@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2, Route } from 'lucide-react'
+import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2, Route, Utensils } from 'lucide-react'
 
 interface TransportRate {
   id: string
@@ -30,6 +30,31 @@ interface SelectedRoute {
   service_code: string
   route_name: string
   service_type: string
+  city: string
+  quantity: number
+  unit_rate: number
+  total_cost: number
+}
+
+interface MealRate {
+  id: string
+  service_code: string
+  restaurant_name: string
+  meal_type: string | null
+  cuisine_type: string | null
+  city: string | null
+  base_rate_eur: number
+  base_rate_non_eur: number
+  tier: string | null
+  supplier_name: string | null
+  notes: string | null
+}
+
+interface SelectedMeal {
+  rate_id: string
+  service_code: string
+  restaurant_name: string
+  meal_type: string
   city: string
   quantity: number
   unit_rate: number
@@ -96,6 +121,13 @@ export default function EditSupplierDocumentPage() {
   const [routeSearch, setRouteSearch] = useState('')
   const [routeCityFilter, setRouteCityFilter] = useState('')
 
+  // Meal rates state
+  const [mealRates, setMealRates] = useState<MealRate[]>([])
+  const [selectedMeals, setSelectedMeals] = useState<SelectedMeal[]>([])
+  const [loadingMeals, setLoadingMeals] = useState(false)
+  const [mealSearch, setMealSearch] = useState('')
+  const [mealCityFilter, setMealCityFilter] = useState('')
+
   useEffect(() => {
     fetchDocument()
     fetchEntranceFees()
@@ -116,9 +148,17 @@ export default function EditSupplierDocumentPage() {
         if (result.data.selected_routes) {
           setSelectedRoutes(result.data.selected_routes)
         }
+        // Load existing selected meals if present
+        if (result.data.selected_meals) {
+          setSelectedMeals(result.data.selected_meals)
+        }
         // Fetch transport rates if this is a transport voucher
         if (result.data.document_type === 'transport_voucher') {
           fetchTransportRates()
+        }
+        // Fetch meal rates if this is a service order
+        if (result.data.document_type === 'service_order') {
+          fetchMealRates()
         }
       } else {
         setError(t('documentNotFound'))
@@ -159,6 +199,33 @@ export default function EditSupplierDocumentPage() {
       console.error('Error fetching transport rates:', err)
     } finally {
       setLoadingRoutes(false)
+    }
+  }
+
+  const fetchMealRates = async () => {
+    setLoadingMeals(true)
+    try {
+      const response = await fetch('/api/rates/meals?active_only=true')
+      const result = await response.json()
+      if (result.success && Array.isArray(result.data)) {
+        setMealRates(result.data.map((r: any) => ({
+          id: r.id,
+          service_code: r.service_code || '',
+          restaurant_name: r.restaurant_name,
+          meal_type: r.meal_type,
+          cuisine_type: r.cuisine_type,
+          city: r.city,
+          base_rate_eur: r.base_rate_eur || 0,
+          base_rate_non_eur: r.base_rate_non_eur || 0,
+          tier: r.tier,
+          supplier_name: r.supplier_name,
+          notes: r.notes
+        })))
+      }
+    } catch (err) {
+      console.error('Error fetching meal rates:', err)
+    } finally {
+      setLoadingMeals(false)
     }
   }
 
@@ -278,8 +345,19 @@ export default function EditSupplierDocumentPage() {
           total_cost: r.total_cost,
           unit_rate: r.unit_rate
         }))
+      } else if (document.document_type === 'service_order' && selectedMeals.length > 0) {
+        dataToSave.selected_meals = selectedMeals
+        dataToSave.services = selectedMeals.map(m => ({
+          service_type: 'meal',
+          service_name: `${m.restaurant_name}${m.meal_type ? ` - ${m.meal_type}` : ''}`,
+          service_code: m.service_code,
+          city: m.city,
+          quantity: m.quantity,
+          total_cost: m.total_cost,
+          unit_rate: m.unit_rate
+        }))
       } else {
-        // Default: entrance fee services for service_order/activity_voucher
+        // Default: entrance fee services for activity_voucher
         dataToSave.services = selectedAttractions.map(a => ({
           service_name: a.attraction_name,
           service_type: 'entrance_fee',
@@ -348,9 +426,9 @@ export default function EditSupplierDocumentPage() {
     return selectedAttractions.reduce((sum, a) => sum + (a.eur_rate * a.quantity), 0)
   }
 
-  // Auto-update document total when attractions change
+  // Auto-update document total when attractions change (activity vouchers only)
   useEffect(() => {
-    if (document && (document.document_type === 'service_order' || document.document_type === 'activity_voucher')) {
+    if (document && document.document_type === 'activity_voucher') {
       const attractionsTotal = calculateAttractionsTotal()
       if (attractionsTotal > 0) {
         setDocument((prev: any) => ({ ...prev, total_cost: attractionsTotal }))
@@ -427,6 +505,71 @@ export default function EditSupplierDocumentPage() {
     }
   }, [selectedRoutes])
 
+  // Add a meal
+  const addMeal = (rate: MealRate) => {
+    if (selectedMeals.find(m => m.rate_id === rate.id)) return
+    const totalPax = (document?.num_adults || 1) + (document?.num_children || 0)
+    setSelectedMeals(prev => [...prev, {
+      rate_id: rate.id,
+      service_code: rate.service_code,
+      restaurant_name: rate.restaurant_name,
+      meal_type: rate.meal_type || '',
+      city: rate.city || '',
+      quantity: totalPax,
+      unit_rate: rate.base_rate_eur,
+      total_cost: rate.base_rate_eur * totalPax
+    }])
+  }
+
+  // Remove a meal
+  const removeMeal = (rateId: string) => {
+    setSelectedMeals(prev => prev.filter(m => m.rate_id !== rateId))
+  }
+
+  // Update quantity for a meal
+  const updateMealQuantity = (rateId: string, quantity: number) => {
+    setSelectedMeals(prev => prev.map(m =>
+      m.rate_id === rateId ? { ...m, quantity: Math.max(1, quantity), total_cost: m.unit_rate * Math.max(1, quantity) } : m
+    ))
+  }
+
+  const calculateMealsTotal = () => {
+    return selectedMeals.reduce((sum, m) => sum + m.total_cost, 0)
+  }
+
+  // Auto-update document total when selected meals change
+  useEffect(() => {
+    if (document && document.document_type === 'service_order' && selectedMeals.length > 0) {
+      const mealsTotal = calculateMealsTotal()
+      setDocument((prev: any) => ({ ...prev, total_cost: mealsTotal }))
+    }
+  }, [selectedMeals])
+
+  // Meal type display labels
+  const MEAL_TYPE_LABELS: Record<string, string> = {
+    Breakfast: t('mealTypes.breakfast'),
+    Lunch: t('mealTypes.lunch'),
+    Dinner: t('mealTypes.dinner'),
+    Brunch: t('mealTypes.brunch'),
+    'Full Board': t('mealTypes.fullBoard'),
+    'Half Board': t('mealTypes.halfBoard'),
+  }
+
+  // Get unique cities from meal rates
+  const mealCities = Array.from(new Set(
+    mealRates.map(r => r.city || '').filter(Boolean)
+  )).sort()
+
+  // Filter meal rates for picker
+  const filteredMeals = mealRates.filter(rate => {
+    const matchesSearch = !mealSearch ||
+      rate.restaurant_name.toLowerCase().includes(mealSearch.toLowerCase()) ||
+      (rate.meal_type || '').toLowerCase().includes(mealSearch.toLowerCase())
+    const matchesCity = !mealCityFilter || (rate.city || '').toLowerCase() === mealCityFilter.toLowerCase()
+    const notSelected = !selectedMeals.find(m => m.rate_id === rate.id)
+    return matchesSearch && matchesCity && notSelected
+  })
+
   // Service type display labels
   const SERVICE_TYPE_LABELS: Record<string, string> = {
     airport_transfer: t('serviceTypes.airportTransfer'),
@@ -485,7 +628,8 @@ export default function EditSupplierDocumentPage() {
     )
   }
 
-  const isEntranceFeeDocument = document.document_type === 'service_order' || document.document_type === 'activity_voucher'
+  const isEntranceFeeDocument = document.document_type === 'activity_voucher'
+  const isMealDocument = document.document_type === 'service_order'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1046,7 +1190,186 @@ export default function EditSupplierDocumentPage() {
             </div>
           )}
 
-          {/* ENTRANCE FEES SECTION - Only show for service orders / activity vouchers */}
+          {/* MEALS SECTION - Only show for service orders */}
+          {isMealDocument && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Utensils className="w-5 h-5 text-primary-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">{t('meals')}</h2>
+                </div>
+              </div>
+
+              {/* Selected Meals Table */}
+              {selectedMeals.length > 0 ? (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('restaurantName')}</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('mealType')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('rate')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('qty')}</th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('total')}</th>
+                        <th className="px-4 py-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedMeals.map((meal) => (
+                        <tr key={meal.rate_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-medium text-gray-900">{meal.restaurant_name}</p>
+                            {meal.city && <p className="text-xs text-gray-500">{meal.city}</p>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">
+                              {MEAL_TYPE_LABELS[meal.meal_type] || meal.meal_type || '—'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="text-sm text-gray-700">{'\u20AC'}{meal.unit_rate.toFixed(2)}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="number"
+                              min="1"
+                              value={meal.quantity}
+                              onChange={(e) => updateMealQuantity(meal.rate_id, parseInt(e.target.value) || 1)}
+                              className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm font-semibold text-primary-600">
+                              {'\u20AC'}{meal.total_cost.toFixed(2)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => removeMeal(meal.rate_id)}
+                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-primary-50 border-t border-primary-200">
+                      <tr>
+                        <td colSpan={4} className="px-4 py-3 text-right">
+                          <span className="text-sm font-semibold text-gray-700 flex items-center justify-end gap-2">
+                            <Calculator className="w-4 h-4" />
+                            {t('totalMealCost')}:
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-lg font-bold text-primary-600">
+                            {'\u20AC'}{calculateMealsTotal().toFixed(2)}
+                          </span>
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 border border-dashed border-gray-300 rounded-lg">
+                  <Utensils className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">{t('noMealsSelected')}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('noMealsHint')}</p>
+                </div>
+              )}
+
+              {/* Meal Picker (always visible for service orders) */}
+              <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="p-3 border-b border-gray-200 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-gray-700">{t('availableMeals')}</h3>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder={t('searchMealsPlaceholder')}
+                      value={mealSearch}
+                      onChange={(e) => setMealSearch(e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <select
+                      value={mealCityFilter}
+                      onChange={(e) => setMealCityFilter(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="">{t('allCities')}</option>
+                      {mealCities.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto">
+                  {loadingMeals ? (
+                    <div className="p-8 text-center">
+                      <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </div>
+                  ) : filteredMeals.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <p className="text-sm">{t('noMealsFound')}</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {/* Group by meal type */}
+                      {Object.entries(
+                        filteredMeals.reduce((acc, rate) => {
+                          const type = rate.meal_type || 'Other'
+                          if (!acc[type]) acc[type] = []
+                          acc[type].push(rate)
+                          return acc
+                        }, {} as Record<string, MealRate[]>)
+                      )
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([type, rates]) => (
+                          <div key={type}>
+                            <div className="bg-gray-50 px-4 py-1.5 border-b border-gray-100">
+                              <span className="text-xs font-semibold text-gray-600 uppercase">
+                                {MEAL_TYPE_LABELS[type] || type}
+                              </span>
+                            </div>
+                            {rates.map(rate => (
+                              <button
+                                key={rate.id}
+                                onClick={() => addMeal(rate)}
+                                className="w-full px-4 py-2.5 text-left hover:bg-primary-50 transition-colors flex items-center justify-between"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900">{rate.restaurant_name}</p>
+                                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin className="w-3 h-3" />
+                                    {rate.city || '—'}
+                                    {rate.cuisine_type && <span className="ml-1 text-gray-400">({rate.cuisine_type})</span>}
+                                  </p>
+                                </div>
+                                <div className="text-right shrink-0 ml-3">
+                                  <p className="text-sm font-semibold text-primary-600">
+                                    {'\u20AC'}{rate.base_rate_eur.toFixed(2)}
+                                  </p>
+                                  {rate.supplier_name && (
+                                    <p className="text-xs text-gray-400">{rate.supplier_name}</p>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ENTRANCE FEES SECTION - Only show for activity vouchers */}
           {isEntranceFeeDocument && (
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">

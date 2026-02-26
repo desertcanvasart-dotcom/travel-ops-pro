@@ -5836,6 +5836,23 @@
       "intercityTransfer": "Intercity Transfer",
       "dinnerTransfer": "Dinner Transfer",
       "soundLightTransfer": "Sound & Light Transfer"
+    },
+    "meals": "Meals",
+    "restaurantName": "Restaurant",
+    "mealType": "Type",
+    "totalMealCost": "Total Meal Cost",
+    "noMealsSelected": "No meals selected",
+    "noMealsHint": "Select meals from the available options below",
+    "availableMeals": "Available Meals",
+    "searchMealsPlaceholder": "Search restaurants or meal types...",
+    "noMealsFound": "No meals found",
+    "mealTypes": {
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "dinner": "Dinner",
+      "brunch": "Brunch",
+      "fullBoard": "Full Board",
+      "halfBoard": "Half Board"
     }
   },
   "supplierDocumentDetail": {
