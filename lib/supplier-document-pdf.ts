@@ -255,7 +255,7 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.text(paxDetail, guestBoxX + 4, y + 33)
   
   if (doc.city) {
-    pdf.text(`📍 ${doc.city}`, guestBoxX + 4, y + 28)
+    pdf.text(doc.city, guestBoxX + 4, y + 28)
   }
   
   y += 45
@@ -524,7 +524,7 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     pdf.setFontSize(7)
     pdf.setFont('helvetica', 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('⚠️ SPECIAL REQUESTS', margin + 4, y + 5)
+    pdf.text('SPECIAL REQUESTS', margin + 4, y + 5)
     
     pdf.setFontSize(9)
     pdf.setFont('helvetica', 'normal')
