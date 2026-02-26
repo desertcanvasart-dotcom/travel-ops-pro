@@ -17,6 +17,7 @@ interface SupplierDocument {
   supplier_contact_name?: string
   supplier_contact_email?: string
   supplier_contact_phone?: string
+  supplier_whatsapp?: string
   supplier_address?: string
   client_name: string
   client_nationality?: string
@@ -169,30 +170,55 @@ export default function SupplierDocumentViewPage() {
   }
 
   const handleSendWhatsApp = async () => {
-    if (!document || !document.supplier_contact_phone) {
+    if (!document) return
+
+    const whatsappNumber = document.supplier_whatsapp || document.supplier_contact_phone
+    if (!whatsappNumber) {
       await dialog.alert(t('error'), t('supplierPhoneNotAvailable'), 'warning')
       return
     }
 
-    const phone = document.supplier_contact_phone.replace(/\D/g, '')
-    const message = encodeURIComponent(
-      t('whatsappMessage', {
-        supplierName: document.supplier_contact_name || document.supplier_name,
-        documentType: DOCUMENT_TITLES[document.document_type],
-        documentNumber: document.document_number,
-        clientName: document.client_name,
-        date: document.check_in || document.service_date || t('asSpecified')
+    setActionLoading('whatsapp')
+    try {
+      const pdf = generateSupplierDocumentPDF(document)
+      const pdfBase64 = pdf.output('datauristring').split(',')[1]
+
+      const response = await fetch('/api/whatsapp/send-supplier-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId: document.id,
+          supplierPhone: whatsappNumber,
+          supplierName: document.supplier_contact_name || document.supplier_name,
+          documentNumber: document.document_number,
+          documentType: DOCUMENT_TITLES[document.document_type],
+          clientName: document.client_name,
+          serviceDate: document.check_in || document.service_date || null,
+          pdfBase64
+        })
       })
-    )
-    
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
-    
-    // Update status
-    fetch(`/api/supplier-documents/${document.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'sent', sent_via: 'whatsapp' })
-    }).then(() => fetchDocument())
+
+      if (response.ok) {
+        // Update status to sent
+        await fetch(`/api/supplier-documents/${document.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'sent', sent_via: 'whatsapp' })
+        })
+
+        setActionSuccess(t('whatsappSentSuccessfully'))
+        fetchDocument()
+        setTimeout(() => setActionSuccess(null), 5000)
+      } else {
+        const errorData = await response.json().catch(() => null)
+        await dialog.alert(t('error'), errorData?.error || t('failedToSendWhatsApp'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error sending WhatsApp:', error)
+      await dialog.alert(t('error'), t('failedToSendWhatsApp'), 'warning')
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   const handleMarkConfirmed = async () => {
@@ -291,13 +317,14 @@ export default function SupplierDocumentViewPage() {
                   {actionLoading === 'email' ? t('sending') : t('email')}
                 </button>
               )}
-              {document.supplier_contact_phone && (
+              {(document.supplier_whatsapp || document.supplier_contact_phone) && (
                 <button
                   onClick={handleSendWhatsApp}
-                  className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium flex items-center gap-1.5"
+                  disabled={actionLoading === 'whatsapp'}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  {t('whatsapp')}
+                  {actionLoading === 'whatsapp' ? t('sending') : t('whatsapp')}
                 </button>
               )}
               {document.status === 'sent' && (

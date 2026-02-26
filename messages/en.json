@@ -5896,6 +5896,8 @@
     "supplierPhoneNotAvailable": "Supplier phone is not available",
     "emailSentSuccessfully": "Email sent successfully!",
     "failedToSendEmail": "Failed to send email",
+    "whatsappSentSuccessfully": "WhatsApp message sent successfully!",
+    "failedToSendWhatsApp": "Failed to send WhatsApp message",
     "whatsappMessage": "Dear {supplierName},\n\nPlease find the {documentType} ({documentNumber}) for our guest {clientName}.\n\nDate: {date}\n\nKind regards,\nTravel2Egypt",
     "asSpecified": "As specified",
     "markedAsConfirmed": "Marked as confirmed!",
