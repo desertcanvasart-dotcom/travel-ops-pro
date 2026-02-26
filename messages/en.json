@@ -5817,7 +5817,13 @@
     "attractionsAvailable": "{count} attractions available",
     "attractionsSelected": "{count} selected",
     "failedToSave": "Failed to save document",
-    "errorSavingDocument": "Error saving document"
+    "errorSavingDocument": "Error saving document",
+    "transportRoutes": "Transport Routes from Itinerary",
+    "routePickerHint": "Select which transport routes this voucher covers. Routes are loaded from the linked itinerary.",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "day": "Day",
+    "selectedRoutesCount": "{count} route(s) selected"
   },
   "supplierDocumentDetail": {
     "documentTypes": {

@@ -53,6 +53,21 @@ interface SupplierDocument {
     non_eur_rate: number
     quantity: number
   }[]
+  // Transport routes specific
+  selected_routes?: {
+    itinerary_service_id: string
+    day_number: number
+    date: string
+    city: string
+    service_name: string
+    pickup_location?: string
+    dropoff_location?: string
+    pickup_time?: string
+    vehicle_type?: string
+    notes?: string
+    rate_eur: number
+    total_cost: number
+  }[]
 }
 
 // Brand colors - lighter, more professional palette
@@ -349,8 +364,8 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     
     y += 28
     
-    // Pickup/Dropoff for transport
-    if (doc.document_type === 'transport_voucher' && (doc.pickup_location || doc.dropoff_location)) {
+    // Pickup/Dropoff for transport (only show single-route box when no selected_routes)
+    if (doc.document_type === 'transport_voucher' && !doc.selected_routes?.length && (doc.pickup_location || doc.dropoff_location)) {
       pdf.setFillColor(BRAND.background.r, BRAND.background.g, BRAND.background.b)
       pdf.roundedRect(margin, y, contentWidth, 18, 3, 3, 'F')
 
@@ -430,7 +445,7 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
 
   // ==================== SERVICES TABLE ====================
   
-  const hasServices = (doc.services && doc.services.length > 0) || (doc.selected_attractions && doc.selected_attractions.length > 0)
+  const hasServices = (doc.services && doc.services.length > 0) || (doc.selected_attractions && doc.selected_attractions.length > 0) || (doc.selected_routes && doc.selected_routes.length > 0)
   
   if (hasServices) {
     pdf.setFontSize(9)
@@ -454,8 +469,8 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     
     y += 12
     
-    // Use selected_attractions if available (entrance fees), otherwise use services
-    const items = doc.selected_attractions || doc.services || []
+    // Use selected_routes for transport, selected_attractions for entrance fees, otherwise use services
+    const items = doc.selected_routes || doc.selected_attractions || doc.services || []
     
     items.forEach((item: any, idx: number) => {
       const isOdd = idx % 2 === 0

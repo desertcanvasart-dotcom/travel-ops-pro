@@ -4,7 +4,38 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2 } from 'lucide-react'
+import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2, Route } from 'lucide-react'
+
+interface ItineraryTransportService {
+  id: string
+  day_number: number
+  date: string
+  city: string
+  service_name: string
+  service_type: string
+  pickup_location?: string
+  dropoff_location?: string
+  pickup_time?: string
+  vehicle_type?: string
+  notes?: string
+  rate_eur: number
+  total_cost: number
+}
+
+interface SelectedRoute {
+  itinerary_service_id: string
+  day_number: number
+  date: string
+  city: string
+  service_name: string
+  pickup_location?: string
+  dropoff_location?: string
+  pickup_time?: string
+  vehicle_type?: string
+  notes?: string
+  rate_eur: number
+  total_cost: number
+}
 
 interface EntranceFee {
   id: string
@@ -59,6 +90,11 @@ export default function EditSupplierDocumentPage() {
   const [attractionSearch, setAttractionSearch] = useState('')
   const [selectedCity, setSelectedCity] = useState('')
 
+  // Transport routes state
+  const [itineraryTransportServices, setItineraryTransportServices] = useState<ItineraryTransportService[]>([])
+  const [selectedRoutes, setSelectedRoutes] = useState<SelectedRoute[]>([])
+  const [loadingRoutes, setLoadingRoutes] = useState(false)
+
   useEffect(() => {
     fetchDocument()
     fetchEntranceFees()
@@ -75,6 +111,14 @@ export default function EditSupplierDocumentPage() {
         if (result.data.selected_attractions) {
           setSelectedAttractions(result.data.selected_attractions)
         }
+        // Load existing selected routes if present
+        if (result.data.selected_routes) {
+          setSelectedRoutes(result.data.selected_routes)
+        }
+        // Fetch itinerary transport services if this is a transport voucher with linked itinerary
+        if (result.data.document_type === 'transport_voucher' && result.data.itinerary?.id) {
+          fetchItineraryRoutes(result.data.itinerary.id)
+        }
       } else {
         setError(t('documentNotFound'))
       }
@@ -82,6 +126,43 @@ export default function EditSupplierDocumentPage() {
       setError(t('errorLoadingDocument'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchItineraryRoutes = async (itineraryId: string) => {
+    setLoadingRoutes(true)
+    try {
+      const response = await fetch(`/api/itineraries/${itineraryId}/days`)
+      const result = await response.json()
+      if (result.success && result.data) {
+        const transportServices: ItineraryTransportService[] = []
+        for (const day of result.data) {
+          for (const service of day.services || []) {
+            if (['transportation', 'transport', 'transfer'].includes(service.service_type)) {
+              transportServices.push({
+                id: service.id,
+                day_number: day.day_number,
+                date: day.date,
+                city: day.city || service.city || '',
+                service_name: service.service_name,
+                service_type: service.service_type,
+                pickup_location: service.pickup_location,
+                dropoff_location: service.dropoff_location,
+                pickup_time: service.pickup_time,
+                vehicle_type: service.vehicle_type,
+                notes: service.notes,
+                rate_eur: parseFloat(service.rate_eur) || 0,
+                total_cost: parseFloat(service.total_cost) || 0
+              })
+            }
+          }
+        }
+        setItineraryTransportServices(transportServices)
+      }
+    } catch (err) {
+      console.error('Error fetching itinerary routes:', err)
+    } finally {
+      setLoadingRoutes(false)
     }
   }
 
@@ -183,11 +264,31 @@ export default function EditSupplierDocumentPage() {
         ...editableFields
       } = document
 
-      const dataToSave = {
+      const dataToSave: Record<string, any> = {
         ...editableFields,
         selected_attractions: selectedAttractions,
-        // Update services array with attraction names for backward compatibility
-        services: selectedAttractions.map(a => ({
+      }
+
+      // Build services array based on document type
+      if (document.document_type === 'transport_voucher' && selectedRoutes.length > 0) {
+        dataToSave.selected_routes = selectedRoutes
+        dataToSave.services = selectedRoutes.map(r => ({
+          service_type: 'transportation',
+          service_name: r.service_name,
+          date: r.date,
+          day_number: r.day_number,
+          city: r.city,
+          pickup_location: r.pickup_location,
+          dropoff_location: r.dropoff_location,
+          pickup_time: r.pickup_time,
+          vehicle_type: r.vehicle_type,
+          notes: r.notes,
+          quantity: 1,
+          total_cost: r.total_cost
+        }))
+      } else {
+        // Default: entrance fee services for service_order/activity_voucher
+        dataToSave.services = selectedAttractions.map(a => ({
           service_name: a.attraction_name,
           service_type: 'entrance_fee',
           quantity: a.quantity,
@@ -264,6 +365,68 @@ export default function EditSupplierDocumentPage() {
       }
     }
   }, [selectedAttractions])
+
+  // Toggle a transport route selection
+  const toggleRoute = (service: ItineraryTransportService) => {
+    setSelectedRoutes(prev => {
+      const exists = prev.find(r => r.itinerary_service_id === service.id)
+      if (exists) {
+        return prev.filter(r => r.itinerary_service_id !== service.id)
+      } else {
+        return [...prev, {
+          itinerary_service_id: service.id,
+          day_number: service.day_number,
+          date: service.date,
+          city: service.city,
+          service_name: service.service_name,
+          pickup_location: service.pickup_location,
+          dropoff_location: service.dropoff_location,
+          pickup_time: service.pickup_time,
+          vehicle_type: service.vehicle_type,
+          notes: service.notes,
+          rate_eur: service.rate_eur,
+          total_cost: service.total_cost
+        }]
+      }
+    })
+  }
+
+  const isRouteSelected = (serviceId: string) => {
+    return selectedRoutes.some(r => r.itinerary_service_id === serviceId)
+  }
+
+  const calculateRoutesTotal = () => {
+    return selectedRoutes.reduce((sum, r) => sum + r.total_cost, 0)
+  }
+
+  const selectAllRoutes = () => {
+    setSelectedRoutes(itineraryTransportServices.map(s => ({
+      itinerary_service_id: s.id,
+      day_number: s.day_number,
+      date: s.date,
+      city: s.city,
+      service_name: s.service_name,
+      pickup_location: s.pickup_location,
+      dropoff_location: s.dropoff_location,
+      pickup_time: s.pickup_time,
+      vehicle_type: s.vehicle_type,
+      notes: s.notes,
+      rate_eur: s.rate_eur,
+      total_cost: s.total_cost
+    })))
+  }
+
+  const deselectAllRoutes = () => {
+    setSelectedRoutes([])
+  }
+
+  // Auto-update document total when selected routes change
+  useEffect(() => {
+    if (document && document.document_type === 'transport_voucher' && selectedRoutes.length > 0) {
+      const routesTotal = calculateRoutesTotal()
+      setDocument((prev: any) => ({ ...prev, total_cost: routesTotal }))
+    }
+  }, [selectedRoutes])
 
   // Get unique cities from entrance fees
   const cities = Array.from(new Set(entranceFees.map(f => f.city))).sort()
@@ -568,26 +731,6 @@ export default function EditSupplierDocumentPage() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('pickupLocation')}</label>
-                    <input
-                      type="text"
-                      value={document.pickup_location || ''}
-                      onChange={(e) => setDocument({ ...document, pickup_location: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('dropoffLocation')}</label>
-                    <input
-                      type="text"
-                      value={document.dropoff_location || ''}
-                      onChange={(e) => setDocument({ ...document, dropoff_location: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('vehicleType')}</label>
                     <select
                       value={document.vehicle_type || ''}
@@ -616,6 +759,141 @@ export default function EditSupplierDocumentPage() {
                     />
                   </div>
                 </div>
+
+                {/* Transport Routes from Itinerary */}
+                {itineraryTransportServices.length > 0 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Route className="w-5 h-5 text-primary-600" />
+                        <h3 className="text-sm font-semibold text-gray-900">{t('transportRoutes')}</h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={selectAllRoutes}
+                          className="px-2 py-1 text-xs text-primary-600 hover:bg-primary-100 rounded"
+                        >
+                          {t('selectAll')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={deselectAllRoutes}
+                          className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                        >
+                          {t('deselectAll')}
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-gray-500 mb-3">{t('routePickerHint')}</p>
+
+                    {loadingRoutes ? (
+                      <div className="text-center py-6">
+                        <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {Object.entries(
+                          itineraryTransportServices.reduce((acc, svc) => {
+                            const key = `day-${svc.day_number}`
+                            if (!acc[key]) acc[key] = { day_number: svc.day_number, date: svc.date, city: svc.city, services: [] }
+                            acc[key].services.push(svc)
+                            return acc
+                          }, {} as Record<string, { day_number: number; date: string; city: string; services: ItineraryTransportService[] }>)
+                        )
+                          .sort(([, a], [, b]) => a.day_number - b.day_number)
+                          .map(([key, group]) => (
+                            <div key={key} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                              <div className="bg-gray-50 px-3 py-1.5 border-b border-gray-200">
+                                <span className="text-xs font-semibold text-gray-700">
+                                  {t('day')} {group.day_number}
+                                </span>
+                                {group.date && (
+                                  <span className="text-xs text-gray-500 ml-2">
+                                    {new Date(group.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                  </span>
+                                )}
+                                {group.city && (
+                                  <span className="text-xs text-gray-500 ml-1">— {group.city}</span>
+                                )}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {group.services.map(service => (
+                                  <label
+                                    key={service.id}
+                                    className={`flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-primary-50 transition-colors ${
+                                      isRouteSelected(service.id) ? 'bg-primary-50' : ''
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isRouteSelected(service.id)}
+                                      onChange={() => toggleRoute(service)}
+                                      className="mt-0.5 h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
+                                      {(service.pickup_location || service.dropoff_location) && (
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                          {service.pickup_location || '?'} → {service.dropoff_location || '?'}
+                                        </p>
+                                      )}
+                                      {service.notes && (
+                                        <p className="text-xs text-gray-400 mt-0.5">{service.notes}</p>
+                                      )}
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <p className="text-sm font-semibold text-primary-600">
+                                        {service.total_cost > 0 ? `€${service.total_cost.toFixed(2)}` : '—'}
+                                      </p>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    )}
+
+                    {selectedRoutes.length > 0 && (
+                      <div className="mt-3 bg-primary-100 border border-primary-200 rounded-lg px-4 py-2.5 flex justify-between items-center">
+                        <span className="text-sm text-gray-700 flex items-center gap-2">
+                          <Calculator className="w-4 h-4" />
+                          {t('selectedRoutesCount', { count: selectedRoutes.length })}
+                        </span>
+                        <span className="text-lg font-bold text-primary-600">
+                          €{calculateRoutesTotal().toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Manual pickup/dropoff fallback - only show when no itinerary routes available */}
+                {itineraryTransportServices.length === 0 && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t('pickupLocation')}</label>
+                      <input
+                        type="text"
+                        value={document.pickup_location || ''}
+                        onChange={(e) => setDocument({ ...document, pickup_location: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t('dropoffLocation')}</label>
+                      <input
+                        type="text"
+                        value={document.dropoff_location || ''}
+                        onChange={(e) => setDocument({ ...document, dropoff_location: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

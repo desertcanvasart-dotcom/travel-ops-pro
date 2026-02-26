@@ -264,6 +264,24 @@ export function prepareTransportVoucherData(
   client: any,
   services: any[]
 ): TransportVoucherData {
+  // If the document has selected_routes, use those as the services source
+  const routeServices = document.selected_routes?.length > 0
+    ? document.selected_routes.map((r: any) => ({
+        date: r.date,
+        day_number: r.day_number,
+        service_name: r.service_name,
+        vehicle_type: r.vehicle_type || document.vehicle_type,
+        pickup_location: r.pickup_location,
+        dropoff_location: r.dropoff_location,
+        pickup_time: r.pickup_time,
+        city: r.city,
+        quantity: 1,
+        rate_eur: r.rate_eur || 0,
+        total_cost: r.total_cost || 0,
+        notes: r.notes
+      }))
+    : services
+
   return {
     voucher_number: document.document_number,
     created_date: document.created_at,
@@ -281,7 +299,7 @@ export function prepareTransportVoucherData(
       adults: client?.adults || 1,
       children: client?.children || 0
     },
-    services: services.map(s => ({
+    services: routeServices.map((s: any) => ({
       date: s.date,
       day_number: s.day_number,
       service_name: s.service_name,
@@ -296,8 +314,8 @@ export function prepareTransportVoucherData(
       notes: s.notes
     })),
     totals: {
-      total_services: services.length,
-      total_cost: services.reduce((sum, s) => sum + (s.total_cost || 0), 0)
+      total_services: routeServices.length,
+      total_cost: routeServices.reduce((sum: number, s: any) => sum + (s.total_cost || 0), 0)
     },
     notes: document.notes
   }

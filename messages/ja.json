@@ -1959,7 +1959,13 @@
       "addon": "アドオン",
       "nonEU": "非EU",
       "attractionsAvailable": "{count} 個のアトラクション利用可能",
-      "attractionsSelected": "{count} 個選択済"
+      "attractionsSelected": "{count} 個選択済",
+      "transportRoutes": "旅程からの交通ルート",
+      "routePickerHint": "このバウチャーがカバーする交通ルートを選択してください。ルートはリンクされた旅程から読み込まれます。",
+      "selectAll": "すべて選択",
+      "deselectAll": "選択解除",
+      "day": "日目",
+      "selectedRoutesCount": "{count}件のルートを選択"
     },
     "contract": {
       "failedToDownloadContract": "契約書のダウンロードに失敗しました",
@@ -6493,7 +6499,13 @@
     "attractionsAvailable": "{count}件の観光地が利用可能",
     "attractionsSelected": "{count}件選択済み",
     "failedToSave": "書類の保存に失敗しました",
-    "errorSavingDocument": "書類保存エラー"
+    "errorSavingDocument": "書類保存エラー",
+    "transportRoutes": "旅程からの交通ルート",
+    "routePickerHint": "このバウチャーがカバーする交通ルートを選択してください。ルートはリンクされた旅程から読み込まれます。",
+    "selectAll": "すべて選択",
+    "deselectAll": "選択解除",
+    "day": "日目",
+    "selectedRoutesCount": "{count}件のルートを選択"
   },
   "supplierDocumentDetail": {
     "documentTypes": {
