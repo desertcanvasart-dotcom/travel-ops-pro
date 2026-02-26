@@ -1995,6 +1995,29 @@
         "brunch": "ブランチ",
         "fullBoard": "フルボード",
         "halfBoard": "ハーフボード"
+      },
+      "guides": "ツアーガイド",
+      "guideLanguage": "言語",
+      "guideType": "ガイドタイプ",
+      "duration": "所要時間",
+      "totalGuideCost": "ガイド合計",
+      "noGuidesSelected": "ガイドが選択されていません",
+      "noGuidesHint": "以下の利用可能なオプションからガイドサービスを選択してください",
+      "availableGuides": "利用可能なガイド料金",
+      "searchGuidesPlaceholder": "言語、タイプ、または都市で検索...",
+      "noGuidesFound": "ガイド料金が見つかりません",
+      "guideTypes": {
+        "licensed": "ライセンスガイド",
+        "egyptologist": "エジプト学者",
+        "local": "ローカルガイド",
+        "specialist": "スペシャリスト",
+        "driverGuide": "ドライバーガイド"
+      },
+      "durationTypes": {
+        "halfDay": "半日（4時間）",
+        "fullDay": "全日（8時間）",
+        "extended": "延長（10時間以上）",
+        "hourly": "時間制"
       }
     },
     "contract": {
@@ -6565,6 +6588,29 @@
       "brunch": "ブランチ",
       "fullBoard": "フルボード",
       "halfBoard": "ハーフボード"
+    },
+    "guides": "ツアーガイド",
+    "guideLanguage": "言語",
+    "guideType": "ガイドタイプ",
+    "duration": "所要時間",
+    "totalGuideCost": "ガイド合計",
+    "noGuidesSelected": "ガイドが選択されていません",
+    "noGuidesHint": "以下の利用可能なオプションからガイドサービスを選択してください",
+    "availableGuides": "利用可能なガイド料金",
+    "searchGuidesPlaceholder": "言語、タイプ、または都市で検索...",
+    "noGuidesFound": "ガイド料金が見つかりません",
+    "guideTypes": {
+      "licensed": "ライセンスガイド",
+      "egyptologist": "エジプト学者",
+      "local": "ローカルガイド",
+      "specialist": "スペシャリスト",
+      "driverGuide": "ドライバーガイド"
+    },
+    "durationTypes": {
+      "halfDay": "半日（4時間）",
+      "fullDay": "全日（8時間）",
+      "extended": "延長（10時間以上）",
+      "hourly": "時間制"
     }
   },
   "supplierDocumentDetail": {

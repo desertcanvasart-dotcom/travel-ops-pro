@@ -49,7 +49,7 @@ export async function PUT(
       'supplier_name', 'supplier_contact_name', 'supplier_contact_email',
       'supplier_contact_phone', 'supplier_address', 'supplier_whatsapp',
       'client_name', 'client_nationality', 'num_adults', 'num_children',
-      'services', 'selected_attractions', 'selected_routes', 'selected_meals',
+      'services', 'selected_attractions', 'selected_routes', 'selected_meals', 'selected_guides',
       'city', 'service_date', 'check_in', 'check_out',
       'pickup_time', 'pickup_location', 'dropoff_location',
       'currency', 'total_cost', 'payment_terms',

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2, Route, Utensils } from 'lucide-react'
+import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2, Route, Utensils, UserCheck } from 'lucide-react'
 
 interface TransportRate {
   id: string
@@ -55,6 +55,32 @@ interface SelectedMeal {
   service_code: string
   restaurant_name: string
   meal_type: string
+  city: string
+  quantity: number
+  unit_rate: number
+  total_cost: number
+}
+
+interface GuideRate {
+  id: string
+  service_code: string
+  guide_language: string
+  guide_type: string
+  city: string | null
+  tour_duration: string
+  base_rate_eur: number
+  base_rate_non_eur: number
+  season: string | null
+  supplier_id: string | null
+  notes: string | null
+}
+
+interface SelectedGuide {
+  rate_id: string
+  service_code: string
+  guide_language: string
+  guide_type: string
+  tour_duration: string
   city: string
   quantity: number
   unit_rate: number
@@ -128,6 +154,13 @@ export default function EditSupplierDocumentPage() {
   const [mealSearch, setMealSearch] = useState('')
   const [mealCityFilter, setMealCityFilter] = useState('')
 
+  // Guide rates state
+  const [guideRates, setGuideRates] = useState<GuideRate[]>([])
+  const [selectedGuides, setSelectedGuides] = useState<SelectedGuide[]>([])
+  const [loadingGuides, setLoadingGuides] = useState(false)
+  const [guideSearch, setGuideSearch] = useState('')
+  const [guideCityFilter, setGuideCityFilter] = useState('')
+
   useEffect(() => {
     fetchDocument()
     fetchEntranceFees()
@@ -152,6 +185,10 @@ export default function EditSupplierDocumentPage() {
         if (result.data.selected_meals) {
           setSelectedMeals(result.data.selected_meals)
         }
+        // Load existing selected guides if present
+        if (result.data.selected_guides) {
+          setSelectedGuides(result.data.selected_guides)
+        }
         // Fetch transport rates if this is a transport voucher
         if (result.data.document_type === 'transport_voucher') {
           fetchTransportRates()
@@ -159,6 +196,10 @@ export default function EditSupplierDocumentPage() {
         // Fetch meal rates if this is a service order
         if (result.data.document_type === 'service_order') {
           fetchMealRates()
+        }
+        // Fetch guide rates if this is a guide assignment
+        if (result.data.document_type === 'guide_assignment') {
+          fetchGuideRates()
         }
       } else {
         setError(t('documentNotFound'))
@@ -226,6 +267,33 @@ export default function EditSupplierDocumentPage() {
       console.error('Error fetching meal rates:', err)
     } finally {
       setLoadingMeals(false)
+    }
+  }
+
+  const fetchGuideRates = async () => {
+    setLoadingGuides(true)
+    try {
+      const response = await fetch('/api/rates/guides?active_only=true')
+      const result = await response.json()
+      if (result.success && Array.isArray(result.data)) {
+        setGuideRates(result.data.map((r: any) => ({
+          id: r.id,
+          service_code: r.service_code || '',
+          guide_language: r.guide_language,
+          guide_type: r.guide_type,
+          city: r.city,
+          tour_duration: r.tour_duration,
+          base_rate_eur: r.base_rate_eur || 0,
+          base_rate_non_eur: r.base_rate_non_eur || 0,
+          season: r.season,
+          supplier_id: r.supplier_id,
+          notes: r.notes
+        })))
+      }
+    } catch (err) {
+      console.error('Error fetching guide rates:', err)
+    } finally {
+      setLoadingGuides(false)
     }
   }
 
@@ -355,6 +423,17 @@ export default function EditSupplierDocumentPage() {
           quantity: m.quantity,
           total_cost: m.total_cost,
           unit_rate: m.unit_rate
+        }))
+      } else if (document.document_type === 'guide_assignment' && selectedGuides.length > 0) {
+        dataToSave.selected_guides = selectedGuides
+        dataToSave.services = selectedGuides.map(g => ({
+          service_type: 'guide',
+          service_name: `${g.guide_language} ${GUIDE_TYPE_LABELS[g.guide_type] || g.guide_type} — ${DURATION_LABELS[g.tour_duration] || g.tour_duration}`,
+          service_code: g.service_code,
+          city: g.city,
+          quantity: g.quantity,
+          total_cost: g.total_cost,
+          unit_rate: g.unit_rate
         }))
       } else {
         // Default: entrance fee services for activity_voucher
@@ -544,6 +623,82 @@ export default function EditSupplierDocumentPage() {
       setDocument((prev: any) => ({ ...prev, total_cost: mealsTotal }))
     }
   }, [selectedMeals])
+
+  // Add a guide
+  const addGuide = (rate: GuideRate) => {
+    if (selectedGuides.find(g => g.rate_id === rate.id)) return
+    const totalPax = (document?.num_adults || 1) + (document?.num_children || 0)
+    setSelectedGuides(prev => [...prev, {
+      rate_id: rate.id,
+      service_code: rate.service_code,
+      guide_language: rate.guide_language,
+      guide_type: rate.guide_type,
+      tour_duration: rate.tour_duration,
+      city: rate.city || '',
+      quantity: totalPax,
+      unit_rate: rate.base_rate_eur,
+      total_cost: rate.base_rate_eur * totalPax
+    }])
+  }
+
+  // Remove a guide
+  const removeGuide = (rateId: string) => {
+    setSelectedGuides(prev => prev.filter(g => g.rate_id !== rateId))
+  }
+
+  // Update quantity for a guide
+  const updateGuideQuantity = (rateId: string, quantity: number) => {
+    setSelectedGuides(prev => prev.map(g =>
+      g.rate_id === rateId ? { ...g, quantity: Math.max(1, quantity), total_cost: g.unit_rate * Math.max(1, quantity) } : g
+    ))
+  }
+
+  const calculateGuidesTotal = () => {
+    return selectedGuides.reduce((sum, g) => sum + g.total_cost, 0)
+  }
+
+  // Auto-update document total when selected guides change
+  useEffect(() => {
+    if (document && document.document_type === 'guide_assignment' && selectedGuides.length > 0) {
+      const guidesTotal = calculateGuidesTotal()
+      setDocument((prev: any) => ({ ...prev, total_cost: guidesTotal }))
+    }
+  }, [selectedGuides])
+
+  // Guide type display labels
+  const GUIDE_TYPE_LABELS: Record<string, string> = {
+    licensed: t('guideTypes.licensed'),
+    egyptologist: t('guideTypes.egyptologist'),
+    local: t('guideTypes.local'),
+    specialist: t('guideTypes.specialist'),
+    driver_guide: t('guideTypes.driverGuide'),
+  }
+
+  // Tour duration display labels
+  const DURATION_LABELS: Record<string, string> = {
+    half_day: t('durationTypes.halfDay'),
+    full_day: t('durationTypes.fullDay'),
+    extended: t('durationTypes.extended'),
+    hourly: t('durationTypes.hourly'),
+  }
+
+  // Get unique cities from guide rates
+  const guideCities = Array.from(new Set(
+    guideRates.map(r => r.city || '').filter(Boolean)
+  )).sort()
+
+  // Filter guide rates for picker
+  const filteredGuides = guideRates.filter(rate => {
+    const matchesSearch = !guideSearch ||
+      rate.guide_language.toLowerCase().includes(guideSearch.toLowerCase()) ||
+      rate.guide_type.toLowerCase().includes(guideSearch.toLowerCase()) ||
+      (rate.city || '').toLowerCase().includes(guideSearch.toLowerCase())
+    const matchesCity = !guideCityFilter || (rate.city || '').toLowerCase() === guideCityFilter.toLowerCase()
+    const notSelected = !selectedGuides.find(g => g.rate_id === rate.id)
+    return matchesSearch && matchesCity && notSelected
+  })
+
+  const isGuideDocument = document?.document_type === 'guide_assignment'
 
   // Meal type display labels
   const MEAL_TYPE_LABELS: Record<string, string> = {
@@ -1355,6 +1510,193 @@ export default function EditSupplierDocumentPage() {
                                   </p>
                                   {rate.supplier_name && (
                                     <p className="text-xs text-gray-400">{rate.supplier_name}</p>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* GUIDE RATES SECTION - Only show for guide assignments */}
+          {isGuideDocument && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-primary-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">{t('guides')}</h2>
+                </div>
+              </div>
+
+              {/* Selected Guides Table */}
+              {selectedGuides.length > 0 ? (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('guideLanguage')}</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('guideType')}</th>
+                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('duration')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('rate')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('qty')}</th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('total')}</th>
+                        <th className="px-4 py-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedGuides.map((guide) => (
+                        <tr key={guide.rate_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-medium text-gray-900">{guide.guide_language}</p>
+                            {guide.city && <p className="text-xs text-gray-500">{guide.city}</p>}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                              {GUIDE_TYPE_LABELS[guide.guide_type] || guide.guide_type.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs text-gray-600">
+                              {DURATION_LABELS[guide.tour_duration] || guide.tour_duration.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="text-sm text-gray-700">{'\u20AC'}{guide.unit_rate.toFixed(2)}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="number"
+                              min="1"
+                              value={guide.quantity}
+                              onChange={(e) => updateGuideQuantity(guide.rate_id, parseInt(e.target.value) || 1)}
+                              className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm font-semibold text-primary-600">
+                              {'\u20AC'}{guide.total_cost.toFixed(2)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => removeGuide(guide.rate_id)}
+                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-primary-50 border-t border-primary-200">
+                      <tr>
+                        <td colSpan={5} className="px-4 py-3 text-right">
+                          <span className="text-sm font-semibold text-gray-700 flex items-center justify-end gap-2">
+                            <Calculator className="w-4 h-4" />
+                            {t('totalGuideCost')}:
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="text-lg font-bold text-primary-600">
+                            {'\u20AC'}{calculateGuidesTotal().toFixed(2)}
+                          </span>
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 border border-dashed border-gray-300 rounded-lg">
+                  <UserCheck className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">{t('noGuidesSelected')}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('noGuidesHint')}</p>
+                </div>
+              )}
+
+              {/* Guide Picker (always visible for guide assignments) */}
+              <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="p-3 border-b border-gray-200 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold text-gray-700">{t('availableGuides')}</h3>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder={t('searchGuidesPlaceholder')}
+                      value={guideSearch}
+                      onChange={(e) => setGuideSearch(e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <select
+                      value={guideCityFilter}
+                      onChange={(e) => setGuideCityFilter(e.target.value)}
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="">{t('allCities')}</option>
+                      {guideCities.map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto">
+                  {loadingGuides ? (
+                    <div className="p-8 text-center">
+                      <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    </div>
+                  ) : filteredGuides.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <p className="text-sm">{t('noGuidesFound')}</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {/* Group by guide type */}
+                      {Object.entries(
+                        filteredGuides.reduce((acc, rate) => {
+                          const type = rate.guide_type || 'Other'
+                          if (!acc[type]) acc[type] = []
+                          acc[type].push(rate)
+                          return acc
+                        }, {} as Record<string, GuideRate[]>)
+                      )
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([type, rates]) => (
+                          <div key={type}>
+                            <div className="bg-gray-50 px-4 py-1.5 border-b border-gray-100">
+                              <span className="text-xs font-semibold text-gray-600 uppercase">
+                                {GUIDE_TYPE_LABELS[type] || type.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            {rates.map(rate => (
+                              <button
+                                key={rate.id}
+                                onClick={() => addGuide(rate)}
+                                className="w-full px-4 py-2.5 text-left hover:bg-primary-50 transition-colors flex items-center justify-between"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {rate.guide_language} — {DURATION_LABELS[rate.tour_duration] || rate.tour_duration.replace(/_/g, ' ')}
+                                  </p>
+                                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin className="w-3 h-3" />
+                                    {rate.city || '—'}
+                                    {rate.season && <span className="ml-1 text-gray-400">({rate.season})</span>}
+                                  </p>
+                                </div>
+                                <div className="text-right shrink-0 ml-3">
+                                  <p className="text-sm font-semibold text-primary-600">
+                                    {'\u20AC'}{rate.base_rate_eur.toFixed(2)}
+                                  </p>
+                                  {rate.notes && (
+                                    <p className="text-xs text-gray-400 max-w-[120px] truncate">{rate.notes}</p>
                                   )}
                                 </div>
                               </button>

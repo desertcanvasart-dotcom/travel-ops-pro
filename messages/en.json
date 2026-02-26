@@ -5853,6 +5853,29 @@
       "brunch": "Brunch",
       "fullBoard": "Full Board",
       "halfBoard": "Half Board"
+    },
+    "guides": "Tour Guides",
+    "guideLanguage": "Language",
+    "guideType": "Guide Type",
+    "duration": "Duration",
+    "totalGuideCost": "Total Guide Cost",
+    "noGuidesSelected": "No guides selected",
+    "noGuidesHint": "Select guide services from the available options below",
+    "availableGuides": "Available Guide Rates",
+    "searchGuidesPlaceholder": "Search by language, type, or city...",
+    "noGuidesFound": "No guide rates found",
+    "guideTypes": {
+      "licensed": "Licensed Guide",
+      "egyptologist": "Egyptologist",
+      "local": "Local Guide",
+      "specialist": "Specialist",
+      "driverGuide": "Driver Guide"
+    },
+    "durationTypes": {
+      "halfDay": "Half Day (4h)",
+      "fullDay": "Full Day (8h)",
+      "extended": "Extended (10h+)",
+      "hourly": "Hourly"
     }
   },
   "supplierDocumentDetail": {
