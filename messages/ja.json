@@ -6540,7 +6540,8 @@
     "paymentTerms": "支払条件",
     "asAgreed": "合意通り",
     "total": "合計",
-    "linkedItinerary": "関連旅程"
+    "linkedItinerary": "関連旅程",
+    "preview": "プレビュー"
   },
   "documents": {
     "documents": "ドキュメント",

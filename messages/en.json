@@ -5864,7 +5864,8 @@
     "paymentTerms": "Payment Terms",
     "asAgreed": "As Agreed",
     "total": "Total",
-    "linkedItinerary": "Linked Itinerary"
+    "linkedItinerary": "Linked Itinerary",
+    "preview": "Preview"
   },
   "documents": {
     "documents": "Documents",
