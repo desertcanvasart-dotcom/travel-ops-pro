@@ -5818,12 +5818,25 @@
     "attractionsSelected": "{count} selected",
     "failedToSave": "Failed to save document",
     "errorSavingDocument": "Error saving document",
-    "transportRoutes": "Transport Routes from Itinerary",
-    "routePickerHint": "Select which transport routes this voucher covers. Routes are loaded from the linked itinerary.",
-    "selectAll": "Select All",
-    "deselectAll": "Deselect All",
-    "day": "Day",
-    "selectedRoutesCount": "{count} route(s) selected"
+    "transportRoutes": "Transport Routes",
+    "addRoute": "Add Route",
+    "routeName": "Route",
+    "routeType": "Type",
+    "totalTransportCost": "Total Transport Cost",
+    "noRoutesSelected": "No routes selected",
+    "noRoutesHint": "Click 'Add Route' or select from available routes below",
+    "availableRoutes": "Available Routes",
+    "searchRoutesPlaceholder": "Search routes...",
+    "noRoutesFound": "No routes found",
+    "serviceTypes": {
+      "airportTransfer": "Airport Transfer",
+      "dayTour": "Day Tour",
+      "halfDay": "Half Day",
+      "cityTransfer": "City Transfer",
+      "intercityTransfer": "Intercity Transfer",
+      "dinnerTransfer": "Dinner Transfer",
+      "soundLightTransfer": "Sound & Light Transfer"
+    }
   },
   "supplierDocumentDetail": {
     "documentTypes": {

@@ -55,17 +55,13 @@ interface SupplierDocument {
   }[]
   // Transport routes specific
   selected_routes?: {
-    itinerary_service_id: string
-    day_number: number
-    date: string
+    rate_id: string
+    service_code: string
+    route_name: string
+    service_type: string
     city: string
-    service_name: string
-    pickup_location?: string
-    dropoff_location?: string
-    pickup_time?: string
-    vehicle_type?: string
-    notes?: string
-    rate_eur: number
+    quantity: number
+    unit_rate: number
     total_cost: number
   }[]
 }
@@ -484,18 +480,18 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
       pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
       
       // Get item name
-      const itemName = item.attraction_name || item.service_name || item.service_type || 'Service'
+      const itemName = item.route_name || item.attraction_name || item.service_name || item.service_type || 'Service'
       const itemCity = item.city ? ` (${item.city})` : ''
       pdf.text((itemName + itemCity).substring(0, 60), margin + 4, y + 6.5)
-      
+
       // Quantity
       const qty = item.quantity || 1
       pdf.text(qty.toString(), pageWidth - margin - 40, y + 6.5, { align: 'center' })
-      
+
       // Amount
-      const amount = item.total_price || item.eur_rate || item.unit_price || 0
+      const amount = item.total_cost || item.total_price || item.eur_rate || item.unit_price || 0
       if (amount > 0) {
-        pdf.text(`${doc.currency} ${(amount * qty).toFixed(2)}`, pageWidth - margin - 4, y + 6.5, { align: 'right' })
+        pdf.text(`${doc.currency} ${amount.toFixed(2)}`, pageWidth - margin - 4, y + 6.5, { align: 'right' })
       } else {
         pdf.text('—', pageWidth - margin - 4, y + 6.5, { align: 'right' })
       }

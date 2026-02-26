@@ -1960,12 +1960,25 @@
       "nonEU": "非EU",
       "attractionsAvailable": "{count} 個のアトラクション利用可能",
       "attractionsSelected": "{count} 個選択済",
-      "transportRoutes": "旅程からの交通ルート",
-      "routePickerHint": "このバウチャーがカバーする交通ルートを選択してください。ルートはリンクされた旅程から読み込まれます。",
-      "selectAll": "すべて選択",
-      "deselectAll": "選択解除",
-      "day": "日目",
-      "selectedRoutesCount": "{count}件のルートを選択"
+      "transportRoutes": "交通ルート",
+      "addRoute": "ルートを追加",
+      "routeName": "ルート",
+      "routeType": "タイプ",
+      "totalTransportCost": "交通費合計",
+      "noRoutesSelected": "ルートが選択されていません",
+      "noRoutesHint": "「ルートを追加」をクリックするか、以下の利用可能なルートから選択してください",
+      "availableRoutes": "利用可能なルート",
+      "searchRoutesPlaceholder": "ルートを検索...",
+      "noRoutesFound": "ルートが見つかりません",
+      "serviceTypes": {
+        "airportTransfer": "空港送迎",
+        "dayTour": "日帰りツアー",
+        "halfDay": "半日ツアー",
+        "cityTransfer": "市内送迎",
+        "intercityTransfer": "都市間送迎",
+        "dinnerTransfer": "ディナー送迎",
+        "soundLightTransfer": "音と光のショー送迎"
+      }
     },
     "contract": {
       "failedToDownloadContract": "契約書のダウンロードに失敗しました",
@@ -6500,12 +6513,25 @@
     "attractionsSelected": "{count}件選択済み",
     "failedToSave": "書類の保存に失敗しました",
     "errorSavingDocument": "書類保存エラー",
-    "transportRoutes": "旅程からの交通ルート",
-    "routePickerHint": "このバウチャーがカバーする交通ルートを選択してください。ルートはリンクされた旅程から読み込まれます。",
-    "selectAll": "すべて選択",
-    "deselectAll": "選択解除",
-    "day": "日目",
-    "selectedRoutesCount": "{count}件のルートを選択"
+    "transportRoutes": "交通ルート",
+    "addRoute": "ルートを追加",
+    "routeName": "ルート",
+    "routeType": "タイプ",
+    "totalTransportCost": "交通費合計",
+    "noRoutesSelected": "ルートが選択されていません",
+    "noRoutesHint": "「ルートを追加」をクリックするか、以下の利用可能なルートから選択してください",
+    "availableRoutes": "利用可能なルート",
+    "searchRoutesPlaceholder": "ルートを検索...",
+    "noRoutesFound": "ルートが見つかりません",
+    "serviceTypes": {
+      "airportTransfer": "空港送迎",
+      "dayTour": "日帰りツアー",
+      "halfDay": "半日ツアー",
+      "cityTransfer": "市内送迎",
+      "intercityTransfer": "都市間送迎",
+      "dinnerTransfer": "ディナー送迎",
+      "soundLightTransfer": "音と光のショー送迎"
+    }
   },
   "supplierDocumentDetail": {
     "documentTypes": {

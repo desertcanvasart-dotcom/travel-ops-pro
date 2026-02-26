@@ -267,18 +267,18 @@ export function prepareTransportVoucherData(
   // If the document has selected_routes, use those as the services source
   const routeServices = document.selected_routes?.length > 0
     ? document.selected_routes.map((r: any) => ({
-        date: r.date,
-        day_number: r.day_number,
-        service_name: r.service_name,
-        vehicle_type: r.vehicle_type || document.vehicle_type,
-        pickup_location: r.pickup_location,
-        dropoff_location: r.dropoff_location,
-        pickup_time: r.pickup_time,
+        date: null,
+        day_number: null,
+        service_name: r.route_name || r.service_name,
+        vehicle_type: document.vehicle_type,
+        pickup_location: null,
+        dropoff_location: null,
+        pickup_time: null,
         city: r.city,
-        quantity: 1,
-        rate_eur: r.rate_eur || 0,
+        quantity: r.quantity || 1,
+        rate_eur: r.unit_rate || r.rate_eur || 0,
         total_cost: r.total_cost || 0,
-        notes: r.notes
+        notes: null
       }))
     : services
 
