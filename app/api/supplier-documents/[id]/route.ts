@@ -42,7 +42,7 @@ export async function PUT(
     console.log('Updating document:', id, body)
     
     // Remove fields that shouldn't be updated directly
-    const { itinerary, supplier, created_at, ...updateData } = body
+    const { id: _id, itinerary, supplier, created_at, ...updateData } = body
     
     // Auto-set timestamps based on status changes
     if (updateData.status === 'sent' && !updateData.sent_at) {

@@ -172,10 +172,19 @@ export default function EditSupplierDocumentPage() {
 
   const handleSave = async () => {
     setSaving(true)
+    setError(null)
     try {
-      // Include selected attractions in the document
+      // Only send editable fields — exclude joined relations and read-only fields
+      const {
+        id: _id,
+        itinerary: _itinerary,
+        supplier: _supplier,
+        created_at: _created,
+        ...editableFields
+      } = document
+
       const dataToSave = {
-        ...document,
+        ...editableFields,
         selected_attractions: selectedAttractions,
         // Update services array with attraction names for backward compatibility
         services: selectedAttractions.map(a => ({
@@ -186,19 +195,22 @@ export default function EditSupplierDocumentPage() {
           total_price: a.eur_rate * a.quantity
         }))
       }
-      
+
       const response = await fetch(`/api/supplier-documents/${params.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSave)
       })
-      
+
       if (response.ok) {
         router.push(`/documents/supplier/${params.id}`)
       } else {
-        setError(t('failedToSave'))
+        const errorData = await response.json().catch(() => null)
+        console.error('Save error:', errorData)
+        setError(errorData?.error || t('failedToSave'))
       }
     } catch (err) {
+      console.error('Save exception:', err)
       setError(t('errorSavingDocument'))
     } finally {
       setSaving(false)
@@ -585,7 +597,6 @@ export default function EditSupplierDocumentPage() {
                     >
                       <option value="">{t('vehicleTypes.select')}</option>
                       <option value="sedan">{t('vehicleTypes.sedan')}</option>
-                      <option value="suv">{t('vehicleTypes.suv')}</option>
                       <option value="minivan">{t('vehicleTypes.minivan')}</option>
                       <option value="van">{t('vehicleTypes.van')}</option>
                       <option value="minibus">{t('vehicleTypes.minibus')}</option>
