@@ -39,11 +39,33 @@ export async function PUT(
 
   try {
     const body = await request.json()
-    console.log('Updating document:', id, body)
-    
-    // Remove fields that shouldn't be updated directly
-    const { id: _id, itinerary, supplier, created_at, ...updateData } = body
-    
+    console.log('Updating document:', id)
+
+    // Whitelist of allowed columns on supplier_documents table
+    // Only these fields will be sent to Supabase — everything else
+    // (joined relations, computed fields, non-column data) is ignored
+    const ALLOWED_FIELDS = [
+      'itinerary_id', 'supplier_id', 'document_type', 'document_number',
+      'supplier_name', 'supplier_contact_name', 'supplier_contact_email',
+      'supplier_contact_phone', 'supplier_address', 'supplier_whatsapp',
+      'client_name', 'client_nationality', 'num_adults', 'num_children',
+      'services', 'selected_attractions', 'selected_routes',
+      'city', 'service_date', 'check_in', 'check_out',
+      'pickup_time', 'pickup_location', 'dropoff_location',
+      'currency', 'total_cost', 'payment_terms',
+      'special_requests', 'internal_notes',
+      'status', 'sent_at', 'confirmed_at', 'completed_at',
+      'sent_via',
+    ]
+
+    // Only include fields that are actual table columns
+    const updateData: Record<string, any> = {}
+    for (const field of ALLOWED_FIELDS) {
+      if (field in body) {
+        updateData[field] = body[field]
+      }
+    }
+
     // Auto-set timestamps based on status changes
     if (updateData.status === 'sent' && !updateData.sent_at) {
       updateData.sent_at = new Date().toISOString()
@@ -54,7 +76,7 @@ export async function PUT(
     if (updateData.status === 'completed' && !updateData.completed_at) {
       updateData.completed_at = new Date().toISOString()
     }
-    
+
     // Set updated_at
     updateData.updated_at = new Date().toISOString()
 
