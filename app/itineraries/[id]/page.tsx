@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
@@ -19,6 +20,11 @@ import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
+
+const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
+  ssr: false,
+  loading: () => <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />,
+})
 
 interface Itinerary {
   id: string
@@ -1574,6 +1580,19 @@ export default function ViewItineraryPage() {
             <button onClick={collapseAll} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">{t('collapseAll')}</button>
           </div>
         </div>
+
+        {/* ROUTE MAP */}
+        {days.length > 0 && (
+          <ItineraryMap
+            days={days.map((d) => ({
+              day_number: d.day_number,
+              title: d.title,
+              city: d.city,
+              overnight_city: d.overnight_city,
+              date: d.date,
+            }))}
+          />
+        )}
 
         {/* DAYS LIST */}
         <div className="space-y-3">

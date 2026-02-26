@@ -666,3 +666,37 @@ thead.bg-primary-600 th {
   font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
   font-size: 12px;
 }
+
+/* =============================================
+   LEAFLET MAP OVERRIDES
+   Prevents map z-index conflicts with sticky
+   headers and modals. Styles popups to match
+   the Autoura design system.
+   ============================================= */
+
+.leaflet-container {
+  z-index: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.leaflet-popup-content {
+  margin: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--gray-700);
+}
+
+.leaflet-popup-tip {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Hide default Leaflet blue marker (we use custom numbered markers) */
+.leaflet-default-icon-path {
+  display: none;
+}

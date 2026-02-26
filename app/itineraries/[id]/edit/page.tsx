@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase'
 import {
   GripVertical,
@@ -41,6 +42,11 @@ import {
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+
+const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
+  ssr: false,
+  loading: () => <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />,
+})
 
 // ============================================
 // TYPES
@@ -1763,6 +1769,20 @@ export default function ItineraryEditorPage() {
               ))}
             </div>
           </div>
+
+          {/* Route Map */}
+          {days.length > 0 && (
+            <ItineraryMap
+              days={days.map((d) => ({
+                day_number: d.day_number,
+                title: d.title,
+                city: d.city,
+                overnight_city: d.overnight_city,
+              }))}
+              defaultExpanded={true}
+              height={300}
+            />
+          )}
 
           {/* Cabin Allocation (for cruise packages) */}
           {itinerary.cabin_allocation && itinerary.cabin_allocation.length > 0 && (
