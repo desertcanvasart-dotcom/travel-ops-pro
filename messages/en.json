@@ -1082,7 +1082,10 @@
       "assignTasksDescription": "Select a team member from each department to handle the generated tasks.",
       "unassigned": "Unassigned",
       "noMembersInDept": "No members in this department",
-      "generate": "Generate Tasks"
+      "generate": "Generate Tasks",
+      "paymentDueWithin14Days": "Payment due within 14 days",
+      "tripDatesNote": "Trip dates: {startDate} – {endDate}",
+      "failedToCreateInvoice": "Failed to create invoice"
     }
   },
   "payments": {
@@ -1342,8 +1345,20 @@
     "paymentTerms": "Payment Terms",
     "notes": "Notes",
     "additionalNotes": "Additional notes...",
+    "additionalNotesPlaceholder": "Additional notes...",
+    "itemDescriptionPlaceholder": "Item description",
     "cancel": "Cancel",
     "creating": "Creating...",
+    "paymentDueWithin14Days": "Payment due within 14 days",
+    "depositPaymentTerms": "Deposit required to confirm booking",
+    "finalPaymentTerms": "Balance due on arrival or by first day of service",
+    "bookingDepositWithCode": "Booking Deposit ({percent}%) - {code}",
+    "finalBalanceWithCode": "Final Balance - {code}",
+    "tourPackageWithCode": "Tour Package - {code}",
+    "tourPackage": "Tour Package",
+    "unknownClient": "Unknown Client",
+    "error": "Error",
+    "invoice": "Invoice",
     "detail": {
       "invoiceNotFound": "Invoice not found",
       "backToInvoices": "Back to Invoices",
