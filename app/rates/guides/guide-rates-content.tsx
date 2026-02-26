@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
+import RateAuditLog from '@/app/components/RateAuditLog'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -527,6 +529,7 @@ export default function GuideRatesContent() {
             <Download className="w-4 h-4" />
             {t('export')}
           </button>
+          <BulkRateImportExport tableName="guide_rates" onImportComplete={fetchRates} />
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
@@ -1170,6 +1173,13 @@ export default function GuideRatesContent() {
                 </label>
               </div>
             </form>
+
+            {/* Audit Log */}
+            {editingRate && (
+              <div className="px-4">
+                <RateAuditLog tableName="guide_rates" recordId={editingRate.id} />
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
               <button

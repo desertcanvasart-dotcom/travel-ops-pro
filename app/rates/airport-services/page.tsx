@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import RateAuditLog from '@/app/components/RateAuditLog'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 
 // ============================================
 // CONSTANTS
@@ -399,6 +401,7 @@ export default function AirportServicesPage() {
             <div className="w-1.5 h-1.5 rounded-full bg-sky-600" />
           </div>
           <div className="flex items-center gap-2">
+            <BulkRateImportExport tableName="airport_staff_rates" onImportComplete={fetchRates} />
             <button type="button" onClick={handleAddNew} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium">
               <Plus className="w-4 h-4" /> {tCommon('addRate')}
             </button>
@@ -704,6 +707,11 @@ export default function AirportServicesPage() {
                 />
                 <span className="text-sm text-gray-700">{tCommon('active')}</span>
               </label>
+              {/* Audit Log */}
+              {editingRate && (
+                <RateAuditLog tableName="airport_staff_rates" recordId={editingRate.id} />
+              )}
+
               <div className="flex gap-2 pt-3 border-t">
                 <button
                   type="button"

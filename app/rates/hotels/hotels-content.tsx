@@ -35,6 +35,8 @@ import {
   AtSign
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import RateAuditLog from '@/app/components/RateAuditLog'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 
 // ============================================
 // EGYPTIAN CITIES - Complete List
@@ -857,6 +859,7 @@ export default function HotelsContent() {
                 <Download className="w-4 h-4" />
                 {tCommon('export')}
               </button>
+              <BulkRateImportExport tableName="accommodation_rates" onImportComplete={fetchRates} />
               <button
                 onClick={handleAddNew}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
@@ -1788,6 +1791,13 @@ export default function HotelsContent() {
                   <span className="text-sm font-medium text-gray-700">{tCommon('activeForBookings')}</span>
                 </label>
               </div>
+
+              {/* Change History */}
+              {editingRate && (
+                <div className="pt-3">
+                  <RateAuditLog tableName="accommodation_rates" recordId={editingRate.id} />
+                </div>
+              )}
 
               {/* Buttons */}
               <div className="flex gap-2 pt-3 border-t">

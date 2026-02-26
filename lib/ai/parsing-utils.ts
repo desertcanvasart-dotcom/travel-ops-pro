@@ -176,3 +176,70 @@ export function preParseRawItinerary(rawItinerary: string): { dayNumber: number;
   console.log(`📋 Pre-parsed ${segments.length} day segments from raw itinerary`)
   return segments
 }
+
+// ============================================
+// DETERMINE INPUT MODE
+// ============================================
+
+/**
+ * Determine whether to use 'structured' or 'creative' generation mode.
+ *
+ * Priority:
+ *  1. Explicit override from caller (input_mode_override)
+ *  2. Parser-flagged structured input with extracted days
+ *  3. Auto-detection from raw_itinerary patterns (day markers, shorthand)
+ *  4. Safety net: parser said structured + raw_itinerary exists → force structured
+ *  5. Fallback: creative
+ */
+export function determineInputMode(params: {
+  input_mode_override?: string | null
+  is_structured_input?: boolean
+  extracted_days?: ExtractedDay[] | null
+  raw_itinerary?: string | null
+}): InputMode {
+  const { input_mode_override, is_structured_input, extracted_days, raw_itinerary } = params
+
+  // 1. Explicit override
+  if (input_mode_override === 'structured') return 'structured'
+  if (input_mode_override === 'creative') return 'creative'
+
+  // 2. Parser-flagged structured input with extracted days
+  if (is_structured_input && extracted_days && extracted_days.length > 0) {
+    return 'structured'
+  }
+
+  let mode: InputMode = 'creative'
+
+  // 3. Auto-detect from raw_itinerary patterns
+  if (raw_itinerary) {
+    const structuredPatterns = [
+      /\bD\d+\b/i,                    // D1, D2, D3...
+      /\d+\s*NTS?\s*[A-Z]{2,4}/i,     // 2NTS CAI, 3NTS CRZ
+      /\bDay\s*\d+\s*(?:[:\-\u2013\u2014]|\b)/i, // Day 1:, Day 2 -, Day 1 Arrival
+      /PROGRAM\s*:/i,                  // PROGRAM: header
+      /\b[A-Z]{3}\/[A-Z]{3}\b/        // CAI/ALX, LXR/HRG city transitions
+    ]
+
+    const dayMarkerCount = (raw_itinerary.match(/\bDay\s*\d+\b/gi) || []).length
+    const dMarkerCount = (raw_itinerary.match(/\bD\d+\b/gi) || []).length
+
+    if (structuredPatterns.some(pattern => pattern.test(raw_itinerary))) {
+      mode = 'structured'
+      console.log('\uD83D\uDD0D Auto-detected structured input from patterns in raw_itinerary')
+    }
+
+    // Extra safety: if there are 2+ day markers, force structured even if regex didn't match
+    if (mode === 'creative' && (dayMarkerCount >= 2 || dMarkerCount >= 2)) {
+      mode = 'structured'
+      console.log(`\uD83D\uDD0D Forced structured mode: found ${dayMarkerCount} Day markers and ${dMarkerCount} D markers`)
+    }
+  }
+
+  // 4. Safety net: parser flagged structured AND raw_itinerary exists → force structured
+  if (is_structured_input && raw_itinerary && mode === 'creative') {
+    mode = 'structured'
+    console.log('\uD83D\uDEE1\uFE0F SAFETY: Parser detected structured input but mode was creative \u2014 forcing structured')
+  }
+
+  return mode
+}

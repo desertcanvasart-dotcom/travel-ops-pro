@@ -120,6 +120,10 @@ interface ItineraryService {
   notes: string
   isNew?: boolean
   isDeleted?: boolean
+  // Multi-currency fields
+  supplier_currency?: string | null
+  supplier_cost_original?: number | null
+  exchange_rate_used?: number | null
 }
 
 interface Supplier {
@@ -1612,8 +1616,16 @@ export default function ItineraryEditorPage() {
                                         />
                                       </div>
                                       <div className="flex-1"></div>
-                                      <div className="text-right font-semibold text-gray-900 text-lg">
-                                        {itinerary.currency} {service.total_cost?.toFixed(2) || '0.00'}
+                                      <div className="text-right">
+                                        <div className="font-semibold text-gray-900 text-lg">
+                                          {itinerary.currency} {service.total_cost?.toFixed(2) || '0.00'}
+                                        </div>
+                                        {/* Show original supplier cost when currency differs */}
+                                        {service.supplier_currency && service.supplier_currency !== itinerary.currency && service.supplier_cost_original != null && (
+                                          <p className="text-[10px] text-gray-400">
+                                            {service.supplier_currency} {service.supplier_cost_original.toFixed(2)} @ {service.exchange_rate_used?.toFixed(2) || '—'}
+                                          </p>
+                                        )}
                                       </div>
                                       <button
                                         onClick={() => setEditingServiceId(null)}
@@ -1641,9 +1653,17 @@ export default function ItineraryEditorPage() {
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                      <span className="text-sm font-semibold text-gray-900">
-                                        {itinerary.currency} {service.total_cost?.toFixed(2) || '0.00'}
-                                      </span>
+                                      <div className="text-right">
+                                        <span className="text-sm font-semibold text-gray-900">
+                                          {itinerary.currency} {service.total_cost?.toFixed(2) || '0.00'}
+                                        </span>
+                                        {/* Show original supplier cost when currency differs */}
+                                        {service.supplier_currency && service.supplier_currency !== itinerary.currency && service.supplier_cost_original != null && (
+                                          <p className="text-[10px] text-gray-400" title={`Exchange rate: ${service.exchange_rate_used?.toFixed(4) || 'N/A'}`}>
+                                            {service.supplier_currency} {service.supplier_cost_original.toFixed(2)} @ {service.exchange_rate_used?.toFixed(2) || '—'}
+                                          </p>
+                                        )}
+                                      </div>
                                       <button
                                         onClick={() => setEditingServiceId(service.id)}
                                         className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded"

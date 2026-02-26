@@ -5,6 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { type PackageType } from '@/lib/package-types'
+import { createMessageWithRetry } from '@/lib/ai/anthropic-client'
 import {
   type ServiceTier,
   type ExtractedDay,
@@ -20,7 +21,6 @@ import { EGYPT_TRAVEL_GLOSSARY } from '@/lib/ai/egypt-glossary'
 // ============================================
 
 export async function generateFromStructuredInput(
-  anthropic: Anthropic,
   extractedDays: ExtractedDay[],
   rawItinerary: string,
   params: {
@@ -276,7 +276,7 @@ NOW CONVERT THE ITINERARY TO JSON:`
 
   console.log('🤖 Sending STRICT structured prompt to AI...')
 
-  const message = await anthropic.messages.create({
+  const message = await createMessageWithRetry({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 16384,
     messages: [
@@ -365,7 +365,6 @@ NOW CONVERT THE ITINERARY TO JSON:`
 // ============================================
 
 export async function generateCreativeItinerary(
-  anthropic: Anthropic,
   params: {
     clientName: string
     tourName: string
@@ -480,7 +479,7 @@ Return ONLY valid JSON:
 Use EXACT attraction names from the provided list. Set includes_hotel to false on the last day.
 For cruise packages: set is_cruise_day: true and accommodation_type: "cruise" for all days on the Nile cruise.`
 
-  const message = await anthropic.messages.create({
+  const message = await createMessageWithRetry({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 8192,
     messages: [

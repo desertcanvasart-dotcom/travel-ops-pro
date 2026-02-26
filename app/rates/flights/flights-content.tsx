@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+import RateAuditLog from '@/app/components/RateAuditLog'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import {
   Search,
   Plus,
@@ -505,13 +507,16 @@ export default function FlightsContent() {
           <Plane className="h-5 w-5 text-sky-600" />
           <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#647C47] text-white text-sm rounded-md hover:bg-[#4f6238] transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          {t('addRate')}
-        </button>
+        <div className="flex items-center gap-2">
+          <BulkRateImportExport tableName="flight_rates" onImportComplete={fetchRates} />
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#647C47] text-white text-sm rounded-md hover:bg-[#4f6238] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            {t('addRate')}
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -1244,6 +1249,11 @@ export default function FlightsContent() {
                   </label>
                 </div>
               </div>
+
+              {/* Audit Log */}
+              {editingRate && (
+                <RateAuditLog tableName="flight_rates" recordId={editingRate.id} />
+              )}
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

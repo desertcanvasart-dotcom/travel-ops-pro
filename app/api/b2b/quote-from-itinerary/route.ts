@@ -451,7 +451,8 @@ export async function POST(request: NextRequest) {
       const guide = await selectGuideFromB2CTable(language, tier)
       const vehicle = await selectVehicleFromB2CTable(numPax + 1, tier)
       const guideRate = guide?.rate || 0
-      const vehicleDiff = vehicle ? (vehicle.rate - (await selectVehicleFromB2CTable(numPax, tier))?.rate || 0) : 0
+      const baseVehicle = await selectVehicleFromB2CTable(numPax, tier)
+      const vehicleDiff = vehicle ? (vehicle.rate - (baseVehicle?.rate ?? 0)) : 0
       const touringDays = (days || []).filter((d: any) =>
         (d.itinerary_services || []).some((s: any) => s.service_type === 'guide' || s.service_type === 'entrance')
       ).length || Math.max((itinerary.total_days || 1) - 1, 1)

@@ -104,7 +104,7 @@ async function translateItineraryServices(
   }
 
   // Fetch all services across all days
-  const dayIds = days.map(d => d.id)
+  const dayIds = days.map((d: any) => d.id)
   const { data: services, error: servicesError } = await supabase
     .from('itinerary_services')
     .select('id, service_name, notes')
@@ -229,20 +229,20 @@ export async function POST(
         await supabase
           .from('itinerary_day_versions')
           .delete()
-          .in('itinerary_day_id', dayIds.map(d => d.id))
+          .in('itinerary_day_id', dayIds.map((d: any) => d.id))
           .eq('language', targetLanguage)
 
         // Delete service versions
         const { data: serviceIds } = await supabase
           .from('itinerary_services')
           .select('id')
-          .in('itinerary_day_id', dayIds.map(d => d.id))
+          .in('itinerary_day_id', dayIds.map((d: any) => d.id))
 
         if (serviceIds && serviceIds.length > 0) {
           await supabase
             .from('itinerary_service_versions')
             .delete()
-            .in('itinerary_service_id', serviceIds.map(s => s.id))
+            .in('itinerary_service_id', serviceIds.map((s: any) => s.id))
             .eq('language', targetLanguage)
         }
       }

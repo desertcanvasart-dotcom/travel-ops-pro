@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import RateAuditLog from '@/app/components/RateAuditLog'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import {
   Utensils,
   Plus,
@@ -612,6 +614,7 @@ export default function MealRatesContent() {
             <Download className="w-4 h-4" />
             {tCommon('export')}
           </button>
+          <BulkRateImportExport tableName="meal_rates" onImportComplete={fetchRates} />
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
@@ -1331,6 +1334,13 @@ export default function MealRatesContent() {
               <div className="mx-4 mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 {error}
+              </div>
+            )}
+
+            {/* Audit Log */}
+            {editingRate && (
+              <div className="px-4">
+                <RateAuditLog tableName="meal_rates" recordId={editingRate.id} />
               </div>
             )}
 

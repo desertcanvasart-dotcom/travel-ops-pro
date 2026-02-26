@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import Anthropic from '@anthropic-ai/sdk'
+import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import {
   buildTaskGenerationPrompt,
   parseTaskGenerationResponse,
@@ -88,15 +88,10 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'No departments found. Please run the departments migration.' }, { status: 500 })
     }
 
-    // 6. Call Claude AI
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({ success: false, error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
-    }
-
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    // 6. Call Claude AI (with retry on 429/529)
     const prompt = buildTaskGenerationPrompt(itinerary, daysWithServices)
 
-    const message = await anthropic.messages.create({
+    const message = await createMessageWithRetry({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
@@ -195,6 +190,7 @@ export async function POST(
 
   } catch (error) {
     console.error('Error generating tasks:', error)
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+    const { message, status } = getUserFriendlyError(error)
+    return NextResponse.json({ success: false, error: message }, { status })
   }
 }

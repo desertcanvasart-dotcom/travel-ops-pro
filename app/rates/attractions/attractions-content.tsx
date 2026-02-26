@@ -11,6 +11,8 @@ import {
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import RateAuditLog from '@/app/components/RateAuditLog'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 
 // ============================================
 // CONSTANTS
@@ -591,6 +593,7 @@ export default function AttractionsContent() {
               <div className="w-1.5 h-1.5 rounded-full bg-amber-600" />
             </div>
             <div className="flex items-center gap-2">
+              <BulkRateImportExport tableName="entrance_fees" onImportComplete={fetchAttractions} />
               <button
                 onClick={handleAddNew}
                 className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center gap-1.5"
@@ -1240,6 +1243,11 @@ export default function AttractionsContent() {
                   <span className="text-sm font-medium text-gray-700">{t('form.activeStatus')}</span>
                 </label>
               </div>
+
+              {/* Audit Log */}
+              {editingAttraction && (
+                <RateAuditLog tableName="entrance_fees" recordId={editingAttraction.id} />
+              )}
 
               {/* Buttons */}
               <div className="flex gap-2 pt-3 border-t">

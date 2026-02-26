@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || ''
-})
+import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 
 // ============================================
 // EGYPTIAN TRAVEL ABBREVIATIONS
@@ -423,13 +420,6 @@ function extractPhoneFromText(text: string): string {
 
 export async function POST(request: Request) {
   try {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { success: false, error: 'ANTHROPIC_API_KEY is not configured' },
-        { status: 500 }
-      )
-    }
-
     const { conversation } = await request.json()
 
     if (!conversation) {
@@ -459,8 +449,8 @@ export async function POST(request: Request) {
       ? buildStructuredExtractionPrompt(structureDetection.rawDaySegments)
       : buildGeneralExtractionPrompt()
 
-    // Call Claude to analyze the conversation
-    const message = await anthropic.messages.create({
+    // Call Claude to analyze the conversation (with retry on 429/529)
+    const message = await createMessageWithRetry({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8192,
       messages: [
@@ -671,15 +661,10 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Error parsing conversation:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    // Include actual error details so client can show useful info
+    const { message, status } = getUserFriendlyError(error)
     return NextResponse.json(
-      {
-        success: false,
-        error: `Failed to analyze conversation: ${errorMessage}`,
-        message: errorMessage
-      },
-      { status: 500 }
+      { success: false, error: message },
+      { status }
     )
   }
 }

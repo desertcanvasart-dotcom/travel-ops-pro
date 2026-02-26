@@ -173,7 +173,7 @@ export default function TourPriceCalculator() {
       if (data.success) {
         setResult(data.data)
         // Initialize all days as expanded
-        const dayNumbers = [...new Set((data.data.services || []).map((s: any) => s.day_number ?? -1))]
+        const dayNumbers = [...new Set<number>((data.data.services || []).map((s: any) => s.day_number ?? -1))]
         setExpandedDays(new Set(dayNumbers))
         setAllDaysExpanded(true)
       }

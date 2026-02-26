@@ -1353,6 +1353,9 @@ function WhatsAppParserContent() {
       // Determine currency: Euro passport holders get EUR, others use user preference
       const effectiveCurrency = data.is_euro_passport === true ? 'EUR' : userPreferences.default_currency
 
+      // Generate idempotency key to prevent duplicate itineraries on retry/double-click
+      const idempotencyKey = crypto.randomUUID()
+
       const response = await fetch('/api/ai/generate-itinerary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1375,7 +1378,9 @@ function WhatsAppParserContent() {
           // B2B partner fields
           partner_id: selectedPartnerId,
           partner_commission_percent: selectedPartner?.commission_percent || 0,
-          source: selectedPartnerId ? 'b2b_custom' : 'b2c_whatsapp'
+          source: selectedPartnerId ? 'b2b_custom' : 'b2c_whatsapp',
+          // Idempotency
+          idempotency_key: idempotencyKey,
         })
       })
 
@@ -2145,39 +2150,71 @@ function WhatsAppParserContent() {
                         <Eye className="w-4 h-4" /> Tour Manager
                       </button>
                     </div>
+                    {generatedItinerary.warnings?.length > 0 && (
+                      <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-amber-800">Pricing Warnings</p>
+                            <ul className="mt-1 space-y-1">
+                              {generatedItinerary.warnings.map((w: string, i: number) => (
+                                <li key={i} className="text-xs text-amber-700">{w}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* B2C Success States (hidden when B2B mode) */}
                 {!isB2BMode && generatedItinerary && generationMode === 'quick' && (
-                  <div ref={itinerarySuccessRef} className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                        <Check className="w-6 h-6 text-white" />
+                  <div ref={itinerarySuccessRef} className="space-y-3">
+                    <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                          <Check className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-bold text-green-800">{t('itineraryGenerated')}</h3>
+                          <p className="text-sm text-green-600">
+                            {generatedItinerary.itinerary_code} • {generatedItinerary.generation_mode === 'structured' ? t('followedYourPlan') : t('aiCreated')}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-base font-bold text-green-800">{t('itineraryGenerated')}</h3>
-                        <p className="text-sm text-green-600">
-                          {generatedItinerary.itinerary_code} • {generatedItinerary.generation_mode === 'structured' ? t('followedYourPlan') : t('aiCreated')}
-                        </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
+                          className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 flex items-center justify-center gap-2"
+                        >
+                          {t('viewItinerary')} <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/itineraries/${generatedItinerary.id}/edit`)}
+                          className="px-4 py-2.5 border border-green-300 bg-white rounded-lg hover:bg-green-50 flex items-center gap-2 text-sm text-green-700"
+                        >
+                          <Pencil className="w-4 h-4" /> {t('edit')}
+                        </button>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/itineraries/${generatedItinerary.id}`)}
-                        className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 flex items-center justify-center gap-2"
-                      >
-                        {t('viewItinerary')} <ChevronRight className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/itineraries/${generatedItinerary.id}/edit`)}
-                        className="px-4 py-2.5 border border-green-300 bg-white rounded-lg hover:bg-green-50 flex items-center gap-2 text-sm text-green-700"
-                      >
-                        <Pencil className="w-4 h-4" /> {t('edit')}
-                      </button>
-                    </div>
+                    {generatedItinerary.warnings?.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-amber-800">Pricing Warnings</p>
+                            <ul className="mt-1 space-y-1">
+                              {generatedItinerary.warnings.map((w: string, i: number) => (
+                                <li key={i} className="text-xs text-amber-700">{w}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

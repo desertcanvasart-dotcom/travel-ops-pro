@@ -10,7 +10,7 @@ import {
   findCruiseTransportRule,
   getCruiseTransportRate
 } from '@/lib/auto-pricing-service'
-import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
+import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeRate, persistExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
 import {
   getItemizedTippingRates,
@@ -347,6 +347,7 @@ export async function createLandItineraryServices(
   totalSupplierCost: number
   totalClientPrice: number
   mealSelections: MealSelection[]
+  warnings: string[]
 }> {
   const {
     itineraryId, itineraryData, rates, startDateObj, durationDays,
@@ -358,14 +359,22 @@ export async function createLandItineraryServices(
   // Fetch exchange rates for currency conversion
   let exchangeRates: ExchangeRates | null = null
   const needsConversion = currency !== 'EUR'
+  let eurToTargetRate: number | null = null
   if (needsConversion) {
     try {
       exchangeRates = await fetchExchangeRates('EUR')
-      const rate = exchangeRates.rates[currency]
+      eurToTargetRate = getExchangeRate('EUR', currency, exchangeRates)
       if (isUsingFallbackRates()) {
-        console.warn(`⚠️ [Service Creation] Using FALLBACK exchange rates! EUR → ${currency} = ${rate || 'N/A'}. Live API unavailable.`)
+        console.warn(`⚠️ [Service Creation] Using FALLBACK exchange rates! EUR → ${currency} = ${eurToTargetRate || 'N/A'}. Live API unavailable.`)
       } else {
-        console.log(`[Service Creation] Currency conversion: EUR → ${currency}, rate: ${rate || 'N/A'} (live)`)
+        console.log(`[Service Creation] Currency conversion: EUR → ${currency}, rate: ${eurToTargetRate || 'N/A'} (live)`)
+      }
+      // Persist the exchange rate snapshot for audit trail
+      if (eurToTargetRate) {
+        await persistExchangeRate(
+          supabase, 'EUR', currency, eurToTargetRate,
+          isUsingFallbackRates() ? 'fallback' : 'frankfurter'
+        )
       }
     } catch (e) {
       console.warn('[Service Creation] Failed to fetch exchange rates, prices will remain in EUR:', e)
@@ -386,8 +395,10 @@ export async function createLandItineraryServices(
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
 
   // Helper: find best meal rate for a city + meal type, respecting tier
-  // Within each matching step, preferred restaurants (is_preferred=true) are picked first
-  const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null } => {
+  // STRICT CITY FILTERING: Only returns restaurants in the requested city.
+  // Never falls back to restaurants in other cities — uses a generic flat rate instead.
+  // Within each matching step, preferred restaurants (is_preferred=true) are picked first.
+  const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null; warning: string | null } => {
     const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
     const allMeals = rates.allMealRates || []
     const typeMatches = allMeals.filter(r => r.meal_type?.toLowerCase() === mealType)
@@ -402,8 +413,11 @@ export async function createLandItineraryServices(
       rate: match.base_rate_eur,
       name: `${mealLabel} - ${match.restaurant_name || city}`,
       code: match.service_code || mealType.toUpperCase(),
-      supplierName: match.supplier_name || match.restaurant_name || null
+      supplierName: match.supplier_name || match.restaurant_name || null,
+      warning: null
     })
+
+    // --- CITY-SCOPED LOOKUP ONLY ---
 
     // 1. Best: city + meal_type + tier (prefer preferred)
     const cityTierCandidates = typeMatches.filter(r =>
@@ -417,26 +431,14 @@ export async function createLandItineraryServices(
     const cityMatch = pickBest(cityCandidates)
     if (cityMatch) return formatResult(cityMatch)
 
-    // 3. Same tier, any city (prefer preferred)
-    const tierCandidates = typeMatches.filter(r => r.tier?.toLowerCase() === tier)
-    const tierMatch = pickBest(tierCandidates)
-    if (tierMatch) return formatResult(tierMatch)
-
-    // 4. Any meal of this type (prefer preferred)
-    const anyType = pickBest(typeMatches)
-    if (anyType) return formatResult(anyType)
-
-    // 5. Any active meal rate at all (prefer preferred)
-    const anyMeal = pickBest(allMeals)
-    if (anyMeal) return formatResult(anyMeal)
-
-    // 6. Fallback flat rate
+    // 3. NO cross-city fallback — use generic flat rate and warn
     const fallback = mealType === 'lunch' ? rates.lunchRate : rates.dinnerRate
     return {
       rate: fallback,
       name: `${mealLabel} - ${city}`,
       code: mealType.toUpperCase(),
-      supplierName: null
+      supplierName: null,
+      warning: `No ${mealType} restaurant found for ${city} (${tier} tier) — using generic rate €${fallback}`
     }
   }
 
@@ -445,7 +447,39 @@ export async function createLandItineraryServices(
   let landCruiseTransportAdded = false
   const createdDays: CreateDayServicesResult[] = []
   const mealSelections: MealSelection[] = []
+  const warnings: string[] = []
   let previousDayData: any = null // Track previous day for intercity detection
+
+  // ============================================
+  // RATE VALIDATION — warn on missing/zero rates
+  // ============================================
+  if (!rates.vehiclePerDay && effectivePackageType !== 'cruise-package') {
+    warnings.push(`No day tour transport rate found for ${effectiveCity} (${totalPax} pax) — transport will be €0`)
+  }
+  if (!rates.transferRate && effectivePackageType !== 'cruise-package') {
+    warnings.push(`No airport transfer rate found for ${effectiveCity} (${totalPax} pax) — transfers will be €0`)
+  }
+  if (!rates.guidePerDay) {
+    warnings.push(`No guide rate found for ${language} (${tier} tier) — guide services will be €0`)
+  }
+  if (includeAccommodation && !rates.hotelRate && effectivePackageType !== 'cruise-package') {
+    warnings.push(`No hotel rate found for ${effectiveCity} (${tier} tier) — accommodation will be €0`)
+  }
+  if (!rates.airportServiceRate && effectivePackageType !== 'cruise-package') {
+    warnings.push('No airport service rates found in airport_staff_rates — airport services will be €0')
+  }
+  if (!rates.hotelServiceRate && effectivePackageType !== 'cruise-package') {
+    warnings.push('No hotel service rates found in hotel_staff_rates — hotel services will be €0')
+  }
+  if (!rates.allEntranceFees?.length) {
+    warnings.push('No entrance fees found — all entrance fees will be €0')
+  }
+  if (!rates.allMealRates?.length && (includeLunch || includeDinner)) {
+    warnings.push('No meal rates found in meal_rates table — all meals will use €0 fallback rate')
+  }
+  if (rates.tippingRates.allRates.length === 0) {
+    warnings.push('No tipping rates found — tips will be €0')
+  }
 
   const allDays = itineraryData.days || []
   for (let dayIndex = 0; dayIndex < allDays.length; dayIndex++) {
@@ -618,9 +652,19 @@ export async function createLandItineraryServices(
         }
       }
 
-      // Insert all departure services
+      // Insert all departure services (with multi-currency tracking)
       for (const svc of departureServices) {
-        await supabase.from('itinerary_services').insert({ itinerary_day_id: day.id, ...svc })
+        await supabase.from('itinerary_services').insert({
+          itinerary_day_id: day.id,
+          ...svc,
+          // Multi-currency: all rates are EUR-based; store original cost + exchange rate
+          supplier_currency: 'EUR',
+          supplier_cost_original: svc.total_cost,
+          exchange_rate_used: eurToTargetRate || 1,
+          // Convert client-facing prices to target currency
+          total_cost: toTargetCurrency(svc.total_cost),
+          client_price: toTargetCurrency(svc.client_price),
+        })
       }
       continue
     }
@@ -985,7 +1029,7 @@ export async function createLandItineraryServices(
           dayEntranceTotal += feePerPerson * totalPax
           matchedAttractions.push(fee.attraction_name)
         } else {
-          console.warn(`⚠️ Day ${dayNumber}: No entrance fee found for "${attr}" — skipping`)
+          warnings.push(`Day ${dayNumber}: No entrance fee found for "${attr}" — skipping`)
         }
       }
 
@@ -1010,9 +1054,10 @@ export async function createLandItineraryServices(
       }
     }
 
-    // Lunch (only if included for this day) — city-aware lookup
+    // Lunch (only if included for this day) — strict city-scoped lookup
     if (dayIncludesLunch) {
       const lunch = findMealRate(currentCity, 'lunch')
+      if (lunch.warning) warnings.push(`Day ${dayNumber}: ${lunch.warning}`)
       const lunchCost = lunch.rate * totalPax
       const lunchRestaurant = lunch.supplierName || null
       services.push({
@@ -1033,9 +1078,10 @@ export async function createLandItineraryServices(
       totalClientPrice += withMargin(lunchCost)
     }
 
-    // Dinner (only if included for this day) — city-aware lookup
+    // Dinner (only if included for this day) — strict city-scoped lookup
     if (dayIncludesDinner) {
       const dinner = findMealRate(currentCity, 'dinner')
+      if (dinner.warning) warnings.push(`Day ${dayNumber}: ${dinner.warning}`)
       const dinnerCost = dinner.rate * totalPax
       const dinnerRestaurant = dinner.supplierName || null
       services.push({
@@ -1166,11 +1212,15 @@ export async function createLandItineraryServices(
       landCruiseTransportAdded = true
     }
 
-    // Insert all services (convert total_cost and client_price to target currency)
+    // Insert all services (with multi-currency tracking + currency conversion)
     for (const svc of services) {
       await supabase.from('itinerary_services').insert({
         itinerary_day_id: day.id,
         ...svc,
+        // Multi-currency: all rates are EUR-based; store original cost + exchange rate
+        supplier_currency: 'EUR',
+        supplier_cost_original: svc.total_cost,
+        exchange_rate_used: eurToTargetRate || 1,
         // Convert client-facing prices to target currency; rate_eur/rate_non_eur stay in EUR
         total_cost: toTargetCurrency(svc.total_cost),
         client_price: toTargetCurrency(svc.client_price),
@@ -1181,12 +1231,19 @@ export async function createLandItineraryServices(
     previousDayData = dayData
   }
 
+  // Log any warnings
+  if (warnings.length > 0) {
+    console.warn(`⚠️ ${warnings.length} pricing warning(s):`)
+    warnings.forEach(w => console.warn(`  • ${w}`))
+  }
+
   // Convert totals to target currency
   return {
     createdDays,
     totalSupplierCost: toTargetCurrency(totalSupplierCost),
     totalClientPrice: toTargetCurrency(totalClientPrice),
     mealSelections,
+    warnings,
   }
 }
 

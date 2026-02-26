@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
+import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
@@ -110,6 +111,8 @@ export default function ViewItineraryPage() {
   const [activeLanguage, setActiveLanguage] = useState<Language>('en')
   const [creatingVersion, setCreatingVersion] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [showSendModal, setShowSendModal] = useState(false)
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
@@ -595,14 +598,15 @@ export default function ViewItineraryPage() {
     }
   }
 
-  const handleDownloadPDF = async () => {
+  const handlePreviewPDF = async () => {
     if (!itinerary || days.length === 0) return
 
     setGeneratingPDF(true)
     try {
       const pdf = await generateItineraryPDF(itinerary, days)
-      const filename = `${itinerary.itinerary_code}_${itinerary.client_name.replace(/\s+/g, '_')}.pdf`
-      pdf.save(filename)
+      const blob = pdf.output('blob')
+      setPdfPreviewBlob(blob)
+      setShowPdfPreview(true)
     } catch (error) {
       console.error('Error generating PDF:', error)
       await dialog.alert(tCommon('error'), t('failedToGeneratePDF'), 'warning')
@@ -1108,11 +1112,11 @@ export default function ViewItineraryPage() {
             <div className="px-4 pb-3 flex justify-end">
               <button
                 onClick={async () => {
-                  const confirmed = await dialog.confirm(
-                    'Re-translate',
-                    `This will delete the existing ${activeLanguage.toUpperCase()} version and re-translate from English. Continue?`,
-                    'warning'
-                  )
+                  const confirmed = await dialog.confirm({
+                    title: 'Re-translate',
+                    message: `This will delete the existing ${activeLanguage.toUpperCase()} version and re-translate from English. Continue?`,
+                    variant: 'warning',
+                  })
                   if (confirmed) {
                     handleCopyAndTranslate(activeLanguage, true)
                   }
@@ -1406,7 +1410,7 @@ export default function ViewItineraryPage() {
               {t('contract')}
             </Link>
             <button
-              onClick={handleDownloadPDF}
+              onClick={handlePreviewPDF}
               disabled={generatingPDF}
               className={`h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 ${
                 generatingPDF ? 'opacity-50 cursor-not-allowed' : ''
@@ -1419,7 +1423,7 @@ export default function ViewItineraryPage() {
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
+                  <FileText className="w-4 h-4" />
                   {t('pdf')}
                 </>
               )}
@@ -1826,6 +1830,22 @@ export default function ViewItineraryPage() {
           </div>
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal
+        pdfBlob={pdfPreviewBlob}
+        filename={itinerary ? `${itinerary.itinerary_code}_${itinerary.client_name.replace(/\s+/g, '_')}.pdf` : 'itinerary.pdf'}
+        isOpen={showPdfPreview}
+        onClose={() => {
+          setShowPdfPreview(false)
+          setPdfPreviewBlob(null)
+        }}
+        onSendEmail={() => {
+          setShowPdfPreview(false)
+          setShowSendModal(true)
+        }}
+        title="Itinerary PDF Preview"
+      />
     </div>
   )
 }

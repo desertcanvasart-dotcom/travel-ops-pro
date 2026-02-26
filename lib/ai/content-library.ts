@@ -312,3 +312,36 @@ export function buildWritingRulesContext(rules: WritingRule[]): string {
 
   return context
 }
+
+// ============================================
+// FETCH ATTRACTION NAMES LIST
+// ============================================
+
+/**
+ * Fetch active attraction names from the entrance_fees table.
+ * Filters out non-Latin names (e.g., Japanese, Arabic) to prevent
+ * the AI from outputting attraction names in wrong languages.
+ * Only pass English/Latin-script names to the AI prompt.
+ */
+export async function fetchAttractionsList(supabase: any): Promise<string[]> {
+  try {
+    const { data } = await supabase
+      .from('entrance_fees')
+      .select('attraction_name')
+      .eq('is_active', true)
+      .eq('is_addon', false) // Exclude add-ons
+
+    if (!data) return []
+
+    return data
+      .map((a: any) => a.attraction_name)
+      .filter((name: string) => {
+        // Keep names that are primarily Latin characters (English, French, etc.)
+        // Reject names that are primarily non-Latin (Japanese, Arabic, etc.)
+        const latinChars = (name.match(/[a-zA-Z]/g) || []).length
+        return latinChars > name.length * 0.3 // At least 30% Latin characters
+      })
+  } catch {
+    return []
+  }
+}

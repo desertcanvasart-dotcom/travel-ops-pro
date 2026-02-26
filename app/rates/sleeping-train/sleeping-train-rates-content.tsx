@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
+import RateAuditLog from '@/app/components/RateAuditLog'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import {
   BedDouble,
   Plus,
@@ -458,6 +460,7 @@ export default function SleepingTrainRatesContent() {
             <Download className="w-4 h-4" />
             {t('export')}
           </button>
+          <BulkRateImportExport tableName="sleeping_train_rates" onImportComplete={fetchRates} />
           <button
             onClick={handleAddNew}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
@@ -1112,6 +1115,13 @@ export default function SleepingTrainRatesContent() {
                 </label>
               </div>
             </form>
+
+            {/* Audit Log */}
+            {editingRate && (
+              <div className="px-4">
+                <RateAuditLog tableName="sleeping_train_rates" recordId={editingRate.id} />
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
               <button

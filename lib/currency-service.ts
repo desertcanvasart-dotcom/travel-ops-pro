@@ -197,3 +197,99 @@ export function formatCurrency(
 export function getCurrencySymbol(currency: string): string {
   return CURRENCY_SYMBOLS[currency] || currency
 }
+
+// ============================================
+// EXCHANGE RATE PERSISTENCE
+// ============================================
+
+/**
+ * Persist an exchange rate snapshot to the database.
+ * Called during service creation to record the rate used for a conversion.
+ */
+export async function persistExchangeRate(
+  supabase: any,
+  fromCurrency: string,
+  toCurrency: string,
+  rate: number,
+  source: string = 'frankfurter'
+): Promise<void> {
+  try {
+    await supabase.from('exchange_rate_snapshots').insert({
+      base_currency: fromCurrency,
+      target_currency: toCurrency,
+      rate,
+      source,
+    })
+  } catch (error) {
+    console.warn('⚠️ Failed to persist exchange rate snapshot:', error)
+  }
+}
+
+/**
+ * Get the most recent historical exchange rate for a currency pair.
+ * Useful for auditing and reports — looks up saved snapshots.
+ */
+export async function getHistoricalRate(
+  supabase: any,
+  fromCurrency: string,
+  toCurrency: string,
+  date?: Date
+): Promise<{ rate: number; capturedAt: string; source: string } | null> {
+  try {
+    let query = supabase
+      .from('exchange_rate_snapshots')
+      .select('rate, captured_at, source')
+      .eq('base_currency', fromCurrency)
+      .eq('target_currency', toCurrency)
+      .order('captured_at', { ascending: false })
+      .limit(1)
+
+    if (date) {
+      // Find the closest snapshot on or before the given date
+      query = query.lte('captured_at', date.toISOString())
+    }
+
+    const { data, error } = await query
+
+    if (error || !data?.length) return null
+
+    return {
+      rate: data[0].rate,
+      capturedAt: data[0].captured_at,
+      source: data[0].source,
+    }
+  } catch (error) {
+    console.warn('⚠️ Failed to fetch historical exchange rate:', error)
+    return null
+  }
+}
+
+/**
+ * Get exchange rate between two currencies.
+ * Convenience function for getting a single rate value.
+ */
+export function getExchangeRate(
+  fromCurrency: string,
+  toCurrency: string,
+  rates: ExchangeRates
+): number | null {
+  if (fromCurrency === toCurrency) return 1
+
+  if (rates.base === fromCurrency) {
+    return rates.rates[toCurrency] || null
+  }
+
+  if (rates.base === toCurrency) {
+    const rate = rates.rates[fromCurrency]
+    return rate ? 1 / rate : null
+  }
+
+  // Cross rate through base
+  const fromRate = rates.rates[fromCurrency]
+  const toRate = rates.rates[toCurrency]
+  if (fromRate && toRate) {
+    return toRate / fromRate
+  }
+
+  return null
+}

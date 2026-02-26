@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, Send, Mail, MessageSquare, Printer, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Download, Send, Mail, MessageSquare, Printer, CheckCircle, Eye } from 'lucide-react'
 import { generateSupplierDocumentPDF } from '@/lib/supplier-document-pdf'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface SupplierDocument {
   id: string
@@ -53,6 +54,8 @@ export default function SupplierDocumentViewPage() {
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
 
   const DOCUMENT_TITLES: Record<string, string> = {
     hotel_voucher: t('documentTypes.hotelVoucher'),
@@ -107,6 +110,15 @@ export default function SupplierDocumentViewPage() {
         printWindow.print()
       }
     }
+  }
+
+  const handlePreviewPDF = () => {
+    if (!document) return
+
+    const pdf = generateSupplierDocumentPDF(document)
+    const blob = pdf.output('blob')
+    setPdfPreviewBlob(blob)
+    setShowPdfPreview(true)
   }
 
   const handleSendEmail = async () => {
@@ -249,8 +261,15 @@ export default function SupplierDocumentViewPage() {
             
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={handleDownload}
+                onClick={handlePreviewPDF}
                 className="px-3 py-1.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm font-medium flex items-center gap-1.5"
+              >
+                <Eye className="w-4 h-4" />
+                {t('preview') || 'Preview'}
+              </button>
+              <button
+                onClick={handleDownload}
+                className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-1.5"
               >
                 <Download className="w-4 h-4" />
                 {t('downloadPDF')}
@@ -465,6 +484,18 @@ export default function SupplierDocumentViewPage() {
           )}
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal
+        pdfBlob={pdfPreviewBlob}
+        filename={document ? `${document.document_number}_${document.supplier_name.replace(/\s+/g, '_')}.pdf` : 'supplier-document.pdf'}
+        isOpen={showPdfPreview}
+        onClose={() => {
+          setShowPdfPreview(false)
+          setPdfPreviewBlob(null)
+        }}
+        title="Supplier Document Preview"
+      />
     </div>
   )
 }

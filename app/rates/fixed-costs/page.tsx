@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Droplets, Coins, Plus, Edit, Save, X, Check, Loader2, AlertTriangle, Settings } from 'lucide-react'
+import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 
 interface FixedCost {
   id: string
@@ -172,13 +173,16 @@ export default function FixedCostsPage() {
             <p className="text-sm text-gray-600">Per-person daily rates for water and other fixed costs included in every itinerary</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#566b3c] font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          Add Cost
-        </button>
+        <div className="flex items-center gap-2">
+          <BulkRateImportExport tableName="fixed_costs" onImportComplete={fetchCosts} />
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#566b3c] font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Add Cost
+          </button>
+        </div>
       </div>
 
       {/* Info Banner */}
