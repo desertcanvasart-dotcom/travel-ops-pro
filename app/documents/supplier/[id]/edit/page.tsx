@@ -413,9 +413,9 @@ export default function EditSupplierDocumentPage() {
           total_cost: r.total_cost,
           unit_rate: r.unit_rate
         }))
-      } else if (document.document_type === 'service_order' && selectedMeals.length > 0) {
-        dataToSave.selected_meals = selectedMeals
-        dataToSave.services = selectedMeals.map(m => ({
+      } else if (document.document_type === 'service_order' && (selectedMeals.length > 0 || selectedAttractions.length > 0)) {
+        // Service orders can have meals, entrance fees, or both
+        const mealServices = selectedMeals.map(m => ({
           service_type: 'meal',
           service_name: `${m.restaurant_name}${m.meal_type ? ` - ${m.meal_type}` : ''}`,
           service_code: m.service_code,
@@ -424,6 +424,16 @@ export default function EditSupplierDocumentPage() {
           total_cost: m.total_cost,
           unit_rate: m.unit_rate
         }))
+        const entranceServices = selectedAttractions.map(a => ({
+          service_type: 'entrance_fee',
+          service_name: a.attraction_name,
+          city: a.city,
+          quantity: a.quantity,
+          unit_price: a.eur_rate,
+          total_price: a.eur_rate * a.quantity
+        }))
+        if (selectedMeals.length > 0) dataToSave.selected_meals = selectedMeals
+        dataToSave.services = [...mealServices, ...entranceServices]
       } else if (document.document_type === 'guide_assignment' && selectedGuides.length > 0) {
         dataToSave.selected_guides = selectedGuides
         dataToSave.services = selectedGuides.map(g => ({
@@ -505,12 +515,21 @@ export default function EditSupplierDocumentPage() {
     return selectedAttractions.reduce((sum, a) => sum + (a.eur_rate * a.quantity), 0)
   }
 
-  // Auto-update document total when attractions change (activity vouchers only)
+  // Auto-update document total when attractions change (activity vouchers and service orders)
   useEffect(() => {
     if (document && document.document_type === 'activity_voucher') {
       const attractionsTotal = calculateAttractionsTotal()
       if (attractionsTotal > 0) {
         setDocument((prev: any) => ({ ...prev, total_cost: attractionsTotal }))
+      }
+    }
+    // For service orders, combine meals + entrance fees total
+    if (document && document.document_type === 'service_order') {
+      const mealsTotal = calculateMealsTotal()
+      const attractionsTotal = calculateAttractionsTotal()
+      const combined = mealsTotal + attractionsTotal
+      if (combined > 0) {
+        setDocument((prev: any) => ({ ...prev, total_cost: combined }))
       }
     }
   }, [selectedAttractions])
@@ -616,11 +635,15 @@ export default function EditSupplierDocumentPage() {
     return selectedMeals.reduce((sum, m) => sum + m.total_cost, 0)
   }
 
-  // Auto-update document total when selected meals change
+  // Auto-update document total when selected meals change (combine with entrance fees for service orders)
   useEffect(() => {
-    if (document && document.document_type === 'service_order' && selectedMeals.length > 0) {
+    if (document && document.document_type === 'service_order') {
       const mealsTotal = calculateMealsTotal()
-      setDocument((prev: any) => ({ ...prev, total_cost: mealsTotal }))
+      const attractionsTotal = calculateAttractionsTotal()
+      const combined = mealsTotal + attractionsTotal
+      if (combined > 0) {
+        setDocument((prev: any) => ({ ...prev, total_cost: combined }))
+      }
     }
   }, [selectedMeals])
 
@@ -782,7 +805,7 @@ export default function EditSupplierDocumentPage() {
     )
   }
 
-  const isEntranceFeeDocument = document.document_type === 'activity_voucher'
+  const isEntranceFeeDocument = document.document_type === 'activity_voucher' || document.document_type === 'service_order'
   const isMealDocument = document.document_type === 'service_order'
 
   return (
