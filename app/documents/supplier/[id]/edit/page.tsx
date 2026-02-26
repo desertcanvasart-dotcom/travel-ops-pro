@@ -624,10 +624,9 @@ export default function EditSupplierDocumentPage() {
     }
   }, [selectedMeals])
 
-  // Add a guide
+  // Add a guide (rate is per day, not per person — default quantity to 1 day)
   const addGuide = (rate: GuideRate) => {
     if (selectedGuides.find(g => g.rate_id === rate.id)) return
-    const totalPax = (document?.num_adults || 1) + (document?.num_children || 0)
     setSelectedGuides(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
@@ -635,9 +634,9 @@ export default function EditSupplierDocumentPage() {
       guide_type: rate.guide_type,
       tour_duration: rate.tour_duration,
       city: rate.city || '',
-      quantity: totalPax,
+      quantity: 1,
       unit_rate: rate.base_rate_eur,
-      total_cost: rate.base_rate_eur * totalPax
+      total_cost: rate.base_rate_eur
     }])
   }
 
@@ -1543,8 +1542,8 @@ export default function EditSupplierDocumentPage() {
                         <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('guideLanguage')}</th>
                         <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('guideType')}</th>
                         <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('duration')}</th>
-                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('rate')}</th>
-                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('qty')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('ratePerDay')}</th>
+                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('days')}</th>
                         <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('total')}</th>
                         <th className="px-4 py-2 w-10"></th>
                       </tr>

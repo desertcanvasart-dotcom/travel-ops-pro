@@ -5858,6 +5858,8 @@
     "guideLanguage": "Language",
     "guideType": "Guide Type",
     "duration": "Duration",
+    "ratePerDay": "Rate/Day",
+    "days": "Days",
     "totalGuideCost": "Total Guide Cost",
     "noGuidesSelected": "No guides selected",
     "noGuidesHint": "Select guide services from the available options below",
