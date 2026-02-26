@@ -17,8 +17,9 @@ import {
   FileText,
   MapPin
 } from 'lucide-react'
-import { downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface UnifiedPayment {
   id: string
@@ -44,6 +45,9 @@ export default function ReceiptsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
+  const [previewFilename, setPreviewFilename] = useState('receipt.pdf')
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [sentIds, setSentIds] = useState<string[]>([])
 
@@ -149,13 +153,13 @@ export default function ReceiptsPage() {
     }
   }
 
-  const handleDownloadReceipt = async (payment: UnifiedPayment) => {
+  const handlePreviewReceipt = (payment: UnifiedPayment) => {
     setDownloadingId(payment.id)
-    
+
     try {
       const receiptNumber = payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
-      
-      downloadReceiptPDF({
+
+      const doc = generateReceiptPDF({
         receiptNumber,
         invoiceNumber: payment.source_reference,
         clientName: payment.client_name,
@@ -172,9 +176,14 @@ export default function ReceiptsPage() {
         total_amount: payment.amount,
         currency: payment.currency
       })
+
+      const blob = doc.output('blob')
+      setPdfPreviewBlob(blob)
+      setPreviewFilename(`Receipt-${receiptNumber}.pdf`)
+      setShowPdfPreview(true)
     } catch (error) {
-      console.error('Error downloading receipt:', error)
-      await dialog.alert('Error', 'Failed to download receipt', 'warning')
+      console.error('Error generating receipt:', error)
+      dialog.alert('Error', 'Failed to generate receipt', 'warning')
     } finally {
       setDownloadingId(null)
     }
@@ -446,12 +455,12 @@ export default function ReceiptsPage() {
                               <Eye className="w-4 h-4" />
                             </button>
                             
-                            {/* Download Button */}
+                            {/* Preview Button */}
                             <button
-                              onClick={() => handleDownloadReceipt(payment)}
+                              onClick={() => handlePreviewReceipt(payment)}
                               disabled={isDownloading}
                               className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Download PDF"
+                              title="Preview PDF"
                             >
                               {isDownloading ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -498,6 +507,18 @@ export default function ReceiptsPage() {
           </div>
         )}
       </div>
+
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal
+        pdfBlob={pdfPreviewBlob}
+        isOpen={showPdfPreview}
+        onClose={() => {
+          setShowPdfPreview(false)
+          setPdfPreviewBlob(null)
+        }}
+        title="Receipt Preview"
+        filename={previewFilename}
+      />
     </div>
   )
 }

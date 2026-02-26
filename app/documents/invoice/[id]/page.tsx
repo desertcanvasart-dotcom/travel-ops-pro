@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, Loader2, FileText, Calendar, CreditCard } from 'lucide-react'
-import { downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { ArrowLeft, Download, Loader2, FileText, Calendar, CreditCard, Eye } from 'lucide-react'
+import { generateInvoicePDF, downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface Payment {
   id: string
@@ -33,6 +34,8 @@ export default function InvoicePage() {
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -55,50 +58,53 @@ export default function InvoicePage() {
     }
   }
 
-  const handleDownloadPDF = () => {
+  const buildInvoiceData = (p: Payment) => {
+    const invoiceNumber = `INV-${p.itinerary_code}-${p.id.slice(0, 4).toUpperCase()}`
+    return {
+      id: p.id,
+      invoice_number: invoiceNumber,
+      invoice_type: p.payment_type === 'deposit' ? 'deposit' as const :
+                    p.payment_type === 'final' ? 'final' as const :
+                    'standard' as const,
+      deposit_percent: p.payment_type === 'deposit' ? 30 : undefined,
+      parent_invoice_id: null,
+      client_name: p.client_name,
+      client_email: p.client_email || '',
+      line_items: [{
+        description: `Payment for ${p.itinerary_code}`,
+        quantity: 1,
+        unit_price: p.amount,
+        amount: p.amount
+      }],
+      subtotal: p.amount,
+      tax_rate: 0,
+      tax_amount: 0,
+      discount_amount: 0,
+      total_amount: p.amount,
+      currency: p.currency,
+      amount_paid: p.payment_status === 'completed' ? p.amount : 0,
+      balance_due: p.payment_status === 'completed' ? 0 : p.amount,
+      status: p.payment_status === 'completed' ? 'paid' : 'sent',
+      issue_date: p.created_at,
+      due_date: p.due_date || p.payment_date || new Date().toISOString(),
+      notes: p.notes,
+      payment_terms: '30% deposit required to confirm booking. Balance due upon arrival.',
+      payment_instructions: 'Payment accepted via bank transfer or credit card.'
+    }
+  }
+
+  const handlePreviewPDF = () => {
     if (!payment) return
-    
+
     setDownloading(true)
-    
     try {
-      const invoiceNumber = `INV-${payment.itinerary_code}-${payment.id.slice(0, 4).toUpperCase()}`
-      
-      // Build invoice object for PDF generator
-      const invoiceData = {
-        id: payment.id,
-        invoice_number: invoiceNumber,
-        invoice_type: payment.payment_type === 'deposit' ? 'deposit' as const : 
-                      payment.payment_type === 'final' ? 'final' as const : 
-                      'standard' as const,
-        deposit_percent: payment.payment_type === 'deposit' ? 30 : undefined,
-        parent_invoice_id: null,
-        client_name: payment.client_name,
-        client_email: payment.client_email || '',
-        line_items: [{
-          description: `Payment for ${payment.itinerary_code}`,
-          quantity: 1,
-          unit_price: payment.amount,
-          amount: payment.amount
-        }],
-        subtotal: payment.amount,
-        tax_rate: 0,
-        tax_amount: 0,
-        discount_amount: 0,
-        total_amount: payment.amount,
-        currency: payment.currency,
-        amount_paid: payment.payment_status === 'completed' ? payment.amount : 0,
-        balance_due: payment.payment_status === 'completed' ? 0 : payment.amount,
-        status: payment.payment_status === 'completed' ? 'paid' : 'sent',
-        issue_date: payment.created_at,
-        due_date: payment.due_date || payment.payment_date || new Date().toISOString(),
-        notes: payment.notes,
-        payment_terms: '30% deposit required to confirm booking. Balance due upon arrival.',
-        payment_instructions: 'Payment accepted via bank transfer or credit card.'
-      }
-      
-      downloadInvoicePDF(invoiceData)
+      const invoiceData = buildInvoiceData(payment)
+      const doc = generateInvoicePDF(invoiceData)
+      const blob = doc.output('blob')
+      setPdfPreviewBlob(blob)
+      setShowPdfPreview(true)
     } catch (error) {
-      console.error('Error downloading PDF:', error)
+      console.error('Error generating PDF:', error)
       dialog.alert(t('error'), t('failedToDownloadInvoice'), 'warning')
     } finally {
       setDownloading(false)
@@ -157,16 +163,16 @@ export default function InvoicePage() {
             {t('backToPayments')}
           </Link>
           <button
-            onClick={handleDownloadPDF}
+            onClick={handlePreviewPDF}
             disabled={downloading}
             className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 flex items-center gap-2 font-medium disabled:opacity-50"
           >
             {downloading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Download className="w-4 h-4" />
+              <Eye className="w-4 h-4" />
             )}
-            {downloading ? t('generating') : t('downloadPDF')}
+            {downloading ? t('generating') : t('previewPDF')}
           </button>
         </div>
 
@@ -295,6 +301,18 @@ export default function InvoicePage() {
           </div>
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal
+        pdfBlob={pdfPreviewBlob}
+        isOpen={showPdfPreview}
+        onClose={() => {
+          setShowPdfPreview(false)
+          setPdfPreviewBlob(null)
+        }}
+        title={`Invoice ${payment ? `INV-${payment.itinerary_code}-${payment.id.slice(0, 4).toUpperCase()}` : ''}`}
+        filename={`Invoice-INV-${payment?.itinerary_code}-${payment?.id.slice(0, 4).toUpperCase()}.pdf`}
+      />
     </div>
   )
 }

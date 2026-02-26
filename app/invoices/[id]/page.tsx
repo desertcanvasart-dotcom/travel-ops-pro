@@ -25,11 +25,13 @@ import {
   Receipt,
   ArrowRight,
   Link as LinkIcon,
-  MessageCircle
+  MessageCircle,
+  Eye
 } from 'lucide-react'
-import { downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
-import { downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { generateInvoicePDF, downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface Invoice {
   id: string
@@ -152,6 +154,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [creatingFinalInvoice, setCreatingFinalInvoice] = useState(false)
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
+  const [previewTitle, setPreviewTitle] = useState('PDF Preview')
+  const [previewFilename, setPreviewFilename] = useState('document.pdf')
   const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
     amount: 0,
     currency: 'EUR',
@@ -281,12 +287,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const handleDownloadPDF = () => {
+  const handlePreviewInvoicePDF = () => {
     if (!invoice) return
-    
+
     setGeneratingPDF(true)
     try {
-      downloadInvoicePDF(invoice)
+      const doc = generateInvoicePDF(invoice)
+      const blob = doc.output('blob')
+      setPdfPreviewBlob(blob)
+      setPreviewTitle(`Invoice ${invoice.invoice_number}`)
+      setPreviewFilename(`Invoice-${invoice.invoice_number}.pdf`)
+      setShowPdfPreview(true)
     } catch (error) {
       console.error('Error generating PDF:', error)
       dialog.alert(tCommon('error'), t('failedToGeneratePDF'), 'warning')
@@ -322,11 +333,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const handleGenerateReceipt = (payment: Payment) => {
+  const handlePreviewReceipt = (payment: Payment) => {
     if (!invoice) return
-    
+
+    const receiptNumber = `RCP-${invoice.invoice_number}-${payments.indexOf(payment) + 1}`
     const receiptData = {
-      receiptNumber: `RCP-${invoice.invoice_number}-${payments.indexOf(payment) + 1}`,
+      receiptNumber,
       invoiceNumber: invoice.invoice_number,
       clientName: invoice.client_name,
       clientEmail: invoice.client_email,
@@ -337,8 +349,18 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       transactionRef: payment.transaction_reference,
       notes: payment.notes
     }
-    
-    downloadReceiptPDF(receiptData, invoice)
+
+    try {
+      const doc = generateReceiptPDF(receiptData, invoice)
+      const blob = doc.output('blob')
+      setPdfPreviewBlob(blob)
+      setPreviewTitle(`Receipt ${receiptNumber}`)
+      setPreviewFilename(`Receipt-${receiptNumber}.pdf`)
+      setShowPdfPreview(true)
+    } catch (error) {
+      console.error('Error generating receipt PDF:', error)
+      dialog.alert(tCommon('error'), t('failedToGeneratePDF'), 'warning')
+    }
   }
 
   const handleDeletePayment = async (paymentId: string) => {
@@ -525,7 +547,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </button>
 
           <button
-            onClick={handleDownloadPDF}
+            onClick={handlePreviewInvoicePDF}
             disabled={generatingPDF}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
@@ -536,12 +558,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </>
             ) : (
               <>
-                <Download className="h-4 w-4" />
-                {t('downloadPDF')}
+                <Eye className="h-4 w-4" />
+                {t('previewPDF')}
               </>
             )}
           </button>
-          
+
           {invoice.status === 'draft' && (
             <button
               onClick={handleMarkAsSent}
@@ -843,7 +865,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             )}
 
             <button
-              onClick={handleDownloadPDF}
+              onClick={handlePreviewInvoicePDF}
               disabled={generatingPDF}
               className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
@@ -854,8 +876,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </>
               ) : (
                 <>
-                  <Download className="h-4 w-4" />
-                  {t('downloadPDF')}
+                  <Eye className="h-4 w-4" />
+                  {t('previewPDF')}
                 </>
               )}
             </button>
@@ -893,11 +915,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => handleGenerateReceipt(payment)}
+                        onClick={() => handlePreviewReceipt(payment)}
                         className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                        title={t('downloadReceipt')}
+                        title={t('previewReceipt')}
                       >
-                        <Receipt className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDeletePayment(payment.id)}
@@ -972,6 +994,18 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal
+        pdfBlob={pdfPreviewBlob}
+        isOpen={showPdfPreview}
+        onClose={() => {
+          setShowPdfPreview(false)
+          setPdfPreviewBlob(null)
+        }}
+        title={previewTitle}
+        filename={previewFilename}
+      />
 
       {/* Record Payment Modal */}
       {showPaymentModal && (

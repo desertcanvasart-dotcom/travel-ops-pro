@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { ArrowLeft, Download, Eye, Edit2, Plus, X, Loader2, Copy, Check, Languages, ChevronDown } from 'lucide-react'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface Itinerary {
   id: string
@@ -108,6 +109,10 @@ export default function ContractPage() {
     specialNotes: 'Safety & Comfort: Meet & assist at all airports, trusted vetted teams, 24/7 WhatsApp support.\nPractical: Bottled water provided daily, restaurants chosen for cleanliness and hygiene.'
   })
 
+  // PDF Preview state
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
+
   // Copy & Translate state
   const [copied, setCopied] = useState(false)
   const [translating, setTranslating] = useState(false)
@@ -190,38 +195,31 @@ export default function ContractPage() {
     }))
   }
 
-  const handleDownloadPDF = async () => {
+  const buildContractPDFData = () => ({
+    contractNumber: contractData.contractNumber,
+    contractDate: contractData.contractDate,
+    clientName: contractData.clientName,
+    clientEmail: contractData.clientEmail,
+    numTravelers: contractData.numTravelers,
+    tourName: contractData.tourPackage,
+    startDate: contractData.startDate,
+    endDate: contractData.endDate,
+    destinations: contractData.destinations,
+    totalCost: contractData.totalCost,
+    currency: 'USD',
+    inclusions: contractData.inclusions,
+    exclusions: contractData.exclusions,
+  })
+
+  const handlePreviewPDF = async () => {
     setSaving(true)
     try {
-      // Use client-side PDF generation
-      const pdfBytes = await generateContractPDF({
-        contractNumber: contractData.contractNumber,
-        contractDate: contractData.contractDate,
-        clientName: contractData.clientName,
-        clientEmail: contractData.clientEmail,
-        numTravelers: contractData.numTravelers,
-        tourName: contractData.tourPackage,
-        startDate: contractData.startDate,
-        endDate: contractData.endDate,
-        destinations: contractData.destinations,
-        totalCost: contractData.totalCost,
-        currency: 'USD',
-        inclusions: contractData.inclusions,
-        exclusions: contractData.exclusions,
-      })
-      
-      // Download the PDF
+      const pdfBytes = await generateContractPDF(buildContractPDFData())
       const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `contract-${contractData.contractNumber}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      setPdfPreviewBlob(blob)
+      setShowPdfPreview(true)
     } catch (error) {
-      console.error('Error downloading PDF:', error)
+      console.error('Error generating PDF:', error)
       dialog.alert(t('error'), t('failedToDownloadContract'), 'warning')
     } finally {
       setSaving(false)
@@ -502,7 +500,7 @@ This contract is governed by the laws of Egypt.
 
             <button
               type="button"
-              onClick={handleDownloadPDF}
+              onClick={handlePreviewPDF}
               disabled={saving}
               className="bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 flex items-center gap-1.5 text-sm font-medium disabled:opacity-50"
             >
@@ -513,8 +511,8 @@ This contract is governed by the laws of Egypt.
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
-                  {t('downloadPDF')}
+                  <Eye className="w-4 h-4" />
+                  {t('previewPDF')}
                 </>
               )}
             </button>
@@ -1085,6 +1083,18 @@ This contract is governed by the laws of Egypt.
 
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal
+        pdfBlob={pdfPreviewBlob}
+        isOpen={showPdfPreview}
+        onClose={() => {
+          setShowPdfPreview(false)
+          setPdfPreviewBlob(null)
+        }}
+        title={`Contract ${contractData.contractNumber}`}
+        filename={`contract-${contractData.contractNumber}.pdf`}
+      />
     </div>
   )
 }

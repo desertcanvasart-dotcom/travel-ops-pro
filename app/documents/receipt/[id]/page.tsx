@@ -16,10 +16,12 @@ import {
   FileText,
   Hash,
   Mail,
-  Phone
+  Phone,
+  Eye
 } from 'lucide-react'
-import { downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface Payment {
   id: string
@@ -46,6 +48,8 @@ export default function ReceiptPage() {
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
+  const [showPdfPreview, setShowPdfPreview] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
@@ -70,31 +74,37 @@ export default function ReceiptPage() {
     }
   }
 
-  const handleDownloadPDF = () => {
+  const buildReceiptData = (p: Payment) => ({
+    receiptNumber: p.transaction_reference || `RCP-${p.id.slice(0, 8).toUpperCase()}`,
+    invoiceNumber: p.itinerary_code,
+    clientName: p.client_name,
+    clientEmail: p.client_email || '',
+    paymentDate: p.payment_date || new Date().toISOString(),
+    paymentMethod: p.payment_method,
+    amount: p.amount,
+    currency: p.currency,
+    transactionRef: p.transaction_reference,
+    notes: p.notes
+  })
+
+  const buildInvoiceData = (p: Payment) => ({
+    invoice_number: p.itinerary_code,
+    client_name: p.client_name,
+    total_amount: p.amount,
+    currency: p.currency
+  })
+
+  const handlePreviewPDF = () => {
     if (!payment) return
-    
+
     setDownloading(true)
-    
     try {
-      downloadReceiptPDF({
-        receiptNumber: payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`,
-        invoiceNumber: payment.itinerary_code,
-        clientName: payment.client_name,
-        clientEmail: payment.client_email || '',
-        paymentDate: payment.payment_date || new Date().toISOString(),
-        paymentMethod: payment.payment_method,
-        amount: payment.amount,
-        currency: payment.currency,
-        transactionRef: payment.transaction_reference,
-        notes: payment.notes
-      }, {
-        invoice_number: payment.itinerary_code,
-        client_name: payment.client_name,
-        total_amount: payment.amount,
-        currency: payment.currency
-      })
+      const doc = generateReceiptPDF(buildReceiptData(payment), buildInvoiceData(payment))
+      const blob = doc.output('blob')
+      setPdfPreviewBlob(blob)
+      setShowPdfPreview(true)
     } catch (error) {
-      console.error('Error downloading PDF:', error)
+      console.error('Error generating PDF:', error)
       dialog.alert(t('error'), t('failedToDownloadReceipt'), 'warning')
     } finally {
       setDownloading(false)
@@ -201,18 +211,18 @@ export default function ReceiptPage() {
               </button>
             )}
 
-            {/* Download Button */}
+            {/* Preview Button */}
             <button
-              onClick={handleDownloadPDF}
+              onClick={handlePreviewPDF}
               disabled={downloading}
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
             >
               {downloading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Download className="w-4 h-4" />
+                <Eye className="w-4 h-4" />
               )}
-              {downloading ? t('generating') : t('downloadPDF')}
+              {downloading ? t('generating') : t('previewPDF')}
             </button>
           </div>
         </div>
@@ -357,6 +367,18 @@ export default function ReceiptPage() {
           </div>
         </div>
       </div>
+
+      {/* PDF Preview Modal */}
+      <PDFPreviewModal
+        pdfBlob={pdfPreviewBlob}
+        isOpen={showPdfPreview}
+        onClose={() => {
+          setShowPdfPreview(false)
+          setPdfPreviewBlob(null)
+        }}
+        title={`Receipt ${payment ? (payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`) : ''}`}
+        filename={`Receipt-${payment ? (payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`) : ''}.pdf`}
+      />
     </div>
   )
 }
