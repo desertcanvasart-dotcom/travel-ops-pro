@@ -109,10 +109,10 @@ const PACKAGE_TYPES = [
 ]
 
 const GENERATION_STEPS: { key: GenerationStep; label: string }[] = [
-  { key: 'creating-client', label: 'Setting up itinerary...' },
-  { key: 'checking-suppliers', label: 'Matching services...' },
-  { key: 'building-route', label: 'Building itinerary structure...' },
-  { key: 'finalizing', label: 'Finalizing draft...' },
+  { key: 'creating-client', label: 'Preparing template...' },
+  { key: 'checking-suppliers', label: 'Mapping days and attractions...' },
+  { key: 'building-route', label: 'Creating tour template...' },
+  { key: 'finalizing', label: 'Finalizing...' },
 ]
 
 // Supported languages for import (excluding Arabic per business rule)
@@ -366,53 +366,41 @@ export default function ImportContent() {
         })
       }, 3000)
 
-      // Map language code to full name for the generate-itinerary endpoint
-      const languageMap: Record<string, string> = {
-        en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian',
-        pt: 'Portuguese', ru: 'Russian', zh: 'Chinese', ja: 'Japanese', ko: 'Korean',
-        nl: 'Dutch', pl: 'Polish', tr: 'Turkish', hi: 'Hindi', th: 'Thai',
-        vi: 'Vietnamese', id: 'Indonesian', ms: 'Malay', sv: 'Swedish', da: 'Danish',
-        no: 'Norwegian', fi: 'Finnish', el: 'Greek', cs: 'Czech', ro: 'Romanian',
-        hu: 'Hungarian', he: 'Hebrew', uk: 'Ukrainian',
-      }
-      const guideLanguageName = languageMap[formData.guide_language] || 'English'
-
-      // Ensure start_date is valid — use today if empty
-      const startDate = formData.start_date || new Date().toISOString().split('T')[0]
-
-      // Normalize extracted_days to match what generate-itinerary expects
-      const normalizedDays = editingDays.map(day => ({
-        ...day,
-        // Ensure meals_mentioned is in the format the endpoint/prompt-builder expects
-        meals_included: {
-          breakfast: day.meals_mentioned?.includes('Breakfast') || false,
-          lunch: day.meals_mentioned?.includes('Lunch') || false,
-          dinner: day.meals_mentioned?.includes('Dinner') || false,
-        },
+      // Build itinerary days in the format tour_templates expects
+      const templateItinerary = editingDays.map(day => ({
+        day: day.day_number,
+        title: day.title,
+        description: day.activities?.join('. ') || '',
+        meals: day.meals_mentioned || [],
+        city: day.overnight_city || day.city || '',
+        is_cruise_day: day.is_cruise_day || false,
       }))
 
-      const response = await fetch('/api/ai/generate-itinerary', {
+      // Determine tour_type from duration
+      const tourType = editingDays.length <= 1 ? 'day_tour' : 'multi_day'
+
+      // Collect all attractions from extracted days
+      const allAttractions = [...new Set(editingDays.flatMap(d => d.attractions || []))]
+
+      // Create tour template via the templates API
+      const response = await fetch('/api/tours/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          is_structured_input: true,
-          extracted_days: normalizedDays,
-          raw_itinerary: extractedData.raw_itinerary,
-          source: 'b2b_file_import',
-          client_name: 'Imported Client',
-          tour_name: formData.trip_name,
-          start_date: startDate,
+          template_name: formData.trip_name,
+          tour_type: tourType,
           duration_days: editingDays.length,
-          num_adults: formData.num_adults,
-          num_children: formData.num_children,
-          language: guideLanguageName,
-          tier: formData.tier,
+          duration_nights: Math.max(0, editingDays.length - 1),
+          cities_covered: extractedData.cities || [],
+          short_description: `${editingDays.length}-day ${extractedData.cities?.join(', ') || ''} tour`,
+          highlights: allAttractions.slice(0, 10),
+          main_attractions: allAttractions,
+          physical_level: 'moderate',
+          is_active: true,
+          itinerary: templateItinerary,
+          inclusions: extractedData.cities ? [`Private guided tour covering ${extractedData.cities.join(', ')}`] : [],
+          exclusions: [],
           package_type: formData.package_type,
-          cities: extractedData.cities,
-          partner_id: formData.partner_id || null,
-          partner_commission_percent: selectedPartner?.commission_percent || 0,
-          skip_pricing: true,
-          idempotency_key: crypto.randomUUID(),
         })
       })
 
@@ -421,13 +409,13 @@ export default function ImportContent() {
       const result = await response.json()
 
       if (!response.ok || !result.success) {
-        setGenerationError(result.error || 'Failed to generate itinerary')
+        setGenerationError(result.error || 'Failed to create tour template')
         setStep('review')
         return
       }
 
       setGenerationStep('complete')
-      setCreatedItineraryId(result.data?.itinerary_id || result.data?.id)
+      setCreatedItineraryId(result.data?.id)
       setStep('complete')
     } catch (err: any) {
       console.error('Generation error:', err)
