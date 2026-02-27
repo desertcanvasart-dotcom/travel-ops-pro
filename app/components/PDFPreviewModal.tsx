@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Download, Printer, Mail, Loader2, Maximize2, Minimize2 } from 'lucide-react'
+import { X, Download, Printer, Mail, Loader2, Maximize2, Minimize2, List, DollarSign } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
 interface PDFPreviewModalProps {
@@ -21,6 +21,10 @@ interface PDFPreviewModalProps {
   onSendEmail?: () => void
   /** Optional: Title shown in the modal header */
   title?: string
+  /** Optional: Whether pricing breakdown is currently shown */
+  showBreakdown?: boolean
+  /** Optional: Callback to toggle pricing breakdown on/off */
+  onToggleBreakdown?: (show: boolean) => void
 }
 
 export default function PDFPreviewModal({
@@ -32,6 +36,8 @@ export default function PDFPreviewModal({
   onPrint,
   onSendEmail,
   title = 'PDF Preview',
+  showBreakdown,
+  onToggleBreakdown,
 }: PDFPreviewModalProps) {
   const t = useTranslations('common')
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
@@ -166,6 +172,24 @@ export default function PDFPreviewModal({
                 <Mail className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Email</span>
               </button>
+            )}
+
+            {onToggleBreakdown && (
+              <>
+                <div className="w-px h-5 bg-gray-300 mx-1" />
+                <button
+                  onClick={() => onToggleBreakdown(!showBreakdown)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    showBreakdown
+                      ? 'text-[#647C47] bg-[#647C47]/10 hover:bg-[#647C47]/20'
+                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                  }`}
+                  title={showBreakdown ? 'Show total only' : 'Show breakdown'}
+                >
+                  {showBreakdown ? <List className="w-3.5 h-3.5" /> : <DollarSign className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">{showBreakdown ? 'Detailed' : 'Total Only'}</span>
+                </button>
+              </>
             )}
 
             <div className="w-px h-5 bg-gray-300 mx-1" />

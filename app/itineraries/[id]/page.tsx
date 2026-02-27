@@ -119,6 +119,7 @@ export default function ViewItineraryPage() {
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
   const [showPdfPreview, setShowPdfPreview] = useState(false)
+  const [pdfShowBreakdown, setPdfShowBreakdown] = useState(true)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [showSendModal, setShowSendModal] = useState(false)
   const [sendSuccess, setSendSuccess] = useState<string | null>(null)
@@ -604,20 +605,39 @@ export default function ViewItineraryPage() {
     }
   }
 
-  const handlePreviewPDF = async () => {
+  const handlePreviewPDF = async (showBreakdown = true) => {
     if (!itinerary || days.length === 0) return
 
     setGeneratingPDF(true)
     try {
-      const pdf = await generateItineraryPDF(itinerary, days)
+      const pdf = await generateItineraryPDF(itinerary, days, {
+        showPricingBreakdown: showBreakdown,
+        showServiceDetails: showBreakdown
+      })
       const blob = pdf.output('blob')
       setPdfPreviewBlob(blob)
+      setPdfShowBreakdown(showBreakdown)
       setShowPdfPreview(true)
     } catch (error) {
       console.error('Error generating PDF:', error)
       await dialog.alert(tCommon('error'), t('failedToGeneratePDF'), 'warning')
     } finally {
       setGeneratingPDF(false)
+    }
+  }
+
+  const handleToggleBreakdown = async (showBreakdown: boolean) => {
+    if (!itinerary || days.length === 0) return
+    try {
+      const pdf = await generateItineraryPDF(itinerary, days, {
+        showPricingBreakdown: showBreakdown,
+        showServiceDetails: showBreakdown
+      })
+      const blob = pdf.output('blob')
+      setPdfPreviewBlob(blob)
+      setPdfShowBreakdown(showBreakdown)
+    } catch (error) {
+      console.error('Error regenerating PDF:', error)
     }
   }
 
@@ -1416,7 +1436,7 @@ export default function ViewItineraryPage() {
               {t('contract')}
             </Link>
             <button
-              onClick={handlePreviewPDF}
+              onClick={() => handlePreviewPDF()}
               disabled={generatingPDF}
               className={`h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 ${
                 generatingPDF ? 'opacity-50 cursor-not-allowed' : ''
@@ -1864,6 +1884,8 @@ export default function ViewItineraryPage() {
           setShowSendModal(true)
         }}
         title="Itinerary PDF Preview"
+        showBreakdown={pdfShowBreakdown}
+        onToggleBreakdown={handleToggleBreakdown}
       />
     </div>
   )
