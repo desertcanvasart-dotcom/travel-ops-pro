@@ -110,10 +110,9 @@ const PACKAGE_TYPES = [
 
 const GENERATION_STEPS: { key: GenerationStep; label: string }[] = [
   { key: 'creating-client', label: 'Setting up itinerary...' },
-  { key: 'checking-suppliers', label: 'Checking supplier availability...' },
-  { key: 'building-route', label: 'Building optimal route...' },
-  { key: 'calculating-margins', label: 'Calculating pricing...' },
-  { key: 'finalizing', label: 'Finalizing itinerary...' },
+  { key: 'checking-suppliers', label: 'Matching services...' },
+  { key: 'building-route', label: 'Building itinerary structure...' },
+  { key: 'finalizing', label: 'Finalizing draft...' },
 ]
 
 // Supported languages for import (excluding Arabic per business rule)
@@ -360,7 +359,7 @@ export default function ImportContent() {
       // Simulate step progression
       const stepInterval = setInterval(() => {
         setGenerationStep(prev => {
-          const steps: GenerationStep[] = ['creating-client', 'checking-suppliers', 'building-route', 'calculating-margins', 'finalizing']
+          const steps: GenerationStep[] = ['creating-client', 'checking-suppliers', 'building-route', 'finalizing']
           const idx = steps.indexOf(prev)
           if (idx < steps.length - 1) return steps[idx + 1]
           return prev
@@ -411,6 +410,7 @@ export default function ImportContent() {
           cities: extractedData.cities,
           partner_id: formData.partner_id || null,
           partner_commission_percent: selectedPartner?.commission_percent || 0,
+          skip_pricing: true,
           idempotency_key: crypto.randomUUID(),
         })
       })
@@ -948,7 +948,7 @@ export default function ImportContent() {
           </div>
           <div className="space-y-2">
             {GENERATION_STEPS.map((gs) => {
-              const steps: GenerationStep[] = ['creating-client', 'checking-suppliers', 'building-route', 'calculating-margins', 'finalizing']
+              const steps: GenerationStep[] = ['creating-client', 'checking-suppliers', 'building-route', 'finalizing']
               const currentIdx = steps.indexOf(generationStep)
               const stepIdx = steps.indexOf(gs.key)
 
