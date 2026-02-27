@@ -19,11 +19,11 @@ const SERVICE_TO_DOC_TYPE: Record<string, { docType: string | null, category?: s
   dinner: { docType: 'service_order', category: 'meals' },
   breakfast: { docType: 'service_order', category: 'meals' },
   
-  // Creates Service Order for ENTRANCE FEES
-  entrance: { docType: 'service_order', category: 'entrance' },
-  activity: { docType: 'service_order', category: 'entrance' },
-  tour: { docType: 'service_order', category: 'entrance' },
-  excursion: { docType: 'service_order', category: 'entrance' },
+  // Creates Activity Voucher for ENTRANCE FEES
+  entrance: { docType: 'activity_voucher' },
+  activity: { docType: 'activity_voucher' },
+  tour: { docType: 'activity_voucher' },
+  excursion: { docType: 'activity_voucher' },
   
   // Creates Hotel Voucher
   accommodation: { docType: 'hotel_voucher' },
@@ -63,7 +63,8 @@ const DOC_PREFIXES: Record<string, string> = {
   service_order: 'SO',
   transport_voucher: 'TV',
   guide_assignment: 'GA',
-  cruise_voucher: 'CV'
+  cruise_voucher: 'CV',
+  activity_voucher: 'AV'
 }
 
 // Default supplier names by document type and category
@@ -72,11 +73,11 @@ const DEFAULT_SUPPLIER_NAMES: Record<string, Record<string, string>> = {
   transport_voucher: { default: 'Transportation' },
   guide_assignment: { default: 'Guide Services' },
   cruise_voucher: { default: 'Cruise Line' },
-  service_order: { 
+  service_order: {
     meals: 'Restaurant & Meals',
-    entrance: 'Entrance Fees',
     default: 'Ground Services'
-  }
+  },
+  activity_voucher: { default: 'Entrance Fees' }
 }
 
 // Track offsets per document type during batch generation
