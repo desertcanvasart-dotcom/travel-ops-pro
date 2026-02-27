@@ -11,7 +11,6 @@ import {
   ArrowRight, ArrowLeft, Check, Eye
 } from 'lucide-react'
 import Link from 'next/link'
-import { SUPPORTED_LANGUAGES } from '@/lib/translate'
 
 // ============================================
 // TYPES
@@ -117,8 +116,38 @@ const GENERATION_STEPS: { key: GenerationStep; label: string }[] = [
   { key: 'finalizing', label: 'Finalizing itinerary...' },
 ]
 
-// Filter out Arabic from languages
-const IMPORT_LANGUAGES = SUPPORTED_LANGUAGES.filter(l => l.code !== 'ar')
+// Supported languages for import (excluding Arabic per business rule)
+// Defined inline to avoid importing lib/translate.ts which has server-only OpenAI dependency
+const IMPORT_LANGUAGES = [
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+  { code: 'fr', name: 'French', flag: '🇫🇷' },
+  { code: 'de', name: 'German', flag: '🇩🇪' },
+  { code: 'it', name: 'Italian', flag: '🇮🇹' },
+  { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
+  { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+  { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+  { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+  { code: 'ko', name: 'Korean', flag: '🇰🇷' },
+  { code: 'nl', name: 'Dutch', flag: '🇳🇱' },
+  { code: 'pl', name: 'Polish', flag: '🇵🇱' },
+  { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
+  { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
+  { code: 'th', name: 'Thai', flag: '🇹🇭' },
+  { code: 'vi', name: 'Vietnamese', flag: '🇻🇳' },
+  { code: 'id', name: 'Indonesian', flag: '🇮🇩' },
+  { code: 'ms', name: 'Malay', flag: '🇲🇾' },
+  { code: 'sv', name: 'Swedish', flag: '🇸🇪' },
+  { code: 'da', name: 'Danish', flag: '🇩🇰' },
+  { code: 'no', name: 'Norwegian', flag: '🇳🇴' },
+  { code: 'fi', name: 'Finnish', flag: '🇫🇮' },
+  { code: 'el', name: 'Greek', flag: '🇬🇷' },
+  { code: 'cs', name: 'Czech', flag: '🇨🇿' },
+  { code: 'ro', name: 'Romanian', flag: '🇷🇴' },
+  { code: 'hu', name: 'Hungarian', flag: '🇭🇺' },
+  { code: 'he', name: 'Hebrew', flag: '🇮🇱' },
+  { code: 'uk', name: 'Ukrainian', flag: '🇺🇦' },
+]
 
 // ============================================
 // HELPERS
