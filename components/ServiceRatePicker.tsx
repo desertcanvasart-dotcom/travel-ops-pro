@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, ChevronDown, MapPin, Loader2 } from 'lucide-react'
+import { ChevronDown, MapPin, Loader2 } from 'lucide-react'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 
 // ============================================
@@ -270,17 +270,14 @@ export default function ServiceRatePicker({
     >
       {/* Search + City Filter */}
       <div className="p-2 border-b border-gray-100 space-y-2">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search rates..."
-            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-[#647C47]"
-          />
-        </div>
+        <input
+          ref={searchInputRef}
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search rates..."
+          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-[#647C47]"
+        />
         {cities.length > 1 && (
           <select
             value={cityFilter}
