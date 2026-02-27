@@ -40,6 +40,7 @@ import {
   UserX
 } from 'lucide-react'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
+import ServiceRatePicker from '@/components/ServiceRatePicker'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -191,6 +192,8 @@ const SERVICE_TYPES = [
   { value: 'supplies', label: 'Supplies', icon: '💧' },
   { value: 'service_fee', label: 'Service Fee', icon: '💼' },
 ]
+
+const RATE_TABLE_TYPES = new Set(['meal', 'transportation', 'guide', 'entrance', 'activity'])
 
 // ============================================
 // HELPER FUNCTIONS
@@ -1548,43 +1551,69 @@ export default function ItineraryEditorPage() {
                                       />
                                     </div>
                                     
-                                    {/* Row 2: Supplier Selection - Full Width */}
+                                    {/* Row 2: Rate Picker for rate-backed types, Supplier Dropdown for others */}
                                     <div className="flex items-center gap-2 pl-3">
-                                      <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
-                                        📦 {t('supplier')}:
-                                      </label>
-                                      <select
-                                        value={service.supplier_id || ''}
-                                        onChange={(e) => {
-                                          const supplierId = e.target.value || null
-                                          const supplier = suppliers.find(s => s.id === supplierId)
-                                          updateService(service.id, { 
-                                            supplier_id: supplierId,
-                                            supplier_name: supplier?.name || null
-                                          })
-                                        }}
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47] bg-white"
-                                      >
-                                        <option value="">{t('noSupplierOptional')}</option>
-                                        {getSuppliersForServiceType(service.service_type).length > 0 && (
-                                          <optgroup label={t('recommendedFor', { type: service.service_type })}>
-                                            {getSuppliersForServiceType(service.service_type).map(s => (
-                                              <option key={s.id} value={s.id}>
-                                                {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
-                                              </option>
-                                            ))}
-                                          </optgroup>
-                                        )}
-                                        {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).length > 0 && (
-                                          <optgroup label={t('allOtherSuppliers')}>
-                                            {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).map(s => (
-                                              <option key={s.id} value={s.id}>
-                                                {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
-                                              </option>
-                                            ))}
-                                          </optgroup>
-                                        )}
-                                      </select>
+                                      {RATE_TABLE_TYPES.has(service.service_type) ? (
+                                        <>
+                                          <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                                            📊 {t('selectRate')}:
+                                          </label>
+                                          <ServiceRatePicker
+                                            serviceType={service.service_type as 'meal' | 'transportation' | 'guide' | 'entrance' | 'activity'}
+                                            defaultCity={day.city}
+                                            currentValue={service.service_name}
+                                            paxCount={(itinerary?.num_adults || 1) + (itinerary?.num_children || 0)}
+                                            onSelectRate={(rate) => {
+                                              updateService(service.id, {
+                                                service_name: rate.service_name,
+                                                rate_eur: rate.rate_eur,
+                                                rate_non_eur: rate.rate_non_eur,
+                                                supplier_id: rate.supplier_id,
+                                                supplier_name: rate.supplier_name,
+                                                total_cost: service.quantity * (rate.rate_non_eur || rate.rate_eur || 0)
+                                              })
+                                            }}
+                                          />
+                                        </>
+                                      ) : (
+                                        <>
+                                          <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                                            📦 {t('supplier')}:
+                                          </label>
+                                          <select
+                                            value={service.supplier_id || ''}
+                                            onChange={(e) => {
+                                              const supplierId = e.target.value || null
+                                              const supplier = suppliers.find(s => s.id === supplierId)
+                                              updateService(service.id, {
+                                                supplier_id: supplierId,
+                                                supplier_name: supplier?.name || null
+                                              })
+                                            }}
+                                            className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47] bg-white"
+                                          >
+                                            <option value="">{t('noSupplierOptional')}</option>
+                                            {getSuppliersForServiceType(service.service_type).length > 0 && (
+                                              <optgroup label={t('recommendedFor', { type: service.service_type })}>
+                                                {getSuppliersForServiceType(service.service_type).map(s => (
+                                                  <option key={s.id} value={s.id}>
+                                                    {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
+                                                  </option>
+                                                ))}
+                                              </optgroup>
+                                            )}
+                                            {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).length > 0 && (
+                                              <optgroup label={t('allOtherSuppliers')}>
+                                                {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).map(s => (
+                                                  <option key={s.id} value={s.id}>
+                                                    {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
+                                                  </option>
+                                                ))}
+                                              </optgroup>
+                                            )}
+                                          </select>
+                                        </>
+                                      )}
                                     </div>
 
                                     {/* Row 3: Qty, Rate, Total, Actions */}

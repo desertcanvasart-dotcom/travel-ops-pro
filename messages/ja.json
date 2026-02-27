@@ -1397,6 +1397,7 @@
         "hotel_service": "ホテルサービス",
         "water": "水"
       },
+      "selectRate": "料金を選択",
       "serviceNamePlaceholder": "サービス名",
       "supplier": "サプライヤー",
       "noSupplierOptional": "-- サプライヤーなし（任意）--",
