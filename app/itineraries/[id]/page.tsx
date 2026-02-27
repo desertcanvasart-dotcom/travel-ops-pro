@@ -1406,24 +1406,6 @@ export default function ViewItineraryPage() {
                 </>
               )}
             </button>
-            <button
-              onClick={handleGenerateCommissions}
-              disabled={generatingCommissions}
-              className="h-10 px-4 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-              title={t('generateCommissionRecords')}
-            >
-              {generatingCommissions ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>{t('generating')}</span>
-                </>
-              ) : (
-                <>
-                  <Handshake className="w-4 h-4" />
-                  <span>{t('commissions')}</span>
-                </>
-              )}
-            </button>
             <GenerateDocumentsButton
               itineraryId={itinerary.id}
               itineraryCode={itinerary.itinerary_code}
