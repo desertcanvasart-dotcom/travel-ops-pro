@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, ChevronDown, MapPin, Loader2 } from 'lucide-react'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 
@@ -136,7 +137,9 @@ export default function ServiceRatePicker({
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [cityFilter, setCityFilter] = useState(defaultCity || '')
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch rates when service type changes
@@ -167,17 +170,57 @@ export default function ServiceRatePicker({
     setCityFilter(defaultCity || '')
   }, [defaultCity])
 
+  // Calculate dropdown position when opening
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const dropdownHeight = 350 // approximate max height
+
+    // Show above if not enough space below
+    const showAbove = spaceBelow < dropdownHeight && rect.top > spaceBelow
+
+    setDropdownPos({
+      top: showAbove ? rect.top - dropdownHeight : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width
+    })
+  }, [])
+
+  // Open/close handler
+  const toggleOpen = useCallback(() => {
+    if (!isOpen) {
+      updatePosition()
+    }
+    setIsOpen(!isOpen)
+  }, [isOpen, updatePosition])
+
+  // Update position on scroll/resize while open
+  useEffect(() => {
+    if (!isOpen) return
+    const handleUpdate = () => updatePosition()
+    window.addEventListener('scroll', handleUpdate, true)
+    window.addEventListener('resize', handleUpdate)
+    return () => {
+      window.removeEventListener('scroll', handleUpdate, true)
+      window.removeEventListener('resize', handleUpdate)
+    }
+  }, [isOpen, updatePosition])
+
   // Click outside to close
   useEffect(() => {
+    if (!isOpen) return
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (
+        triggerRef.current && !triggerRef.current.contains(target) &&
+        dropdownRef.current && !dropdownRef.current.contains(target)
+      ) {
         setIsOpen(false)
       }
     }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
   // Focus search when opening
@@ -212,99 +255,114 @@ export default function ServiceRatePicker({
     setSearch('')
   }
 
-  return (
-    <div ref={containerRef} className="relative flex-1">
-      {/* Trigger Button */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded text-sm bg-white hover:border-[#647C47] focus:outline-none focus:border-[#647C47] text-left"
-      >
-        <span className={currentValue ? 'text-gray-900' : 'text-gray-400'}>
-          {currentValue || 'Select rate...'}
-        </span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
+  // Portal-rendered dropdown
+  const dropdown = isOpen && dropdownPos ? createPortal(
+    <div
+      ref={dropdownRef}
+      className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+      style={{
+        position: 'fixed',
+        top: dropdownPos.top,
+        left: dropdownPos.left,
+        width: dropdownPos.width,
+        zIndex: 9999,
+      }}
+    >
+      {/* Search + City Filter */}
+      <div className="p-2 border-b border-gray-100 space-y-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search rates..."
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-[#647C47]"
+          />
+        </div>
+        {cities.length > 1 && (
+          <select
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-[#647C47]"
+          >
+            <option value="">All Cities</option>
+            {cities.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        )}
+      </div>
 
-      {/* Dropdown */}
-      {isOpen && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-          {/* Search + City Filter */}
-          <div className="p-2 border-b border-gray-100 space-y-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search rates..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-[#647C47]"
-              />
-            </div>
-            {cities.length > 1 && (
-              <select
-                value={cityFilter}
-                onChange={(e) => setCityFilter(e.target.value)}
-                className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-[#647C47]"
-              >
-                <option value="">All Cities</option>
-                {cities.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            )}
+      {/* Rate List */}
+      <div className="max-h-[250px] overflow-y-auto">
+        {loading ? (
+          <div className="py-8 text-center">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto text-gray-400" />
           </div>
-
-          {/* Rate List */}
-          <div className="max-h-[250px] overflow-y-auto">
-            {loading ? (
-              <div className="py-8 text-center">
-                <Loader2 className="w-5 h-5 animate-spin mx-auto text-gray-400" />
-              </div>
-            ) : filteredRates.length === 0 ? (
-              <div className="py-6 text-center text-sm text-gray-500">
-                No rates found
-              </div>
-            ) : (
-              filteredRates.map(rate => (
-                <button
-                  key={rate.id}
-                  type="button"
-                  onClick={() => handleSelect(rate)}
-                  className="w-full px-3 py-2 text-left hover:bg-[#f5f7f2] border-b border-gray-50 last:border-0 transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">{rate.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {rate.city && (
-                          <span className="flex items-center gap-0.5 text-xs text-gray-500">
-                            <MapPin className="w-3 h-3" />{rate.city}
-                          </span>
-                        )}
-                        {rate.details && (
-                          <span className="text-xs text-gray-400">{rate.details}</span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-sm font-semibold text-[#647C47] whitespace-nowrap">
-                      €{rate.rate_eur.toFixed(2)}
-                    </span>
+        ) : filteredRates.length === 0 ? (
+          <div className="py-6 text-center text-sm text-gray-500">
+            No rates found
+          </div>
+        ) : (
+          filteredRates.map(rate => (
+            <button
+              key={rate.id}
+              type="button"
+              onClick={() => handleSelect(rate)}
+              className="w-full px-3 py-2 text-left hover:bg-[#f5f7f2] border-b border-gray-50 last:border-0 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 truncate">{rate.name}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {rate.city && (
+                      <span className="flex items-center gap-0.5 text-xs text-gray-500">
+                        <MapPin className="w-3 h-3" />{rate.city}
+                      </span>
+                    )}
+                    {rate.details && (
+                      <span className="text-xs text-gray-400">{rate.details}</span>
+                    )}
                   </div>
-                </button>
-              ))
-            )}
-          </div>
+                </div>
+                <span className="text-sm font-semibold text-[#647C47] whitespace-nowrap">
+                  €{rate.rate_eur.toFixed(2)}
+                </span>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
 
-          {/* Footer */}
-          {!loading && (
-            <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
-              {filteredRates.length} rate{filteredRates.length !== 1 ? 's' : ''} available
-            </div>
-          )}
+      {/* Footer */}
+      {!loading && (
+        <div className="px-3 py-1.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
+          {filteredRates.length} rate{filteredRates.length !== 1 ? 's' : ''} available
         </div>
       )}
+    </div>,
+    document.body
+  ) : null
+
+  return (
+    <div className="relative flex-1">
+      {/* Trigger Button */}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggleOpen}
+        className="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded text-sm bg-white hover:border-[#647C47] focus:outline-none focus:border-[#647C47] text-left"
+      >
+        <span className={currentValue ? 'text-gray-900 truncate' : 'text-gray-400'}>
+          {currentValue || 'Select rate...'}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Portal Dropdown */}
+      {dropdown}
     </div>
   )
 }
