@@ -986,7 +986,7 @@ export default function ImportContent() {
           </div>
           <div className="flex items-center justify-center gap-3">
             <Link
-              href="/tours"
+              href="/tours/manage"
               className="flex items-center gap-2 px-6 py-2.5 bg-[#647C47] text-white font-medium rounded-lg hover:bg-[#4f6238] transition-colors text-sm"
             >
               <Package className="w-4 h-4" />
