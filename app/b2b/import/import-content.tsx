@@ -985,15 +985,13 @@ export default function ImportContent() {
             <p className="text-sm text-gray-500 mt-1">{formData.trip_name}</p>
           </div>
           <div className="flex items-center justify-center gap-3">
-            {createdItineraryId && (
-              <Link
-                href="/tours"
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#647C47] text-white font-medium rounded-lg hover:bg-[#4f6238] transition-colors text-sm"
-              >
-                <Edit3 className="w-4 h-4" />
-                {t('viewItinerary')}
-              </Link>
-            )}
+            <Link
+              href="/tours"
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#647C47] text-white font-medium rounded-lg hover:bg-[#4f6238] transition-colors text-sm"
+            >
+              <Package className="w-4 h-4" />
+              {t('goToTours')}
+            </Link>
             <button
               onClick={handleReset}
               className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
