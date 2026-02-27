@@ -367,20 +367,45 @@ export default function ImportContent() {
         })
       }, 3000)
 
+      // Map language code to full name for the generate-itinerary endpoint
+      const languageMap: Record<string, string> = {
+        en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian',
+        pt: 'Portuguese', ru: 'Russian', zh: 'Chinese', ja: 'Japanese', ko: 'Korean',
+        nl: 'Dutch', pl: 'Polish', tr: 'Turkish', hi: 'Hindi', th: 'Thai',
+        vi: 'Vietnamese', id: 'Indonesian', ms: 'Malay', sv: 'Swedish', da: 'Danish',
+        no: 'Norwegian', fi: 'Finnish', el: 'Greek', cs: 'Czech', ro: 'Romanian',
+        hu: 'Hungarian', he: 'Hebrew', uk: 'Ukrainian',
+      }
+      const guideLanguageName = languageMap[formData.guide_language] || 'English'
+
+      // Ensure start_date is valid — use today if empty
+      const startDate = formData.start_date || new Date().toISOString().split('T')[0]
+
+      // Normalize extracted_days to match what generate-itinerary expects
+      const normalizedDays = editingDays.map(day => ({
+        ...day,
+        // Ensure meals_mentioned is in the format the endpoint/prompt-builder expects
+        meals_included: {
+          breakfast: day.meals_mentioned?.includes('Breakfast') || false,
+          lunch: day.meals_mentioned?.includes('Lunch') || false,
+          dinner: day.meals_mentioned?.includes('Dinner') || false,
+        },
+      }))
+
       const response = await fetch('/api/ai/generate-itinerary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           is_structured_input: true,
-          extracted_days: editingDays,
+          extracted_days: normalizedDays,
           raw_itinerary: extractedData.raw_itinerary,
           source: 'b2b_file_import',
-          trip_name: formData.trip_name,
-          start_date: formData.start_date || undefined,
+          tour_name: formData.trip_name,
+          start_date: startDate,
           duration_days: editingDays.length,
           num_adults: formData.num_adults,
           num_children: formData.num_children,
-          language: formData.guide_language,
+          language: guideLanguageName,
           tier: formData.tier,
           package_type: formData.package_type,
           cities: extractedData.cities,
@@ -394,14 +419,14 @@ export default function ImportContent() {
 
       const result = await response.json()
 
-      if (!response.ok || result.error) {
+      if (!response.ok || !result.success) {
         setGenerationError(result.error || 'Failed to generate itinerary')
         setStep('review')
         return
       }
 
       setGenerationStep('complete')
-      setCreatedItineraryId(result.itinerary_id || result.id)
+      setCreatedItineraryId(result.data?.itinerary_id || result.data?.id)
       setStep('complete')
     } catch (err: any) {
       console.error('Generation error:', err)
