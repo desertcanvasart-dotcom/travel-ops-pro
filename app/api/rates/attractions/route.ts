@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
     }
     
     if (activeOnly) {
-      query = query.eq('is_active', true)
+      // Use neq(false) instead of eq(true) to include NULL values (default = active)
+      query = query.neq('is_active', false)
     }
     
     if (addonsOnly) {

@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     if (category) query = query.eq('category', category)
     if (isAddon === 'true') query = query.eq('is_addon', true)
     if (isAddon === 'false') query = query.eq('is_addon', false)
-    if (activeOnly === 'true') query = query.eq('is_active', true)
+    if (activeOnly === 'true') query = query.neq('is_active', false) // Include NULL (default = active)
     if (search) query = query.ilike('attraction_name', `%${search}%`)
     if (limit) query = query.limit(parseInt(limit))
 
