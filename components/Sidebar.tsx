@@ -53,7 +53,8 @@ import {
   Tags,
   Globe,
   Mail,
-  Droplets
+  Droplets,
+  Upload
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -149,6 +150,7 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'tourBuilder', href: '/tours/manage', icon: LayoutTemplate },
       { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
+      { labelKey: 'importItinerary', href: '/b2b/import', icon: Upload },
       { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
       { labelKey: 'quotes', href: '/b2b/quotes', icon: FileText },
       { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
