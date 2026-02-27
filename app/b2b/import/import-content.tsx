@@ -399,6 +399,7 @@ export default function ImportContent() {
           extracted_days: normalizedDays,
           raw_itinerary: extractedData.raw_itinerary,
           source: 'b2b_file_import',
+          client_name: 'Imported Client',
           tour_name: formData.trip_name,
           start_date: startDate,
           duration_days: editingDays.length,
