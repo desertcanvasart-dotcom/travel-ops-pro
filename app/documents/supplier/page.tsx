@@ -8,6 +8,7 @@ import {
   Hotel, Car, Ship, MapPin, Users, CheckCircle,
   Clock, RotateCcw
 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface SupplierDocument {
   id: string
@@ -43,6 +44,7 @@ interface Stats {
 const DOCUMENT_TYPES = [
   { value: 'hotel_voucher', label: 'Hotel Voucher', icon: Hotel, color: 'bg-blue-100 text-blue-700' },
   { value: 'service_order', label: 'Service Order', icon: FileText, color: 'bg-purple-100 text-purple-700' },
+  { value: 'activity_voucher', label: 'Activity Voucher', icon: MapPin, color: 'bg-emerald-100 text-emerald-700' },
   { value: 'transport_voucher', label: 'Transport Voucher', icon: Car, color: 'bg-amber-100 text-amber-700' },
   { value: 'guide_assignment', label: 'Guide Assignment', icon: Users, color: 'bg-pink-100 text-pink-700' },
   { value: 'cruise_voucher', label: 'Cruise Voucher', icon: Ship, color: 'bg-cyan-100 text-cyan-700' }
@@ -58,6 +60,7 @@ const STATUS_OPTIONS = [
 
 export default function SupplierDocumentsPage() {
   const t = useTranslations('supplierDocuments')
+  const dialog = useConfirmDialog()
   const [documents, setDocuments] = useState<SupplierDocument[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -122,7 +125,13 @@ export default function SupplierDocumentsPage() {
   }
 
   const handleDelete = async (docId: string) => {
-    if (!confirm(t('confirmDeleteDocument'))) return
+    const confirmed = await dialog.confirm({
+      title: t('deleteDocument'),
+      message: t('confirmDeleteDocument'),
+      confirmText: t('delete'),
+      variant: 'danger',
+    })
+    if (!confirmed) return
 
     try {
       const response = await fetch(`/api/supplier-documents/${docId}`, {

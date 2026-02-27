@@ -1836,6 +1836,7 @@
         "revertToDraft": "下書きに戻す",
         "delete": "文書を削除"
       },
+      "deleteDocument": "文書を削除",
       "confirmDeleteDocument": "この文書を削除してもよろしいですか？"
     },
     "supplierDocumentDetail": {
@@ -6465,6 +6466,7 @@
     "markAsCompleted": "完了にする",
     "revertToDraft": "下書きに戻す",
     "delete": "削除",
+    "deleteDocument": "書類を削除",
     "confirmDeleteDocument": "この書類を削除してもよろしいですか？"
   },
   "supplierDocumentEdit": {

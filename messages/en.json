@@ -5726,6 +5726,7 @@
     "markAsCompleted": "Mark as Completed",
     "revertToDraft": "Revert to Draft",
     "delete": "Delete",
+    "deleteDocument": "Delete Document",
     "confirmDeleteDocument": "Are you sure you want to delete this document?"
   },
   "supplierDocumentEdit": {
