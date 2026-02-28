@@ -240,11 +240,15 @@ export function applyB2BDayRules(days: any[]): any[] {
     }
 
     // Transfer-only detection for first/last days
+    // If attractions[] is explicitly provided and non-empty, trust it (data from enriched template)
+    // Only check title indicators when attractions are empty to decide if it's sightseeing
     const combined = ((day.title || '') + ' ' + (day.description || '')).toLowerCase()
-    const hasRealAttractions = (day.attractions || []).length > 0
-      && SIGHTSEEING_INDICATORS.some(p => p.test(combined))
+    const attractionsList = corrected.attractions || []
+    const hasProvidedAttractions = attractionsList.length > 0
+    const titleSuggestsSightseeing = SIGHTSEEING_INDICATORS.some(p => p.test(combined))
+    const hasRealSightseeing = hasProvidedAttractions || titleSuggestsSightseeing
 
-    if ((isFirstDay || isLastDay) && !hasRealAttractions && totalDays > 1) {
+    if ((isFirstDay || isLastDay) && !hasRealSightseeing && totalDays > 1) {
       // Transfer-only: clear attractions, no guide needed
       corrected.attractions = []
       corrected.services = {

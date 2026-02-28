@@ -70,7 +70,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Convert itinerary days to template itinerary JSONB format
-    const templateItinerary = days.map(day => {
+    // IMPORTANT: Carry ALL pricing-relevant fields from itinerary_days + itinerary_services
+    // so the B2B pricing engine doesn't have to reconstruct them from titles.
+    const templateItinerary = days.map((day, index) => {
       const daySvcs = servicesByDay[day.id] || []
       const meals: string[] = []
 
@@ -87,7 +89,49 @@ export async function POST(request: NextRequest) {
       if (hasLunch) meals.push('lunch')
       if (hasDinner) meals.push('dinner')
 
-      const isCruiseDay = daySvcs.some((s: any) => s.service_type === 'cruise')
+      // Detect cruise day from services or day flag
+      const isCruiseDay = daySvcs.some((s: any) => s.service_type === 'cruise') || day.is_cruise_day
+
+      // Derive service flags from itinerary_services
+      const hasGuideService = daySvcs.some((s: any) => s.service_type === 'guide')
+      const isFirstDay = index === 0
+      const isLastDay = index === days.length - 1
+
+      // Airport: determine arrival vs departure from service name + position
+      const airportArrival = daySvcs.some((s: any) =>
+        s.service_type === 'airport_service' &&
+        (s.service_name?.toLowerCase().includes('meet') ||
+         s.service_name?.toLowerCase().includes('arrival') ||
+         s.service_name?.toLowerCase().includes('greet'))
+      ) || (isFirstDay && daySvcs.some((s: any) => s.service_type === 'airport_service'))
+
+      const airportDeparture = daySvcs.some((s: any) =>
+        s.service_type === 'airport_service' &&
+        (s.service_name?.toLowerCase().includes('departure') ||
+         s.service_name?.toLowerCase().includes('farewell') ||
+         s.service_name?.toLowerCase().includes('assist'))
+      ) || (isLastDay && daySvcs.some((s: any) => s.service_type === 'airport_service'))
+
+      // Hotel services: check-in vs check-out
+      const hotelCheckin = daySvcs.some((s: any) =>
+        s.service_type === 'hotel_service' &&
+        s.service_name?.toLowerCase().includes('check-in')
+      ) || (isFirstDay && daySvcs.some((s: any) => s.service_type === 'hotel_service'))
+
+      const hotelCheckout = daySvcs.some((s: any) =>
+        s.service_type === 'hotel_service' &&
+        (s.service_name?.toLowerCase().includes('check-out') ||
+         s.service_name?.toLowerCase().includes('porter'))
+      ) || (isLastDay && daySvcs.some((s: any) => s.service_type === 'hotel_service'))
+
+      // Infer accommodation_type
+      let accommodationType: string = 'hotel'
+      if (isCruiseDay) {
+        accommodationType = 'cruise'
+      } else if (isLastDay && !daySvcs.some((s: any) =>
+        s.service_type === 'accommodation' || s.service_type === 'cruise')) {
+        accommodationType = 'none'
+      }
 
       return {
         day: day.day_number,
@@ -95,7 +139,19 @@ export async function POST(request: NextRequest) {
         description: day.description || '',
         meals,
         city: day.city || day.overnight_location || itinerary.city || 'Cairo',
-        is_cruise_day: isCruiseDay
+        is_cruise_day: isCruiseDay,
+        // Pricing-critical fields from itinerary_days
+        attractions: day.attractions || [],
+        overnight_city: day.overnight_city || day.overnight_location || null,
+        accommodation_type: accommodationType,
+        // Service flags derived from itinerary_services
+        services: {
+          airport_arrival: airportArrival,
+          airport_departure: airportDeparture,
+          hotel_checkin: hotelCheckin,
+          hotel_checkout: hotelCheckout,
+          guide_required: day.guide_required ?? hasGuideService,
+        },
       }
     })
 

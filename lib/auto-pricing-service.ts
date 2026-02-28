@@ -27,6 +27,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
+import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -71,6 +72,7 @@ export interface ItineraryDay {
   title: string
   description?: string
   city: string
+  overnight_city?: string  // Where the traveler sleeps — may differ from city on day trips
   accommodation_type: AccommodationType
   meals: {
     breakfast: MealStatus
@@ -507,7 +509,7 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
     return []
   }
 
-  return itineraryData.map((day: any, index: number) => {
+  const parsed = itineraryData.map((day: any, index: number) => {
     // Handle old format (simple meals array)
     let meals = {
       breakfast: 'none' as MealStatus,
@@ -587,6 +589,7 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
       title: day.title || `Day ${index + 1}`,
       description: day.description || '',
       city: day.city || inferCityFromTitle(day.title || ''),
+      overnight_city: day.overnight_city || undefined,
       accommodation_type: day.accommodation_type || inferAccommodationType(day, itineraryData),
       meals,
       attractions,
@@ -597,6 +600,10 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
       is_cruise_day: day.is_cruise_day || false
     }
   })
+
+  // Apply B2B Day Rules Engine for deterministic enforcement
+  // (first/last day flags, transfer-only cleanup, meal venue removal)
+  return applyB2BDayRules(parsed) as ItineraryDay[]
 }
 
 /**
@@ -605,17 +612,7 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
 function extractAttractionsFromTitle(title: string): string[] {
   const attractions: string[] = []
   const patterns = [
-    /karnak/i,
-    /luxor temple/i,
-    /valley of (the )?kings/i,
-    /hatshepsut/i,
-    /colossi of memnon/i,
-    /edfu/i,
-    /kom[- ]?ombo/i,
-    /philae/i,
-    /high dam/i,
-    /aswan dam/i,
-    /unfinished obelisk/i,
+    // Cairo / Giza
     /pyramid/i,
     /sphinx/i,
     /egyptian museum/i,
@@ -624,7 +621,29 @@ function extractAttractionsFromTitle(title: string): string[] {
     /gem/i,
     /citadel/i,
     /khan el[- ]?khalili/i,
-    /abu simbel/i
+    // Luxor
+    /karnak/i,
+    /luxor temple/i,
+    /valley of (the )?kings/i,
+    /hatshepsut/i,
+    /colossi of memnon/i,
+    // Aswan
+    /philae/i,
+    /high dam/i,
+    /aswan dam/i,
+    /unfinished obelisk/i,
+    // Between Luxor & Aswan
+    /edfu/i,
+    /kom[- ]?ombo/i,
+    /abu simbel/i,
+    // Alexandria
+    /pompey['']?s?\s*pillar/i,
+    /qaitbay/i,
+    /catacombs/i,
+    /bibliotheca\s*alexandrina/i,
+    /alexandria\s*library/i,
+    /montazah/i,
+    /stanley\s*bridge/i,
   ]
 
   for (const pattern of patterns) {
@@ -673,7 +692,16 @@ function normalizeAttractionName(name: string): string {
     'citadel': 'Saladin Citadel',
     'khan el khalili': 'Khan El Khalili',
     'khan el-khalili': 'Khan El Khalili',
-    'abu simbel': 'Abu Simbel'
+    'abu simbel': 'Abu Simbel',
+    // Alexandria
+    "pompey's pillar": "Pompey's Pillar",
+    'pompeys pillar': "Pompey's Pillar",
+    'qaitbay': 'Qaitbay Citadel',
+    'catacombs': 'Catacombs of Kom El Shoqafa',
+    'bibliotheca alexandrina': 'Bibliotheca Alexandrina',
+    'alexandria library': 'Bibliotheca Alexandrina',
+    'montazah': 'Montazah Palace Gardens',
+    'stanley bridge': 'Stanley Bridge',
   }
 
   return nameMap[normalized] || name
@@ -1236,7 +1264,7 @@ export function findTransportRate(
 
   // Priority 5: Fallback to nearby cities
   if (!record) {
-    const fallbackCities = ['luxor', 'aswan', 'cairo']
+    const fallbackCities = ['luxor', 'aswan', 'cairo', 'alexandria', 'hurghada']
     for (const fallbackCity of fallbackCities) {
       if (fallbackCity === cityLower) continue
       const fallbackKey = [serviceType, fallbackCity, duration, ''].join('|')
@@ -1552,7 +1580,7 @@ export async function calculateDayBasedPricing(
     cruiseRates = await getCruiseRates(tier, firstCruiseDay?.city)
   }
 
-  const hotelCities = [...new Set(hotelDays.map(d => d.city))]
+  const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
   const hotelRatesMap = new Map<string, Awaited<ReturnType<typeof getHotelRates>>>()
   for (const city of hotelCities) {
     const rates = await getHotelRates(city, tier)
@@ -1573,7 +1601,7 @@ export async function calculateDayBasedPricing(
   let singleSupplement = 0
 
   for (const day of hotelDays) {
-    const hotelRate = hotelRatesMap.get(day.city)
+    const hotelRate = hotelRatesMap.get(day.overnight_city || day.city)
     if (hotelRate) {
       singleSupplement += hotelRate.singleSuppNight
     } else {
@@ -1737,16 +1765,17 @@ export async function calculateDayBasedPricing(
 
   let accommodationPPD = 0
 
-  // Hotel PPD
+  // Hotel PPD — use overnight_city for day trips (e.g., Alexandria day trip sleeps in Cairo)
   for (const day of hotelDays) {
-    const hotelRate = hotelRatesMap.get(day.city)
+    const hotelCity = day.overnight_city || day.city
+    const hotelRate = hotelRatesMap.get(hotelCity)
     if (hotelRate) {
       accommodationPPD += hotelRate.ppdNight
       services.push({
         id: `day${day.day}-hotel`,
         dayNumber: day.day,
         serviceType: 'accommodation',
-        serviceName: `Hotel - ${hotelRate.hotelName} (${day.city})`,
+        serviceName: `Hotel - ${hotelRate.hotelName} (${hotelCity})`,
         quantity: 1,
         quantityMode: 'per_pax',
         unitCost: hotelRate.ppdNight,
