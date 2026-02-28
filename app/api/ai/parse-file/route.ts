@@ -9,7 +9,6 @@
 
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import mammoth from 'mammoth'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 
@@ -313,6 +312,7 @@ function buildContentBlocks(
 // ============================================
 
 async function extractDocxText(base64Data: string): Promise<string> {
+  const mammoth = await import('mammoth')
   const buffer = Buffer.from(base64Data, 'base64')
   const result = await mammoth.extractRawText({ buffer })
   return result.value

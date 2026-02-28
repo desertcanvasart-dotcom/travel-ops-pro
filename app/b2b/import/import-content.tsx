@@ -307,6 +307,13 @@ export default function ImportContent() {
         })
       })
 
+      // Check if response is actually JSON (not an HTML error page)
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        setExtractError('Server error during extraction. Please try again.')
+        return
+      }
+
       const result = await response.json()
 
       if (!result.success) {
