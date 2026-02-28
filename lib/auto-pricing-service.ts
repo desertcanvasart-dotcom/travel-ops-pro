@@ -828,7 +828,10 @@ export async function getHotelRates(
       const hotel = anyHotel[0]
       // rate_double_eur is already per-person (double occupancy)
       const ppd = hotel.rate_double_eur
-      const singleSupp = (hotel.rate_single_eur || hotel.rate_double_eur) - hotel.rate_double_eur
+      // Use ?? (nullish coalescing) so that rate_single_eur=0 isn't treated as missing
+      const singleSupp = (hotel.rate_single_eur ?? hotel.rate_double_eur) - hotel.rate_double_eur
+
+      console.log(`🏨 Hotel (fallback tier): ${hotel.name} | PPD: €${ppd} | Single: €${hotel.rate_single_eur} | Double: €${hotel.rate_double_eur} | Supp: €${singleSupp}`)
 
       return {
         hotelName: hotel.name,
@@ -840,9 +843,10 @@ export async function getHotelRates(
     const hotel = hotels[0]
     // rate_double_eur is already per-person (double occupancy)
     const ppd = hotel.rate_double_eur
-    const singleSupp = (hotel.rate_single_eur || hotel.rate_double_eur) - hotel.rate_double_eur
+    // Use ?? (nullish coalescing) so that rate_single_eur=0 isn't treated as missing
+    const singleSupp = (hotel.rate_single_eur ?? hotel.rate_double_eur) - hotel.rate_double_eur
 
-    console.log(`✅ Hotel: ${hotel.name} | PPD/night: €${ppd.toFixed(2)} | SingleSupp/night: €${singleSupp.toFixed(2)}`)
+    console.log(`✅ Hotel: ${hotel.name} | PPD/night: €${ppd?.toFixed(2)} | SingleRate: €${hotel.rate_single_eur} | DoubleRate: €${hotel.rate_double_eur} | SingleSupp/night: €${singleSupp.toFixed(2)}`)
 
     return {
       hotelName: hotel.name,

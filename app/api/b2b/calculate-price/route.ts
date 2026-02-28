@@ -546,7 +546,7 @@ export async function POST(request: NextRequest) {
         margin_amount: autoPriceResult.marginAmount,
         selling_price: autoPriceResult.sellingPrice,
         price_per_person: autoPriceResult.pricePerPerson,
-        single_supplement: autoPriceResult.singleSupplement || 0,
+        single_supplement: autoPriceResult.singleSupplement ?? 0,
         currency: autoPriceResult.currency,
         pax_pricing_table: autoPriceResult.paxPricingTable,
         // Include age-based pricing breakdown if available

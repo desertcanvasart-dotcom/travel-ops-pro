@@ -226,7 +226,7 @@ async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ 
     const dblRate = anyHotel[0].rate_double_eur || 0
     return {
       rate: dblRate,
-      singleRate: anyHotel[0].rate_single_eur || dblRate,
+      singleRate: anyHotel[0].rate_single_eur ?? dblRate,
       name: anyHotel[0].name || 'Hotel',
       id: anyHotel[0].id
     }
@@ -235,7 +235,7 @@ async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ 
   const dblRate = hotels[0].rate_double_eur || 0
   return {
     rate: dblRate,
-    singleRate: hotels[0].rate_single_eur || dblRate,
+    singleRate: hotels[0].rate_single_eur ?? dblRate,
     name: hotels[0].name || 'Hotel',
     id: hotels[0].id
   }

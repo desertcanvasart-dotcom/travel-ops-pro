@@ -203,7 +203,7 @@ export default function TourPriceCalculator() {
       const data = await res.json()
 
       if (data.success && data.data.pax_pricing_table) {
-        const singleSupplement = data.data.single_supplement || 0
+        const singleSupplement = data.data.single_supplement ?? 0
         const sheet: RateSheetRow[] = data.data.pax_pricing_table
           .filter((row: any) => row.numPax >= paxFrom && row.numPax <= paxTo)
           .map((row: any) => {
@@ -791,7 +791,7 @@ export default function TourPriceCalculator() {
                       <td className="px-4 py-2 text-right font-medium">&euro;{row.selling_price.toFixed(2)}</td>
                       <td className="px-4 py-2 text-right font-bold text-[#647C47]">&euro;{row.price_per_person.toFixed(2)}</td>
                       <td className="px-4 py-2 text-right text-amber-600">
-                        {row.single_supplement ? `\u20AC${row.single_supplement.toFixed(2)}` : '\u2014'}
+                        {row.single_supplement != null ? `\u20AC${row.single_supplement.toFixed(2)}` : '\u2014'}
                       </td>
                     </tr>
                   ))}
