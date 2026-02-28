@@ -896,17 +896,71 @@ export async function createLandItineraryServices(
     // but ADD local sightseeing vehicle if there are attractions at the destination
     const skipRegularTransport = isDomesticFlight || (isIntercityTransfer && isTransferOnly)
     if (!isFreeDay && !isCruiseDay && !skipRegularTransport) {
-      const transportRate = (isTransferOnly && !isIntercityTransfer) ? rates.transferRate : rates.vehiclePerDay
+      // --- Per-day transport rate lookup ---
+      // If the day is in a different city, fetch transport rate for THAT city
+      const dayCity = dayData.city || effectiveCity
+      let dayTransportRate = rates.vehiclePerDay
+      let dayTransportName = rates.vehicleTypeName
+      let dayTransportCode = rates.vehicleServiceCode
+      let dayTransportSupplier = rates.vehicleSupplierName
+      let dayTransferRate = rates.transferRate
+      let dayTransferCode = rates.transferServiceCode
+      let dayTransferSupplier = rates.transferSupplierName
+
+      if (dayCity.toLowerCase() !== effectiveCity.toLowerCase()) {
+        // Fetch city-specific transport rates
+        const { getTransportRateForPax: getCityTransportRate } = await import('@/lib/transport-rate-utils')
+        const { data: cityDayTourRates } = await supabase
+          .from('transportation_rates')
+          .select('*')
+          .eq('is_active', true)
+          .eq('service_type', 'day_tour')
+          .ilike('city', dayCity)
+          .limit(1)
+
+        if (cityDayTourRates?.length) {
+          const result = getCityTransportRate(cityDayTourRates[0], totalPax, isEuroPassport)
+          if (result) {
+            dayTransportRate = isEuroPassport ? result.rateEur : result.rateNonEur
+            dayTransportName = result.vehicleType
+            dayTransportCode = cityDayTourRates[0].id || rates.vehicleServiceCode
+            dayTransportSupplier = cityDayTourRates[0].supplier_name || null
+            console.log(`🚗 Day ${dayNumber} (${dayCity}): Using city-specific transport rate €${dayTransportRate}`)
+          }
+        } else {
+          console.warn(`⚠️ Day ${dayNumber}: No transport rate found for ${dayCity} — using ${effectiveCity} rate €${dayTransportRate}`)
+        }
+
+        // Also fetch city-specific transfer rate
+        const { data: cityTransferRates } = await supabase
+          .from('transportation_rates')
+          .select('*')
+          .eq('is_active', true)
+          .eq('service_type', 'airport_transfer')
+          .ilike('city', dayCity)
+          .limit(1)
+
+        if (cityTransferRates?.length) {
+          const result = getCityTransportRate(cityTransferRates[0], totalPax, isEuroPassport)
+          if (result) {
+            dayTransferRate = isEuroPassport ? result.rateEur : result.rateNonEur
+            dayTransferCode = cityTransferRates[0].id || rates.transferServiceCode
+            dayTransferSupplier = cityTransferRates[0].supplier_name || null
+          }
+        }
+      }
+
+      const transportRate = (isTransferOnly && !isIntercityTransfer) ? dayTransferRate : dayTransportRate
       const transportName = (isTransferOnly && !isIntercityTransfer)
         ? 'Airport/Hotel Transfer'
         : isIntercityTransfer && hasSightseeingOnThisDay
-          ? `${rates.vehicleTypeName} Sightseeing Transportation (${currentCity})`
-          : `${rates.vehicleTypeName} Transportation`
+          ? `${dayTransportName} Sightseeing Transportation (${currentCity})`
+          : `${dayTransportName} Transportation`
       services.push({
         service_type: 'transportation',
-        service_code: rates.vehicleServiceCode,
+        service_code: (isTransferOnly && !isIntercityTransfer) ? dayTransferCode : dayTransportCode,
         service_name: transportName,
-        supplier_name: rates.vehicleSupplierName,
+        supplier_name: (isTransferOnly && !isIntercityTransfer) ? dayTransferSupplier : dayTransportSupplier,
         quantity: 1,
         rate_eur: transportRate,
         rate_non_eur: transportRate,
@@ -1004,19 +1058,31 @@ export async function createLandItineraryServices(
         // Normalize attraction name for better matching
         const normalizedAttr = normalizeAttractionForMatch(attr)
 
-        // Find best match: prefer exact match, then longest partial match
+        // Find best match: prefer exact match, then STRICT partial match only
         let fee = rates.allEntranceFees.find((ef: any) =>
           ef.attraction_name.toLowerCase() === normalizedAttr.toLowerCase()
         )
+        let matchType = 'exact'
         if (!fee) {
-          // Partial match — sort by name length DESC to prefer "Grand Egyptian Museum" over "Egyptian Museum"
+          // STRICT partial match — require substantial name overlap to prevent
+          // false matches like "Solar Boat Museum" → "Egyptian Museum"
           const sortedFees = [...(rates.allEntranceFees || [])].sort(
             (a: any, b: any) => (b.attraction_name?.length || 0) - (a.attraction_name?.length || 0)
           )
-          fee = sortedFees.find((ef: any) =>
-            ef.attraction_name.toLowerCase().includes(normalizedAttr.toLowerCase()) ||
-            normalizedAttr.toLowerCase().includes(ef.attraction_name.toLowerCase())
-          )
+          fee = sortedFees.find((ef: any) => {
+            const dbName = ef.attraction_name.toLowerCase()
+            const searchName = normalizedAttr.toLowerCase()
+            // Require at least 50% name overlap ratio to prevent false matches
+            const overlapRatio = Math.min(dbName.length, searchName.length) / Math.max(dbName.length, searchName.length)
+            return overlapRatio > 0.5 && (dbName.includes(searchName) || searchName.includes(dbName))
+          })
+          if (fee) {
+            matchType = 'partial'
+            const dbName = fee.attraction_name.toLowerCase()
+            const searchName = normalizedAttr.toLowerCase()
+            const ratio = Math.min(dbName.length, searchName.length) / Math.max(dbName.length, searchName.length)
+            console.warn(`⚠️ Day ${dayNumber}: Partial entrance fee match: "${attr}" → "${fee.attraction_name}" (overlap: ${(ratio * 100).toFixed(0)}%)`)
+          }
         }
 
         if (fee) {
@@ -1028,7 +1094,11 @@ export async function createLandItineraryServices(
             : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
           dayEntranceTotal += feePerPerson * totalPax
           matchedAttractions.push(fee.attraction_name)
+          if (matchType === 'exact') {
+            console.log(`✅ Day ${dayNumber}: Entrance fee matched: "${attr}" → "${fee.attraction_name}" = €${feePerPerson}/person`)
+          }
         } else {
+          console.warn(`❌ Day ${dayNumber}: No entrance fee found for "${attr}" (normalized: "${normalizedAttr}") — skipping`)
           warnings.push(`Day ${dayNumber}: No entrance fee found for "${attr}" — skipping`)
         }
       }

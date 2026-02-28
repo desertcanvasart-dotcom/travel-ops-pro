@@ -123,17 +123,45 @@ If the input mentions visiting a city and then RETURNING to the base hotel:
 - cities_visited = ["Cairo", "Alexandria"] but overnight_city = "Cairo"
 - The hotel stay remains in the base city throughout
 
-DEPARTURE/FAREWELL DAYS:
+ARRIVAL DAYS (CRITICAL):
+If the FIRST day is just "arrival" + "transfer to hotel" with NO sightseeing:
+- is_arrival: true, is_transfer_only: true
+- attractions: [] (EMPTY — do NOT list nearby landmarks)
+- guide_required: false
+- needs_airport_service: true, needs_hotel_service: true
+If the first day has BOTH arrival AND sightseeing (e.g., "D1 CAI/ALX/CAI"):
+- is_arrival: true, is_transfer_only: false
+- List actual visited sites in attractions[]
+- guide_required: true
+- needs_airport_service: true, needs_hotel_service: true
+
+DEPARTURE/FAREWELL DAYS (CRITICAL):
 If input mentions "farewell", "departure", "airport transfer", "final breakfast":
 - is_departure: true, is_transfer_only: true
+- attractions: [] (EMPTY — do NOT list nearby landmarks)
+- guide_required: false
+- needs_airport_service: true, needs_hotel_service: true
 - overnight_city should be the departure city (usually Cairo)
-- Guide is NOT needed for transfer-only days
+
+TRANSFER-ONLY RULE:
+When is_transfer_only is true, the attractions array MUST be empty [].
+Do NOT add landmarks just because the traveler can "see" them from the car/hotel.
+A "glimpse of the pyramids" is NOT the same as "visiting the pyramids".
 
 ENTRANCE FEE LOGIC:
-DEFAULT: Any attraction mentioned = entrance fee included → add to attractions[]
+DEFAULT: Any attraction that is actually VISITED (entered) = add to attractions[]
 (OUTSIDE) = Photo stop only → add to photo_stops[] (NO entrance fee)
 Do NOT use an "entrance_included" array. The "attractions" array IS the entrance fee list.
 Only sites explicitly marked (OUTSIDE) go into photo_stops[] and are excluded from fees.
+
+MEAL VENUES vs ATTRACTIONS (CRITICAL):
+Restaurants, markets, and bazaars where tourists EAT are NOT attractions.
+Do NOT add these to attractions[]:
+- "Fish Market" (when it's for lunch/dinner, not sightseeing)
+- Restaurant names
+- "Khan El Khalili" (when it's for shopping/dining, not a guided visit with entrance fee)
+If a place is BOTH a dining venue AND a tourist site, only add it to attractions[]
+if the traveler is actually entering and touring it (not just eating there).
 
 FREE DAYS:
 "D5 CRZ" with nothing else = Sailing day → is_free_day: true, is_sailing_day: true
@@ -271,7 +299,12 @@ ${writingContext}
 □ I did NOT add Abu Simbel, Unfinished Obelisk, or other sites not mentioned
 □ DAY TRIPS: If input says "return to Cairo" or "back to [city]", the overnight_city is the RETURN city, NOT the visited city
 □ OVERNIGHT CITIES: If the hotel is in Cairo and they take a day trip, overnight_city = "Cairo" (not the day-trip destination)
-□ DEPARTURE DAY: If input mentions "farewell", "departure", or "airport transfer", set is_departure: true, is_transfer_only: true
+□ ARRIVAL DAY: First day of multi-day package has is_arrival: true, needs_airport_service: true, needs_hotel_service: true
+□ ARRIVAL DAY: If first day has NO sightseeing (just arrival+transfer), set is_transfer_only: true, attractions: []
+□ DEPARTURE DAY: Last day has is_departure: true, needs_airport_service: true, needs_hotel_service: true
+□ DEPARTURE DAY: If last day has NO sightseeing (just farewell/transfer), set is_transfer_only: true, attractions: []
+□ TRANSFER-ONLY: When is_transfer_only is true, attractions MUST be [] and guide_required MUST be false
+□ MEAL VENUES: Restaurants and dining venues (Fish Market, etc.) are NOT in attractions[]
 □ ALL attraction names are in ENGLISH (no Japanese, Arabic, or other non-Latin names)
 □ Free/sailing days have is_free_day: true
 □ ALL attractions are in the attractions[] array (entrance fees apply by default)

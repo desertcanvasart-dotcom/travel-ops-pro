@@ -538,7 +538,8 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
     const hasAttractions = (day.attractions && day.attractions.length > 0) ||
                           (day.title && /temple|pyramid|museum|valley|tomb/i.test(day.title))
 
-    const services = day.services || {
+    // Build services with defaults, then ENFORCE first/last day rules
+    const baseServices = day.services || {
       airport_arrival: isFirstDay,
       airport_departure: isLastDay,
       hotel_checkin: isFirstDay,
@@ -546,10 +547,39 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
       guide_required: hasAttractions
     }
 
+    // RULE ENFORCEMENT: Always ensure arrival/departure flags on first/last days
+    // even if the template data didn't include them
+    const services = {
+      ...baseServices,
+      // First day of multi-day tour: always has airport arrival + hotel check-in
+      ...(isFirstDay && itineraryData.length > 1 ? {
+        airport_arrival: true,
+        hotel_checkin: true,
+      } : {}),
+      // Last day of multi-day tour: always has airport departure + hotel check-out
+      ...(isLastDay && itineraryData.length > 1 ? {
+        airport_departure: true,
+        hotel_checkout: true,
+      } : {}),
+    }
+
     // Extract attractions from title if not provided
     let attractions = day.attractions || []
     if (attractions.length === 0 && day.title) {
       attractions = extractAttractionsFromTitle(day.title)
+    }
+
+    // RULE: Transfer-only days (first/last with no real sightseeing) shouldn't have attractions
+    const title = (day.title || '').toLowerCase()
+    const description = (day.description || '').toLowerCase()
+    const combined = title + ' ' + description
+    const isLikelyTransferOnly = (isFirstDay || isLastDay) &&
+      (/arrival|departure|farewell|transfer.*airport|airport.*transfer|check[\s-]?out/i.test(combined)) &&
+      !(/visit|explore|tour|discover|excursion|sightseeing|museum|temple|pyramid/i.test(combined))
+
+    if (isLikelyTransferOnly) {
+      attractions = []
+      services.guide_required = false
     }
 
     return {
@@ -875,19 +905,27 @@ export async function getEntranceFee(
       .limit(1)
 
     if (error || !fees || fees.length === 0) {
-      const keywords = attractionName.toLowerCase().split(/\s+/).filter(k => k.length > 3)
-      
-      for (const keyword of keywords) {
-        const { data: keywordFees } = await supabaseAdmin
-          .from('entrance_fees')
-          .select('id, attraction_name, eur_rate, non_eur_rate')
-          .eq('is_active', true)
-          .ilike('attraction_name', `%${keyword}%`)
-          .limit(1)
+      // STRICT fallback: Only match if the full attraction name substantially overlaps
+      // with a DB entry. Do NOT split into individual keywords — that causes false matches
+      // like "Solar Boat Museum" matching "Egyptian Museum" via the keyword "museum".
+      const { data: allFees } = await supabaseAdmin
+        .from('entrance_fees')
+        .select('id, attraction_name, eur_rate, non_eur_rate')
+        .eq('is_active', true)
 
-        if (keywordFees && keywordFees.length > 0) {
-          fees = keywordFees
-          break
+      if (allFees && allFees.length > 0) {
+        const searchName = attractionName.toLowerCase()
+        // Sort by name length DESC to prefer longer (more specific) matches
+        const sorted = [...allFees].sort((a, b) => (b.attraction_name?.length || 0) - (a.attraction_name?.length || 0))
+        const match = sorted.find(ef => {
+          const dbName = (ef.attraction_name || '').toLowerCase()
+          // Require substantial overlap — at least 50% of the shorter name
+          const overlapRatio = Math.min(dbName.length, searchName.length) / Math.max(dbName.length, searchName.length)
+          return overlapRatio > 0.5 && (dbName.includes(searchName) || searchName.includes(dbName))
+        })
+        if (match) {
+          fees = [match]
+          console.warn(`⚠️ Entrance fee partial match: "${attractionName}" → "${match.attraction_name}"`)
         }
       }
     }

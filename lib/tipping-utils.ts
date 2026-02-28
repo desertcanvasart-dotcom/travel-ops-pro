@@ -51,14 +51,18 @@ export interface DayTipRole {
 // ---- Constants ----
 
 /**
- * Canonical tier multipliers for tipping rates.
- * Higher tiers = proportionally higher tips.
+ * Tier multipliers for tipping rates.
+ * DISABLED: Tipping rates are now used directly from the database
+ * as configured in the Rates > Tipping UI. No code-level adjustment.
+ * All tiers use multiplier 1.0 (DB values as-is).
+ *
+ * Previously: budget=0.8, standard=1.0, deluxe=1.2, luxury=1.5
  */
 const TIPPING_TIER_MULTIPLIERS: Record<string, number> = {
-  budget: 0.8,
+  budget: 1.0,
   standard: 1.0,
-  deluxe: 1.2,
-  luxury: 1.5,
+  deluxe: 1.0,
+  luxury: 1.0,
 }
 
 // ---- Flat total (backward compat for estimation paths) ----

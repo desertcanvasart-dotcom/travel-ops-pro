@@ -38,6 +38,7 @@ import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclus
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { createLanguageVersions } from '@/lib/ai/language-versions'
 import { getUserPreferences } from '@/lib/ai/user-preferences'
+import { applyDayRules } from '@/lib/ai/day-rules-engine'
 
 
 // Admin client for bypassing RLS on content library
@@ -534,6 +535,15 @@ export async function POST(request: NextRequest) {
         includeDinner: include_dinner,
         includeAccommodation: includeAccommodationFinal
       })
+    }
+
+    // ============================================
+    // POST-AI VALIDATION: Apply business rules
+    // ============================================
+    if (itineraryData.days && itineraryData.days.length > 0) {
+      console.log('🔧 Applying day rules engine (pre-service-creation validation)...')
+      itineraryData.days = applyDayRules(itineraryData.days, effectivePackageType)
+      console.log('✅ Day rules applied successfully')
     }
 
     // Update duration from AI result
