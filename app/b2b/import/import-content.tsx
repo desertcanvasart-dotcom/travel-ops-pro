@@ -178,6 +178,39 @@ function getFileIcon(type: string) {
 }
 
 // ============================================
+// SUB-COMPONENTS
+// ============================================
+
+function ImportAttractionInput({ onAdd }: { onAdd: (name: string) => void }) {
+  const [value, setValue] = useState('')
+  const handleAdd = () => {
+    if (value.trim()) {
+      onAdd(value.trim())
+      setValue('')
+    }
+  }
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd() } }}
+        placeholder="Add attraction..."
+        className="flex-1 px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:border-[#647C47]"
+      />
+      <button
+        onClick={handleAdd}
+        disabled={!value.trim()}
+        className="px-3 py-1.5 bg-[#b8c9a8] text-[#4a5c35] rounded text-sm hover:bg-[#a0b88e] disabled:opacity-50"
+      >
+        <Plus className="w-4 h-4" />
+      </button>
+    </div>
+  )
+}
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
@@ -856,6 +889,18 @@ export default function ImportContent() {
                       />
                     </div>
 
+                    {/* City */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t('city')}</label>
+                      <input
+                        type="text"
+                        value={day.city || ''}
+                        onChange={(e) => updateDay(index, { city: e.target.value })}
+                        className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:border-[#647C47]"
+                        placeholder="Cairo, Luxor, Alexandria..."
+                      />
+                    </div>
+
                     {/* Activities */}
                     {day.activities.length > 0 && (
                       <div>
@@ -871,33 +916,111 @@ export default function ImportContent() {
                       </div>
                     )}
 
-                    {/* Attractions */}
-                    {day.attractions.length > 0 && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">{t('attractions')}</label>
-                        <div className="flex flex-wrap gap-1.5">
+                    {/* Attractions (editable: add/remove) */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        {t('attractions')} ({(day.attractions || []).length})
+                      </label>
+                      {(day.attractions || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
                           {day.attractions.map((attr, ai) => (
-                            <span key={ai} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                            <span key={ai} className="inline-flex items-center gap-1 text-xs bg-[#b8c9a8]/30 text-[#4a5c35] px-2 py-1 rounded-full">
                               {attr}
+                              <button
+                                onClick={() => {
+                                  const updated = [...day.attractions]
+                                  updated.splice(ai, 1)
+                                  updateDay(index, { attractions: updated })
+                                }}
+                                className="hover:text-red-600 ml-0.5"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
                             </span>
                           ))}
                         </div>
-                      </div>
-                    )}
+                      )}
+                      <ImportAttractionInput onAdd={(name) => {
+                        const updated = [...(day.attractions || []), name]
+                        updateDay(index, { attractions: updated })
+                      }} />
+                    </div>
 
-                    {/* Meals */}
-                    {day.meals_mentioned.length > 0 && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Meals</label>
-                        <div className="flex gap-2">
-                          {day.meals_mentioned.map((meal, mi) => (
-                            <span key={mi} className="text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded">
-                              {meal}
-                            </span>
-                          ))}
-                        </div>
+                    {/* Meals (toggleable) */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('meals')}</label>
+                      <div className="flex gap-3">
+                        {['Breakfast', 'Lunch', 'Dinner'].map(meal => {
+                          const isIncluded = (day.meals_mentioned || []).some(
+                            m => m.toLowerCase() === meal.toLowerCase()
+                          )
+                          return (
+                            <label key={meal} className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isIncluded}
+                                onChange={() => {
+                                  const meals = [...(day.meals_mentioned || [])]
+                                  if (isIncluded) {
+                                    const idx = meals.findIndex(m => m.toLowerCase() === meal.toLowerCase())
+                                    if (idx >= 0) meals.splice(idx, 1)
+                                  } else {
+                                    meals.push(meal)
+                                  }
+                                  updateDay(index, { meals_mentioned: meals })
+                                }}
+                                className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                              />
+                              <span className="text-xs text-gray-700">{meal}</span>
+                            </label>
+                          )
+                        })}
                       </div>
-                    )}
+                    </div>
+
+                    {/* Service toggles */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">{t('serviceFlags')}</label>
+                      <div className="flex flex-wrap gap-3">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.guide_required}
+                            onChange={(e) => updateDay(index, { guide_required: e.target.checked })}
+                            className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                          />
+                          <span className="text-xs text-gray-700">{t('guideRequired')}</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.is_cruise_day}
+                            onChange={(e) => updateDay(index, { is_cruise_day: e.target.checked })}
+                            className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                          />
+                          <Ship className="w-3 h-3 text-cyan-600" />
+                          <span className="text-xs text-gray-700">{t('cruiseDay')}</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.is_arrival}
+                            onChange={(e) => updateDay(index, { is_arrival: e.target.checked })}
+                            className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                          />
+                          <span className="text-xs text-gray-700">{t('arrivalDay')}</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={day.is_departure}
+                            onChange={(e) => updateDay(index, { is_departure: e.target.checked })}
+                            className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                          />
+                          <span className="text-xs text-gray-700">{t('departureDay')}</span>
+                        </label>
+                      </div>
+                    </div>
 
                     {/* Remove Day */}
                     {editingDays.length > 1 && (

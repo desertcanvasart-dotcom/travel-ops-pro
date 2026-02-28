@@ -6926,6 +6926,13 @@
     "unsupportedFileType": "対応していないファイル形式",
     "fileTooLarge": "ファイルサイズの上限を超えています",
     "extractionFailed": "ファイルからデータを抽出できませんでした",
-    "removeDay": "日を削除"
+    "removeDay": "日を削除",
+    "city": "都市",
+    "meals": "食事",
+    "serviceFlags": "サービスフラグ",
+    "guideRequired": "ガイド必要",
+    "cruiseDay": "クルーズ日",
+    "arrivalDay": "到着日",
+    "departureDay": "出発日"
   }
 }

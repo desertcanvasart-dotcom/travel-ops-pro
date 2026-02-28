@@ -6186,6 +6186,13 @@
     "unsupportedFileType": "Unsupported file type",
     "fileTooLarge": "File exceeds size limit",
     "extractionFailed": "Failed to extract data from file",
-    "removeDay": "Remove Day"
+    "removeDay": "Remove Day",
+    "city": "City",
+    "meals": "Meals",
+    "serviceFlags": "Service Flags",
+    "guideRequired": "Guide Required",
+    "cruiseDay": "Cruise Day",
+    "arrivalDay": "Arrival Day",
+    "departureDay": "Departure Day"
   }
 }
