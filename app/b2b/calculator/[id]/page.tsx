@@ -4,7 +4,7 @@ import React, { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag } from 'lucide-react'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
@@ -73,6 +73,55 @@ interface SavedQuote {
   quote_number: string
 }
 
+interface TemplateItineraryDay {
+  day: number
+  title: string
+  description: string
+  meals: string[]
+  city: string
+  overnight_city: string | null
+  is_cruise_day: boolean
+  attractions: string[]
+  accommodation_type: string // 'hotel' | 'cruise' | 'none'
+  services: {
+    airport_arrival: boolean
+    airport_departure: boolean
+    hotel_checkin: boolean
+    hotel_checkout: boolean
+    guide_required: boolean
+  }
+}
+
+// Inline attraction input sub-component
+function AttractionInput({ onAdd, placeholder }: { onAdd: (name: string) => void; placeholder: string }) {
+  const [value, setValue] = useState('')
+  const handleAdd = () => {
+    if (value.trim()) {
+      onAdd(value.trim())
+      setValue('')
+    }
+  }
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd() } }}
+        placeholder={placeholder}
+        className="flex-1 px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none"
+      />
+      <button
+        onClick={handleAdd}
+        disabled={!value.trim()}
+        className="px-3 py-1.5 bg-[#b8c9a8] text-[#4a5c35] rounded-lg text-sm hover:bg-[#a0b88e] disabled:opacity-50"
+      >
+        <Plus className="w-4 h-4" />
+      </button>
+    </div>
+  )
+}
+
 export default function TourPriceCalculator() {
   const t = useTranslations('b2bCalculator')
   const params = useParams()
@@ -114,9 +163,21 @@ export default function TourPriceCalculator() {
     notes: ''
   })
 
-  // Fetch partners on mount
+  // Itinerary editor state
+  const [templateId, setTemplateId] = useState<string | null>(null)
+  const [templateName, setTemplateName] = useState<string>('')
+  const [editableDays, setEditableDays] = useState<TemplateItineraryDay[]>([])
+  const [originalDays, setOriginalDays] = useState<TemplateItineraryDay[]>([])
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [savingItinerary, setSavingItinerary] = useState(false)
+  const [loadingItinerary, setLoadingItinerary] = useState(true)
+  const [itineraryExpanded, setItineraryExpanded] = useState(true)
+  const [expandedEditorDays, setExpandedEditorDays] = useState<Set<number>>(new Set())
+
+  // Fetch partners and template on mount
   useEffect(() => {
     fetchPartners()
+    fetchTemplateItinerary()
   }, [])
 
   const fetchPartners = async () => {
@@ -129,6 +190,138 @@ export default function TourPriceCalculator() {
     } catch (err) {
       console.error('Failed to fetch partners:', err)
     }
+  }
+
+  const fetchTemplateItinerary = async () => {
+    setLoadingItinerary(true)
+    try {
+      const res = await fetch(`/api/b2b/calculator-init?variation_id=${variationId}`)
+      const data = await res.json()
+      if (data.success) {
+        setTemplateId(data.template_id)
+        setTemplateName(data.template_name || '')
+        // Ensure each day has the full enriched structure
+        const days: TemplateItineraryDay[] = (data.itinerary || []).map((d: any, i: number) => ({
+          day: d.day || i + 1,
+          title: d.title || `Day ${i + 1}`,
+          description: d.description || '',
+          meals: Array.isArray(d.meals) ? d.meals : [],
+          city: d.city || '',
+          overnight_city: d.overnight_city || null,
+          is_cruise_day: d.is_cruise_day || false,
+          attractions: Array.isArray(d.attractions) ? d.attractions : [],
+          accommodation_type: d.accommodation_type || 'hotel',
+          services: {
+            airport_arrival: d.services?.airport_arrival || false,
+            airport_departure: d.services?.airport_departure || false,
+            hotel_checkin: d.services?.hotel_checkin || false,
+            hotel_checkout: d.services?.hotel_checkout || false,
+            guide_required: d.services?.guide_required || false,
+          }
+        }))
+        setEditableDays(days)
+        setOriginalDays(JSON.parse(JSON.stringify(days)))
+      }
+    } catch (err) {
+      console.error('Failed to fetch template itinerary:', err)
+    } finally {
+      setLoadingItinerary(false)
+    }
+  }
+
+  // ----- Itinerary Editor Handlers -----
+
+  const toggleEditorDay = (day: number) => {
+    setExpandedEditorDays(prev => {
+      const next = new Set(prev)
+      if (next.has(day)) next.delete(day)
+      else next.add(day)
+      return next
+    })
+  }
+
+  const updateDay = (dayIndex: number, field: string, value: any) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      updated[dayIndex] = { ...updated[dayIndex], [field]: value }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const updateDayService = (dayIndex: number, serviceField: string, value: boolean) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      updated[dayIndex] = {
+        ...updated[dayIndex],
+        services: { ...updated[dayIndex].services, [serviceField]: value }
+      }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const toggleMeal = (dayIndex: number, meal: string) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      const meals = [...(updated[dayIndex].meals || [])]
+      const idx = meals.indexOf(meal)
+      if (idx >= 0) meals.splice(idx, 1)
+      else meals.push(meal)
+      updated[dayIndex] = { ...updated[dayIndex], meals }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const addAttraction = (dayIndex: number, attraction: string) => {
+    if (!attraction.trim()) return
+    setEditableDays(prev => {
+      const updated = [...prev]
+      const attractions = [...(updated[dayIndex].attractions || []), attraction.trim()]
+      updated[dayIndex] = { ...updated[dayIndex], attractions }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const removeAttraction = (dayIndex: number, attrIndex: number) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      const attractions = [...(updated[dayIndex].attractions || [])]
+      attractions.splice(attrIndex, 1)
+      updated[dayIndex] = { ...updated[dayIndex], attractions }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const saveItineraryChanges = async () => {
+    if (!templateId) return
+    setSavingItinerary(true)
+    try {
+      const res = await fetch('/api/b2b/update-template-itinerary', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_id: templateId, itinerary: editableDays })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setOriginalDays(JSON.parse(JSON.stringify(editableDays)))
+        setHasUnsavedChanges(false)
+      } else {
+        setError(data.error || t('failedToSaveItinerary'))
+      }
+    } catch {
+      setError(t('failedToSaveItinerary'))
+    } finally {
+      setSavingItinerary(false)
+    }
+  }
+
+  const resetItineraryChanges = () => {
+    setEditableDays(JSON.parse(JSON.stringify(originalDays)))
+    setHasUnsavedChanges(false)
   }
 
   const toggleDay = (day: number) => {
@@ -152,6 +345,10 @@ export default function TourPriceCalculator() {
   }
 
   const calculatePrice = async () => {
+    // Auto-save itinerary changes before pricing
+    if (hasUnsavedChanges && templateId) {
+      await saveItineraryChanges()
+    }
     setLoading(true)
     setError(null)
     setSavedQuote(null)
@@ -186,6 +383,10 @@ export default function TourPriceCalculator() {
   }
 
   const generateRateSheet = async () => {
+    // Auto-save itinerary changes before generating rate sheet
+    if (hasUnsavedChanges && templateId) {
+      await saveItineraryChanges()
+    }
     setGeneratingSheet(true)
     try {
       const res = await fetch('/api/b2b/calculate-price', {
@@ -558,6 +759,276 @@ export default function TourPriceCalculator() {
 
         {/* Results Panel */}
         <div className="lg:col-span-2 space-y-6">
+
+          {/* ============================================ */}
+          {/* ITINERARY EDITOR SECTION                     */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            {/* Collapsible header */}
+            <div
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+              onClick={() => setItineraryExpanded(!itineraryExpanded)}
+            >
+              <div className="flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-[#647C47]" />
+                <h2 className="text-lg font-semibold">{t('editItinerary')}</h2>
+                <span className="text-sm text-gray-500">
+                  ({editableDays.length} {editableDays.length === 1 ? t('dayLabel') : t('daysLabel')})
+                </span>
+                {hasUnsavedChanges && (
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                    {t('unsavedChanges')}
+                  </span>
+                )}
+              </div>
+              {itineraryExpanded
+                ? <ChevronUp className="w-5 h-5 text-gray-400" />
+                : <ChevronDown className="w-5 h-5 text-gray-400" />
+              }
+            </div>
+
+            {itineraryExpanded && (
+              <div className="px-4 pb-4 space-y-3">
+                {loadingItinerary ? (
+                  <div className="flex items-center justify-center py-8 text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    <span className="text-sm">{t('loadingItinerary')}</span>
+                  </div>
+                ) : editableDays.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    {t('noItineraryData')}
+                  </div>
+                ) : (
+                  <>
+                    {/* Day cards accordion */}
+                    {editableDays.map((day, index) => (
+                      <div key={day.day} className="border border-gray-200 rounded-lg overflow-hidden">
+                        {/* Day header (collapsed) */}
+                        <div
+                          className="flex items-center justify-between px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => toggleEditorDay(day.day)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="flex items-center justify-center w-7 h-7 bg-[#647C47] text-white rounded-full text-sm font-bold">
+                              {day.day}
+                            </span>
+                            <div>
+                              <span className="font-medium text-gray-900">{day.title || `Day ${day.day}`}</span>
+                              <span className="ml-2 text-sm text-gray-500">{day.city}</span>
+                              {day.overnight_city && day.overnight_city !== day.city && (
+                                <span className="ml-1 text-xs text-gray-400">→ {t('overnightIn')} {day.overnight_city}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {day.services?.airport_arrival && <span title={t('airportArrival')}><Plane className="w-3.5 h-3.5 text-blue-500" /></span>}
+                            {day.services?.airport_departure && <span title={t('airportDeparture')}><Plane className="w-3.5 h-3.5 text-orange-500 rotate-45" /></span>}
+                            {day.services?.guide_required && <span title={t('guideRequired')}><User className="w-3.5 h-3.5 text-green-600" /></span>}
+                            {day.is_cruise_day && <span title={t('cruiseDay')}><Ship className="w-3.5 h-3.5 text-blue-600" /></span>}
+                            {(day.attractions || []).length > 0 && (
+                              <span className="text-xs text-gray-400 ml-1">{(day.attractions || []).length} <Tag className="w-3 h-3 inline" /></span>
+                            )}
+                            {expandedEditorDays.has(day.day)
+                              ? <ChevronUp className="w-4 h-4 text-gray-400 ml-1" />
+                              : <ChevronDown className="w-4 h-4 text-gray-400 ml-1" />
+                            }
+                          </div>
+                        </div>
+
+                        {/* Day body (expanded) */}
+                        {expandedEditorDays.has(day.day) && (
+                          <div className="p-4 space-y-4 bg-white">
+                            {/* Row 1: Title (full width) */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">{t('dayTitle')}</label>
+                              <input
+                                type="text"
+                                value={day.title}
+                                onChange={(e) => updateDay(index, 'title', e.target.value)}
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm"
+                              />
+                            </div>
+
+                            {/* Row 2: City + Overnight City */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  <MapPin className="w-3 h-3 inline mr-1" />{t('city')}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={day.city}
+                                  onChange={(e) => updateDay(index, 'city', e.target.value)}
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  <MapPin className="w-3 h-3 inline mr-1" />{t('overnightCity')}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={day.overnight_city || ''}
+                                  onChange={(e) => updateDay(index, 'overnight_city', e.target.value || null)}
+                                  placeholder={day.city}
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Row 3: Accommodation Type + Cruise Day */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">{t('accommodationType')}</label>
+                                <select
+                                  value={day.accommodation_type || 'hotel'}
+                                  onChange={(e) => {
+                                    updateDay(index, 'accommodation_type', e.target.value)
+                                    // Couple with cruise day flag
+                                    if (e.target.value === 'cruise') {
+                                      updateDay(index, 'is_cruise_day', true)
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm bg-white"
+                                >
+                                  <option value="hotel">{t('hotel')}</option>
+                                  <option value="cruise">{t('cruise')}</option>
+                                  <option value="none">{t('noAccommodation')}</option>
+                                </select>
+                              </div>
+                              <div className="flex items-center pt-5">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={day.is_cruise_day}
+                                    onChange={(e) => {
+                                      updateDay(index, 'is_cruise_day', e.target.checked)
+                                      if (e.target.checked) {
+                                        updateDay(index, 'accommodation_type', 'cruise')
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                                  />
+                                  <Ship className="w-4 h-4 text-blue-600" />
+                                  <span className="text-sm">{t('cruiseDay')}</span>
+                                </label>
+                              </div>
+                            </div>
+
+                            {/* Row 4: Meals */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-2">{t('mealsLabel')}</label>
+                              <div className="flex gap-4">
+                                {['breakfast', 'lunch', 'dinner'].map(meal => (
+                                  <label key={meal} className="flex items-center gap-1.5 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={(day.meals || []).includes(meal)}
+                                      onChange={() => toggleMeal(index, meal)}
+                                      className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                                    />
+                                    <span className="text-sm capitalize">{t(meal)}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Row 5: Services */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-2">{t('servicesLabel')}</label>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                {([
+                                  { key: 'airport_arrival', label: t('airportArrival'), icon: Plane },
+                                  { key: 'airport_departure', label: t('airportDeparture'), icon: Plane },
+                                  { key: 'hotel_checkin', label: t('hotelCheckin'), icon: Building2 },
+                                  { key: 'hotel_checkout', label: t('hotelCheckout'), icon: Building2 },
+                                  { key: 'guide_required', label: t('guideRequired'), icon: User },
+                                ] as const).map(svc => (
+                                  <label key={svc.key} className="flex items-center gap-1.5 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={(day.services as any)?.[svc.key] || false}
+                                      onChange={(e) => updateDayService(index, svc.key, e.target.checked)}
+                                      className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                                    />
+                                    <svc.icon className="w-3 h-3 text-gray-400" />
+                                    <span className="text-xs">{svc.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Row 6: Attractions */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-2">
+                                <Tag className="w-3 h-3 inline mr-1" />
+                                {t('attractions')} ({(day.attractions || []).length})
+                              </label>
+                              {(day.attractions || []).length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                  {(day.attractions || []).map((attr, ai) => (
+                                    <span key={ai} className="inline-flex items-center gap-1 px-2 py-1 bg-[#b8c9a8]/30 text-[#4a5c35] text-xs rounded-full">
+                                      {attr}
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); removeAttraction(index, ai) }}
+                                        className="hover:text-red-600 ml-0.5"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <AttractionInput
+                                onAdd={(name) => addAttraction(index, name)}
+                                placeholder={t('addAttractionPlaceholder')}
+                              />
+                            </div>
+
+                            {/* Row 7: Description (collapsible) */}
+                            <details className="text-sm">
+                              <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700">{t('descriptionToggle')}</summary>
+                              <textarea
+                                value={day.description || ''}
+                                onChange={(e) => updateDay(index, 'description', e.target.value)}
+                                rows={3}
+                                className="w-full mt-2 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm resize-none"
+                                placeholder={t('descriptionPlaceholder')}
+                              />
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Action buttons */}
+                    <div className="flex gap-3 pt-3 border-t">
+                      <button
+                        onClick={saveItineraryChanges}
+                        disabled={!hasUnsavedChanges || savingItinerary}
+                        className="flex items-center gap-2 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium disabled:opacity-50 transition-colors"
+                      >
+                        {savingItinerary ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" />{t('savingChanges')}</>
+                        ) : (
+                          <><Save className="w-4 h-4" />{t('saveChanges')}</>
+                        )}
+                      </button>
+                      <button
+                        onClick={resetItineraryChanges}
+                        disabled={!hasUnsavedChanges}
+                        className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50 transition-colors"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        {t('resetChanges')}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Error Display */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
