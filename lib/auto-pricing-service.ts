@@ -403,11 +403,15 @@ export function detectAreaFromAttractions(attractions: string[]): TransportArea 
 
 /**
  * Detect duration from number of attractions
+ * Business rules:
+ *   0 attractions → null (no sightseeing transport needed)
+ *   1 attraction  → half_day
+ *   2+ attractions → full_day
  */
-export function detectDurationFromAttractions(attractions: string[]): TransportDuration {
-  if (!attractions || attractions.length === 0) return 'half_day'
-  if (attractions.length >= 3) return 'full_day'
-  return 'half_day'
+export function detectDurationFromAttractions(attractions: string[]): TransportDuration | null {
+  if (!attractions || attractions.length === 0) return null
+  if (attractions.length === 1) return 'half_day'
+  return 'full_day'
 }
 
 /**
@@ -423,7 +427,7 @@ export function determineTransportNeeds(
   area: TransportArea
   useSpecialVehicle: boolean
   specialVehicleType?: VehicleType
-} {
+} | null {
   // Check for explicit overrides first
   if (day.transport?.service_type) {
     return {
@@ -475,30 +479,26 @@ export function determineTransportNeeds(
   }
   
   // Regular sightseeing day
+  // Only assign sightseeing transport if there are actual attractions.
+  // If guide_required but 0 attractions, the day is likely a transfer-only
+  // or rest day where guide was auto-detected from title keywords.
   const hasAttractions = day.attractions && day.attractions.length > 0
-  const guideRequired = day.services.guide_required
-  
-  if (hasAttractions || guideRequired) {
+
+  if (hasAttractions) {
     const area = detectAreaFromAttractions(day.attractions)
     const duration = detectDurationFromAttractions(day.attractions)
-    
+
     return {
       serviceType: 'day_tour',
-      duration,
+      duration: duration || 'half_day',
       area,
       useSpecialVehicle,
       specialVehicleType
     }
   }
-  
-  // Default: day tour full day
-  return {
-    serviceType: 'day_tour',
-    duration: 'full_day',
-    area: null,
-    useSpecialVehicle,
-    specialVehicleType
-  }
+
+  // No attractions and no airport/intercity need → no transport required
+  return null
 }
 
 /**
@@ -571,6 +571,10 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
       attractions = extractAttractionsFromTitle(day.title)
     }
 
+    // Normalize attraction names for consistent DB matching
+    // Applies Giza Plateau rules: "Pyramids of Giza", "Sphinx" → "Giza Plateau"
+    attractions = normalizeAttractionsList(attractions)
+
     // RULE: Transfer-only days (first/last with no real sightseeing) shouldn't have attractions
     const title = (day.title || '').toLowerCase()
     const description = (day.description || '').toLowerCase()
@@ -608,17 +612,48 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
 
 /**
  * Extract attraction names from day title
+ *
+ * PYRAMID / GIZA RULES:
+ *   - "visit the pyramid", "visit Giza", "Giza Plateau", "Plateau", generic "pyramid(s)" → "Giza Plateau"
+ *   - Sphinx → included in Giza Plateau, no separate entry
+ *   - Specific pyramid name + "(inside)" → add that specific pyramid entrance fee
+ *   - Specific pyramid name WITHOUT "(inside)" → ignore (no entrance fee)
  */
 function extractAttractionsFromTitle(title: string): string[] {
   const attractions: string[] = []
+
+  // --- PYRAMID / GIZA special handling ---
+  const titleLower = title.toLowerCase()
+
+  // Check for specific pyramid names with "(inside)" — add both Giza Plateau + specific pyramid
+  const specificPyramidInside = title.match(
+    /(?:cheops|khufu|khafre|chephren|menkaure|mycerinus|great pyramid|red pyramid|bent pyramid|step pyramid|djoser)\s*\(inside\)/gi
+  )
+  if (specificPyramidInside) {
+    attractions.push('Giza Plateau')
+    for (const match of specificPyramidInside) {
+      // Extract the pyramid name without "(inside)"
+      const pyramidName = match.replace(/\s*\(inside\)/i, '').trim()
+      attractions.push(normalizeAttractionName(pyramidName))
+    }
+  } else if (
+    // Generic pyramid/Giza/Plateau references → just Giza Plateau
+    /giza\s*plateau/i.test(title) ||
+    /plateau/i.test(title) ||
+    /pyramid/i.test(title) ||
+    /sphinx/i.test(title) ||
+    (/giza/i.test(title) && /visit|tour|explore|excursion|sightseeing/i.test(title))
+  ) {
+    attractions.push('Giza Plateau')
+  }
+
+  // --- Standard pattern matching for other attractions ---
   const patterns = [
-    // Cairo / Giza
-    /pyramid/i,
-    /sphinx/i,
+    // Cairo (non-pyramid)
     /egyptian museum/i,
     /cairo museum/i,
     /grand egyptian museum/i,
-    /gem/i,
+    /\bgem\b/i,
     /citadel/i,
     /khan el[- ]?khalili/i,
     // Luxor
@@ -650,7 +685,11 @@ function extractAttractionsFromTitle(title: string): string[] {
     if (pattern.test(title)) {
       const match = title.match(pattern)
       if (match) {
-        attractions.push(normalizeAttractionName(match[0]))
+        const normalized = normalizeAttractionName(match[0])
+        // Avoid duplicates
+        if (!attractions.includes(normalized)) {
+          attractions.push(normalized)
+        }
       }
     }
   }
@@ -682,9 +721,20 @@ function normalizeAttractionName(name: string): string {
     'high dam': 'Aswan High Dam',
     'aswan dam': 'Aswan High Dam',
     'unfinished obelisk': 'Unfinished Obelisk',
-    'pyramid': 'Pyramids of Giza',
-    'pyramids': 'Pyramids of Giza',
-    'sphinx': 'Great Sphinx',
+    'giza plateau': 'Giza Plateau',
+    'pyramid': 'Giza Plateau',
+    'pyramids': 'Giza Plateau',
+    'pyramids of giza': 'Giza Plateau',
+    'sphinx': 'Giza Plateau',
+    'great sphinx': 'Giza Plateau',
+    // Specific pyramids (only relevant when "(inside)" is specified)
+    'cheops': 'Cheops Pyramid (inside)',
+    'khufu': 'Cheops Pyramid (inside)',
+    'great pyramid': 'Cheops Pyramid (inside)',
+    'khafre': 'Khafre Pyramid (inside)',
+    'chephren': 'Khafre Pyramid (inside)',
+    'menkaure': 'Menkaure Pyramid (inside)',
+    'mycerinus': 'Menkaure Pyramid (inside)',
     'egyptian museum': 'Egyptian Museum',
     'cairo museum': 'Egyptian Museum',
     'grand egyptian museum': 'Grand Egyptian Museum',
@@ -705,6 +755,67 @@ function normalizeAttractionName(name: string): string {
   }
 
   return nameMap[normalized] || name
+}
+
+/**
+ * Normalize a list of attractions:
+ * - Deduplicate by canonical name
+ * - Merge Giza-related entries: "Pyramids of Giza", "Great Sphinx" → single "Giza Plateau"
+ * - Remove specific pyramid names that don't have "(inside)" suffix
+ */
+function normalizeAttractionsList(attractions: string[]): string[] {
+  const GIZA_ALIASES = [
+    'pyramids of giza', 'pyramid of giza', 'pyramids', 'pyramid',
+    'great sphinx', 'sphinx', 'giza plateau', 'giza pyramids'
+  ]
+  const SPECIFIC_PYRAMID_NAMES = [
+    'cheops', 'khufu', 'khafre', 'chephren', 'menkaure', 'mycerinus',
+    'great pyramid', 'red pyramid', 'bent pyramid', 'step pyramid', 'djoser'
+  ]
+
+  const result: string[] = []
+  let hasGizaPlateau = false
+
+  for (const attr of attractions) {
+    const lower = attr.toLowerCase().trim()
+
+    // Check if this is a Giza alias → merge into single "Giza Plateau"
+    if (GIZA_ALIASES.some(alias => lower.includes(alias))) {
+      if (!hasGizaPlateau) {
+        result.push('Giza Plateau')
+        hasGizaPlateau = true
+      }
+      continue
+    }
+
+    // Check if this is a specific pyramid name
+    const isSpecificPyramid = SPECIFIC_PYRAMID_NAMES.some(p => lower.includes(p))
+    if (isSpecificPyramid) {
+      // Only add if it has "(inside)" suffix
+      if (/\(inside\)/i.test(attr)) {
+        // Also ensure Giza Plateau is added (you need to enter the plateau to get to the pyramid)
+        if (!hasGizaPlateau) {
+          result.push('Giza Plateau')
+          hasGizaPlateau = true
+        }
+        // Normalize and add
+        const normalized = normalizeAttractionName(attr.replace(/\s*\(inside\)/i, '').trim())
+        if (!result.includes(normalized)) {
+          result.push(normalized)
+        }
+      }
+      // Without "(inside)" → skip entirely (no entrance fee for just mentioning the name)
+      continue
+    }
+
+    // Regular attraction — normalize and deduplicate
+    const normalized = normalizeAttractionName(attr)
+    if (!result.includes(normalized)) {
+      result.push(normalized)
+    }
+  }
+
+  return result
 }
 
 /**
@@ -989,6 +1100,25 @@ export async function getGuideRate(
   tier: ServiceTier
 ): Promise<{ id: string; name: string; dailyRate: number } | null> {
   try {
+    // 1. Try guide_rates table first (has per-language/type/duration rates)
+    const { data: guideRate } = await supabaseAdmin
+      .from('guide_rates')
+      .select('id, service_code, guide_language, base_rate_eur, supplier_id')
+      .eq('is_active', true)
+      .ilike('guide_language', `%${language}%`)
+      .limit(1)
+      .single()
+
+    if (guideRate && (guideRate.base_rate_eur ?? 0) > 0) {
+      console.log(`✅ Guide (guide_rates): ${language} | €${guideRate.base_rate_eur}/day`)
+      return {
+        id: guideRate.id,
+        name: `${language} Speaking Guide`,
+        dailyRate: guideRate.base_rate_eur
+      }
+    }
+
+    // 2. Fallback to guides table (legacy supplier-based)
     const { data: guides, error } = await supabaseAdmin
       .from('guides')
       .select('id, name, daily_rate, languages, tier')
@@ -996,37 +1126,42 @@ export async function getGuideRate(
       .contains('languages', [language])
       .order('is_preferred', { ascending: false })
 
-    if (error || !guides || guides.length === 0) {
-      const { data: anyGuide } = await supabaseAdmin
-        .from('guides')
-        .select('id, name, daily_rate')
-        .eq('is_active', true)
-        .order('is_preferred', { ascending: false })
-        .limit(1)
-
-      if (!anyGuide || anyGuide.length === 0) {
+    if (!error && guides && guides.length > 0) {
+      const selected = guides.find(g => g.tier === tier) || guides[0]
+      if ((selected.daily_rate ?? 0) > 0) {
+        console.log(`✅ Guide (guides): ${selected.name} | €${selected.daily_rate}/day`)
         return {
-          id: 'default',
-          name: 'Guide',
-          dailyRate: DEFAULT_RATES[tier].guide
+          id: selected.id,
+          name: selected.name,
+          dailyRate: selected.daily_rate
         }
-      }
-
-      return {
-        id: anyGuide[0].id,
-        name: anyGuide[0].name,
-        dailyRate: anyGuide[0].daily_rate || DEFAULT_RATES[tier].guide
       }
     }
 
-    const selected = guides.find(g => g.tier === tier) || guides[0]
+    // 3. Try any active guide_rates entry regardless of language
+    const { data: anyRate } = await supabaseAdmin
+      .from('guide_rates')
+      .select('id, service_code, guide_language, base_rate_eur')
+      .eq('is_active', true)
+      .gt('base_rate_eur', 0)
+      .limit(1)
+      .single()
 
-    console.log(`✅ Guide: ${selected.name} | €${selected.daily_rate}/day`)
+    if (anyRate) {
+      console.log(`✅ Guide (guide_rates fallback): ${anyRate.guide_language} | €${anyRate.base_rate_eur}/day`)
+      return {
+        id: anyRate.id,
+        name: `${anyRate.guide_language || language} Speaking Guide`,
+        dailyRate: anyRate.base_rate_eur
+      }
+    }
 
+    // 4. Final fallback to default rates
+    console.warn(`⚠️ No guide rate found for ${language} — using default`)
     return {
-      id: selected.id,
-      name: selected.name,
-      dailyRate: selected.daily_rate || DEFAULT_RATES[tier].guide
+      id: 'default',
+      name: 'Guide',
+      dailyRate: DEFAULT_RATES[tier].guide
     }
   } catch (err) {
     console.error('Error fetching guide rate:', err)
@@ -1592,7 +1727,11 @@ export async function calculateDayBasedPricing(
   const guideRate = await getGuideRate(language, tier)
   const mealRates = await getMealRates(tier)
   const tippingRates = await getItemizedTips(tier)
-  const waterCostPerPax = 2
+
+  // Fetch water cost from DB (fixed_daily_costs table) instead of hardcoding
+  const { getFixedDailyCosts } = await import('@/lib/fixed-costs')
+  const fixedDailyCosts = await getFixedDailyCosts()
+  const waterCostPerPax = fixedDailyCosts.waterPerPersonPerDay
 
   // ============================================
   // STEP 5: Calculate Single Supplement (whole tour)
@@ -1913,7 +2052,7 @@ export async function calculateDayBasedPricing(
   interface DayTransportInfo {
     day: number
     city: string
-    needs: ReturnType<typeof determineTransportNeeds>
+    needs: NonNullable<ReturnType<typeof determineTransportNeeds>>
     requiresTransport: boolean
     isCruisePackageDay: boolean // Part of cruise transport package
   }
@@ -1925,21 +2064,29 @@ export async function calculateDayBasedPricing(
     const previousDay = i > 0 ? itinerary[i - 1] : null
     const nextDay = i < itinerary.length - 1 ? itinerary[i + 1] : null
 
-    const hasSightseeing = day.services.guide_required || day.attractions.length > 0
-    const hasAirportService = day.services.airport_arrival || day.services.airport_departure
-    const isIntercityDay = previousDay &&
-                           previousDay.city.toLowerCase() !== day.city.toLowerCase() &&
-                           day.accommodation_type !== 'cruise' &&
-                           previousDay.accommodation_type !== 'cruise'
-
     // Check if this day is part of a cruise transport package
     const isCruisePackageDay = day.is_cruise_day === true
 
-    // Determine if this day requires individual transport (non-cruise package days only)
-    const requiresTransport = !isCruisePackageDay && (hasSightseeing || hasAirportService || isIntercityDay)
-
-    if (requiresTransport) {
+    if (isCruisePackageDay) {
       const needs = determineTransportNeeds(day, previousDay, nextDay)
+      if (needs) {
+        transportInfoByDay.push({
+          day: day.day,
+          city: day.city,
+          needs,
+          requiresTransport: false,
+          isCruisePackageDay: true
+        })
+      }
+      console.log(`🚢 Day ${day.day} (${day.city}): Cruise package day - bundled transport`)
+      continue
+    }
+
+    // determineTransportNeeds returns null when no transport is needed
+    // (e.g., 0 attractions, no airport, no intercity)
+    const needs = determineTransportNeeds(day, previousDay, nextDay)
+
+    if (needs) {
       transportInfoByDay.push({
         day: day.day,
         city: day.city,
@@ -1947,25 +2094,9 @@ export async function calculateDayBasedPricing(
         requiresTransport: true,
         isCruisePackageDay: false
       })
-
       console.log(`🚗 Day ${day.day} (${day.city}): ${needs.serviceType} | ${needs.duration} | area: ${needs.area || 'none'} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
-    } else if (isCruisePackageDay) {
-      transportInfoByDay.push({
-        day: day.day,
-        city: day.city,
-        needs: determineTransportNeeds(day, previousDay, nextDay),
-        requiresTransport: false,
-        isCruisePackageDay: true
-      })
-      console.log(`🚢 Day ${day.day} (${day.city}): Cruise package day - bundled transport`)
     } else {
-      transportInfoByDay.push({
-        day: day.day,
-        city: day.city,
-        needs: determineTransportNeeds(day, previousDay, nextDay),
-        requiresTransport: false,
-        isCruisePackageDay: false
-      })
+      console.log(`⏸️ Day ${day.day} (${day.city}): No transport required`)
     }
   }
 
