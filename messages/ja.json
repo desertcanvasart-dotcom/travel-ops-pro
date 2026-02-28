@@ -1279,6 +1279,7 @@
     "searchPlaceholder": "顧客名、旅行名、コードで検索...",
     "showingOf": "{total}件中{count}件を表示",
     "code": "コード",
+    "created": "作成日",
     "client": "顧客",
     "trip": "旅行",
     "dates": "日程",
@@ -5494,6 +5495,7 @@
     },
     "table": {
       "template": "テンプレート",
+      "created": "作成日",
       "type": "タイプ",
       "duration": "期間",
       "cities": "都市",

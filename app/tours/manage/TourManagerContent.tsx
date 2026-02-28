@@ -1447,6 +1447,7 @@ export default function TourManagerContent() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.template')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.created')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.type')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.duration')}</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.cities')}</th>
@@ -1475,6 +1476,11 @@ export default function TourManagerContent() {
                               <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded text-[10px] font-medium">Auto</span>
                             )}
                           </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-xs text-gray-500">
+                            {new Date(template.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
@@ -1550,7 +1556,7 @@ export default function TourManagerContent() {
                       {/* Expanded Row - Variations */}
                       {expandedTemplate === template.id && (
                         <tr className="bg-gray-50">
-                          <td colSpan={7} className="px-8 py-3">
+                          <td colSpan={9} className="px-8 py-3">
                             <div className="flex items-center gap-2 mb-2">
                               <Layers className="w-4 h-4 text-purple-600" />
                               <span className="text-sm font-medium text-gray-700">Variations</span>
@@ -1632,6 +1638,8 @@ export default function TourManagerContent() {
                       <h3 className="text-base font-semibold text-gray-900">{template.template_name}</h3>
                       <div className="flex items-center gap-2">
                         <p className="text-xs text-gray-500 font-mono">{template.template_code}</p>
+                        <span className="text-xs text-gray-400">·</span>
+                        <p className="text-xs text-gray-400">{new Date(template.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                         <LanguageIndicator availableLanguages={template.available_languages || []} size="sm" />
                       </div>
                     </div>
@@ -1733,6 +1741,9 @@ export default function TourManagerContent() {
                   </div>
                   <div className="hidden md:block">
                     <span className="text-xs text-gray-500 font-mono">{template.template_code}</span>
+                  </div>
+                  <div className="hidden md:block">
+                    <span className="text-xs text-gray-400">{new Date(template.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
                   </div>
                   <div className="hidden md:block">
                     <LanguageIndicator availableLanguages={template.available_languages || []} size="sm" />

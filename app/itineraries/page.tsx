@@ -21,6 +21,7 @@ interface Itinerary {
   total_cost: number
   currency: string
   status: string
+  created_at: string
   available_languages: Language[]
 }
 interface Toast {
@@ -314,6 +315,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('code')}</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('created')}</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('client')}</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('trip')}</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('dates')}</th>
@@ -332,6 +334,11 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-primary-50 text-primary-700 border border-primary-200">
                       {itinerary.itinerary_code}
                     </span>
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <div className="text-xs text-gray-500">
+                      {new Date(itinerary.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </div>
                   </td>
                   <td className="px-3 py-3">
                     <div className="text-sm font-medium text-gray-900">{itinerary.client_name}</div>

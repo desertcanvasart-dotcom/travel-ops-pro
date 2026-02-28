@@ -846,6 +846,7 @@
     "searchPlaceholder": "Search by client name, trip name, or code...",
     "showingOf": "Showing {count} of {total} itineraries",
     "code": "Code",
+    "created": "Created",
     "client": "Client",
     "trip": "Trip",
     "dates": "Dates",
@@ -5200,6 +5201,7 @@
     },
     "table": {
       "template": "Template",
+      "created": "Created",
       "type": "Type",
       "duration": "Duration",
       "cities": "Cities",
