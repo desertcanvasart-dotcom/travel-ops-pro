@@ -90,9 +90,11 @@ export async function POST(request: NextRequest) {
 
     // Prepare variation data with smart defaults
     const variationsToInsert = variations.map(v => {
-      // Generate variation code
-      const variationCode = v.variation_code || 
+      // Generate unique variation code (append random suffix to avoid duplicates)
+      const baseCode = v.variation_code ||
         `${v.variation_name.toUpperCase().replace(/\s+/g, '-').substring(0, 20)}-${v.tier.toUpperCase()}`
+      const suffix = Math.random().toString(36).substring(2, 6).toUpperCase()
+      const variationCode = v.variation_code ? v.variation_code : `${baseCode}-${suffix}`
 
       return {
         template_id: v.template_id,

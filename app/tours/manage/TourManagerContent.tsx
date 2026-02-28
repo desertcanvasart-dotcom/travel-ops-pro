@@ -588,7 +588,18 @@ interface AddVariationModalProps {
 }
 
 function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVariationModalProps) {
-  const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set(['standard']))
+  // Determine which tiers already exist for this template
+  const existingTiers = new Set<string>(
+    (template.variations || []).map(v => v.tier)
+  )
+
+  // Pre-select 'standard' only if it doesn't already exist
+  const initialSelection = new Set<string>()
+  if (!existingTiers.has('standard')) {
+    initialSelection.add('standard')
+  }
+
+  const [selectedTiers, setSelectedTiers] = useState<Set<string>>(initialSelection)
   const [groupTypes, setGroupTypes] = useState<Record<string, 'private' | 'shared'>>({
     budget: 'shared',
     standard: 'private',
@@ -598,6 +609,7 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
   const [saving, setSaving] = useState(false)
 
   const toggleTier = (tier: string) => {
+    if (existingTiers.has(tier)) return // Don't allow selecting already-existing tiers
     const newSet = new Set(selectedTiers)
     if (newSet.has(tier)) {
       newSet.delete(tier)
@@ -674,29 +686,37 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
           </p>
 
           <div className="space-y-3">
-            {(Object.entries(TIER_CONFIG) as [string, typeof TIER_CONFIG.budget][]).map(([tier, config]) => (
+            {(Object.entries(TIER_CONFIG) as [string, typeof TIER_CONFIG.budget][]).map(([tier, config]) => {
+              const alreadyExists = existingTiers.has(tier)
+              return (
               <div
                 key={tier}
-                className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                  selectedTiers.has(tier)
-                    ? `${config.borderColor} ${config.bgColor}`
-                    : 'border-gray-200 hover:border-gray-300'
+                className={`border rounded-lg p-4 transition-all ${
+                  alreadyExists
+                    ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                    : selectedTiers.has(tier)
+                      ? `${config.borderColor} ${config.bgColor} cursor-pointer`
+                      : 'border-gray-200 hover:border-gray-300 cursor-pointer'
                 }`}
                 onClick={() => toggleTier(tier)}
               >
                 <div className="flex items-start gap-3">
                   <input
                     type="checkbox"
-                    checked={selectedTiers.has(tier)}
+                    checked={selectedTiers.has(tier) || alreadyExists}
+                    disabled={alreadyExists}
                     onChange={() => toggleTier(tier)}
-                    className="mt-1 w-4 h-4 text-green-600 border-gray-300 rounded"
+                    className="mt-1 w-4 h-4 text-green-600 border-gray-300 rounded disabled:opacity-50"
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{config.icon}</span>
-                      <span className={`font-medium ${selectedTiers.has(tier) ? config.textColor : 'text-gray-900'}`}>
+                      <span className={`font-medium ${alreadyExists ? 'text-gray-400' : selectedTiers.has(tier) ? config.textColor : 'text-gray-900'}`}>
                         {config.label}
                       </span>
+                      {alreadyExists && (
+                        <span className="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full">Already exists</span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{config.description}</p>
                     
@@ -733,7 +753,7 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
                   </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
 

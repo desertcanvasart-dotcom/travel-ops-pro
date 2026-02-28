@@ -8,7 +8,7 @@ import {
   CheckCircle, AlertCircle, ChevronDown, ChevronUp,
   MapPin, Calendar, Users, Star, Crown, Sun, Map,
   Hotel, Package, Ship, Anchor, Edit3, Plus, Trash2,
-  ArrowRight, ArrowLeft, Check, Eye
+  ArrowRight, ArrowLeft, Check, Eye, Calculator
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -248,6 +248,7 @@ export default function ImportContent() {
   const [generationStep, setGenerationStep] = useState<GenerationStep>('idle')
   const [generationError, setGenerationError] = useState<string | null>(null)
   const [createdItineraryId, setCreatedItineraryId] = useState<string | null>(null)
+  const [createdVariationId, setCreatedVariationId] = useState<string | null>(null)
 
   // Partners
   const [partners, setPartners] = useState<B2BPartner[]>([])
@@ -454,8 +455,38 @@ export default function ImportContent() {
         return
       }
 
+      const templateId = result.data?.id
+      setCreatedItineraryId(templateId)
+
+      // Create variation using the selected tier so user can proceed directly to pricing
+      if (templateId) {
+        try {
+          const tierLabel = formData.tier.charAt(0).toUpperCase() + formData.tier.slice(1)
+          const varResponse = await fetch('/api/tours/variations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              template_id: templateId,
+              variation_name: `${formData.trip_name} - ${tierLabel}`,
+              tier: formData.tier,
+              group_type: formData.tier === 'budget' ? 'shared' : 'private',
+              min_pax: formData.num_adults + formData.num_children,
+              max_pax: 40,
+              is_active: true,
+            })
+          })
+          const varResult = await varResponse.json()
+          if (varResult.success && varResult.data) {
+            const variationId = Array.isArray(varResult.data) ? varResult.data[0]?.id : varResult.data.id
+            setCreatedVariationId(variationId)
+          }
+        } catch (varErr) {
+          console.warn('Failed to auto-create variation:', varErr)
+          // Non-fatal: user can still create variation manually from Tour Manager
+        }
+      }
+
       setGenerationStep('complete')
-      setCreatedItineraryId(result.data?.id)
       setStep('complete')
     } catch (err: any) {
       console.error('Generation error:', err)
@@ -513,6 +544,7 @@ export default function ImportContent() {
     setExtractError(null)
     setGenerationError(null)
     setCreatedItineraryId(null)
+    setCreatedVariationId(null)
     setGenerationStep('idle')
     setExpandedDays(new Set())
   }
@@ -1103,9 +1135,18 @@ export default function ImportContent() {
             <p className="text-sm text-gray-500 mt-1">{formData.trip_name}</p>
           </div>
           <div className="flex items-center justify-center gap-3">
+            {createdVariationId && (
+              <Link
+                href={`/b2b/calculator/${createdVariationId}`}
+                className="flex items-center gap-2 px-6 py-2.5 bg-[#647C47] text-white font-medium rounded-lg hover:bg-[#4f6238] transition-colors text-sm"
+              >
+                <Calculator className="w-4 h-4" />
+                {t('calculatePrice')}
+              </Link>
+            )}
             <Link
               href="/tours/manage"
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#647C47] text-white font-medium rounded-lg hover:bg-[#4f6238] transition-colors text-sm"
+              className={`flex items-center gap-2 px-6 py-2.5 ${createdVariationId ? 'border border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-[#647C47] text-white hover:bg-[#4f6238]'} font-medium rounded-lg transition-colors text-sm`}
             >
               <Package className="w-4 h-4" />
               {t('goToTours')}
