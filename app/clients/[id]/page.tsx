@@ -83,6 +83,8 @@ export default function ClientProfilePage() {
   const [communications, setCommunications] = useState<Communication[]>([])
   const [followups, setFollowups] = useState<Followup[]>([])
   const [notes, setNotes] = useState<Note[]>([])
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; blocking?: string; items?: any[]; force?: boolean }>({ open: false })
+  const [deleting, setDeleting] = useState(false)
   const [bookings, setBookings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'communications' | 'bookings' | 'notes' | 'followups'>('overview')
@@ -104,6 +106,30 @@ export default function ClientProfilePage() {
 
   const reloadCommunications = () => {
     fetchClientData()
+  }
+
+  const handleDeleteClient = async (force = false) => {
+    try {
+      setDeleting(true)
+      const url = `/api/clients/${clientId}${force ? '?force=true' : ''}`
+      const response = await fetch(url, { method: 'DELETE' })
+      const data = await response.json()
+
+      if (!response.ok) {
+        if (data.blocking === 'itineraries') {
+          // Show modal with blocking info so user can choose to force delete
+          setDeleteModal({ open: true, blocking: 'itineraries', items: data.items, force: true })
+          return
+        }
+        throw new Error(data.error || 'Failed to delete client')
+      }
+
+      router.push('/clients')
+    } catch (error: any) {
+      alert(error.message || 'Failed to delete client')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   // Mark followup as complete
@@ -170,13 +196,14 @@ export default function ClientProfilePage() {
         .order('created_at', { ascending: false })
       setNotes(notesData || [])
 
-      // Fetch bookings
-      const { data: bookingsData } = await supabase
-        .from('itineraries')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
-      setBookings(bookingsData || [])
+      // Fetch bookings (itineraries) via API to bypass RLS
+      try {
+        const bookingsRes = await fetch(`/api/clients/${clientId}/itineraries`)
+        const bookingsJson = await bookingsRes.json()
+        setBookings(bookingsJson.data || [])
+      } catch {
+        setBookings([])
+      }
 
     } catch (error) {
       console.error('Error fetching client data:', error)
@@ -249,7 +276,10 @@ export default function ClientProfilePage() {
                 <Edit className="w-4 h-4" />
                 {t('editClient')}
               </Link>
-              <button className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200">
+              <button
+                onClick={() => setDeleteModal({ open: true })}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200"
+              >
                 <Trash2 className="w-4 h-4" />
                 {t('delete')}
               </button>
@@ -905,6 +935,66 @@ export default function ClientProfilePage() {
   onSuccess={reloadCommunications}
   editCommunication={editingCommunication}
 />
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !deleting && setDeleteModal({ open: false })} />
+          <div className="relative bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  {deleteModal.blocking ? t('deleteBlocked') : t('deleteConfirmTitle')}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {deleteModal.blocking
+                    ? t('deleteBlockedMessage', { name: `${client?.first_name} ${client?.last_name}`, count: deleteModal.items?.length || 0 })
+                    : t('deleteConfirmBody', { name: `${client?.first_name} ${client?.last_name}` })
+                  }
+                </p>
+              </div>
+            </div>
+
+            {deleteModal.items && deleteModal.items.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 max-h-32 overflow-y-auto">
+                <p className="text-xs font-medium text-amber-800 mb-1">{t('linkedItineraries')}</p>
+                <ul className="text-xs text-amber-700 space-y-0.5">
+                  {deleteModal.items.map((item: any) => (
+                    <li key={item.id}>• {item.code || item.id} — {item.name || 'Untitled'}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 justify-end">
+              <button
+                onClick={() => setDeleteModal({ open: false })}
+                disabled={deleting}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={() => handleDeleteClient(!!deleteModal.force)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors font-medium disabled:opacity-50"
+              >
+                {deleting ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    {t('deleting')}
+                  </span>
+                ) : (
+                  deleteModal.force ? t('forceDelete') : t('delete')
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

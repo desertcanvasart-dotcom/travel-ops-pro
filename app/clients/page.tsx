@@ -185,18 +185,29 @@ export default function ClientsPage() {
     })
   }
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (force = false) => {
     if (!deleteModal.clientId) return
 
     try {
       setDeleting(true)
-      const response = await fetch(`/api/clients/${deleteModal.clientId}`, {
-        method: 'DELETE',
-      })
-
+      const url = `/api/clients/${deleteModal.clientId}${force ? '?force=true' : ''}`
+      const response = await fetch(url, { method: 'DELETE' })
       const data = await response.json()
 
       if (!response.ok) {
+        if (data.blocking === 'itineraries' && !force) {
+          // Ask user if they want to force delete
+          const proceed = await dialog.confirm({
+            title: t('deleteBlockedTitle'),
+            message: `${data.error}\n\n${t('deleteForceConfirm')}`,
+            variant: 'warning',
+            confirmText: t('forceDelete'),
+          })
+          if (proceed) {
+            await confirmDelete(true)
+          }
+          return
+        }
         throw new Error(data.error || 'Failed to delete client')
       }
 
@@ -341,7 +352,7 @@ export default function ClientsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={confirmDelete}
+                  onClick={() => confirmDelete()}
                   disabled={deleting}
                   className="px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
                 >

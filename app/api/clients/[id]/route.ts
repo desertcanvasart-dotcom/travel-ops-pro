@@ -140,22 +140,61 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const { searchParams } = new URL(request.url)
+    const force = searchParams.get('force') === 'true'
 
-    // Hard-block: check for itineraries (important business data)
+    // Check for itineraries
     const { data: itineraries } = await supabaseAdmin
       .from('itineraries')
-      .select('id')
+      .select('id, itinerary_code, trip_name')
       .eq('client_id', id)
-      .limit(1)
 
     if (itineraries && itineraries.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete client with existing itineraries. Please delete or reassign itineraries first.' },
-        { status: 400 }
-      )
+      if (!force) {
+        return NextResponse.json(
+          {
+            error: `Cannot delete client: ${itineraries.length} itinerary/itineraries found. Use force delete to remove them.`,
+            blocking: 'itineraries',
+            count: itineraries.length,
+            items: itineraries.map(i => ({ id: i.id, code: i.itinerary_code, name: i.trip_name }))
+          },
+          { status: 400 }
+        )
+      }
+
+      // Force: cascade delete itineraries (and their related data)
+      for (const itin of itineraries) {
+        // Delete itinerary days & services
+        const { data: days } = await supabaseAdmin
+          .from('itinerary_days')
+          .select('id')
+          .eq('itinerary_id', itin.id)
+
+        if (days && days.length > 0) {
+          const dayIds = days.map(d => d.id)
+          await supabaseAdmin.from('itinerary_services').delete().in('day_id', dayIds)
+          await supabaseAdmin.from('itinerary_day_versions').delete().in('itinerary_day_id', dayIds)
+        }
+        await supabaseAdmin.from('itinerary_days').delete().eq('itinerary_id', itin.id)
+        await supabaseAdmin.from('itinerary_versions').delete().eq('itinerary_id', itin.id)
+
+        // Detach bookings from this itinerary
+        await supabaseAdmin.from('bookings').delete().eq('itinerary_id', itin.id)
+
+        // Detach quotes
+        await supabaseAdmin
+          .from('tour_quotes')
+          .update({ itinerary_id: null })
+          .eq('itinerary_id', itin.id)
+          .not('variation_id', 'is', null)
+        await supabaseAdmin.from('tour_quotes').delete().eq('itinerary_id', itin.id)
+
+        // Delete the itinerary itself
+        await supabaseAdmin.from('itineraries').delete().eq('id', itin.id)
+      }
     }
 
-    // Hard-block: check for invoices (financial data)
+    // Check for invoices
     const { data: invoices } = await supabaseAdmin
       .from('invoices')
       .select('id')
@@ -164,7 +203,7 @@ export async function DELETE(
 
     if (invoices && invoices.length > 0) {
       return NextResponse.json(
-        { error: 'Cannot delete client with existing invoices. Please delete or reassign invoices first.' },
+        { error: 'Cannot delete client with existing invoices. Please delete or reassign invoices first.', blocking: 'invoices' },
         { status: 400 }
       )
     }
