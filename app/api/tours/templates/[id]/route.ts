@@ -177,7 +177,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete template (and cascade to variations, days, activities, pricing)
+// DELETE - Delete template (and cascade to variations, days, activities, pricing, quotes)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -185,29 +185,31 @@ export async function DELETE(
   try {
     const { id } = await params
 
-    // Get all days first
-    const { data: days } = await supabaseAdmin
+    // 1. Get all days first
+    const { data: days, error: daysErr } = await supabaseAdmin
       .from('tour_days')
       .select('id')
       .eq('tour_id', id)
 
     if (days && days.length > 0) {
       const dayIds = days.map(d => d.id)
-      
+
       // Delete activities for these days
-      await supabaseAdmin
+      const { error: actErr } = await supabaseAdmin
         .from('tour_day_activities')
         .delete()
         .in('tour_day_id', dayIds)
+      if (actErr) console.error('Error deleting day activities:', actErr)
     }
 
     // Delete days
-    await supabaseAdmin
+    const { error: delDaysErr } = await supabaseAdmin
       .from('tour_days')
       .delete()
       .eq('tour_id', id)
+    if (delDaysErr) console.error('Error deleting days:', delDaysErr)
 
-    // Delete variation services first
+    // 2. Get all variations
     const { data: variations } = await supabaseAdmin
       .from('tour_variations')
       .select('id')
@@ -215,25 +217,58 @@ export async function DELETE(
 
     if (variations && variations.length > 0) {
       const variationIds = variations.map(v => v.id)
-      await supabaseAdmin
+
+      // Detach quotes that also have an itinerary_id (set variation_id to null)
+      const { error: detachErr } = await supabaseAdmin
+        .from('tour_quotes')
+        .update({ variation_id: null })
+        .in('variation_id', variationIds)
+        .not('itinerary_id', 'is', null)
+      if (detachErr) console.error('Error detaching quotes:', detachErr)
+
+      // Delete quotes that only reference these variations (no itinerary fallback)
+      const { error: delQuotesErr } = await supabaseAdmin
+        .from('tour_quotes')
+        .delete()
+        .in('variation_id', variationIds)
+      if (delQuotesErr) console.error('Error deleting quotes:', delQuotesErr)
+
+      // Delete variation daily itinerary
+      const { error: delDailyErr } = await supabaseAdmin
+        .from('variation_daily_itinerary')
+        .delete()
+        .in('variation_id', variationIds)
+      if (delDailyErr) console.error('Error deleting variation daily itinerary:', delDailyErr)
+
+      // Delete variation services
+      const { error: delSvcErr } = await supabaseAdmin
         .from('tour_variation_services')
         .delete()
         .in('variation_id', variationIds)
+      if (delSvcErr) console.error('Error deleting variation services:', delSvcErr)
     }
 
-    // Delete variations
-    await supabaseAdmin
+    // Delete variations (version tables cascade automatically via ON DELETE CASCADE)
+    const { error: delVarErr } = await supabaseAdmin
       .from('tour_variations')
       .delete()
       .eq('template_id', id)
+    if (delVarErr) {
+      console.error('Error deleting variations:', delVarErr)
+      return NextResponse.json(
+        { success: false, error: `Failed to delete variations: ${delVarErr.message}` },
+        { status: 500 }
+      )
+    }
 
     // Delete pricing
-    await supabaseAdmin
+    const { error: delPriceErr } = await supabaseAdmin
       .from('tour_pricing')
       .delete()
       .eq('tour_id', id)
+    if (delPriceErr) console.error('Error deleting pricing:', delPriceErr)
 
-    // Delete template
+    // Delete template (version tables cascade automatically via ON DELETE CASCADE)
     const { error } = await supabaseAdmin
       .from('tour_templates')
       .delete()
@@ -242,7 +277,7 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting template:', error)
       return NextResponse.json(
-        { success: false, error: 'Failed to delete template' },
+        { success: false, error: `Failed to delete template: ${error.message}` },
         { status: 500 }
       )
     }
