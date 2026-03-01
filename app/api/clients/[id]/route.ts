@@ -221,16 +221,29 @@ export async function DELETE(
         .in('conversation_id', waConvs.map(c => c.id))
     }
 
+    // Clean up email: delete messages first, then conversations
+    const { data: emailConvs } = await supabaseAdmin
+      .from('email_conversations')
+      .select('id')
+      .eq('client_id', id)
+
+    if (emailConvs && emailConvs.length > 0) {
+      await supabaseAdmin
+        .from('email_messages')
+        .delete()
+        .in('conversation_id', emailConvs.map(c => c.id))
+    }
+
     // Clean up all related tables (delete or unlink as appropriate)
     // These run in parallel for speed — each is independent
     await Promise.allSettled([
       cleanupTable('follow_ups', id),
       cleanupTable('whatsapp_conversations', id),
+      cleanupTable('email_conversations', id),
       cleanupTable('client_preferences', id),
       cleanupTable('client_notes', id),
       cleanupTable('commissions', id, 'unlink'),
       cleanupTable('template_send_log', id, 'unlink'),
-      cleanupTable('email_conversations', id, 'unlink'),
     ])
 
     // Now delete the client
