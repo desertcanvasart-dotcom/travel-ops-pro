@@ -5119,6 +5119,11 @@
       "of": "of",
       "tours": "tours"
     },
+    "views": {
+      "grid": "Grid",
+      "table": "Table",
+      "list": "List"
+    },
     "card": {
       "day": "day",
       "days": "days",
@@ -5208,7 +5213,11 @@
       "variations": "Variations",
       "lang": "Lang",
       "status": "Status",
-      "actions": "Actions"
+      "actions": "Actions",
+      "price": "Price",
+      "tiers": "Tiers",
+      "category": "Category",
+      "passengers": "Passengers"
     },
     "actions": {
       "edit": "Edit",
