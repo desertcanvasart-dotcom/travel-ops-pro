@@ -7,8 +7,9 @@ import { useTranslations } from 'next-intl'
 import {
   ArrowLeft, FileText, Download, Send, Calendar, Users,
   Building2, Loader2, Globe, Mail, Phone, User, Clock, CheckCircle2,
-  XCircle, TrendingUp, Eye
+  XCircle, TrendingUp, Eye, ArrowRightCircle
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 
@@ -45,6 +46,7 @@ interface Quote {
   price_per_person: number
   currency: string
   status: string
+  converted_to_itinerary_id: string | null
   valid_until: string
   notes: string | null
   created_at: string
@@ -96,7 +98,9 @@ export default function QuoteDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [converting, setConverting] = useState(false)
   const [activeLanguage, setActiveLanguage] = useState<Language>('en')
+  const router = useRouter()
 
   useEffect(() => {
     if (quoteId) fetchQuote()
@@ -135,6 +139,33 @@ export default function QuoteDetailPage() {
       console.error('Failed to update status:', err)
     } finally {
       setUpdating(false)
+    }
+  }
+
+  const convertToItinerary = async () => {
+    if (!quote) return
+    setConverting(true)
+    try {
+      const res = await fetch(`/api/b2b/quotes/${quoteId}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh quote to reflect "converted" status
+        await fetchQuote()
+        // Navigate to the new/updated itinerary
+        router.push(`/itineraries/${data.data.itinerary_id}`)
+      } else {
+        console.error('Convert failed:', data.error)
+        alert(data.error || t('convertFailed'))
+      }
+    } catch (err) {
+      console.error('Failed to convert quote:', err)
+      alert(t('convertFailed'))
+    } finally {
+      setConverting(false)
     }
   }
 
@@ -197,6 +228,7 @@ export default function QuoteDetailPage() {
       sent: { bg: 'bg-blue-100', text: 'text-blue-700', icon: Send, label: t('statusSent') },
       accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: t('statusAccepted') },
       rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle, label: t('statusRejected') },
+      converted: { bg: 'bg-purple-100', text: 'text-purple-700', icon: ArrowRightCircle, label: t('statusConverted') },
     }
     const style = styles[status] || styles.draft
     const Icon = style.icon
@@ -214,6 +246,7 @@ export default function QuoteDetailPage() {
       sent: t('statusSent'),
       accepted: t('statusAccepted'),
       rejected: t('statusRejected'),
+      converted: t('statusConverted'),
     }
     return labels[status] || status
   }
@@ -472,7 +505,7 @@ export default function QuoteDetailPage() {
                 <button
                   key={status}
                   onClick={() => updateStatus(status)}
-                  disabled={updating || quote.status === status}
+                  disabled={updating || quote.status === status || quote.status === 'converted'}
                   className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
                     quote.status === status
                       ? 'bg-[#647C47] text-white'
@@ -484,6 +517,41 @@ export default function QuoteDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* Convert to Itinerary — visible when accepted */}
+          {quote.status === 'accepted' && (
+            <div className="bg-green-50 rounded-lg border border-green-200 p-6">
+              <h3 className="text-base font-semibold mb-2 text-green-900">{t('readyToConvert')}</h3>
+              <p className="text-sm text-green-700 mb-4">{t('convertDescription')}</p>
+              <button
+                onClick={convertToItinerary}
+                disabled={converting}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm transition-colors disabled:opacity-50"
+              >
+                {converting ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" />{t('converting')}</>
+                ) : (
+                  <><ArrowRightCircle className="w-4 h-4" />{t('convertToItinerary')}</>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Converted — show link to itinerary */}
+          {quote.status === 'converted' && quote.converted_to_itinerary_id && (
+            <div className="bg-purple-50 rounded-lg border border-purple-200 p-6">
+              <h3 className="text-base font-semibold mb-2 text-purple-900 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />{t('quoteConverted')}
+              </h3>
+              <p className="text-sm text-purple-700 mb-4">{t('convertedDescription')}</p>
+              <Link
+                href={`/itineraries/${quote.converted_to_itinerary_id}`}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium text-sm transition-colors"
+              >
+                <Eye className="w-4 h-4" />{t('viewItinerary')}
+              </Link>
+            </div>
+          )}
 
           {/* Validity */}
           <div className="bg-gray-50 rounded-lg border p-4">

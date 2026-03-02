@@ -59,6 +59,7 @@ interface Attraction {
   city: string
   base_rate_eur: number
   base_rate_non_eur: number
+  source: 'entrance' | 'activity'
 }
 
 interface DayService {
@@ -392,15 +393,48 @@ export default function ItineraryEditorPage() {
 
   const loadAttractions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('activity_rates')
-        .select('id, activity_name, city, base_rate_eur, base_rate_non_eur')
-        .eq('is_active', true)
-        .order('city')
-        .order('activity_name')
+      // Load both entrance fees and activities in parallel
+      const [entranceRes, activityRes] = await Promise.all([
+        supabase
+          .from('entrance_fees')
+          .select('id, attraction_name, city, eur_rate, non_eur_rate')
+          .neq('is_active', false)
+          .order('city')
+          .order('attraction_name'),
+        supabase
+          .from('activity_rates')
+          .select('id, activity_name, city, base_rate_eur, base_rate_non_eur')
+          .eq('is_active', true)
+          .order('city')
+          .order('activity_name')
+      ])
 
-      if (error) throw error
-      setAttractions(data || [])
+      if (entranceRes.error) console.error('Error loading entrance fees:', entranceRes.error)
+      if (activityRes.error) console.error('Error loading activities:', activityRes.error)
+
+      // Normalize entrance fees to the shared Attraction shape
+      const entranceFees: Attraction[] = (entranceRes.data || []).map((ef: any) => ({
+        id: ef.id,
+        activity_name: ef.attraction_name,
+        city: ef.city,
+        base_rate_eur: ef.eur_rate || 0,
+        base_rate_non_eur: ef.non_eur_rate || 0,
+        source: 'entrance' as const,
+      }))
+
+      const activities: Attraction[] = (activityRes.data || []).map((a: any) => ({
+        ...a,
+        source: 'activity' as const,
+      }))
+
+      // Combine: entrance fees first, then activities
+      const combined = [...entranceFees, ...activities].sort((a, b) => {
+        const cityCompare = a.city.localeCompare(b.city)
+        if (cityCompare !== 0) return cityCompare
+        return a.activity_name.localeCompare(b.activity_name)
+      })
+
+      setAttractions(combined)
     } catch (error) {
       console.error('Error loading attractions:', error)
     }
@@ -1953,9 +1987,14 @@ export default function ItineraryEditorPage() {
                       }`}
                     >
                       <div>
-                        <div className="font-semibold text-sm text-gray-900">
+                        <div className="font-semibold text-sm text-gray-900 flex items-center gap-2">
                           {attr.activity_name}
-                          {isAdded && <Check size={14} className="inline ml-2 text-green-600" />}
+                          {isAdded && <Check size={14} className="inline text-green-600" />}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            attr.source === 'entrance' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {attr.source === 'entrance' ? t('entranceFee') : t('activity')}
+                          </span>
                         </div>
                         <div className="text-xs text-gray-500 mt-0.5">📍 {attr.city}</div>
                       </div>

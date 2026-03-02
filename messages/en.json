@@ -907,6 +907,8 @@
       "itineraryDays": "Itinerary Days",
       "itineraryNotFound": "Itinerary not found",
       "lunch": "Lunch",
+      "entranceFee": "Entrance",
+      "activity": "Activity",
       "newDay": "New Day",
       "newService": "New Service",
       "noAttractionsFound": "No attractions found",
@@ -5402,7 +5404,16 @@
     "validUntil": "Valid Until",
     "tierBudget": "Budget",
     "tierStandard": "Standard",
-    "tierLuxury": "Luxury"
+    "tierLuxury": "Luxury",
+    "statusConverted": "Converted",
+    "readyToConvert": "Ready to Convert",
+    "convertDescription": "This quote has been accepted. Convert it to an itinerary to proceed with confirmation and booking.",
+    "converting": "Converting...",
+    "convertToItinerary": "Convert to Itinerary",
+    "convertFailed": "Failed to convert quote. Please try again.",
+    "quoteConverted": "Quote Converted",
+    "convertedDescription": "This quote has been converted to an itinerary. Review and confirm the itinerary to create a booking.",
+    "viewItinerary": "View Itinerary"
   },
   "b2bPricingRules": {
     "title": "B2B Pricing Rules",
