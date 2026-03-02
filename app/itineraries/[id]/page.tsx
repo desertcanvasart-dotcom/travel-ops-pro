@@ -1361,14 +1361,21 @@ export default function ViewItineraryPage() {
             {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess(t('bookingConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
             {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess(t('paymentReminderSent')); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
             <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess(t('paymentConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
-            <button
-              type="button"
-              onClick={() => setShowSendModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:bg-primary-700"
-            >
-              <Send className="w-4 h-4" />
-              {t('sendQuote')}
-            </button>
+            {itinerary.status === 'draft' ? (
+              <button
+                type="button"
+                onClick={() => setShowSendModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:bg-primary-700"
+              >
+                <Send className="w-4 h-4" />
+                {t('sendQuote')}
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm font-medium">
+                <CheckCircle className="w-4 h-4" />
+                {t('quoteSent')}
+              </div>
+            )}
           </div>
           )}
           {itinerary.client_phone && (
