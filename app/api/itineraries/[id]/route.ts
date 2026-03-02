@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 
-const supabase = createClient()
-
-// Admin client for operations that need to bypass RLS (like booking creation)
-const supabaseAdmin = createAdminClient(
+// Server-side admin client — bypasses RLS for reliable reads/writes
+const supabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+// Keep alias for existing references in the file
+const supabaseAdmin = supabase
 
 // GET - Used by VIEW page
 export async function GET(
