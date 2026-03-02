@@ -1441,6 +1441,7 @@
     "errorDeleteFailed": "旅程の削除に失敗しました",
     "errorUpdateFailed": "ステータスの更新に失敗しました",
     "detail": {
+      "errorLoadingTitle": "旅程の読み込みエラー",
       "itineraryNotFound": "旅程が見つかりません",
       "errorLoadingItinerary": "旅程の読み込み中にエラーが発生しました",
       "failedToUpdateCostMode": "費用モードの更新に失敗しました",
