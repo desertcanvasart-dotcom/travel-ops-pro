@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS, SERVICE_TRANSLATION_FIELDS } from '@/lib/translation-utils'
 import type { Language } from '@/types/multilingual'
 
-const supabase = createClient()
+const supabase = createServerClient()
 
 // Helper function to translate itinerary days
 async function translateItineraryDays(

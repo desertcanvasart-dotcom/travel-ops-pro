@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
 
 export async function POST(request: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     // Get itinerary details
     const { data: itinerary, error: dbError } = await supabase

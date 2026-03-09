@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 export async function PATCH(
   request: NextRequest,
@@ -7,7 +7,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     const { data: invoice, error: fetchError } = await supabase

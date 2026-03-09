@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // Email service - adjust based on your setup (Resend, SendGrid, etc.)
 // This example uses a generic sendEmail function - replace with your actual implementation
@@ -250,7 +250,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
 // GET: Fetch invoices due for reminders (preview)
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const preview = searchParams.get('preview') === 'true'
 
@@ -316,7 +316,7 @@ export async function GET(request: NextRequest) {
 // POST: Process and send reminders
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
     const { invoiceIds, sendAll = false } = body
 

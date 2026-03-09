@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { RATE_TABLE_CONFIGS, getExportHeaders } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 
-const supabase = createClient()
+const supabase = createServerClient()
 
 /**
  * GET /api/rates/bulk/export?table=accommodation_rates

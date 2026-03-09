@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
 import { calculatePricingFromRates, getFallbackRates } from '@/lib/rate-lookup-service'
 
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       template_id = null    // Force specific template
     } = body
 
-    const supabase = createClient()
+    const supabase = createServerClient()
     const totalPax = num_adults + num_children
 
     // ============================================

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // GET /api/whatsapp/agents - List all team members (for WhatsApp assignment)
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const activeOnly = searchParams.get('active_only') !== 'false'
     const availableOnly = searchParams.get('available_only') === 'true'
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/agents - Create new team member / agent
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     const { name, email, phone, user_id, avatar_url, max_conversations, role } = body
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 // PATCH /api/whatsapp/agents - Update team member / agent
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
     const { id, ...updates } = body
 
@@ -128,7 +128,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/whatsapp/agents - Deactivate agent (soft delete)
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 

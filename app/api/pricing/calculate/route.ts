@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient as createSSRClient } from '@supabase/ssr'
+import { createServerClient } from '@/lib/supabase-server'
 import { cookies } from 'next/headers'
 
 // Create authenticated client to get user preferences
 async function createAuthClient() {
   const cookieStore = await cookies()
   
-  return createServerClient(
+  return createSSRClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -15,7 +15,7 @@ async function createAuthClient() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options: any }[]) {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options)
           })
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       userId = null,
     } = body
 
-    const supabase = createClient()
+    const supabase = createServerClient()
     const total_travelers = num_adults + num_children
 
     console.log('🚗 Vehicle Selection:', { 

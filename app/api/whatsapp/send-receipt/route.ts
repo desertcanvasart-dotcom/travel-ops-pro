@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
 export async function POST(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Payment ID required' }, { status: 400 })
     }
 
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     // Get payment details with itinerary
     const { data: payment, error: paymentError } = await supabase

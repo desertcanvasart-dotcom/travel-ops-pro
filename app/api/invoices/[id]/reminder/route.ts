@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // Reuse the email generation from the main route
 function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
@@ -133,7 +133,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     // Get invoice
     const { data: invoice, error } = await supabase
@@ -244,7 +244,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     const { data: reminders, error } = await supabase
       .from('invoice_reminders')

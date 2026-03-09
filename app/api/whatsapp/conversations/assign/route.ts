@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // POST /api/whatsapp/conversations/assign - Assign or claim a conversation
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
     const { conversation_id, agent_id, team_member_id, action } = body
 
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
 // GET /api/whatsapp/conversations/assign - Get assignment info
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('conversation_id')
 

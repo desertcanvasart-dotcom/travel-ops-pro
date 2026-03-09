@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
-const supabase = createClient()
+const supabase = createServerClient()
 
 // GET - List all language versions for an itinerary
 export async function GET(

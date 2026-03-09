@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import twilio from 'twilio'
 
 const twilioClient = twilio(
@@ -12,7 +12,7 @@ const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+
 // GET /api/whatsapp/messages - Get messages for a conversation
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('conversation_id')
     const limit = parseInt(searchParams.get('limit') || '50')
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/messages - Send a new message
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
     const { conversation_id, phone_number, message } = body
 

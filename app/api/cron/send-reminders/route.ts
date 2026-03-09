@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // Verify cron secret for security
 const CRON_SECRET = process.env.CRON_SECRET
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const today = new Date().toISOString().split('T')[0]
 
     console.log('🔔 Starting automated reminder processing...')

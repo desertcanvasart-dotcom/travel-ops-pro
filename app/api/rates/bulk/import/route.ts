@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { RATE_TABLE_CONFIGS, validateImportData } from '@/lib/bulk-rate-service'
 import type { ImportResult } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 
-const supabase = createClient()
+const supabase = createServerClient()
 
 /**
  * POST /api/rates/bulk/import

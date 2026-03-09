@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/app/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // Generate unique itinerary code
 function generateItineraryCode(): string {
@@ -20,7 +20,7 @@ function calculateTotalDays(startDate: string, endDate: string): number {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     // Fetch itineraries with their language versions
     const { searchParams } = new URL(request.url)
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     // Generate itinerary_code if not provided
