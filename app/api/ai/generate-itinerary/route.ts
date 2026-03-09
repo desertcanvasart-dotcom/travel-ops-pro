@@ -79,16 +79,17 @@ export async function POST(request: NextRequest) {
       client_id = null,
       nationality = null,
       is_euro_passport = null,
-      include_lunch = true,
-      include_dinner = false,
+      include_lunch: raw_include_lunch,
+      include_dinner: raw_include_dinner,
       include_accommodation = true,
       include_guide,  // undefined = per-day AI decision, true = always, false = never
+      meal_plan = null,  // From WhatsApp parser: RO|BB|HB|FB|AI
       margin_percent = userPrefs.default_margin_percent,
       currency = userPrefs.default_currency,
       cost_mode = userPrefs.default_cost_mode,
       package_type: requested_package_type = 'land-package',
       skip_pricing = false,
-      
+
       // NEW: Structured input parameters from parser
       is_structured_input = false,
       extracted_days = null,
@@ -103,6 +104,35 @@ export async function POST(request: NextRequest) {
       // Idempotency
       idempotency_key = null,
     } = body
+
+    // ============================================
+    // MEAL PLAN → include_lunch / include_dinner mapping
+    // The WhatsApp parser extracts meal_plan (RO|BB|HB|FB|AI) but the
+    // frontend never sends include_lunch/include_dinner explicitly.
+    // Map meal_plan to the correct defaults:
+    //   RO (Room Only) = no meals
+    //   BB (Bed & Breakfast) = no lunch, no dinner (breakfast from hotel)
+    //   HB (Half Board) = lunch included, no dinner
+    //   FB (Full Board) = lunch + dinner included
+    //   AI (All Inclusive) = lunch + dinner included
+    // If include_lunch/include_dinner were explicitly sent (not undefined), honor them.
+    // ============================================
+    let include_lunch = raw_include_lunch
+    let include_dinner = raw_include_dinner
+    if (meal_plan && typeof meal_plan === 'string') {
+      const mp = meal_plan.toUpperCase().trim()
+      if (raw_include_lunch === undefined || raw_include_lunch === null) {
+        include_lunch = ['HB', 'FB', 'AI'].includes(mp)
+      }
+      if (raw_include_dinner === undefined || raw_include_dinner === null) {
+        include_dinner = ['FB', 'AI'].includes(mp)
+      }
+      console.log(`🍽️ Meal plan "${mp}" → include_lunch=${include_lunch}, include_dinner=${include_dinner}`)
+    } else {
+      // No meal_plan and no explicit values: use safe defaults
+      if (include_lunch === undefined || include_lunch === null) include_lunch = true
+      if (include_dinner === undefined || include_dinner === null) include_dinner = false
+    }
 
     // ============================================
     // IDEMPOTENCY CHECK

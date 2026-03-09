@@ -229,24 +229,40 @@ export async function fetchAllPricingRates(
   let selectedHotel: any = null
 
   if (includeAccommodation) {
-    // PRIORITY 1: Try to match the specific hotel name from the parsed input
+    // PRIORITY 1: Try to match the specific hotel name from the parsed input — WITH tier filter
     if (hotelName) {
-      const { data: namedHotels } = await supabase
+      // First: try name + tier match (correct behavior: respect the selected tier)
+      const { data: namedHotelsTier } = await supabase
         .from('accommodation_rates')
         .select('*')
         .eq('is_active', true)
+        .eq('tier', tier)
         .ilike('property_name', `%${hotelName}%`)
         .limit(3)
 
-      if (namedHotels?.length) {
-        selectedHotel = namedHotels[0]
+      if (namedHotelsTier?.length) {
+        selectedHotel = namedHotelsTier[0]
         hotelRate = isEuroPassport
           ? toNumber(selectedHotel.pp_double_eur, 0)
           : toNumber(selectedHotel.pp_double_non_eur, 0)
         hotelName_final = selectedHotel.property_name
-        console.log(`🏨 Matched parsed hotel name "${hotelName}" → ${selectedHotel.property_name} (rate: ${hotelRate})`)
+        console.log(`🏨 Matched hotel "${hotelName}" in ${tier} tier → ${selectedHotel.property_name} (rate: ${hotelRate})`)
       } else {
-        console.log(`⚠️ Parsed hotel "${hotelName}" not found in accommodation_rates — falling back to tier search`)
+        // Fallback: name match ignoring tier — but log a warning about tier mismatch
+        const { data: namedHotelsAny } = await supabase
+          .from('accommodation_rates')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('property_name', `%${hotelName}%`)
+          .limit(3)
+
+        if (namedHotelsAny?.length) {
+          const actualTier = namedHotelsAny[0].tier || 'unknown'
+          console.warn(`⚠️ Hotel "${hotelName}" found but in "${actualTier}" tier (requested: "${tier}") — ignoring name match, will use tier-appropriate hotel instead`)
+          // DO NOT select this hotel — fall through to Priority 2 (city + tier search)
+        } else {
+          console.log(`⚠️ Parsed hotel "${hotelName}" not found in accommodation_rates — falling back to tier search`)
+        }
       }
     }
 
@@ -504,21 +520,42 @@ export async function createLandItineraryServices(
     const includesHotelForDay = !isLastDay && includeAccommodation && !isCruiseDay && (dayData.includes_hotel !== false)
 
     // Airport & flight detection helpers
+    // Primary: AI sets transport_type=flight and flight_info
+    // Fallback: detect domestic flight from activities/description (e.g., "flight to Aswan", "domestic flight")
+    const hasExplicitFlightInfo = !!dayData.flight_info && dayData.transport_type === 'flight'
+    const hasDomesticFlightInActivities = !hasExplicitFlightInfo
+      && !dayData.is_arrival && !dayData.is_departure
+      && (
+        // Check activities array for flight mentions
+        (dayData.activities || []).some((a: string) =>
+          /\b(flight|fly|domestic\s*flight)\b/i.test(a)
+        )
+        // Check description for flight mentions between Egyptian cities
+        || /\b(domestic\s*flight|fly\s+to|flight\s+to\s+(aswan|luxor|cairo|hurghada|sharm))\b/i.test(dayData.description || '')
+        // Check title for flight mentions
+        || /\b(flight|fly)\b/i.test(dayData.title || '')
+        // Check if transport_type mentions flight even without flight_info
+        || dayData.transport_type === 'flight'
+      )
     const isDomesticFlight = !dayData.is_arrival && !dayData.is_departure
-      && !!dayData.flight_info && dayData.transport_type === 'flight'
+      && (hasExplicitFlightInfo || hasDomesticFlightInActivities)
+    if (hasDomesticFlightInActivities && !hasExplicitFlightInfo) {
+      console.warn(`⚠️ Day ${dayNumber}: Detected domestic flight from activities/description but AI didn't set transport_type=flight`)
+    }
     const hasAirportOnThisDay = dayData.is_arrival || dayData.is_departure || isDomesticFlight
     const hasSightseeingOnThisDay = !isTransferOnly && !isFreeDay
       && ((dayData.attractions?.length > 0) || dayData.guide_required !== false)
 
-    // Intercity transfer detection: city changed from previous day by road (not flight, not cruise)
+    // Intercity transfer detection: city changed from previous day by road (not flight)
+    // Includes cruise-to-land transitions (e.g., cruise checkout in Luxor → drive to Hurghada)
     const previousOvernightCity = previousDayData?.overnight_city || previousDayData?.city
     const currentCity = dayData.city || effectiveCity
+    const previousWasCruise = previousDayData?.accommodation_type === 'cruise' || previousDayData?.is_cruise_day
     const isIntercityTransfer = previousDayData
       && previousOvernightCity
       && previousOvernightCity.toLowerCase() !== currentCity.toLowerCase()
       && !isDomesticFlight
-      && !isCruiseDay
-      && previousDayData.accommodation_type !== 'cruise'
+      && !isCruiseDay  // Current day is NOT a cruise day (previous CAN be cruise — this handles checkout + drive)
       && !dayData.is_arrival  // International arrivals are not intercity
 
     // Generate appropriate title for free/sailing days
@@ -832,18 +869,24 @@ export async function createLandItineraryServices(
       totalSupplierCost += intercityRate
       totalClientPrice += withMargin(intercityRate)
 
-      // Hotel check-out at origin city (if not already handled by departure/arrival logic)
+      // Check-out at origin city (hotel or cruise disembarkation)
       if (!dayData.is_departure && !dayData.is_arrival) {
+        const checkoutServiceName = previousWasCruise
+          ? 'Cruise Disembarkation Assistance'
+          : 'Hotel Check-out Assistance'
+        const checkoutNotes = previousWasCruise
+          ? `Cruise disembarkation in ${originCity}`
+          : `Hotel check-out in ${originCity}`
         services.push({
           service_type: 'hotel_service',
           service_code: 'HOTEL-SVC',
-          service_name: 'Hotel Check-out Assistance',
+          service_name: checkoutServiceName,
           quantity: 1,
           rate_eur: rates.hotelServiceRate,
           rate_non_eur: rates.hotelServiceRate,
           total_cost: rates.hotelServiceRate,
           client_price: withMargin(rates.hotelServiceRate),
-          notes: `Hotel check-out in ${originCity}`
+          notes: checkoutNotes
         })
         totalSupplierCost += rates.hotelServiceRate
         totalClientPrice += withMargin(rates.hotelServiceRate)
@@ -890,6 +933,64 @@ export async function createLandItineraryServices(
       totalClientPrice += withMargin(rates.transferRate)
     }
 
+    // Day-trip intercity transport: when cities_visited includes a different city but
+    // overnight_city is the base city (round trip pattern, e.g., Cairo→Alexandria→Cairo)
+    // This adds the intercity round-trip vehicle SEPARATE from the local sightseeing sedan
+    const citiesVisited = dayData.cities_visited || []
+    const overnightCity = (dayData.overnight_city || dayData.city || effectiveCity).toLowerCase()
+    const dayTripCity = citiesVisited.find((c: string) =>
+      c.toLowerCase() !== overnightCity && c.toLowerCase() !== effectiveCity.toLowerCase()
+    )
+    const isDayTrip = !!dayTripCity && !isIntercityTransfer && !isCruiseDay
+
+    if (isDayTrip) {
+      // Fetch round-trip intercity rate for the day trip (e.g., Cairo→Alexandria round trip)
+      const { getTransportRateForPax: getDayTripRate } = await import('@/lib/transport-rate-utils')
+      const { data: dayTripRates } = await supabase
+        .from('transportation_rates')
+        .select('*')
+        .eq('is_active', true)
+        .eq('service_type', 'intercity_transfer')
+        .ilike('origin_city', overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1))
+        .ilike('destination_city', dayTripCity)
+        .limit(1)
+
+      let dayTripRate = 0
+      let dayTripVehicle = 'Vehicle'
+      let dayTripCode = 'DAY-TRIP-TRANSPORT'
+      let dayTripSupplier: string | null = null
+
+      if (dayTripRates?.length) {
+        const result = getDayTripRate(dayTripRates[0], totalPax, isEuroPassport)
+        if (result) {
+          dayTripRate = isEuroPassport ? result.rateEur : result.rateNonEur
+          dayTripVehicle = result.vehicleType
+          dayTripCode = dayTripRates[0].id || 'DAY-TRIP-TRANSPORT'
+          dayTripSupplier = dayTripRates[0].supplier_name || null
+        }
+      }
+
+      if (dayTripRate > 0) {
+        services.push({
+          service_type: 'transportation',
+          service_code: dayTripCode,
+          service_name: `${dayTripVehicle} Day Trip Transfer (${overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1)} → ${dayTripCity} → ${overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1)})`,
+          supplier_name: dayTripSupplier,
+          quantity: 1,
+          rate_eur: dayTripRate,
+          rate_non_eur: dayTripRate,
+          total_cost: dayTripRate,
+          client_price: withMargin(dayTripRate),
+          notes: `Round-trip intercity transfer for ${dayTripCity} day trip`
+        })
+        totalSupplierCost += dayTripRate
+        totalClientPrice += withMargin(dayTripRate)
+        console.log(`🚌 Day ${dayNumber}: Added day-trip intercity transfer ${overnightCity}→${dayTripCity} (€${dayTripRate})`)
+      } else {
+        console.warn(`⚠️ Day ${dayNumber}: No intercity rate found for day trip to ${dayTripCity}`)
+      }
+    }
+
     // Transportation (skip for cruise days — bundled transport added separately)
     // Skip for domestic flight days — their transfers are already added above
     // For intercity days: skip if transfer-only (intercity vehicle is already the transport),
@@ -898,7 +999,8 @@ export async function createLandItineraryServices(
     if (!isFreeDay && !isCruiseDay && !skipRegularTransport) {
       // --- Per-day transport rate lookup ---
       // If the day is in a different city, fetch transport rate for THAT city
-      const dayCity = dayData.city || effectiveCity
+      // For day trips: use the destination city for the local sightseeing vehicle
+      const dayCity = isDayTrip && dayTripCity ? dayTripCity : (dayData.city || effectiveCity)
       let dayTransportRate = rates.vehiclePerDay
       let dayTransportName = rates.vehicleTypeName
       let dayTransportCode = rates.vehicleServiceCode
@@ -953,9 +1055,11 @@ export async function createLandItineraryServices(
       const transportRate = (isTransferOnly && !isIntercityTransfer) ? dayTransferRate : dayTransportRate
       const transportName = (isTransferOnly && !isIntercityTransfer)
         ? 'Airport/Hotel Transfer'
-        : isIntercityTransfer && hasSightseeingOnThisDay
-          ? `${dayTransportName} Sightseeing Transportation (${currentCity})`
-          : `${dayTransportName} Transportation`
+        : isDayTrip && dayTripCity
+          ? `${dayTransportName} Sightseeing Transportation (${dayTripCity})`
+          : isIntercityTransfer && hasSightseeingOnThisDay
+            ? `${dayTransportName} Sightseeing Transportation (${currentCity})`
+            : `${dayTransportName} Transportation`
       services.push({
         service_type: 'transportation',
         service_code: (isTransferOnly && !isIntercityTransfer) ? dayTransferCode : dayTransportCode,
@@ -966,9 +1070,11 @@ export async function createLandItineraryServices(
         rate_non_eur: transportRate,
         total_cost: transportRate,
         client_price: withMargin(transportRate),
-        notes: isIntercityTransfer
-          ? `Local sightseeing vehicle in ${currentCity}`
-          : `From ${dayData.city || effectiveCity}`
+        notes: isDayTrip && dayTripCity
+          ? `Local sightseeing vehicle in ${dayTripCity}`
+          : isIntercityTransfer
+            ? `Local sightseeing vehicle in ${currentCity}`
+            : `From ${dayData.city || effectiveCity}`
       })
       totalSupplierCost += transportRate
       totalClientPrice += withMargin(transportRate)

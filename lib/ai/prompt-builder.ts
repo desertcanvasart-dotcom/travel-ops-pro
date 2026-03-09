@@ -388,6 +388,62 @@ NOW CONVERT THE ITINERARY TO JSON:`
       })
     }
 
+    // CRUISE DAY CONSISTENCY FIX: Ensure all days between first and last cruise day are marked
+    // The AI sometimes marks only the embarkation day, missing sailing/touring days
+    if (inputHasCruise && outputHasCruise) {
+      const cruiseDayIndices = result.days
+        .map((d: any, i: number) => (d.is_cruise_day || d.accommodation_type === 'cruise') ? i : -1)
+        .filter((i: number) => i >= 0)
+
+      if (cruiseDayIndices.length > 0) {
+        const firstCruise = cruiseDayIndices[0]
+        const lastCruise = cruiseDayIndices[cruiseDayIndices.length - 1]
+
+        // Also detect cruise nights from input (e.g., "3NTS CRZ")
+        const cruiseNightsMatch = rawItinerary.match(/(\d+)\s*(?:NTS?|nights?)\s*(?:CRZ|cruise)/i)
+        const expectedCruiseNights = cruiseNightsMatch ? parseInt(cruiseNightsMatch[1]) : 0
+
+        // Fill gaps between first and last marked cruise day
+        let fixedCount = 0
+        for (let i = firstCruise; i <= lastCruise; i++) {
+          const day = result.days[i]
+          if (!day.is_cruise_day && day.accommodation_type !== 'cruise') {
+            day.is_cruise_day = true
+            day.accommodation_type = 'cruise'
+            fixedCount++
+          }
+        }
+
+        // If we know expected cruise nights and they exceed the range, extend forward
+        const actualCruiseDays = lastCruise - firstCruise + 1
+        if (expectedCruiseNights > 0 && actualCruiseDays < expectedCruiseNights) {
+          const missingDays = expectedCruiseNights - actualCruiseDays
+          for (let i = 1; i <= missingDays; i++) {
+            const idx = lastCruise + i
+            if (idx < result.days.length) {
+              const day = result.days[idx]
+              // Only extend if this day isn't already a land day with hotel + specific sightseeing outside cruise ports
+              if (!day.is_departure && !day.is_arrival) {
+                day.is_cruise_day = true
+                day.accommodation_type = 'cruise'
+                // If no activities, mark as sailing day
+                if (!day.attractions?.length) {
+                  day.is_sailing_day = true
+                  day.is_free_day = true
+                }
+                fixedCount++
+                console.log(`🚢 Extended cruise to Day ${day.day_number} (expected ${expectedCruiseNights} nights)`)
+              }
+            }
+          }
+        }
+
+        if (fixedCount > 0) {
+          console.log(`🚢 Fixed ${fixedCount} cruise day(s) that were not marked by AI`)
+        }
+      }
+    }
+
     // Check if AI hallucinated cities not in input (e.g., Aswan/Luxor when input says Cairo)
     const inputMentionsCairo = /\b(cairo|cai|giza|gza|pyramid|museum|mena\s*house)\b/i.test(rawItinerary)
     const inputMentionsUpperEgypt = /\b(aswan|asw|luxor|lxr|kom\s*ombo|edfu|abu\s*simbel|philae|valley\s*of\s*(the\s*)?kings)\b/i.test(rawItinerary)
