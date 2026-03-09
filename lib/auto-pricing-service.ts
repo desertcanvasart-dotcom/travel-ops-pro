@@ -956,33 +956,37 @@ export async function getCruiseRates(
 }
 
 /**
- * Get hotel rates for a city and tier
+ * Get hotel rates for a city and tier from accommodation_rates table
+ * Uses pp_double and single_supp columns (per-person, per-night)
  */
 export async function getHotelRates(
   city: string,
-  tier: ServiceTier
+  tier: ServiceTier,
+  isEurPassport: boolean = true
 ): Promise<{
   hotelName: string
   ppdNight: number
   singleSuppNight: number
 } | null> {
   try {
+    // Query accommodation_rates (the authoritative rates table with per-person pricing)
     const { data: hotels, error } = await supabaseAdmin
-      .from('hotel_contacts')
+      .from('accommodation_rates')
       .select('*')
       .eq('tier', tier)
       .eq('is_active', true)
       .ilike('city', `%${city}%`)
-      .order('is_preferred', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1)
 
     if (error || !hotels || hotels.length === 0) {
+      // Fallback: try any tier for this city
       const { data: anyHotel } = await supabaseAdmin
-        .from('hotel_contacts')
+        .from('accommodation_rates')
         .select('*')
         .eq('is_active', true)
         .ilike('city', `%${city}%`)
-        .order('is_preferred', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(1)
 
       if (!anyHotel || anyHotel.length === 0) {
@@ -995,30 +999,34 @@ export async function getHotelRates(
       }
 
       const hotel = anyHotel[0]
-      // rate_double_eur is already per-person (double occupancy)
-      const ppd = hotel.rate_double_eur
-      // Use ?? (nullish coalescing) so that rate_single_eur=0 isn't treated as missing
-      const singleSupp = (hotel.rate_single_eur ?? hotel.rate_double_eur) - hotel.rate_double_eur
+      const ppd = isEurPassport
+        ? (hotel.pp_double_eur || 0)
+        : (hotel.pp_double_non_eur || 0)
+      const singleSupp = isEurPassport
+        ? (hotel.single_supp_eur || 0)
+        : (hotel.single_supp_non_eur || 0)
 
-      console.log(`🏨 Hotel (fallback tier): ${hotel.name} | PPD: €${ppd} | Single: €${hotel.rate_single_eur} | Double: €${hotel.rate_double_eur} | Supp: €${singleSupp}`)
+      console.log(`🏨 Hotel (fallback tier): ${hotel.property_name} | PPD: €${ppd} | SingleSupp/night: €${singleSupp} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
 
       return {
-        hotelName: hotel.name,
+        hotelName: hotel.property_name,
         ppdNight: ppd,
         singleSuppNight: Math.max(0, singleSupp)
       }
     }
 
     const hotel = hotels[0]
-    // rate_double_eur is already per-person (double occupancy)
-    const ppd = hotel.rate_double_eur
-    // Use ?? (nullish coalescing) so that rate_single_eur=0 isn't treated as missing
-    const singleSupp = (hotel.rate_single_eur ?? hotel.rate_double_eur) - hotel.rate_double_eur
+    const ppd = isEurPassport
+      ? (hotel.pp_double_eur || 0)
+      : (hotel.pp_double_non_eur || 0)
+    const singleSupp = isEurPassport
+      ? (hotel.single_supp_eur || 0)
+      : (hotel.single_supp_non_eur || 0)
 
-    console.log(`✅ Hotel: ${hotel.name} | PPD/night: €${ppd?.toFixed(2)} | SingleRate: €${hotel.rate_single_eur} | DoubleRate: €${hotel.rate_double_eur} | SingleSupp/night: €${singleSupp.toFixed(2)}`)
+    console.log(`✅ Hotel: ${hotel.property_name} | PPD/night: €${ppd.toFixed(2)} | SingleSupp/night: €${singleSupp.toFixed(2)} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
 
     return {
-      hotelName: hotel.name,
+      hotelName: hotel.property_name,
       ppdNight: ppd,
       singleSuppNight: Math.max(0, singleSupp)
     }
@@ -1718,7 +1726,7 @@ export async function calculateDayBasedPricing(
   const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
   const hotelRatesMap = new Map<string, Awaited<ReturnType<typeof getHotelRates>>>()
   for (const city of hotelCities) {
-    const rates = await getHotelRates(city, tier)
+    const rates = await getHotelRates(city, tier, isEurPassport)
     if (rates) {
       hotelRatesMap.set(city, rates)
     }
@@ -1919,7 +1927,7 @@ export async function calculateDayBasedPricing(
         quantityMode: 'per_pax',
         unitCost: hotelRate.ppdNight,
         lineTotal: hotelRate.ppdNight,
-        rateSource: 'hotel_contacts',
+        rateSource: 'accommodation_rates',
         isPerPax: true,
         isOptional: false,
         notes: 'PPD (Per Person Double)'
@@ -2019,25 +2027,25 @@ export async function calculateDayBasedPricing(
     }
   }
 
-  // ----- Water (per pax per sightseeing day) -----
+  // ----- Water (per pax per sightseeing day) — distributed per day -----
   const sightseeingDaysList = itinerary.filter(d => d.services.guide_required || d.attractions.length > 0)
   const sightseeingDays = sightseeingDaysList.length
   const waterPerPax = waterCostPerPax * sightseeingDays
 
-  if (sightseeingDays > 0) {
+  for (const sDay of sightseeingDaysList) {
     services.push({
-      id: `water-all-days`,
-      dayNumber: 1,
+      id: `water-day-${sDay.day}`,
+      dayNumber: sDay.day,
       serviceType: 'water',
-      serviceName: `Bottled Water (${sightseeingDays} sightseeing days)`,
-      quantity: sightseeingDays,
+      serviceName: 'Bottled Water',
+      quantity: 1,
       quantityMode: 'per_pax',
       unitCost: waterCostPerPax,
-      lineTotal: waterPerPax,
+      lineTotal: waterCostPerPax,
       rateSource: 'fixed',
       isPerPax: true,
       isOptional: false,
-      notes: `€${waterCostPerPax}/day × ${sightseeingDays} days`
+      notes: `Bottled water for sightseeing`
     })
   }
 

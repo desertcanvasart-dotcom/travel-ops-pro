@@ -97,6 +97,7 @@ export interface PricingRates {
   guidePerDay: number
   selectedGuide: any
   allEntranceFees: any[]
+  allActivityRates: any[]
   lunchRate: number       // Fallback flat rate (kept for backward compat)
   dinnerRate: number      // Fallback flat rate (kept for backward compat)
   allMealRates: MealRateRecord[]  // All active meal rates for per-city lookup
@@ -197,8 +198,11 @@ export async function fetchAllPricingRates(
 
   if (!guidePerDay) console.warn(`⚠️ No guide rate found at all — guide will be €0`)
 
-  // Entrance fees
-  const { data: allEntranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
+  // Entrance fees + activity rates (sea trips, boat rides, etc.)
+  const [{ data: allEntranceFees }, { data: allActivityRates }] = await Promise.all([
+    supabase.from('entrance_fees').select('*').eq('is_active', true),
+    supabase.from('activity_rates').select('*').eq('is_active', true)
+  ])
 
   // Meal rates — fetch ALL active rates for per-city lookup
   const { data: allMealRates } = await supabase.from('meal_rates').select('*').eq('is_active', true)
@@ -305,6 +309,7 @@ export async function fetchAllPricingRates(
     guidePerDay,
     selectedGuide,
     allEntranceFees: allEntranceFees || [],
+    allActivityRates: allActivityRates || [],
     lunchRate,
     dinnerRate,
     allMealRates: (allMealRates || []) as MealRateRecord[],
@@ -522,39 +527,55 @@ export async function createLandItineraryServices(
     // Airport & flight detection helpers
     // Primary: AI sets transport_type=flight and flight_info
     // Fallback: detect domestic flight from activities/description (e.g., "flight to Aswan", "domestic flight")
+    // HYBRID PATTERN: A day can have BOTH a domestic flight AND international departure
+    //   e.g., Day 9: HRG→CAI domestic flight + sightseeing + international departure MS955@23:20
+    //   This needs 3 airport services: 1 at HRG (domestic departure), 2 at CAI (domestic arrival + international departure)
     const hasExplicitFlightInfo = !!dayData.flight_info && dayData.transport_type === 'flight'
-    const hasDomesticFlightInActivities = !hasExplicitFlightInfo
-      && !dayData.is_arrival && !dayData.is_departure
-      && (
-        // Check activities array for flight mentions
-        (dayData.activities || []).some((a: string) =>
-          /\b(flight|fly|domestic\s*flight)\b/i.test(a)
-        )
-        // Check description for flight mentions between Egyptian cities
-        || /\b(domestic\s*flight|fly\s+to|flight\s+to\s+(aswan|luxor|cairo|hurghada|sharm))\b/i.test(dayData.description || '')
-        // Check title for flight mentions
-        || /\b(flight|fly)\b/i.test(dayData.title || '')
-        // Check if transport_type mentions flight even without flight_info
-        || dayData.transport_type === 'flight'
+    const hasDomesticFlightSignals = (
+      // Check activities array for flight mentions
+      (dayData.activities || []).some((a: string) =>
+        /\b(flight|fly|domestic\s*flight)\b/i.test(a)
       )
+      // Check description for flight mentions between Egyptian cities
+      || /\b(domestic\s*flight|fly\s+to|flight\s+to\s+(aswan|luxor|cairo|hurghada|sharm))\b/i.test(dayData.description || '')
+      // Check title for flight mentions
+      || /\b(flight|fly)\b/i.test(dayData.title || '')
+      // Check if transport_type mentions flight even without flight_info
+      || dayData.transport_type === 'flight'
+    )
+    // Pure domestic flight (no international arrival/departure on same day)
     const isDomesticFlight = !dayData.is_arrival && !dayData.is_departure
-      && (hasExplicitFlightInfo || hasDomesticFlightInActivities)
-    if (hasDomesticFlightInActivities && !hasExplicitFlightInfo) {
+      && (hasExplicitFlightInfo || hasDomesticFlightSignals)
+    // Hybrid: domestic flight + international departure on same day
+    // e.g., HRG→CAI by flight, sightseeing in Cairo, then international departure
+    const isHybridDomesticDeparture = dayData.is_departure && !dayData.is_arrival
+      && (hasExplicitFlightInfo || hasDomesticFlightSignals)
+    // Hybrid: international arrival + domestic flight on same day
+    const isHybridDomesticArrival = dayData.is_arrival && !dayData.is_departure
+      && (hasExplicitFlightInfo || hasDomesticFlightSignals)
+    const hasDomesticFlightOnThisDay = isDomesticFlight || isHybridDomesticDeparture || isHybridDomesticArrival
+    if (hasDomesticFlightOnThisDay && !hasExplicitFlightInfo) {
       console.warn(`⚠️ Day ${dayNumber}: Detected domestic flight from activities/description but AI didn't set transport_type=flight`)
     }
-    const hasAirportOnThisDay = dayData.is_arrival || dayData.is_departure || isDomesticFlight
+    const hasAirportOnThisDay = dayData.is_arrival || dayData.is_departure || hasDomesticFlightOnThisDay
     const hasSightseeingOnThisDay = !isTransferOnly && !isFreeDay
       && ((dayData.attractions?.length > 0) || dayData.guide_required !== false)
 
     // Intercity transfer detection: city changed from previous day by road (not flight)
     // Includes cruise-to-land transitions (e.g., cruise checkout in Luxor → drive to Hurghada)
-    const previousOvernightCity = previousDayData?.overnight_city || previousDayData?.city
+    // For day trips (cities_visited but same overnight city), the previous day's overnight_city
+    // should be the base city — not the visited city. If overnight_city is null/empty, prefer
+    // effectiveCity over the visited city to avoid false intercity detection.
+    const prevCitiesVisited = previousDayData?.cities_visited || []
+    const previousWasDayTrip = prevCitiesVisited.length > 1
+    const previousOvernightCity = previousDayData?.overnight_city
+      || (previousWasDayTrip ? effectiveCity : previousDayData?.city)
     const currentCity = dayData.city || effectiveCity
     const previousWasCruise = previousDayData?.accommodation_type === 'cruise' || previousDayData?.is_cruise_day
     const isIntercityTransfer = previousDayData
       && previousOvernightCity
       && previousOvernightCity.toLowerCase() !== currentCity.toLowerCase()
-      && !isDomesticFlight
+      && !hasDomesticFlightOnThisDay  // Any domestic flight means city change is by air, not road
       && !isCruiseDay  // Current day is NOT a cruise day (previous CAN be cruise — this handles checkout + drive)
       && !dayData.is_arrival  // International arrivals are not intercity
 
@@ -711,8 +732,8 @@ export async function createLandItineraryServices(
 
     // Airport Services (for arrivals/departures/domestic flights)
     // Skip on cruise days — bundled cruise transport covers airport staff + transfers
-    if (!isCruiseDay && (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info)) {
-      if (isDomesticFlight) {
+    if (!isCruiseDay && (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info || hasDomesticFlightOnThisDay)) {
+      if (isDomesticFlight || isHybridDomesticDeparture || isHybridDomesticArrival) {
         // Domestic flight: airport services at BOTH departure and arrival airports
         services.push({
           service_type: 'airport_service',
@@ -742,7 +763,39 @@ export async function createLandItineraryServices(
         totalSupplierCost += rates.airportServiceRate
         totalClientPrice += withMargin(rates.airportServiceRate)
 
-        // Domestic flight also needs TWO airport transfers (hotel→airport + airport→hotel)
+        // HYBRID: If this day also has an international departure/arrival, add a 3rd airport service
+        if (isHybridDomesticDeparture) {
+          services.push({
+            service_type: 'airport_service',
+            service_code: 'AIRPORT',
+            service_name: 'Airport Meet & Assist (International Departure)',
+            quantity: 1,
+            rate_eur: rates.airportServiceRate,
+            rate_non_eur: rates.airportServiceRate,
+            total_cost: rates.airportServiceRate,
+            client_price: withMargin(rates.airportServiceRate),
+            notes: `International departure: ${dayData.departure_flight_info || dayData.flight_info || ''}`
+          })
+          totalSupplierCost += rates.airportServiceRate
+          totalClientPrice += withMargin(rates.airportServiceRate)
+        }
+        if (isHybridDomesticArrival) {
+          services.push({
+            service_type: 'airport_service',
+            service_code: 'AIRPORT',
+            service_name: 'Airport Meet & Assist (International Arrival)',
+            quantity: 1,
+            rate_eur: rates.airportServiceRate,
+            rate_non_eur: rates.airportServiceRate,
+            total_cost: rates.airportServiceRate,
+            client_price: withMargin(rates.airportServiceRate),
+            notes: `International arrival: ${dayData.arrival_flight_info || dayData.flight_info || ''}`
+          })
+          totalSupplierCost += rates.airportServiceRate
+          totalClientPrice += withMargin(rates.airportServiceRate)
+        }
+
+        // Domestic flight needs TWO airport transfers (hotel→airport + airport→destination)
         services.push({
           service_type: 'transportation',
           service_code: rates.transferServiceCode,
@@ -772,6 +825,24 @@ export async function createLandItineraryServices(
         })
         totalSupplierCost += rates.transferRate
         totalClientPrice += withMargin(rates.transferRate)
+
+        // HYBRID departure: also need transfer to final international departure airport
+        if (isHybridDomesticDeparture) {
+          services.push({
+            service_type: 'transportation',
+            service_code: rates.transferServiceCode,
+            service_name: 'Airport Transfer - International Departure',
+            supplier_name: rates.transferSupplierName,
+            quantity: 1,
+            rate_eur: rates.transferRate,
+            rate_non_eur: rates.transferRate,
+            total_cost: rates.transferRate,
+            client_price: withMargin(rates.transferRate),
+            notes: 'Transfer to international departure airport'
+          })
+          totalSupplierCost += rates.transferRate
+          totalClientPrice += withMargin(rates.transferRate)
+        }
       } else {
         // International arrival/departure OR explicit needs_airport_service
         const isInternational = dayData.is_arrival || dayData.is_departure
@@ -995,7 +1066,7 @@ export async function createLandItineraryServices(
     // Skip for domestic flight days — their transfers are already added above
     // For intercity days: skip if transfer-only (intercity vehicle is already the transport),
     // but ADD local sightseeing vehicle if there are attractions at the destination
-    const skipRegularTransport = isDomesticFlight || (isIntercityTransfer && isTransferOnly)
+    const skipRegularTransport = hasDomesticFlightOnThisDay || (isIntercityTransfer && isTransferOnly)
     if (!isFreeDay && !isCruiseDay && !skipRegularTransport) {
       // --- Per-day transport rate lookup ---
       // If the day is in a different city, fetch transport rate for THAT city
@@ -1081,7 +1152,7 @@ export async function createLandItineraryServices(
     }
 
     // Domestic flight + sightseeing: add the day-tour vehicle (transfers already added above)
-    if (isDomesticFlight && hasSightseeingOnThisDay && !isCruiseDay) {
+    if (hasDomesticFlightOnThisDay && hasSightseeingOnThisDay && !isCruiseDay) {
       services.push({
         service_type: 'transportation',
         service_code: rates.vehicleServiceCode,
@@ -1121,7 +1192,7 @@ export async function createLandItineraryServices(
       hasGuide: dayNeedsGuide,
       hasDriver: !isFreeDay && !isCruiseDay,
       hasAirportService: hasAirportOnThisDay,
-      airportServiceCount: isDomesticFlight ? 2 : (hasAirportOnThisDay ? 1 : 0),
+      airportServiceCount: isHybridDomesticDeparture ? 3 : (hasDomesticFlightOnThisDay ? 2 : (hasAirportOnThisDay ? 1 : 0)),
       hasHotelNight: includesHotelForDay,
       isCruiseDay,
       isTransferOnly,
@@ -1204,8 +1275,23 @@ export async function createLandItineraryServices(
             console.log(`✅ Day ${dayNumber}: Entrance fee matched: "${attr}" → "${fee.attraction_name}" = €${feePerPerson}/person`)
           }
         } else {
-          console.warn(`❌ Day ${dayNumber}: No entrance fee found for "${attr}" (normalized: "${normalizedAttr}") — skipping`)
-          warnings.push(`Day ${dayNumber}: No entrance fee found for "${attr}" — skipping`)
+          // Fallback: check activity_rates (sea trips, boat rides, etc.)
+          const activityMatch = (rates.allActivityRates || []).find((ar: any) =>
+            ar.activity_name?.toLowerCase() === normalizedAttr.toLowerCase()
+            || ar.activity_name?.toLowerCase().includes(normalizedAttr.toLowerCase())
+            || normalizedAttr.toLowerCase().includes(ar.activity_name?.toLowerCase() || '')
+          )
+          if (activityMatch) {
+            const activityRate = isEuroPassport
+              ? toNumber(activityMatch.base_rate_eur || activityMatch.eur_rate, 0)
+              : toNumber(activityMatch.base_rate_non_eur || activityMatch.non_eur_rate, activityMatch.base_rate_eur || activityMatch.eur_rate || 0)
+            dayEntranceTotal += activityRate * totalPax
+            matchedAttractions.push(activityMatch.activity_name || attr)
+            console.log(`✅ Day ${dayNumber}: Activity rate matched: "${attr}" → "${activityMatch.activity_name}" = €${activityRate}/person`)
+          } else {
+            console.warn(`❌ Day ${dayNumber}: No entrance fee or activity rate found for "${attr}" (normalized: "${normalizedAttr}") — skipping`)
+            warnings.push(`Day ${dayNumber}: No entrance fee or activity rate found for "${attr}" — skipping`)
+          }
         }
       }
 
