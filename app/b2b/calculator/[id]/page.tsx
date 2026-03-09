@@ -163,6 +163,9 @@ export default function TourPriceCalculator() {
     notes: ''
   })
 
+  // Variation tier (from DB via calculator-init)
+  const [variationTier, setVariationTier] = useState<string>('standard')
+
   // Itinerary editor state
   const [templateId, setTemplateId] = useState<string | null>(null)
   const [templateName, setTemplateName] = useState<string>('')
@@ -200,6 +203,7 @@ export default function TourPriceCalculator() {
       if (data.success) {
         setTemplateId(data.template_id)
         setTemplateName(data.template_name || '')
+        if (data.tier) setVariationTier(data.tier)
         // Ensure each day has the full enriched structure
         const days: TemplateItineraryDay[] = (data.itinerary || []).map((d: any, i: number) => ({
           day: d.day || i + 1,
@@ -363,7 +367,8 @@ export default function TourPriceCalculator() {
           is_eur_passport: isEurPassport,
           margin_percent: marginPercent,
           include_optionals: includeOptionals,
-          tour_leader_included: tourLeaderIncluded
+          tour_leader_included: tourLeaderIncluded,
+          tier: variationTier
         })
       })
       const data = await res.json()
@@ -398,7 +403,8 @@ export default function TourPriceCalculator() {
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
           margin_percent: marginPercent,
-          tour_leader_included: tourLeaderIncluded
+          tour_leader_included: tourLeaderIncluded,
+          tier: variationTier
         })
       })
       const data = await res.json()

@@ -309,41 +309,62 @@ async function getEntranceFee(attractionName: string, isEurPassport: boolean): P
   }
 }
 
-// Get hotel rate from hotel_contacts table
-async function getHotelRate(city: string, tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
+// Get hotel rate from accommodation_rates table (authoritative per-person rates)
+async function getHotelRate(
+  city: string,
+  tier: string = 'standard',
+  isEurPassport: boolean = true
+): Promise<{ rate: number; name: string; id: string } | null> {
   const { data: hotels, error } = await supabaseAdmin
-    .from('hotel_contacts')
-    .select('id, name, rate_double_eur, city, tier, is_preferred')
+    .from('accommodation_rates')
+    .select('id, property_name, pp_double_eur, pp_double_non_eur, city, tier')
     .eq('is_active', true)
     .ilike('city', `%${city}%`)
     .eq('tier', tier)
-    .order('is_preferred', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
 
-  if (error || !hotels || hotels.length === 0) {
-    // Fallback: any hotel in city
-    const { data: anyHotel } = await supabaseAdmin
-      .from('hotel_contacts')
-      .select('id, name, rate_double_eur')
-      .eq('is_active', true)
-      .ilike('city', `%${city}%`)
-      .order('is_preferred', { ascending: false })
-      .limit(1)
-
-    if (!anyHotel || anyHotel.length === 0) return null
-
+  if (!error && hotels && hotels.length > 0) {
+    const rate = isEurPassport ? (hotels[0].pp_double_eur || 0) : (hotels[0].pp_double_non_eur || 0)
     return {
-      rate: anyHotel[0].rate_double_eur || 0,
-      name: anyHotel[0].name || 'Hotel',
-      id: anyHotel[0].id
+      rate,
+      name: hotels[0].property_name || 'Hotel',
+      id: hotels[0].id
     }
   }
 
-  return {
-    rate: hotels[0].rate_double_eur || 0,
-    name: hotels[0].name || 'Hotel',
-    id: hotels[0].id
+  // Fallback: try adjacent tiers (never jump to a completely different tier)
+  const TIER_FALLBACK: Record<string, string[]> = {
+    budget:   ['standard'],
+    standard: ['deluxe', 'budget'],
+    deluxe:   ['standard', 'luxury'],
+    luxury:   ['deluxe']
   }
+  const fallbackTiers = TIER_FALLBACK[tier] || []
+
+  for (const fbTier of fallbackTiers) {
+    const { data: fbHotels } = await supabaseAdmin
+      .from('accommodation_rates')
+      .select('id, property_name, pp_double_eur, pp_double_non_eur, city, tier')
+      .eq('is_active', true)
+      .ilike('city', `%${city}%`)
+      .eq('tier', fbTier)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (fbHotels && fbHotels.length > 0) {
+      const rate = isEurPassport ? (fbHotels[0].pp_double_eur || 0) : (fbHotels[0].pp_double_non_eur || 0)
+      console.warn(`⚠️ No ${tier} hotel for ${city} — using ${fbTier} tier: ${fbHotels[0].property_name}`)
+      return {
+        rate,
+        name: fbHotels[0].property_name || 'Hotel',
+        id: fbHotels[0].id
+      }
+    }
+  }
+
+  console.warn(`⚠️ No hotel found for ${city} in any tier`)
+  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -726,14 +747,14 @@ export async function POST(request: NextRequest) {
 
           case 'accommodation': {
             // rate_double_eur is per-person (double occupancy), not per-room
-            const hotel = await getHotelRate(service.city || 'Cairo', effectiveTier)
+            const hotel = await getHotelRate(service.city || 'Cairo', effectiveTier, is_eur_passport)
             if (hotel) {
               unitCost = hotel.rate
               lineTotal = hotel.rate * num_pax
               effectiveQuantityMode = 'per_pax'
               pricingNote = `${hotel.name}: €${hotel.rate}/pax (double occupancy)`
-              rateSource = 'hotel_contacts'
-              console.log(`✅ Hotel from B2C: ${hotel.name} -> €${hotel.rate}/pax`)
+              rateSource = 'accommodation_rates'
+              console.log(`✅ Hotel: ${hotel.name} -> €${hotel.rate}/pax (${effectiveTier})`)
             }
             break
           }

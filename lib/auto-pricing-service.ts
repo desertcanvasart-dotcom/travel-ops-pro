@@ -980,38 +980,51 @@ export async function getHotelRates(
       .limit(1)
 
     if (error || !hotels || hotels.length === 0) {
-      // Fallback: try any tier for this city
-      const { data: anyHotel } = await supabaseAdmin
-        .from('accommodation_rates')
-        .select('*')
-        .eq('is_active', true)
-        .ilike('city', `%${city}%`)
-        .order('created_at', { ascending: false })
-        .limit(1)
+      // Fallback: try adjacent tiers in order (never jump to a completely different tier)
+      // e.g., standard → deluxe → budget (never luxury), luxury → deluxe (never budget)
+      const TIER_FALLBACK_ORDER: Record<ServiceTier, ServiceTier[]> = {
+        budget:   ['standard'],
+        standard: ['deluxe', 'budget'],
+        deluxe:   ['standard', 'luxury'],
+        luxury:   ['deluxe']
+      }
+      const fallbackTiers = TIER_FALLBACK_ORDER[tier] || []
 
-      if (!anyHotel || anyHotel.length === 0) {
-        console.log(`⚠️ No hotel found for ${city} (${tier}), using defaults`)
-        return {
-          hotelName: `${city} Hotel`,
-          ppdNight: DEFAULT_RATES[tier].hotelPPD,
-          singleSuppNight: DEFAULT_RATES[tier].hotelSingleSupp
+      for (const fallbackTier of fallbackTiers) {
+        const { data: fbHotels } = await supabaseAdmin
+          .from('accommodation_rates')
+          .select('*')
+          .eq('tier', fallbackTier)
+          .eq('is_active', true)
+          .ilike('city', `%${city}%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (fbHotels && fbHotels.length > 0) {
+          const hotel = fbHotels[0]
+          const ppd = isEurPassport
+            ? (hotel.pp_double_eur || 0)
+            : (hotel.pp_double_non_eur || 0)
+          const singleSupp = isEurPassport
+            ? (hotel.single_supp_eur || 0)
+            : (hotel.single_supp_non_eur || 0)
+
+          console.warn(`⚠️ No ${tier} hotel for ${city} — using ${fallbackTier} tier: ${hotel.property_name} | PPD: €${ppd} | SingleSupp/night: €${singleSupp}`)
+
+          return {
+            hotelName: hotel.property_name,
+            ppdNight: ppd,
+            singleSuppNight: Math.max(0, singleSupp)
+          }
         }
       }
 
-      const hotel = anyHotel[0]
-      const ppd = isEurPassport
-        ? (hotel.pp_double_eur || 0)
-        : (hotel.pp_double_non_eur || 0)
-      const singleSupp = isEurPassport
-        ? (hotel.single_supp_eur || 0)
-        : (hotel.single_supp_non_eur || 0)
-
-      console.log(`🏨 Hotel (fallback tier): ${hotel.property_name} | PPD: €${ppd} | SingleSupp/night: €${singleSupp} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
-
+      // No hotel found in any adjacent tier — use defaults
+      console.log(`⚠️ No hotel found for ${city} (${tier} or adjacent tiers), using defaults`)
       return {
-        hotelName: hotel.property_name,
-        ppdNight: ppd,
-        singleSuppNight: Math.max(0, singleSupp)
+        hotelName: `${city} Hotel`,
+        ppdNight: DEFAULT_RATES[tier].hotelPPD,
+        singleSuppNight: DEFAULT_RATES[tier].hotelSingleSupp
       }
     }
 
