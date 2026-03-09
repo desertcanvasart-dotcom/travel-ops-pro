@@ -54,7 +54,7 @@ const supabaseAdmin = createAdminClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const supabase = createClient()
+    const supabase = supabaseAdmin
     const userPrefs = await getUserPreferences(supabase)
     
     const {
@@ -408,6 +408,7 @@ export async function POST(request: NextRequest) {
           }).eq('id', itinerary.id)
           if (updateError) {
             console.error('❌ Failed to update cruise itinerary pricing:', updateError)
+            throw new Error(`Failed to save cruise pricing: ${updateError.message}`)
           }
         }
 
@@ -732,6 +733,7 @@ export async function POST(request: NextRequest) {
       .eq('id', itinerary.id)
     if (updateError) {
       console.error('❌ Failed to update itinerary pricing/inclusions:', updateError)
+      throw new Error(`Failed to save pricing: ${updateError.message}`)
     }
 
     console.log('🎉 Land tour itinerary complete!', {
