@@ -123,19 +123,19 @@ const pillars = [
   {
     icon: Sparkles,
     title: "Conversation to Priced Itinerary",
-    description: "Paste a WhatsApp message. AI extracts dates, cities, attractions, and group size — then generates a fully priced, day-by-day itinerary with entrance fees, transport, guides, and margins calculated. In minutes, not hours.",
+    description: "Paste a WhatsApp message and the AI instantly extracts the essentials\u2014dates, destinations, attractions, and group size. It then builds a complete day-by-day itinerary with transport, guides, entrance fees, and margins automatically calculated. Ready in minutes instead of hours.",
     color: "from-emerald-500 to-teal-600"
   },
   {
     icon: Inbox,
     title: "All Communication, One Place",
-    description: "WhatsApp messages, emails, quotes, invoices, supplier vouchers, and client history — all in a single dashboard. No more switching between apps, phones, and spreadsheets to find what you need.",
+    description: "WhatsApp messages, emails, quotes, invoices, supplier vouchers, and client history\u2014everything organized in one clear dashboard. No more jumping between apps, phones, or spreadsheets to track conversations, documents, and trip details across your entire workflow.",
     color: "from-amber-500 to-orange-600"
   },
   {
     icon: BarChart3,
     title: "Every Number, Always Accurate",
-    description: "Supplier costs, client prices, margins, commissions, tipping, currency conversion — all calculated in real-time. Change one rate and every quote updates. Know your exact profit before the tour starts.",
+    description: "Supplier costs, client prices, margins, commissions, tipping, and currency conversion\u2014all calculated instantly in real time. Update a single rate and every quote adjusts automatically, so you always know the true profit before the tour even begins.",
     color: "from-violet-500 to-purple-600"
   }
 ]
