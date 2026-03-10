@@ -577,7 +577,9 @@ export async function createLandItineraryServices(
       && previousOvernightCity.toLowerCase() !== currentCity.toLowerCase()
       && !hasDomesticFlightOnThisDay  // Any domestic flight means city change is by air, not road
       && !isCruiseDay  // Current day is NOT a cruise day (previous CAN be cruise — this handles checkout + drive)
-      && !dayData.is_arrival  // International arrivals are not intercity
+      // Note: is_arrival is NOT excluded — arrival days CAN have intercity components
+      // (e.g., arrive Cairo, then drive to another city). The previousDayData null check
+      // already prevents false intercity detection on the first day of the trip.
 
     // Generate appropriate title for free/sailing days
     let dayTitle = dayData.title || `Day ${dayNumber}`
@@ -1152,21 +1154,53 @@ export async function createLandItineraryServices(
     }
 
     // Domestic flight + sightseeing: add the day-tour vehicle (transfers already added above)
+    // Use city-specific rates for the sightseeing city (e.g., fly HRG→CAI, sightsee in Cairo)
     if (hasDomesticFlightOnThisDay && hasSightseeingOnThisDay && !isCruiseDay) {
+      const flightSightseeingCity = dayData.city || effectiveCity
+      let flightDayTourRate = rates.vehiclePerDay
+      let flightDayTourName = rates.vehicleTypeName
+      let flightDayTourCode = rates.vehicleServiceCode
+      let flightDayTourSupplier = rates.vehicleSupplierName
+
+      // Fetch city-specific day tour rate if sightseeing is in a different city than the base
+      if (flightSightseeingCity.toLowerCase() !== effectiveCity.toLowerCase()) {
+        const { getTransportRateForPax: getFlightCityRate } = await import('@/lib/transport-rate-utils')
+        const { data: flightCityRates } = await supabase
+          .from('transportation_rates')
+          .select('*')
+          .eq('is_active', true)
+          .eq('service_type', 'day_tour')
+          .ilike('city', flightSightseeingCity)
+          .limit(1)
+
+        if (flightCityRates?.length) {
+          const result = getFlightCityRate(flightCityRates[0], totalPax, isEuroPassport)
+          if (result) {
+            flightDayTourRate = isEuroPassport ? result.rateEur : result.rateNonEur
+            flightDayTourName = result.vehicleType
+            flightDayTourCode = flightCityRates[0].id || rates.vehicleServiceCode
+            flightDayTourSupplier = flightCityRates[0].supplier_name || null
+            console.log(`🚗 Day ${dayNumber} (${flightSightseeingCity}): Using city-specific transport rate €${flightDayTourRate} for domestic flight sightseeing`)
+          }
+        } else {
+          console.warn(`⚠️ Day ${dayNumber}: No transport rate found for ${flightSightseeingCity} — using ${effectiveCity} rate €${flightDayTourRate}`)
+        }
+      }
+
       services.push({
         service_type: 'transportation',
-        service_code: rates.vehicleServiceCode,
-        service_name: `${rates.vehicleTypeName} Sightseeing Transportation`,
-        supplier_name: rates.vehicleSupplierName,
+        service_code: flightDayTourCode,
+        service_name: `${flightDayTourName} Sightseeing Transportation`,
+        supplier_name: flightDayTourSupplier,
         quantity: 1,
-        rate_eur: rates.vehiclePerDay,
-        rate_non_eur: rates.vehiclePerDay,
-        total_cost: rates.vehiclePerDay,
-        client_price: withMargin(rates.vehiclePerDay),
-        notes: `Sightseeing in ${dayData.city || effectiveCity}`
+        rate_eur: flightDayTourRate,
+        rate_non_eur: flightDayTourRate,
+        total_cost: flightDayTourRate,
+        client_price: withMargin(flightDayTourRate),
+        notes: `Sightseeing in ${flightSightseeingCity}`
       })
-      totalSupplierCost += rates.vehiclePerDay
-      totalClientPrice += withMargin(rates.vehiclePerDay)
+      totalSupplierCost += flightDayTourRate
+      totalClientPrice += withMargin(flightDayTourRate)
     }
 
     // Guide (only if required for this day)

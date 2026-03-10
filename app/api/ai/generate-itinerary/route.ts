@@ -39,6 +39,7 @@ import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { createLanguageVersions } from '@/lib/ai/language-versions'
 import { getUserPreferences } from '@/lib/ai/user-preferences'
 import { applyDayRules } from '@/lib/ai/day-rules-engine'
+import { reconcileWithParserData } from '@/lib/ai/reconciliation'
 
 
 // Admin client for bypassing RLS on content library
@@ -569,9 +570,18 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================
-    // POST-AI VALIDATION: Apply business rules
+    // POST-AI VALIDATION: Reconcile + Apply business rules
     // ============================================
     if (itineraryData.days && itineraryData.days.length > 0) {
+      // Step 1: Reconcile AI output with parser's extracted_days
+      // The parser extracts detailed per-day data (attractions with INSIDE/OUTSIDE,
+      // meals, flights, cities) that the AI may miss when re-parsing raw text.
+      if (extracted_days && extracted_days.length > 0) {
+        console.log('🔧 Running reconciliation layer (parser data → AI output)...')
+        itineraryData.days = reconcileWithParserData(itineraryData.days, extracted_days)
+      }
+
+      // Step 2: Apply deterministic day rules
       console.log('🔧 Applying day rules engine (pre-service-creation validation)...')
       itineraryData.days = applyDayRules(itineraryData.days, effectivePackageType)
       console.log('✅ Day rules applied successfully')
