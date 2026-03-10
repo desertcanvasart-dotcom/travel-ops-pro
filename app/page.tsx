@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { 
-  MessageSquare, 
-  FileText, 
-  Users, 
-  DollarSign, 
-  Calendar, 
+import {
+  MessageSquare,
+  FileText,
+  Users,
+  DollarSign,
+  Calendar,
   Truck,
   ClipboardList,
   BarChart3,
@@ -35,7 +35,16 @@ import {
   PieChart,
   Lock,
   UserCheck,
-  Timer
+  Timer,
+  Mail,
+  Inbox,
+  Handshake,
+  Map,
+  GripVertical,
+  Bell,
+  Banknote,
+  RefreshCcw,
+  ClipboardCheck
 } from 'lucide-react'
 
 // Animation hook for scroll reveal
@@ -406,6 +415,134 @@ const modules = [
       "1-click invites for new team members",
       "Instant deactivation when staff leave"
     ]
+  },
+  {
+    id: "email-integration",
+    title: "Gmail Integration",
+    shortTitle: "Email",
+    icon: Mail,
+    badge: "Core",
+    badgeColor: "bg-slate-100 text-slate-700",
+    category: "SALES",
+    before: [
+      "Switching between Gmail and your CRM constantly",
+      "Client emails lost in overflowing inboxes",
+      "No link between email threads and bookings",
+      "Sending quotes from personal email"
+    ],
+    after: [
+      "Gmail connected via OAuth — send and receive inside Autoura",
+      "Email conversations linked to client profiles",
+      "Send quotes, invoices, and contracts without leaving the platform",
+      "Full email history alongside WhatsApp in one unified view"
+    ]
+  },
+  {
+    id: "unified-inbox",
+    title: "Unified Conversations",
+    shortTitle: "Inbox",
+    icon: Inbox,
+    badge: "Core",
+    badgeColor: "bg-slate-100 text-slate-700",
+    category: "SALES",
+    highlight: "1 inbox for everything",
+    before: [
+      "WhatsApp on your phone, email on your laptop",
+      "Client history split across platforms",
+      "No single view of all communications",
+      "Team members don't know what's been said where"
+    ],
+    after: [
+      "WhatsApp + Email in one unified inbox",
+      "Complete conversation history per client",
+      "Every message linked to the right booking",
+      "Team-wide visibility — no more 'did anyone reply?'"
+    ]
+  },
+  {
+    id: "b2b-system",
+    title: "B2B Partner System",
+    shortTitle: "B2B",
+    icon: Handshake,
+    badge: "Core",
+    badgeColor: "bg-slate-100 text-slate-700",
+    category: "SALES",
+    highlight: "Partner pricing",
+    before: [
+      "Different pricing for each partner in separate spreadsheets",
+      "Manually adjusting margins per B2B client",
+      "No way to generate partner-specific quotes quickly",
+      "Can't track which partners bring which bookings"
+    ],
+    after: [
+      "Partner profiles with custom pricing rules",
+      "B2B quotes with partner-specific margins",
+      "Calculator tool for instant partner pricing",
+      "Convert any itinerary to a B2B quote in one click"
+    ]
+  },
+  {
+    id: "tour-templates",
+    title: "Tour Templates & Builder",
+    shortTitle: "Tours",
+    icon: Map,
+    badge: "Core",
+    badgeColor: "bg-slate-100 text-slate-700",
+    category: "OPERATIONS",
+    before: [
+      "Rebuilding the same Cairo 3-day itinerary over and over",
+      "No standardized product catalog",
+      "Pricing recalculated from scratch each time",
+      "Variations scattered across old documents"
+    ],
+    after: [
+      "Pre-built tour templates with auto-pricing",
+      "Visual tour builder for custom packages",
+      "Instantly generate quotes from any template",
+      "Manage and update tour catalog in one place"
+    ]
+  },
+  {
+    id: "calendar-tasks",
+    title: "Calendar, Tasks & Reminders",
+    shortTitle: "Calendar",
+    icon: Calendar,
+    badge: "Core",
+    badgeColor: "bg-slate-100 text-slate-700",
+    category: "OPERATIONS",
+    before: [
+      "Tour dates tracked in Google Calendar separately",
+      "Follow-up reminders in your head",
+      "Tasks assigned verbally — no record",
+      "Missed deadlines because nothing is linked"
+    ],
+    after: [
+      "Calendar view of all tours and bookings",
+      "Auto-generated tasks from itineraries",
+      "Reminders and follow-ups with notifications",
+      "Everything linked — task, booking, client, supplier"
+    ]
+  },
+  {
+    id: "commissions",
+    title: "Commissions Tracking",
+    shortTitle: "Commissions",
+    icon: Banknote,
+    badge: "Core",
+    badgeColor: "bg-slate-100 text-slate-700",
+    category: "FINANCE",
+    before: [
+      "Agent commissions calculated manually at month end",
+      "No visibility into who earned what",
+      "Disputes over commission amounts",
+      "Spreadsheets that nobody trusts"
+    ],
+    after: [
+      "Auto-calculated commissions per booking",
+      "Transparent breakdown for each team member",
+      "Real-time commission dashboard",
+      "Linked to actual payments received"
+    ]
   }
 ]
 
@@ -439,6 +576,31 @@ const differentiators = [
     icon: BarChart3,
     title: "Transparent Margins",
     description: "Real profit on every booking. Not estimated. Not averaged. The actual number."
+  },
+  {
+    icon: RefreshCcw,
+    title: "Live Currency Conversion",
+    description: "Real-time exchange rates. Quote in EUR, USD, GBP, or JPY — prices update automatically."
+  },
+  {
+    icon: ClipboardCheck,
+    title: "Itemized Tipping System",
+    description: "Tips calculated per role — guide, driver, boat crew, porter. No more guessing or forgetting."
+  },
+  {
+    icon: GripVertical,
+    title: "Drag & Drop Itinerary Editing",
+    description: "Reorder days, move services, restructure trips visually. Changes recalculate pricing instantly."
+  },
+  {
+    icon: Clock,
+    title: "Rate Audit Trail",
+    description: "Every rate change is logged. Know who changed what, when, and what the old value was."
+  },
+  {
+    icon: Map,
+    title: "Interactive Map View",
+    description: "See your itinerary on a map. Every city, every stop, every route — visualized for clients."
   }
 ]
 
