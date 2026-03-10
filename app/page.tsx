@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { 
   MessageSquare, 
@@ -428,7 +428,7 @@ const differentiators = [
   {
     icon: Globe,
     title: "Multi-Language",
-    description: "Parse messages and generate documents in Japanese, French, Spanish, Arabic."
+    description: "Parse messages and generate documents in multiple languages including Japanese, French, and Spanish."
   },
   {
     icon: Zap,
@@ -460,8 +460,8 @@ const egyptFeatures = [
   },
   {
     icon: Languages,
-    title: "Arabic + English Interface",
-    description: "Your team works in Arabic. Documents go out in English, French, Spanish, Japanese."
+    title: "Multilingual Documents",
+    description: "Generate client-facing documents in English, Japanese, French, and Spanish. Built for international tour operators."
   }
 ]
 
@@ -490,10 +490,26 @@ export default function AutouraHomepage() {
   const [activeModule, setActiveModule] = useState(0)
   const [isLoaded, setIsLoaded] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [videoModalOpen, setVideoModalOpen] = useState(false)
 
   useEffect(() => {
     setIsLoaded(true)
   }, [])
+
+  // Close video modal on Escape key
+  useEffect(() => {
+    if (!videoModalOpen) return
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVideoModalOpen(false)
+    }
+    document.addEventListener('keydown', handleEsc)
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', handleEsc)
+      document.body.style.overflow = ''
+    }
+  }, [videoModalOpen])
 
   return (
     <div className="min-h-screen bg-stone-50 overflow-x-hidden">
@@ -593,7 +609,10 @@ export default function AutouraHomepage() {
                   Book a Free Demo
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </a>
-                <button className="group w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-white text-stone-700 font-semibold rounded-xl border border-stone-200 hover:border-stone-300 hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setVideoModalOpen(true)}
+                  className="group w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-white text-stone-700 font-semibold rounded-xl border border-stone-200 hover:border-stone-300 hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
                   <Play className="w-4 h-4 text-[#647C47]" />
                   See How It Works
                 </button>
@@ -1036,6 +1055,41 @@ export default function AutouraHomepage() {
           </div>
         </div>
       </footer>
+
+      {/* Video Modal */}
+      {videoModalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          onClick={() => setVideoModalOpen(false)}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+
+          {/* Modal content */}
+          <div
+            className="relative w-full max-w-4xl mx-4 aspect-video rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setVideoModalOpen(false)}
+              className="absolute -top-10 right-0 sm:-top-12 sm:-right-0 text-white/80 hover:text-white transition-colors z-10 flex items-center gap-1 text-sm"
+            >
+              <XIcon className="w-5 h-5" />
+              <span className="hidden sm:inline">Close</span>
+            </button>
+
+            {/* YouTube embed */}
+            <iframe
+              src="https://www.youtube.com/embed/a9yu2rMaAso?autoplay=1&rel=0&modestbranding=1"
+              title="See How Autoura Works"
+              className="w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
