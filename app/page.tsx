@@ -121,21 +121,21 @@ const painPoints = [
 
 const pillars = [
   {
-    icon: Users,
-    title: "Sales & CRM",
-    description: "WhatsApp inbox, client profiles, lead tracking, and instant quote generation. Every conversation becomes a searchable record.",
+    icon: Sparkles,
+    title: "Conversation to Priced Itinerary",
+    description: "Paste a WhatsApp message. AI extracts dates, cities, attractions, and group size — then generates a fully priced, day-by-day itinerary with entrance fees, transport, guides, and margins calculated. In minutes, not hours.",
     color: "from-emerald-500 to-teal-600"
   },
   {
-    icon: ClipboardList,
-    title: "Operations",
-    description: "Itinerary builder, resource scheduling, supplier management, and daily manifests. Know exactly what's happening every day.",
+    icon: Inbox,
+    title: "All Communication, One Place",
+    description: "WhatsApp messages, emails, quotes, invoices, supplier vouchers, and client history — all in a single dashboard. No more switching between apps, phones, and spreadsheets to find what you need.",
     color: "from-amber-500 to-orange-600"
   },
   {
-    icon: DollarSign,
-    title: "Finance",
-    description: "Invoicing, payment tracking, supplier payables, and profit margins. See your actual margin on every tour.",
+    icon: BarChart3,
+    title: "Every Number, Always Accurate",
+    description: "Supplier costs, client prices, margins, commissions, tipping, currency conversion — all calculated in real-time. Change one rate and every quote updates. Know your exact profit before the tour starts.",
     color: "from-violet-500 to-purple-600"
   }
 ]
@@ -876,10 +876,10 @@ export default function AutouraHomepage() {
           <AnimatedSection>
             <div className="text-center mb-12 sm:mb-16">
               <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold text-stone-900 mb-4 sm:mb-6">
-                One Platform for <span className="text-[#647C47]">Everything</span>
+                One Message Becomes a <span className="text-[#647C47]">Complete Business</span>
               </h2>
               <p className="text-stone-600 text-base sm:text-lg max-w-2xl mx-auto">
-                From the first WhatsApp message to the final payment receipt — a single system designed for how tour operators actually work.
+                A client sends you a WhatsApp message. Minutes later, you have a priced itinerary, a branded PDF, and a clear profit margin — all from one dashboard.
               </p>
             </div>
           </AnimatedSection>
