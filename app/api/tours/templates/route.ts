@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         *,
         category:tour_categories(id, category_name, category_code)
       `)
-      .order('template_name', { ascending: true })
+      .order('created_at', { ascending: false })
 
     if (category) {
       query = query.eq('category_id', category)
