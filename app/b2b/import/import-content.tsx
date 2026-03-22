@@ -8,7 +8,7 @@ import {
   CheckCircle, AlertCircle, ChevronDown, ChevronUp,
   MapPin, Calendar, Users, Star, Crown, Sun, Map,
   Hotel, Package, Ship, Anchor, Edit3, Plus, Trash2,
-  ArrowRight, ArrowLeft, Check, Eye, Calculator, Search
+  ArrowRight, ArrowLeft, Check, Eye, Calculator
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -260,18 +260,15 @@ function ImportAttractionInput({
   return (
     <div className="relative" ref={dropdownRef}>
       <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setIsOpen(true) }}
-            onFocus={() => setIsOpen(true)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleManualAdd() } }}
-            placeholder="Search attractions..."
-            className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:border-[#647C47]"
-          />
-        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setIsOpen(true) }}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleManualAdd() } }}
+          placeholder="Search attractions..."
+          className="flex-1 px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:border-[#647C47]"
+        />
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="px-3 py-1.5 bg-[#b8c9a8] text-[#4a5c35] rounded text-sm hover:bg-[#a0b88e]"
