@@ -347,6 +347,92 @@ export async function fetchAttractionsList(supabase: any): Promise<string[]> {
 }
 
 // ============================================
+// ATTRACTIONS WITH CITY — for AI prompt menus
+// ============================================
+
+export interface AttractionWithCity {
+  attraction_name: string
+  city: string
+}
+
+/**
+ * Fetches all attractions grouped by city from entrance_fees and activity_rates tables.
+ * Returns a structured list so the AI can pick from a city-specific menu.
+ */
+export async function fetchAttractionsWithCity(supabase: any): Promise<AttractionWithCity[]> {
+  try {
+    const [entranceResult, activityResult] = await Promise.all([
+      supabase
+        .from('entrance_fees')
+        .select('attraction_name, city')
+        .eq('is_active', true)
+        .eq('is_addon', false),
+      supabase
+        .from('activity_rates')
+        .select('activity_name, city')
+        .eq('is_active', true),
+    ])
+
+    const attractions: AttractionWithCity[] = []
+    const seen = new Set<string>()
+
+    // Entrance fees (primary)
+    if (entranceResult.data) {
+      for (const item of entranceResult.data) {
+        const key = `${item.attraction_name}|${item.city}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          const latinChars = (item.attraction_name.match(/[a-zA-Z]/g) || []).length
+          if (latinChars > item.attraction_name.length * 0.3) {
+            attractions.push({ attraction_name: item.attraction_name, city: item.city || 'Unknown' })
+          }
+        }
+      }
+    }
+
+    // Activity rates (secondary, fill gaps)
+    if (activityResult.data) {
+      for (const item of activityResult.data) {
+        const key = `${item.activity_name}|${item.city}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          attractions.push({ attraction_name: item.activity_name, city: item.city || 'Unknown' })
+        }
+      }
+    }
+
+    return attractions
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Formats attractions grouped by city for the AI prompt.
+ * Produces a structured menu the AI must pick from.
+ */
+export function formatAttractionMenuForPrompt(attractions: AttractionWithCity[]): string {
+  // Group by city
+  const byCity: Record<string, string[]> = {}
+  for (const attr of attractions) {
+    const city = attr.city || 'Other'
+    if (!byCity[city]) byCity[city] = []
+    if (!byCity[city].includes(attr.attraction_name)) {
+      byCity[city].push(attr.attraction_name)
+    }
+  }
+
+  // Format as structured menu
+  const sections = Object.entries(byCity)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([city, names]) => {
+      return `  ${city}: ${names.join(' | ')}`
+    })
+
+  return sections.join('\n')
+}
+
+// ============================================
 // RICH CONTENT MAP (for deep AI integration)
 // ============================================
 

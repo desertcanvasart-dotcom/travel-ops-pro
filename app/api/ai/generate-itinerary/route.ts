@@ -27,6 +27,8 @@ import {
   fetchWritingRules,
   buildWritingRulesContext,
   fetchAttractionsList,
+  fetchAttractionsWithCity,
+  formatAttractionMenuForPrompt,
   buildAttractionContentMap,
   buildRichContentContext,
   logContentUsage,
@@ -386,7 +388,7 @@ export async function POST(request: NextRequest) {
             total_cost: 0,
             total_revenue: 0,
             margin_percent,
-            status: skip_pricing ? 'draft' : 'quoted',
+            status: 'draft',
             tier,
             package_type: effectivePackageType,
             cost_mode,
@@ -430,12 +432,20 @@ export async function POST(request: NextRequest) {
         const { createdDays: createdCruiseDays, totalSupplierCost, totalClientPrice, warnings: cruiseWarnings } = cruiseServiceResult
 
         // Update pricing totals (inclusions/exclusions were already set in the INSERT)
+        // Always persist generation warnings for visibility
+        if (cruiseWarnings.length > 0) {
+          await supabase.from('itineraries').update({
+            generation_warnings: cruiseWarnings,
+          }).eq('id', itinerary.id)
+        }
+
         if (!skip_pricing) {
           const { error: updateError } = await supabase.from('itineraries').update({
             total_cost: totalClientPrice,
             total_revenue: totalClientPrice,
             supplier_cost: totalSupplierCost,
             profit: totalClientPrice - totalSupplierCost,
+            generation_warnings: cruiseWarnings.length > 0 ? cruiseWarnings : null,
           }).eq('id', itinerary.id)
           if (updateError) {
             console.error('❌ Failed to update cruise itinerary pricing:', updateError)
@@ -466,8 +476,8 @@ export async function POST(request: NextRequest) {
             is_cruise: true,
             cruise_ship: cruiseRate.shipName,
             generation_mode: 'creative',
-            mode: skip_pricing ? 'draft' : 'quoted',
-            redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
+            mode: 'draft',
+            redirect_to: `/itineraries/${itinerary.id}`,
             currency: effectiveCurrency,
             total_days: duration_days,
             ...(skip_pricing ? {} : {
@@ -497,6 +507,8 @@ export async function POST(request: NextRequest) {
     const contentLibrary = await fetchContentLibrary(supabaseAdmin, tier, searchCities, interests)
     const writingRules = await fetchWritingRules(supabaseAdmin)
     const attractionNames = await fetchAttractionsList(supabase)
+    const attractionsWithCity = await fetchAttractionsWithCity(supabase)
+    const attractionMenu = formatAttractionMenuForPrompt(attractionsWithCity)
 
     // Build rich content map (full descriptions, not truncated) and format for prompts
     const contentMap = buildAttractionContentMap(contentLibrary)
@@ -538,6 +550,7 @@ export async function POST(request: NextRequest) {
           totalPax,
           language: contentLanguage,
           attractionNames,
+          attractionMenu,
           writingRules,
           packageType: effectivePackageType,
           contentContext,
@@ -561,6 +574,7 @@ export async function POST(request: NextRequest) {
         startDate: start_date,
         effectiveCity,
         attractionNames,
+        attractionMenu,
         contentContext,
         writingContext,
         includeLunch: include_lunch,
@@ -572,6 +586,7 @@ export async function POST(request: NextRequest) {
     // ============================================
     // POST-AI VALIDATION: Reconcile + Apply business rules
     // ============================================
+    const attractionValidationWarnings: string[] = []
     if (itineraryData.days && itineraryData.days.length > 0) {
       // Step 1: Reconcile AI output with parser's extracted_days
       // The parser extracts detailed per-day data (attractions with INSIDE/OUTSIDE,
@@ -585,6 +600,25 @@ export async function POST(request: NextRequest) {
       console.log('🔧 Applying day rules engine (pre-service-creation validation)...')
       itineraryData.days = applyDayRules(itineraryData.days, effectivePackageType)
       console.log('✅ Day rules applied successfully')
+
+      // Step 3: Validate AI attractions against database
+      // Flag any attraction names the AI used that don't exist in the DB
+      const dbAttractionSet = new Set(attractionNames.map((n: string) => n.toLowerCase()))
+      for (const day of itineraryData.days) {
+        if (day.attractions && Array.isArray(day.attractions)) {
+          for (const attr of day.attractions) {
+            if (!dbAttractionSet.has(attr.toLowerCase())) {
+              attractionValidationWarnings.push(
+                `Day ${day.day_number}: "${attr}" not found in database — entrance fee will be €0`
+              )
+            }
+          }
+        }
+      }
+      if (attractionValidationWarnings.length > 0) {
+        console.warn(`⚠️ ${attractionValidationWarnings.length} attraction(s) not matched in DB:`)
+        attractionValidationWarnings.forEach(w => console.warn(`  • ${w}`))
+      }
     }
 
     // Update duration from AI result
@@ -678,7 +712,7 @@ export async function POST(request: NextRequest) {
         total_cost: 0,
         total_revenue: 0,
         margin_percent,
-        status: skip_pricing ? 'draft' : 'quoted',
+        status: 'draft',
         tier,
         package_type: effectivePackageType,
         cost_mode,
@@ -756,17 +790,21 @@ export async function POST(request: NextRequest) {
       mealSelections: mealSelections.length > 0 ? mealSelections : undefined,
     })
 
+    // Combine all warnings (attraction validation + rate validation + per-day pricing warnings)
+    const allWarnings = [...attractionValidationWarnings, ...pricingWarnings]
+
     // Update pricing totals AND inclusions with actual restaurant names
     const updatePayload: Record<string, any> = {
       inclusions: updatedIncExc.inclusions,
       exclusions: updatedIncExc.exclusions,
+      generation_warnings: allWarnings.length > 0 ? allWarnings : null,
     }
     if (!skip_pricing) {
       updatePayload.total_cost = totalClientPrice
       updatePayload.total_revenue = totalClientPrice
       updatePayload.supplier_cost = totalSupplierCost
       updatePayload.profit = totalClientPrice - totalSupplierCost
-      updatePayload.status = 'quoted'
+      // Status stays 'draft' — user must manually mark as 'quoted' after review
     }
     const { error: updateError } = await supabase.from('itineraries')
       .update(updatePayload)
@@ -800,8 +838,9 @@ export async function POST(request: NextRequest) {
     }))
     await createLanguageVersions(supabase, itinerary.id, itineraryData.trip_name, contentLanguage, createdLandDays)
 
-    // Collect warnings from both cruise path and land path
-    const allWarnings = [
+    // Collect warnings from attraction validation + pricing
+    const responseWarnings = [
+      ...attractionValidationWarnings,
       ...(pricingWarnings || []),
     ]
 
@@ -816,8 +855,8 @@ export async function POST(request: NextRequest) {
         package_type: effectivePackageType,
         is_cruise: cruiseDetection.isCruise,
         generation_mode: inputMode,
-        mode: skip_pricing ? 'draft' : 'quoted',
-        redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
+        mode: 'draft',
+        redirect_to: `/itineraries/${itinerary.id}`,
         currency: effectiveCurrency,
         total_days: duration_days,
         ...(skip_pricing ? {} : {
@@ -826,7 +865,7 @@ export async function POST(request: NextRequest) {
           margin: totalClientPrice - totalSupplierCost,
           per_person_cost: Math.round(totalClientPrice / totalPax * 100) / 100
         }),
-        ...(allWarnings.length > 0 ? { warnings: allWarnings } : {})
+        ...(responseWarnings.length > 0 ? { warnings: responseWarnings } : {})
       }
     })
 

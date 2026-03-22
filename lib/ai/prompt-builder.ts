@@ -28,12 +28,13 @@ export async function generateFromStructuredInput(
     totalPax: number
     language: string
     attractionNames: string[]
+    attractionMenu?: string
     writingRules: WritingRule[]
     packageType?: PackageType
     contentContext?: string
   }
 ): Promise<any> {
-  const { tier, totalPax, language, attractionNames, writingRules, packageType, contentContext } = params
+  const { tier, totalPax, language, attractionNames, attractionMenu, writingRules, packageType, contentContext } = params
   const writingContext = buildWritingRulesContext(writingRules)
 
   // Calculate expected number of days
@@ -153,6 +154,19 @@ DEFAULT: Any attraction that is actually VISITED (entered) = add to attractions[
 (OUTSIDE) = Photo stop only → add to photo_stops[] (NO entrance fee)
 Do NOT use an "entrance_included" array. The "attractions" array IS the entrance fee list.
 Only sites explicitly marked (OUTSIDE) go into photo_stops[] and are excluded from fees.
+
+═══════════════════════════════════════════════════════════════
+🎯 DATABASE ATTRACTION MENU (CRITICAL — use EXACT names!)
+═══════════════════════════════════════════════════════════════
+You MUST use attraction names EXACTLY as they appear below. These are the only
+attractions that have pricing in the database. Using any other name will result
+in missing entrance fees (€0 pricing).
+
+${attractionMenu || attractionNames.join(', ')}
+
+If an attraction in the input doesn't match any name above, find the CLOSEST
+match from this list and use that exact name. If no match exists, still include
+it but know that it won't have a price.
 
 MEAL VENUES vs ATTRACTIONS (CRITICAL):
 Restaurants, markets, and bazaars where tourists EAT are NOT attractions.
@@ -480,6 +494,7 @@ export async function generateCreativeItinerary(
     startDate: string
     effectiveCity: string
     attractionNames: string[]
+    attractionMenu?: string
     contentContext: string
     writingContext: string
     includeLunch: boolean
@@ -490,7 +505,7 @@ export async function generateCreativeItinerary(
   const {
     clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
     language, cities, interests, specialRequests, startDate, effectiveCity,
-    attractionNames, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation
+    attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation
   } = params
 
   const prompt = `Create a ${durationDays}-day Egypt itinerary.
@@ -506,8 +521,18 @@ CITIES: ${cities.length > 0 ? cities.join(', ') : effectiveCity}
 ${interests.length > 0 ? `INTERESTS: ${interests.join(', ')}` : ''}
 ${specialRequests.length > 0 ? `SPECIAL REQUESTS: ${specialRequests.join(', ')}` : ''}
 
-AVAILABLE ATTRACTIONS (use EXACT names from this list):
-${attractionNames.join(', ')}
+═══════════════════════════════════════════════════════════════
+🎯 DATABASE ATTRACTION MENU (CRITICAL — use EXACT names!)
+═══════════════════════════════════════════════════════════════
+You MUST use attraction names EXACTLY as they appear below, grouped by city.
+These are the ONLY attractions with pricing in the database. Using any other
+name will result in missing entrance fees (€0 pricing).
+
+${attractionMenu || attractionNames.join(', ')}
+
+Only select attractions from cities the client is visiting.
+═══════════════════════════════════════════════════════════════
+
 ${contentContext}
 ${writingContext}
 

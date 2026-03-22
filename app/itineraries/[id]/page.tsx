@@ -5,7 +5,7 @@ import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
@@ -56,6 +56,7 @@ interface Itinerary {
   versions?: Record<string, ItineraryVersion>
   inclusions?: string[]
   exclusions?: string[]
+  generation_warnings?: string[]
 }
 
 interface ItineraryDay {
@@ -1299,6 +1300,31 @@ export default function ViewItineraryPage() {
             </div>
           )}
         </div>
+
+        {/* GENERATION WARNINGS */}
+        {itinerary.generation_warnings && itinerary.generation_warnings.length > 0 && (
+          <div className="bg-amber-50 rounded-lg border border-amber-300 shadow-sm p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-amber-900 mb-2">
+                  Pricing Warnings ({itinerary.generation_warnings.length})
+                </h3>
+                <p className="text-xs text-amber-700 mb-3">
+                  The following issues were detected during itinerary generation. Some services may have missing or zero prices.
+                </p>
+                <ul className="space-y-1">
+                  {itinerary.generation_warnings.map((warning: string, idx: number) => (
+                    <li key={idx} className="text-xs text-amber-800 flex items-start gap-2">
+                      <span className="text-amber-500 mt-0.5">•</span>
+                      <span>{warning}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* COST MODE TOGGLE */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
