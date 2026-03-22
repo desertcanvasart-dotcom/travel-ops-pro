@@ -57,8 +57,7 @@ INSERT INTO attraction_aliases (canonical_name, alias, source_table) VALUES
   ('Giza Plateau', 'Giza Pyramids', 'entrance_fees'),
   ('Giza Plateau', 'Sphinx', 'entrance_fees'),
   ('Giza Plateau', 'Great Sphinx', 'entrance_fees'),
-  ('Giza Plateau', 'Pyramid of Cheops', 'entrance_fees'),
-  ('Giza Plateau', 'Pyramid of Khufu', 'entrance_fees'),
+  -- NOTE: Pyramid of Cheops / Khufu are separate add-on tickets, NOT aliases for Giza Plateau
   ('Giza Plateau', 'Giza Pyramids and Sphinx', 'entrance_fees'),
   ('Giza Plateau', 'Pyramids of Giza and Sphinx', 'entrance_fees'),
   ('Giza Plateau', 'The Giza Pyramids and Sphinx', 'entrance_fees'),
