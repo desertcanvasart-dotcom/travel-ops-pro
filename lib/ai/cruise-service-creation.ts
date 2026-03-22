@@ -8,7 +8,7 @@
 
 import { type ServiceTier, toNumber } from '@/lib/ai/parsing-utils'
 import { type CruiseRate } from '@/lib/ai/cruise-pricing'
-import { type CruiseContentMatch } from '@/lib/ai/content-library'
+import { type CruiseContentMatch, fetchAttractionAliases } from '@/lib/ai/content-library'
 import {
   fetchCruiseTransportPricingRules,
   findCruiseTransportRule,
@@ -337,16 +337,34 @@ export async function createCruiseItineraryServices(
       let dayEntranceTotal = 0
       const matchedAttractions: string[] = []
 
+      // Fetch aliases for resolving alternative attraction names
+      let aliasToCanonical: Map<string, string> | null = null
+      try {
+        const aliases = await fetchAttractionAliases(supabase)
+        aliasToCanonical = aliases.aliasToCanonical
+      } catch { /* ignore if table doesn't exist yet */ }
+
       for (const attractionName of dayData.attractions) {
         // Skip photo stops (outside viewing only, no fee)
         if (photoStops.some((ps: string) => ps.toLowerCase() === attractionName.toLowerCase())) {
           continue
         }
 
-        const fee = entranceFees?.find((ef: any) =>
-          ef.attraction_name.toLowerCase().includes(attractionName.toLowerCase()) ||
-          attractionName.toLowerCase().includes(ef.attraction_name.toLowerCase())
+        // Resolve alias to canonical name
+        const normalizedName = attractionName.toLowerCase().replace(/^the /, '').trim()
+        const resolvedName = aliasToCanonical?.get(normalizedName) || attractionName
+
+        // Try exact match first, then resolved alias match
+        let fee = entranceFees?.find((ef: any) =>
+          ef.attraction_name.toLowerCase() === resolvedName.toLowerCase()
         )
+        // Fallback: substring match
+        if (!fee) {
+          fee = entranceFees?.find((ef: any) =>
+            ef.attraction_name.toLowerCase().includes(resolvedName.toLowerCase()) ||
+            resolvedName.toLowerCase().includes(ef.attraction_name.toLowerCase())
+          )
+        }
 
         if (fee) {
           if (fee.is_addon) continue

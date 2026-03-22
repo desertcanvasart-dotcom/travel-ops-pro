@@ -28,13 +28,14 @@ import {
   buildWritingRulesContext,
   fetchAttractionsList,
   fetchAttractionsWithCity,
+  fetchAttractionAliases,
   formatAttractionMenuForPrompt,
   buildAttractionContentMap,
   buildRichContentContext,
   logContentUsage,
 } from '@/lib/ai/content-library'
 import { generateFromStructuredInput, generateCreativeItinerary } from '@/lib/ai/prompt-builder'
-import { fetchAllPricingRates, createLandItineraryServices, fetchHotelsForCities } from '@/lib/ai/service-creation'
+import { fetchAllPricingRates, createLandItineraryServices, fetchHotelsForCities, setAliasCache } from '@/lib/ai/service-creation'
 import { createCruiseItineraryServices } from '@/lib/ai/cruise-service-creation'
 import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclusions-builder'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
@@ -510,6 +511,10 @@ export async function POST(request: NextRequest) {
     const attractionsWithCity = await fetchAttractionsWithCity(supabase)
     const attractionMenu = formatAttractionMenuForPrompt(attractionsWithCity)
 
+    // Fetch DB aliases and set cache for service-creation matching
+    const { aliasToCanonical } = await fetchAttractionAliases(supabase)
+    setAliasCache(aliasToCanonical)
+
     // Build rich content map (full descriptions, not truncated) and format for prompts
     const contentMap = buildAttractionContentMap(contentLibrary)
     const { context: contentContext, matchedContentIds } = buildRichContentContext(contentMap, attractionNames)
@@ -601,17 +606,30 @@ export async function POST(request: NextRequest) {
       itineraryData.days = applyDayRules(itineraryData.days, effectivePackageType)
       console.log('✅ Day rules applied successfully')
 
-      // Step 3: Validate AI attractions against database
-      // Flag any attraction names the AI used that don't exist in the DB
+      // Step 3: Validate AI attractions against database (with alias resolution)
+      // If the AI used an alias, auto-correct to the canonical name before flagging
       const dbAttractionSet = new Set(attractionNames.map((n: string) => n.toLowerCase()))
       for (const day of itineraryData.days) {
         if (day.attractions && Array.isArray(day.attractions)) {
-          for (const attr of day.attractions) {
-            if (!dbAttractionSet.has(attr.toLowerCase())) {
-              attractionValidationWarnings.push(
-                `Day ${day.day_number}: "${attr}" not found in database — entrance fee will be €0`
-              )
+          for (let i = 0; i < day.attractions.length; i++) {
+            const attr = day.attractions[i]
+            const attrLower = attr.toLowerCase().replace(/^the /, '').trim()
+
+            // Already matches DB directly
+            if (dbAttractionSet.has(attrLower)) continue
+
+            // Check if it's a known alias → auto-correct to canonical name
+            const canonical = aliasToCanonical.get(attrLower)
+            if (canonical && dbAttractionSet.has(canonical.toLowerCase())) {
+              console.log(`🔄 Day ${day.day_number}: Auto-corrected "${attr}" → "${canonical}" (alias match)`)
+              day.attractions[i] = canonical
+              continue
             }
+
+            // No match at all — warn
+            attractionValidationWarnings.push(
+              `Day ${day.day_number}: "${attr}" not found in database — entrance fee will be €0`
+            )
           }
         }
       }

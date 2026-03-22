@@ -353,15 +353,56 @@ export async function fetchAttractionsList(supabase: any): Promise<string[]> {
 export interface AttractionWithCity {
   attraction_name: string
   city: string
+  source: 'entrance' | 'activity'
+  aliases?: string[]
+}
+
+export interface AttractionAlias {
+  canonical_name: string
+  alias: string
+  source_table: string
+}
+
+/**
+ * Fetches all active aliases from the attraction_aliases table.
+ * Returns a map: alias (lowercase) → canonical_name
+ */
+export async function fetchAttractionAliases(supabase: any): Promise<{
+  aliasToCanonical: Map<string, string>
+  canonicalToAliases: Map<string, string[]>
+}> {
+  const aliasToCanonical = new Map<string, string>()
+  const canonicalToAliases = new Map<string, string[]>()
+
+  try {
+    const { data } = await supabase
+      .from('attraction_aliases')
+      .select('canonical_name, alias')
+      .eq('is_active', true)
+
+    if (data) {
+      for (const row of data) {
+        aliasToCanonical.set(row.alias.toLowerCase(), row.canonical_name)
+        const existing = canonicalToAliases.get(row.canonical_name) || []
+        existing.push(row.alias)
+        canonicalToAliases.set(row.canonical_name, existing)
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not fetch attraction aliases (table may not exist yet):', e)
+  }
+
+  return { aliasToCanonical, canonicalToAliases }
 }
 
 /**
  * Fetches all attractions grouped by city from entrance_fees and activity_rates tables.
+ * Also fetches aliases from attraction_aliases table.
  * Returns a structured list so the AI can pick from a city-specific menu.
  */
 export async function fetchAttractionsWithCity(supabase: any): Promise<AttractionWithCity[]> {
   try {
-    const [entranceResult, activityResult] = await Promise.all([
+    const [entranceResult, activityResult, { canonicalToAliases }] = await Promise.all([
       supabase
         .from('entrance_fees')
         .select('attraction_name, city')
@@ -371,6 +412,7 @@ export async function fetchAttractionsWithCity(supabase: any): Promise<Attractio
         .from('activity_rates')
         .select('activity_name, city')
         .eq('is_active', true),
+      fetchAttractionAliases(supabase),
     ])
 
     const attractions: AttractionWithCity[] = []
@@ -384,7 +426,13 @@ export async function fetchAttractionsWithCity(supabase: any): Promise<Attractio
           seen.add(key)
           const latinChars = (item.attraction_name.match(/[a-zA-Z]/g) || []).length
           if (latinChars > item.attraction_name.length * 0.3) {
-            attractions.push({ attraction_name: item.attraction_name, city: item.city || 'Unknown' })
+            const aliases = canonicalToAliases.get(item.attraction_name) || []
+            attractions.push({
+              attraction_name: item.attraction_name,
+              city: item.city || 'Unknown',
+              source: 'entrance',
+              aliases: aliases.length > 0 ? aliases : undefined,
+            })
           }
         }
       }
@@ -396,7 +444,13 @@ export async function fetchAttractionsWithCity(supabase: any): Promise<Attractio
         const key = `${item.activity_name}|${item.city}`
         if (!seen.has(key)) {
           seen.add(key)
-          attractions.push({ attraction_name: item.activity_name, city: item.city || 'Unknown' })
+          const aliases = canonicalToAliases.get(item.activity_name) || []
+          attractions.push({
+            attraction_name: item.activity_name,
+            city: item.city || 'Unknown',
+            source: 'activity',
+            aliases: aliases.length > 0 ? aliases : undefined,
+          })
         }
       }
     }
@@ -410,26 +464,35 @@ export async function fetchAttractionsWithCity(supabase: any): Promise<Attractio
 /**
  * Formats attractions grouped by city for the AI prompt.
  * Produces a structured menu the AI must pick from.
+ * Shows entrance fees vs activities, and lists known aliases so the AI
+ * can map common alternative names to the canonical DB name.
  */
 export function formatAttractionMenuForPrompt(attractions: AttractionWithCity[]): string {
   // Group by city
-  const byCity: Record<string, string[]> = {}
+  const byCity: Record<string, AttractionWithCity[]> = {}
   for (const attr of attractions) {
     const city = attr.city || 'Other'
     if (!byCity[city]) byCity[city] = []
-    if (!byCity[city].includes(attr.attraction_name)) {
-      byCity[city].push(attr.attraction_name)
+    if (!byCity[city].some(a => a.attraction_name === attr.attraction_name)) {
+      byCity[city].push(attr)
     }
   }
 
-  // Format as structured menu
+  // Format as structured menu with type labels and aliases
   const sections = Object.entries(byCity)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([city, names]) => {
-      return `  ${city}: ${names.join(' | ')}`
+    .map(([city, attrs]) => {
+      const lines = attrs.map(attr => {
+        const typeLabel = attr.source === 'activity' ? '[activity]' : '[entrance]'
+        const aliasNote = attr.aliases && attr.aliases.length > 0
+          ? ` (also known as: ${attr.aliases.join(', ')})`
+          : ''
+        return `    - ${attr.attraction_name} ${typeLabel}${aliasNote}`
+      })
+      return `  ${city}:\n${lines.join('\n')}`
     })
 
-  return sections.join('\n')
+  return sections.join('\n\n')
 }
 
 // ============================================

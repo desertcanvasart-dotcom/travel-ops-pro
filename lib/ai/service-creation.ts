@@ -20,9 +20,35 @@ import {
   type ItemizedTippingRates,
 } from '@/lib/tipping-utils'
 
-// Normalize attraction names from AI output to canonical database names
+// ============================================
+// ALIAS RESOLUTION: DB-backed + hardcoded fallback
+// ============================================
+
+// In-memory cache for DB aliases (refreshed per request via setAliasCache)
+let _aliasCache: Map<string, string> | null = null
+
+/**
+ * Set the alias cache from DB data. Called once per generation request.
+ * Map: lowercase alias → canonical name
+ */
+export function setAliasCache(aliasMap: Map<string, string>) {
+  _aliasCache = aliasMap
+}
+
+/**
+ * Normalize attraction names from AI output to canonical database names.
+ * Uses DB aliases (primary) with hardcoded fallback for safety.
+ */
 function normalizeAttractionForMatch(name: string): string {
   const normalized = name.toLowerCase().replace(/^the /, '').trim()
+
+  // 1. Check DB alias cache first (populated from attraction_aliases table)
+  if (_aliasCache) {
+    const dbMatch = _aliasCache.get(normalized)
+    if (dbMatch) return dbMatch
+  }
+
+  // 2. Hardcoded fallback map (kept as safety net, but DB aliases take priority)
   const nameMap: Record<string, string> = {
     'grand egyptian museum': 'Grand Egyptian Museum',
     'gem': 'Grand Egyptian Museum',
@@ -45,9 +71,11 @@ function normalizeAttractionForMatch(name: string): string {
     'valley of the kings': 'Valley of the Kings',
     'hatshepsut': 'Hatshepsut Temple',
     'hatshepsut temple': 'Hatshepsut Temple',
+    'temple of hatshepsut': 'Hatshepsut Temple',
     'colossi of memnon': 'Colossi of Memnon',
     'edfu': 'Edfu Temple',
     'edfu temple': 'Edfu Temple',
+    'temple of horus': 'Edfu Temple',
     'kom ombo': 'Kom Ombo Temple',
     'kom ombo temple': 'Kom Ombo Temple',
     'philae': 'Philae Temple',

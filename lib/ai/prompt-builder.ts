@@ -156,17 +156,22 @@ Do NOT use an "entrance_included" array. The "attractions" array IS the entrance
 Only sites explicitly marked (OUTSIDE) go into photo_stops[] and are excluded from fees.
 
 ═══════════════════════════════════════════════════════════════
-🎯 DATABASE ATTRACTION MENU (CRITICAL — use EXACT names!)
+🎯 DATABASE ATTRACTION MENU (CRITICAL — use EXACT canonical names!)
 ═══════════════════════════════════════════════════════════════
-You MUST use attraction names EXACTLY as they appear below. These are the only
-attractions that have pricing in the database. Using any other name will result
-in missing entrance fees (€0 pricing).
+Below is the COMPLETE list of attractions and activities with pricing in the database.
+Each item shows its CANONICAL name (the one you MUST use), its type [entrance] or [activity],
+and any known aliases in parentheses.
+
+RULES:
+1. ALWAYS use the CANONICAL name (the main name before [entrance]/[activity]), NEVER an alias
+2. If the input mentions "Temple of Horus", look up that it's an alias for "Edfu Temple" → use "Edfu Temple"
+3. If the input mentions "Pyramids" or "Sphinx", these are covered by "Giza Plateau" → use "Giza Plateau" (ONE entry, not two)
+4. [entrance] = ticketed site with entrance fee → put in attractions[]
+5. [activity] = bookable activity with activity rate → put in attractions[]
+6. Anything NOT in this list = photo stop or non-ticketed → put in photo_stops[], NOT attractions[]
+7. Do NOT invent attraction names. If it's not listed here, it doesn't have pricing.
 
 ${attractionMenu || attractionNames.join(', ')}
-
-If an attraction in the input doesn't match any name above, find the CLOSEST
-match from this list and use that exact name. If no match exists, still include
-it but know that it won't have a price.
 
 MEAL VENUES vs ATTRACTIONS (CRITICAL):
 Restaurants, markets, and bazaars where tourists EAT are NOT attractions.
@@ -522,15 +527,24 @@ ${interests.length > 0 ? `INTERESTS: ${interests.join(', ')}` : ''}
 ${specialRequests.length > 0 ? `SPECIAL REQUESTS: ${specialRequests.join(', ')}` : ''}
 
 ═══════════════════════════════════════════════════════════════
-🎯 DATABASE ATTRACTION MENU (CRITICAL — use EXACT names!)
+🎯 DATABASE ATTRACTION MENU (CRITICAL — use EXACT canonical names!)
 ═══════════════════════════════════════════════════════════════
-You MUST use attraction names EXACTLY as they appear below, grouped by city.
-These are the ONLY attractions with pricing in the database. Using any other
-name will result in missing entrance fees (€0 pricing).
+Below is the COMPLETE list of attractions and activities with pricing in the database.
+Each item shows its CANONICAL name (the one you MUST use), its type [entrance] or [activity],
+and any known aliases in parentheses.
+
+RULES:
+1. ALWAYS use the CANONICAL name (the main name before [entrance]/[activity]), NEVER an alias
+2. If a common name is listed as an alias, use the canonical name instead
+   (e.g., "Temple of Horus" is an alias → use "Edfu Temple")
+3. Combined tickets: "Giza Plateau" covers Pyramids + Sphinx — use ONE entry "Giza Plateau"
+4. [entrance] = ticketed site with entrance fee → put in attractions[]
+5. [activity] = bookable activity with activity rate → put in attractions[]
+6. Anything NOT in this list = photo stop or non-ticketed → put in photo_stops[], NOT attractions[]
+7. Do NOT invent attraction names. If it's not listed here, it doesn't have pricing.
+8. Only select attractions from cities the client is visiting.
 
 ${attractionMenu || attractionNames.join(', ')}
-
-Only select attractions from cities the client is visiting.
 ═══════════════════════════════════════════════════════════════
 
 ${contentContext}
