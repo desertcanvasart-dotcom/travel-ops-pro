@@ -8,7 +8,7 @@ import {
   CheckCircle, AlertCircle, ChevronDown, ChevronUp,
   MapPin, Calendar, Users, Star, Crown, Sun, Map,
   Hotel, Package, Ship, Anchor, Edit3, Plus, Trash2,
-  ArrowRight, ArrowLeft, Check, Eye, Calculator
+  ArrowRight, ArrowLeft, Check, Eye, Calculator, Search
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -178,34 +178,188 @@ function getFileIcon(type: string) {
 }
 
 // ============================================
+// ATTRACTION TYPE
+// ============================================
+
+interface ImportAttraction {
+  id: string
+  activity_name: string
+  city: string
+  base_rate_eur: number
+  base_rate_non_eur: number
+  source: 'entrance' | 'activity'
+}
+
+// ============================================
 // SUB-COMPONENTS
 // ============================================
 
-function ImportAttractionInput({ onAdd }: { onAdd: (name: string) => void }) {
-  const [value, setValue] = useState('')
-  const handleAdd = () => {
-    if (value.trim()) {
-      onAdd(value.trim())
-      setValue('')
+function ImportAttractionInput({
+  onAdd,
+  attractions,
+  existingAttractions,
+  dayCity
+}: {
+  onAdd: (name: string) => void
+  attractions: ImportAttraction[]
+  existingAttractions: string[]
+  dayCity?: string | null
+}) {
+  const [search, setSearch] = useState('')
+  const [isOpen, setIsOpen] = useState(false)
+  const [cityFilter, setCityFilter] = useState<string | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Auto-set city filter to the day's city on open
+  useEffect(() => {
+    if (isOpen && dayCity && !cityFilter) {
+      const matchedCity = [...new Set(attractions.map(a => a.city))].find(
+        c => c.toLowerCase() === dayCity.toLowerCase()
+      )
+      if (matchedCity) setCityFilter(matchedCity)
+    }
+  }, [isOpen, dayCity, attractions, cityFilter])
+
+  const filteredAttractions = attractions.filter(attr => {
+    const matchesSearch = !search || attr.activity_name.toLowerCase().includes(search.toLowerCase())
+    const matchesCity = !cityFilter || attr.city === cityFilter
+    return matchesSearch && matchesCity
+  })
+
+  const cities = [...new Set(attractions.map(a => a.city))].sort()
+
+  const handleSelect = (attr: ImportAttraction) => {
+    if (!existingAttractions.includes(attr.activity_name)) {
+      onAdd(attr.activity_name)
+    }
+    setSearch('')
+    setIsOpen(false)
+    setCityFilter(null)
+  }
+
+  // Also allow adding freeform text
+  const handleManualAdd = () => {
+    if (search.trim() && !existingAttractions.includes(search.trim())) {
+      onAdd(search.trim())
+      setSearch('')
+      setIsOpen(false)
     }
   }
+
   return (
-    <div className="flex gap-2">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd() } }}
-        placeholder="Add attraction..."
-        className="flex-1 px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:border-[#647C47]"
-      />
-      <button
-        onClick={handleAdd}
-        disabled={!value.trim()}
-        className="px-3 py-1.5 bg-[#b8c9a8] text-[#4a5c35] rounded text-sm hover:bg-[#a0b88e] disabled:opacity-50"
-      >
-        <Plus className="w-4 h-4" />
-      </button>
+    <div className="relative" ref={dropdownRef}>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setIsOpen(true) }}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleManualAdd() } }}
+            placeholder="Search attractions..."
+            className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:border-[#647C47]"
+          />
+        </div>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="px-3 py-1.5 bg-[#b8c9a8] text-[#4a5c35] rounded text-sm hover:bg-[#a0b88e]"
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          {/* City filter pills */}
+          <div className="px-3 pt-2 pb-1 flex flex-wrap gap-1.5 border-b border-gray-100">
+            <button
+              onClick={() => setCityFilter(null)}
+              className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+                !cityFilter ? 'bg-[#647C47] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              All
+            </button>
+            {cities.map(city => (
+              <button
+                key={city}
+                onClick={() => setCityFilter(cityFilter === city ? null : city)}
+                className={`px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
+                  cityFilter === city ? 'bg-[#647C47] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {city}
+              </button>
+            ))}
+          </div>
+
+          {/* Attractions list */}
+          <div className="max-h-[250px] overflow-y-auto">
+            {filteredAttractions.map(attr => {
+              const isAdded = existingAttractions.includes(attr.activity_name)
+              return (
+                <div
+                  key={attr.id}
+                  onClick={() => !isAdded && handleSelect(attr)}
+                  className={`px-3 py-2 flex justify-between items-center transition-all ${
+                    isAdded
+                      ? 'bg-green-50 cursor-default opacity-60'
+                      : 'hover:bg-[#f4f7f1] cursor-pointer'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-gray-900 flex items-center gap-1.5 truncate">
+                      {attr.activity_name}
+                      {isAdded && <Check className="w-3 h-3 text-green-600 flex-shrink-0" />}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                        attr.source === 'entrance' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {attr.source === 'entrance' ? 'Entrance' : 'Activity'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">📍 {attr.city}</div>
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-3">
+                    <div className="text-xs font-semibold text-[#647C47]">
+                      €{attr.base_rate_eur} / €{attr.base_rate_non_eur}
+                    </div>
+                    <div className="text-[10px] text-gray-400">EUR / Non-EUR</div>
+                  </div>
+                </div>
+              )
+            })}
+            {filteredAttractions.length === 0 && (
+              <div className="px-3 py-6 text-center text-gray-400 text-sm">
+                {search ? (
+                  <div>
+                    <p>No matching attractions</p>
+                    <button
+                      onClick={handleManualAdd}
+                      className="mt-2 text-[#647C47] hover:underline font-medium"
+                    >
+                      + Add &quot;{search}&quot; manually
+                    </button>
+                  </div>
+                ) : (
+                  <p>No attractions available</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -253,7 +407,10 @@ export default function ImportContent() {
   // Partners
   const [partners, setPartners] = useState<B2BPartner[]>([])
 
-  // Fetch partners on mount
+  // Attractions from content library
+  const [allAttractions, setAllAttractions] = useState<ImportAttraction[]>([])
+
+  // Fetch partners and attractions on mount
   useEffect(() => {
     fetch('/api/b2b/partners')
       .then(res => res.json())
@@ -261,6 +418,38 @@ export default function ImportContent() {
         if (data.data) setPartners(data.data)
       })
       .catch(() => {})
+
+    // Load attractions from both entrance_fees and activity_rates
+    Promise.all([
+      fetch('/api/rates/attractions?active_only=true').then(r => r.json()),
+      fetch('/api/rates/activities?active_only=true').then(r => r.json()),
+    ]).then(([entranceRes, activityRes]) => {
+      const entranceFees: ImportAttraction[] = (entranceRes.data || []).map((ef: any) => ({
+        id: ef.id,
+        activity_name: ef.attraction_name,
+        city: ef.city,
+        base_rate_eur: ef.eur_rate || 0,
+        base_rate_non_eur: ef.non_eur_rate || 0,
+        source: 'entrance' as const,
+      }))
+
+      const activities: ImportAttraction[] = (activityRes.data || []).map((a: any) => ({
+        id: a.id,
+        activity_name: a.activity_name,
+        city: a.city,
+        base_rate_eur: a.base_rate_eur || 0,
+        base_rate_non_eur: a.base_rate_non_eur || 0,
+        source: 'activity' as const,
+      }))
+
+      const combined = [...entranceFees, ...activities].sort((a, b) => {
+        const cityCompare = a.city.localeCompare(b.city)
+        if (cityCompare !== 0) return cityCompare
+        return a.activity_name.localeCompare(b.activity_name)
+      })
+
+      setAllAttractions(combined)
+    }).catch(err => console.error('Error loading attractions:', err))
   }, [])
 
   // ============================================
@@ -972,10 +1161,15 @@ export default function ImportContent() {
                           ))}
                         </div>
                       )}
-                      <ImportAttractionInput onAdd={(name) => {
-                        const updated = [...(day.attractions || []), name]
-                        updateDay(index, { attractions: updated })
-                      }} />
+                      <ImportAttractionInput
+                        attractions={allAttractions}
+                        existingAttractions={day.attractions || []}
+                        dayCity={day.city || day.overnight_city}
+                        onAdd={(name) => {
+                          const updated = [...(day.attractions || []), name]
+                          updateDay(index, { attractions: updated })
+                        }}
+                      />
                     </div>
 
                     {/* Meals (toggleable) */}
