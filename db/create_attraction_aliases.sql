@@ -59,6 +59,9 @@ INSERT INTO attraction_aliases (canonical_name, alias, source_table) VALUES
   ('Giza Plateau', 'Great Sphinx', 'entrance_fees'),
   ('Giza Plateau', 'Pyramid of Cheops', 'entrance_fees'),
   ('Giza Plateau', 'Pyramid of Khufu', 'entrance_fees'),
+  ('Giza Plateau', 'Giza Pyramids and Sphinx', 'entrance_fees'),
+  ('Giza Plateau', 'Pyramids of Giza and Sphinx', 'entrance_fees'),
+  ('Giza Plateau', 'The Giza Pyramids and Sphinx', 'entrance_fees'),
 
   -- Grand Egyptian Museum
   ('Grand Egyptian Museum', 'GEM', 'entrance_fees'),
@@ -98,6 +101,7 @@ INSERT INTO attraction_aliases (canonical_name, alias, source_table) VALUES
   ('Philae Temple', 'Temple of Philae', 'entrance_fees'),
   ('Philae Temple', 'Isis Temple', 'entrance_fees'),
   ('Philae Temple', 'Philae', 'entrance_fees'),
+  ('Philae Temple', 'The Temple of Isis', 'entrance_fees'),
 
   -- Kom Ombo Temple
   ('Kom Ombo Temple', 'Temple of Kom Ombo', 'entrance_fees'),
@@ -110,7 +114,9 @@ INSERT INTO attraction_aliases (canonical_name, alias, source_table) VALUES
 
   -- Abu Simbel
   ('Abu Simbel', 'Abu Simbel Temples', 'entrance_fees'),
+  ('Abu Simbel', 'Abu Simbel Temple', 'entrance_fees'),
   ('Abu Simbel', 'Temple of Abu Simbel', 'entrance_fees'),
+  ('Abu Simbel', 'The Temple of Abu Simbel', 'entrance_fees'),
   ('Abu Simbel', 'Temple of Ramesses II', 'entrance_fees'),
 
   -- Saladin Citadel
@@ -140,6 +146,13 @@ INSERT INTO attraction_aliases (canonical_name, alias, source_table) VALUES
 
   -- Catacombs
   ('Catacombs of Kom El Shoqafa', 'Kom El Shoqafa', 'entrance_fees'),
-  ('Catacombs of Kom El Shoqafa', 'Catacombs', 'entrance_fees')
+  ('Catacombs of Kom El Shoqafa', 'Catacombs', 'entrance_fees'),
+
+  -- Memphis / Mit Rahina Open Museum
+  ('Memphis', 'Mit Rahina', 'entrance_fees'),
+  ('Memphis', 'Open Museum at Mit Rahina', 'entrance_fees'),
+  ('Memphis', 'Mit Rahina Open Museum', 'entrance_fees'),
+  ('Memphis', 'Memphis Open Air Museum', 'entrance_fees'),
+  ('Memphis', 'Ancient Memphis', 'entrance_fees')
 
 ON CONFLICT (alias) DO NOTHING;
