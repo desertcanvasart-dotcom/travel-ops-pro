@@ -758,7 +758,20 @@ export async function createLandItineraryServices(
     const previousWasDayTrip = prevCitiesVisited.length > 1
     const previousOvernightCity = previousDayData?.overnight_city
       || (previousWasDayTrip ? effectiveCity : previousDayData?.city)
-    const currentCity = dayData.city || effectiveCity
+    // Normalize city: AI sometimes returns "Luxor/Hurghada" or "Cairo → Aswan" for transition days
+    // For service lookups (meals, transport, hotels), use the primary city or overnight city
+    const rawCity = dayData.city || effectiveCity
+    const currentCity = rawCity.includes('/') ? rawCity.split('/')[0].trim()
+      : rawCity.includes('→') ? rawCity.split('→')[0].trim()
+      : rawCity.includes('-') && rawCity.split('-').length === 2 && /^[A-Z]/.test(rawCity.split('-')[1].trim())
+        ? rawCity.split('-')[0].trim()  // "Luxor-Hurghada" but not "El-Gouna"
+        : rawCity
+    // For meals, use overnight city (destination) since that's where dinner happens
+    const mealCity = dayData.overnight_city || (
+      rawCity.includes('/') ? rawCity.split('/').pop()!.trim()
+      : rawCity.includes('→') ? rawCity.split('→').pop()!.trim()
+      : currentCity
+    )
     const previousWasCruise = previousDayData?.accommodation_type === 'cruise' || previousDayData?.is_cruise_day
     const isIntercityTransfer = previousDayData
       && previousOvernightCity
@@ -1562,7 +1575,7 @@ export async function createLandItineraryServices(
     // Lunch (only if included for this day) — strict city-scoped lookup
     // Skip separate restaurant services for All Inclusive hotels — meals are part of hotel rate
     if (dayIncludesLunch && !isAllInclusive) {
-      const lunch = findMealRate(currentCity, 'lunch')
+      const lunch = findMealRate(mealCity, 'lunch')
       if (lunch.warning) warnings.push(`Day ${dayNumber}: ${lunch.warning}`)
       const lunchCost = lunch.rate * totalPax
       const lunchRestaurant = lunch.supplierName || null
@@ -1587,7 +1600,7 @@ export async function createLandItineraryServices(
     // Dinner (only if included for this day) — strict city-scoped lookup
     // Skip separate restaurant services for All Inclusive hotels — meals are part of hotel rate
     if (dayIncludesDinner && !isAllInclusive) {
-      const dinner = findMealRate(currentCity, 'dinner')
+      const dinner = findMealRate(mealCity, 'dinner')
       if (dinner.warning) warnings.push(`Day ${dayNumber}: ${dinner.warning}`)
       const dinnerCost = dinner.rate * totalPax
       const dinnerRestaurant = dinner.supplierName || null

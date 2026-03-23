@@ -162,6 +162,13 @@ INSERT INTO attraction_aliases (canonical_name, alias, source_table) VALUES
   ('Sea Trip', 'Snorkeling Trip', 'activity_rates'),
   ('Sea Trip', 'Boat Trip', 'activity_rates'),
   ('Sea Trip', 'Red Sea Boat Trip', 'activity_rates'),
-  ('Sea Trip', 'Sea Excursion', 'activity_rates')
+  ('Sea Trip', 'Sea Excursion', 'activity_rates'),
+  ('Sea Trip', 'Red Sea Islands', 'activity_rates'),
+  ('Sea Trip', 'Red Sea Island Trip', 'activity_rates'),
+
+  -- Edfu Temple aliases with parenthetical variants
+  ('Edfu Temple', 'Temple of Horus (Edfu)', 'entrance_fees'),
+  ('Edfu Temple', 'Horus Temple (Edfu)', 'entrance_fees'),
+  ('Edfu Temple', 'Edfu Temple of Horus', 'entrance_fees')
 
 ON CONFLICT (alias) DO NOTHING;
