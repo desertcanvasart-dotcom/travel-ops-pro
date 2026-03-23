@@ -361,6 +361,131 @@ export async function fetchAllPricingRates(
 }
 
 // ============================================
+// PER-CITY TRANSPORT RATE LOOKUP
+// Fetches transport rates dynamically for any city (not just the primary city)
+// Used when itineraries span multiple cities (Cairo → Aswan → Luxor → Hurghada)
+// ============================================
+
+interface CityTransportRates {
+  vehiclePerDay: number
+  vehicleTypeName: string
+  vehicleServiceCode: string
+  vehicleSupplierName: string | null
+  transferRate: number
+  transferServiceCode: string
+  transferSupplierName: string | null
+}
+
+// Cache to avoid re-fetching for the same city
+const _cityTransportCache = new Map<string, CityTransportRates>()
+
+async function getTransportRatesForCity(
+  supabase: any,
+  city: string,
+  totalPax: number,
+  isEuroPassport: boolean,
+  primaryRates: PricingRates
+): Promise<CityTransportRates> {
+  const cacheKey = `${city.toLowerCase()}-${totalPax}-${isEuroPassport}`
+  if (_cityTransportCache.has(cacheKey)) return _cityTransportCache.get(cacheKey)!
+
+  const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
+
+  // Day tour vehicle for this city
+  const { data: dayTourRates } = await supabase
+    .from('transportation_rates')
+    .select('*')
+    .eq('is_active', true)
+    .eq('service_type', 'day_tour')
+    .ilike('city', city)
+    .limit(1)
+
+  const dayTourResult = dayTourRates?.length ? getTransportRateForPax(dayTourRates[0], totalPax, isEuroPassport) : null
+  const vehiclePerDay = dayTourResult ? (isEuroPassport ? dayTourResult.rateEur : dayTourResult.rateNonEur) : primaryRates.vehiclePerDay
+  const vehicleTypeName = dayTourResult ? dayTourResult.vehicleType : primaryRates.vehicleTypeName
+  const vehicleServiceCode = dayTourRates?.[0]?.id || primaryRates.vehicleServiceCode
+  const vehicleSupplierName = dayTourRates?.[0]?.supplier_name || primaryRates.vehicleSupplierName
+
+  // Airport transfer for this city
+  const { data: transferRates } = await supabase
+    .from('transportation_rates')
+    .select('*')
+    .eq('is_active', true)
+    .eq('service_type', 'airport_transfer')
+    .ilike('city', city)
+    .limit(1)
+
+  const transferResult = transferRates?.length ? getTransportRateForPax(transferRates[0], totalPax, isEuroPassport) : null
+  const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
+  const transferServiceCode = transferRates?.[0]?.id || primaryRates.transferServiceCode
+  const transferSupplierName = transferRates?.[0]?.supplier_name || primaryRates.transferSupplierName
+
+  const result: CityTransportRates = {
+    vehiclePerDay,
+    vehicleTypeName,
+    vehicleServiceCode,
+    vehicleSupplierName,
+    transferRate,
+    transferServiceCode,
+    transferSupplierName,
+  }
+  _cityTransportCache.set(cacheKey, result)
+  return result
+}
+
+// ============================================
+// PER-CITY HOTEL RATE LOOKUP
+// ============================================
+
+interface CityHotelRates {
+  hotelRate: number
+  hotelName: string | null
+  selectedHotel: any
+}
+
+const _cityHotelCache = new Map<string, CityHotelRates>()
+
+async function getHotelRatesForCity(
+  supabase: any,
+  city: string,
+  tier: string,
+  isEuroPassport: boolean,
+  primaryRates: PricingRates
+): Promise<CityHotelRates> {
+  const cacheKey = `${city.toLowerCase()}-${tier}-${isEuroPassport}`
+  if (_cityHotelCache.has(cacheKey)) return _cityHotelCache.get(cacheKey)!
+
+  const { data: hotels } = await supabase
+    .from('accommodation_rates')
+    .select('*')
+    .ilike('city', city)
+    .eq('is_active', true)
+    .eq('tier', tier)
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  let result: CityHotelRates
+  if (hotels?.length) {
+    const hotel = hotels[0]
+    result = {
+      hotelRate: isEuroPassport ? toNumber(hotel.pp_double_eur, 0) : toNumber(hotel.pp_double_non_eur, 0),
+      hotelName: hotel.property_name,
+      selectedHotel: hotel,
+    }
+  } else {
+    // Fall back to primary rates if no hotel found for this city
+    result = {
+      hotelRate: primaryRates.hotelRate,
+      hotelName: primaryRates.hotelName,
+      selectedHotel: primaryRates.selectedHotel,
+    }
+    console.warn(`⚠️ No hotel found for ${city}/${tier} — using primary hotel rate`)
+  }
+  _cityHotelCache.set(cacheKey, result)
+  return result
+}
+
+// ============================================
 // CREATE LAND/STRUCTURED DAY SERVICES
 // ============================================
 
@@ -501,6 +626,10 @@ export async function createLandItineraryServices(
     }
   }
 
+  // Clear per-city caches for fresh lookups each generation
+  _cityTransportCache.clear()
+  _cityHotelCache.clear()
+
   let totalSupplierCost = 0
   let totalClientPrice = 0
   let landCruiseTransportAdded = false
@@ -510,19 +639,11 @@ export async function createLandItineraryServices(
   let previousDayData: any = null // Track previous day for intercity detection
 
   // ============================================
-  // RATE VALIDATION — warn on missing/zero rates
+  // RATE VALIDATION — warn on missing GLOBAL rates only
+  // City-specific rates (transport, hotel) are validated per-day below
   // ============================================
-  if (!rates.vehiclePerDay && effectivePackageType !== 'cruise-package') {
-    warnings.push(`No day tour transport rate found for ${effectiveCity} (${totalPax} pax) — transport will be €0`)
-  }
-  if (!rates.transferRate && effectivePackageType !== 'cruise-package') {
-    warnings.push(`No airport transfer rate found for ${effectiveCity} (${totalPax} pax) — transfers will be €0`)
-  }
   if (!rates.guidePerDay) {
     warnings.push(`No guide rate found for ${language} (${tier} tier) — guide services will be €0`)
-  }
-  if (includeAccommodation && !rates.hotelRate && effectivePackageType !== 'cruise-package') {
-    warnings.push(`No hotel rate found for ${effectiveCity} (${tier} tier) — accommodation will be €0`)
   }
   if (!rates.airportServiceRate && effectivePackageType !== 'cruise-package') {
     warnings.push('No airport service rates found in airport_staff_rates — airport services will be €0')
@@ -703,21 +824,23 @@ export async function createLandItineraryServices(
       totalSupplierCost += rates.hotelServiceRate
       totalClientPrice += withMargin(rates.hotelServiceRate)
 
-      // Transfer to airport
+      // Transfer to airport — use per-city rate for departure city
+      const departureCity = dayData.city || effectiveCity
+      const depTransport = await getTransportRatesForCity(supabase, departureCity, totalPax, isEuroPassport, rates)
       departureServices.push({
         service_type: 'transportation',
-        service_code: rates.transferServiceCode,
+        service_code: depTransport.transferServiceCode,
         service_name: 'Airport Transfer',
-        supplier_name: rates.transferSupplierName,
+        supplier_name: depTransport.transferSupplierName,
         quantity: 1,
-        rate_eur: rates.transferRate,
-        rate_non_eur: rates.transferRate,
-        total_cost: rates.transferRate,
-        client_price: withMargin(rates.transferRate),
-        notes: 'Transfer to airport'
+        rate_eur: depTransport.transferRate,
+        rate_non_eur: depTransport.transferRate,
+        total_cost: depTransport.transferRate,
+        client_price: withMargin(depTransport.transferRate),
+        notes: `Transfer to ${departureCity} airport`
       })
-      totalSupplierCost += rates.transferRate
-      totalClientPrice += withMargin(rates.transferRate)
+      totalSupplierCost += depTransport.transferRate
+      totalClientPrice += withMargin(depTransport.transferRate)
 
       // Departure day tips (porter at airport + driver for transfer)
       const departureTipRoles = determineTipRolesForDay({
@@ -836,52 +959,59 @@ export async function createLandItineraryServices(
         }
 
         // Domestic flight needs TWO airport transfers (hotel→airport + airport→destination)
-        services.push({
-          service_type: 'transportation',
-          service_code: rates.transferServiceCode,
-          service_name: 'Airport Transfer - Departure City',
-          supplier_name: rates.transferSupplierName,
-          quantity: 1,
-          rate_eur: rates.transferRate,
-          rate_non_eur: rates.transferRate,
-          total_cost: rates.transferRate,
-          client_price: withMargin(rates.transferRate),
-          notes: 'Transfer to departure airport'
-        })
-        totalSupplierCost += rates.transferRate
-        totalClientPrice += withMargin(rates.transferRate)
+        // Use per-city rates: departure from previous city, arrival at current city
+        const flightDepCity = previousDayData?.overnight_city || previousDayData?.city || effectiveCity
+        const flightArrCity = dayData.city || effectiveCity
+        const flightDepTransport = await getTransportRatesForCity(supabase, flightDepCity, totalPax, isEuroPassport, rates)
+        const flightArrTransport = await getTransportRatesForCity(supabase, flightArrCity, totalPax, isEuroPassport, rates)
 
         services.push({
           service_type: 'transportation',
-          service_code: rates.transferServiceCode,
-          service_name: 'Airport Transfer - Arrival City',
-          supplier_name: rates.transferSupplierName,
+          service_code: flightDepTransport.transferServiceCode,
+          service_name: `Airport Transfer - ${flightDepCity}`,
+          supplier_name: flightDepTransport.transferSupplierName,
           quantity: 1,
-          rate_eur: rates.transferRate,
-          rate_non_eur: rates.transferRate,
-          total_cost: rates.transferRate,
-          client_price: withMargin(rates.transferRate),
-          notes: `Transfer from ${dayData.city || 'destination'} airport`
+          rate_eur: flightDepTransport.transferRate,
+          rate_non_eur: flightDepTransport.transferRate,
+          total_cost: flightDepTransport.transferRate,
+          client_price: withMargin(flightDepTransport.transferRate),
+          notes: `Transfer to ${flightDepCity} airport`
         })
-        totalSupplierCost += rates.transferRate
-        totalClientPrice += withMargin(rates.transferRate)
+        totalSupplierCost += flightDepTransport.transferRate
+        totalClientPrice += withMargin(flightDepTransport.transferRate)
+
+        services.push({
+          service_type: 'transportation',
+          service_code: flightArrTransport.transferServiceCode,
+          service_name: `Airport Transfer - ${flightArrCity}`,
+          supplier_name: flightArrTransport.transferSupplierName,
+          quantity: 1,
+          rate_eur: flightArrTransport.transferRate,
+          rate_non_eur: flightArrTransport.transferRate,
+          total_cost: flightArrTransport.transferRate,
+          client_price: withMargin(flightArrTransport.transferRate),
+          notes: `Transfer from ${flightArrCity} airport`
+        })
+        totalSupplierCost += flightArrTransport.transferRate
+        totalClientPrice += withMargin(flightArrTransport.transferRate)
 
         // HYBRID departure: also need transfer to final international departure airport
         if (isHybridDomesticDeparture) {
+          const hybridDepTransport = await getTransportRatesForCity(supabase, flightArrCity, totalPax, isEuroPassport, rates)
           services.push({
             service_type: 'transportation',
-            service_code: rates.transferServiceCode,
-            service_name: 'Airport Transfer - International Departure',
-            supplier_name: rates.transferSupplierName,
+            service_code: hybridDepTransport.transferServiceCode,
+            service_name: `Airport Transfer - International Departure (${flightArrCity})`,
+            supplier_name: hybridDepTransport.transferSupplierName,
             quantity: 1,
-            rate_eur: rates.transferRate,
-            rate_non_eur: rates.transferRate,
-            total_cost: rates.transferRate,
-            client_price: withMargin(rates.transferRate),
-            notes: 'Transfer to international departure airport'
+            rate_eur: hybridDepTransport.transferRate,
+            rate_non_eur: hybridDepTransport.transferRate,
+            total_cost: hybridDepTransport.transferRate,
+            client_price: withMargin(hybridDepTransport.transferRate),
+            notes: `Transfer to ${flightArrCity} international departure airport`
           })
-          totalSupplierCost += rates.transferRate
-          totalClientPrice += withMargin(rates.transferRate)
+          totalSupplierCost += hybridDepTransport.transferRate
+          totalClientPrice += withMargin(hybridDepTransport.transferRate)
         }
       } else {
         // International arrival/departure OR explicit needs_airport_service
@@ -1026,22 +1156,24 @@ export async function createLandItineraryServices(
     // the airport transfer is a separate service from the day-tour vehicle.
     // Domestic flights already have their transfers added above.
     if (hasAirportOnThisDay && hasSightseeingOnThisDay && !isDomesticFlight) {
+      const airportCity = dayData.city || effectiveCity
+      const airportCityTransport = await getTransportRatesForCity(supabase, airportCity, totalPax, isEuroPassport, rates)
       services.push({
         service_type: 'transportation',
-        service_code: rates.transferServiceCode,
-        service_name: 'Airport Transfer',
-        supplier_name: rates.transferSupplierName,
+        service_code: airportCityTransport.transferServiceCode,
+        service_name: `Airport Transfer (${airportCity})`,
+        supplier_name: airportCityTransport.transferSupplierName,
         quantity: 1,
-        rate_eur: rates.transferRate,
-        rate_non_eur: rates.transferRate,
-        total_cost: rates.transferRate,
-        client_price: withMargin(rates.transferRate),
+        rate_eur: airportCityTransport.transferRate,
+        rate_non_eur: airportCityTransport.transferRate,
+        total_cost: airportCityTransport.transferRate,
+        client_price: withMargin(airportCityTransport.transferRate),
         notes: dayData.is_arrival
-          ? 'Airport to hotel/first stop transfer'
-          : 'Hotel to airport transfer'
+          ? `Airport to hotel/first stop transfer in ${airportCity}`
+          : `Hotel to ${airportCity} airport transfer`
       })
-      totalSupplierCost += rates.transferRate
-      totalClientPrice += withMargin(rates.transferRate)
+      totalSupplierCost += airportCityTransport.transferRate
+      totalClientPrice += withMargin(airportCityTransport.transferRate)
     }
 
     // Day-trip intercity transport: when cities_visited includes a different city but
@@ -1455,22 +1587,29 @@ export async function createLandItineraryServices(
     }
 
     // Hotel (only if included and not last day and not cruise day) — per-person pricing
-    if (includesHotelForDay && rates.hotelRate > 0) {
-      const hotelCost = rates.hotelRate * totalPax
-      services.push({
-        service_type: 'accommodation',
-        service_code: rates.selectedHotel?.id || 'HOTEL',
-        service_name: `${rates.hotelName} (${totalPax} ${totalPax > 1 ? 'persons' : 'person'})`,
-        supplier_name: rates.hotelName,
-        quantity: totalPax,
-        rate_eur: rates.hotelRate,
-        rate_non_eur: rates.hotelRate,
-        total_cost: hotelCost,
-        client_price: withMargin(hotelCost),
-        notes: `Overnight at ${rates.hotelName}`
-      })
-      totalSupplierCost += hotelCost
-      totalClientPrice += withMargin(hotelCost)
+    if (includesHotelForDay) {
+      // Use per-city hotel rate — overnight city determines which hotel to use
+      const overnightForHotel = dayData.overnight_city || dayData.city || effectiveCity
+      const cityHotel = await getHotelRatesForCity(supabase, overnightForHotel, tier, isEuroPassport, rates)
+      if (cityHotel.hotelRate > 0) {
+        const hotelCost = cityHotel.hotelRate * totalPax
+        services.push({
+          service_type: 'accommodation',
+          service_code: cityHotel.selectedHotel?.id || 'HOTEL',
+          service_name: `${cityHotel.hotelName} (${totalPax} ${totalPax > 1 ? 'persons' : 'person'})`,
+          supplier_name: cityHotel.hotelName,
+          quantity: totalPax,
+          rate_eur: cityHotel.hotelRate,
+          rate_non_eur: cityHotel.hotelRate,
+          total_cost: hotelCost,
+          client_price: withMargin(hotelCost),
+          notes: `Overnight at ${cityHotel.hotelName} in ${overnightForHotel}`
+        })
+        totalSupplierCost += hotelCost
+        totalClientPrice += withMargin(hotelCost)
+      } else {
+        warnings.push(`Day ${dayNumber}: No hotel found for ${overnightForHotel} (${tier} tier) — accommodation will be €0`)
+      }
     }
 
     // Cruise accommodation + bundled transport (for cruise days in cruise-land packages)

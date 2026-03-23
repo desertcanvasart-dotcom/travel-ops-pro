@@ -628,7 +628,7 @@ export async function POST(request: NextRequest) {
 
             // No match at all — warn
             attractionValidationWarnings.push(
-              `Day ${day.day_number}: "${attr}" not found in database — entrance fee will be €0`
+              `Day ${day.day_number}: "${attr}" not found in entrance fees or activity rates — pricing will be €0`
             )
           }
         }

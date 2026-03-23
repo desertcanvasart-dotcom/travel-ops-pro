@@ -325,22 +325,31 @@ export function buildWritingRulesContext(rules: WritingRule[]): string {
  */
 export async function fetchAttractionsList(supabase: any): Promise<string[]> {
   try {
-    const { data } = await supabase
-      .from('entrance_fees')
-      .select('attraction_name')
-      .eq('is_active', true)
-      .eq('is_addon', false) // Exclude add-ons
+    // Fetch BOTH entrance fees AND activity rates — activities (Sea Trip, etc.)
+    // are valid attractions that need to be in the validation set
+    const [{ data: entranceFees }, { data: activityRates }] = await Promise.all([
+      supabase
+        .from('entrance_fees')
+        .select('attraction_name')
+        .eq('is_active', true)
+        .eq('is_addon', false),
+      supabase
+        .from('activity_rates')
+        .select('activity_name')
+        .eq('is_active', true)
+    ])
 
-    if (!data) return []
+    const entranceNames = (entranceFees || []).map((a: any) => a.attraction_name)
+    const activityNames = (activityRates || []).map((a: any) => a.activity_name)
+    const allNames = [...entranceNames, ...activityNames]
 
-    return data
-      .map((a: any) => a.attraction_name)
-      .filter((name: string) => {
-        // Keep names that are primarily Latin characters (English, French, etc.)
-        // Reject names that are primarily non-Latin (Japanese, Arabic, etc.)
-        const latinChars = (name.match(/[a-zA-Z]/g) || []).length
-        return latinChars > name.length * 0.3 // At least 30% Latin characters
-      })
+    return allNames.filter((name: string) => {
+      if (!name) return false
+      // Keep names that are primarily Latin characters (English, French, etc.)
+      // Reject names that are primarily non-Latin (Japanese, Arabic, etc.)
+      const latinChars = (name.match(/[a-zA-Z]/g) || []).length
+      return latinChars > name.length * 0.3 // At least 30% Latin characters
+    })
   } catch {
     return []
   }
