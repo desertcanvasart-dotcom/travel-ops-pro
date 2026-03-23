@@ -521,6 +521,7 @@ export async function createLandItineraryServices(
     includeDinner: boolean
     includeAccommodation: boolean
     includeGuide?: boolean  // Global guide override: true=always include, false=never include, undefined=per-day AI decision
+    mealPlan?: string | null  // RO|BB|HB|FB|AI — when AI (All Inclusive), meals are hotel-provided, no separate restaurant services
     skipPricing: boolean
     marginPercent: number
     startDate: string
@@ -538,7 +539,11 @@ export async function createLandItineraryServices(
     effectivePackageType, effectiveCity, totalPax, isEuroPassport,
     tier, language, includeLunch, includeDinner, includeAccommodation,
     includeGuide, skipPricing, marginPercent, startDate, currency = 'EUR',
+    mealPlan,
   } = params
+
+  // All Inclusive: meals are provided by the hotel, not separate restaurant services
+  const isAllInclusive = mealPlan?.toUpperCase().trim() === 'AI'
 
   // Fetch exchange rates for currency conversion
   let exchangeRates: ExchangeRates | null = null
@@ -1521,7 +1526,8 @@ export async function createLandItineraryServices(
     }
 
     // Lunch (only if included for this day) — strict city-scoped lookup
-    if (dayIncludesLunch) {
+    // Skip separate restaurant services for All Inclusive hotels — meals are part of hotel rate
+    if (dayIncludesLunch && !isAllInclusive) {
       const lunch = findMealRate(currentCity, 'lunch')
       if (lunch.warning) warnings.push(`Day ${dayNumber}: ${lunch.warning}`)
       const lunchCost = lunch.rate * totalPax
@@ -1545,7 +1551,8 @@ export async function createLandItineraryServices(
     }
 
     // Dinner (only if included for this day) — strict city-scoped lookup
-    if (dayIncludesDinner) {
+    // Skip separate restaurant services for All Inclusive hotels — meals are part of hotel rate
+    if (dayIncludesDinner && !isAllInclusive) {
       const dinner = findMealRate(currentCity, 'dinner')
       if (dinner.warning) warnings.push(`Day ${dayNumber}: ${dinner.warning}`)
       const dinnerCost = dinner.rate * totalPax

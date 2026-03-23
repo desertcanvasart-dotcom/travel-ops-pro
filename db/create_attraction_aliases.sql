@@ -152,6 +152,16 @@ INSERT INTO attraction_aliases (canonical_name, alias, source_table) VALUES
   ('Memphis', 'Open Museum at Mit Rahina', 'entrance_fees'),
   ('Memphis', 'Mit Rahina Open Museum', 'entrance_fees'),
   ('Memphis', 'Memphis Open Air Museum', 'entrance_fees'),
-  ('Memphis', 'Ancient Memphis', 'entrance_fees')
+  ('Memphis', 'Ancient Memphis', 'entrance_fees'),
+
+  -- Sea Trip (activity_rates) — various names used for Red Sea excursions
+  ('Sea Trip', 'Red Sea excursion', 'activity_rates'),
+  ('Sea Trip', 'Red Sea Excursion', 'activity_rates'),
+  ('Sea Trip', 'Red Sea trip', 'activity_rates'),
+  ('Sea Trip', 'Red Sea Trip', 'activity_rates'),
+  ('Sea Trip', 'Snorkeling Trip', 'activity_rates'),
+  ('Sea Trip', 'Boat Trip', 'activity_rates'),
+  ('Sea Trip', 'Red Sea Boat Trip', 'activity_rates'),
+  ('Sea Trip', 'Sea Excursion', 'activity_rates')
 
 ON CONFLICT (alias) DO NOTHING;

@@ -777,6 +777,7 @@ export async function POST(request: NextRequest) {
       marginPercent: margin_percent,
       startDate: start_date,
       currency: effectiveCurrency,
+      mealPlan: meal_plan || null,
     })
 
 
