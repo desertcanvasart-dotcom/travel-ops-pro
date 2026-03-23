@@ -545,6 +545,30 @@ export async function createLandItineraryServices(
   // All Inclusive: meals are provided by the hotel, not separate restaurant services
   const isAllInclusive = mealPlan?.toUpperCase().trim() === 'AI'
 
+  console.log(`🏗️ createLandItineraryServices called:`, {
+    itineraryId,
+    durationDays,
+    effectivePackageType,
+    effectiveCity,
+    totalPax,
+    tier,
+    skipPricing,
+    mealPlan,
+    isAllInclusive,
+    includeLunch,
+    includeDinner,
+    includeAccommodation,
+    includeGuide,
+    currency,
+    daysCount: (itineraryData?.days || []).length,
+    guideRate: rates.guidePerDay,
+    airportRate: rates.airportServiceRate,
+    hotelServiceRate: rates.hotelServiceRate,
+    entranceFeesCount: rates.allEntranceFees?.length || 0,
+    activityRatesCount: rates.allActivityRates?.length || 0,
+    mealRatesCount: rates.allMealRates?.length || 0,
+  })
+
   // Fetch exchange rates for currency conversion
   let exchangeRates: ExchangeRates | null = null
   const needsConversion = currency !== 'EUR'
@@ -791,7 +815,12 @@ export async function createLandItineraryServices(
       overnightCity: overnightCityValue,
     })
 
-    if (skipPricing) continue
+    if (skipPricing) {
+      console.log(`⏭️ Day ${dayNumber}: skipPricing=true, skipping service creation`)
+      continue
+    }
+
+    console.log(`🔧 Day ${dayNumber}: Creating services — city=${currentCity}, cruise=${isCruiseDay}, transfer=${isTransferOnly}, free=${isFreeDay}, guide=${dayNeedsGuide}, lunch=${dayIncludesLunch}, dinner=${dayIncludesDinner}, attractions=${(dayData.attractions || []).length}`)
 
     // Handle departure day - transfer + airport/hotel services
     // On cruise days, the bundled cruise transport covers transfers + airport staff + check-out
@@ -879,8 +908,9 @@ export async function createLandItineraryServices(
       }
 
       // Insert all departure services (with multi-currency tracking)
+      console.log(`📦 Day ${dayNumber} (departure): inserting ${departureServices.length} services for day_id=${day.id}`)
       for (const svc of departureServices) {
-        await supabase.from('itinerary_services').insert({
+        const { error: depSvcError } = await supabase.from('itinerary_services').insert({
           itinerary_day_id: day.id,
           ...svc,
           // Multi-currency: all rates are EUR-based; store original cost + exchange rate
@@ -891,6 +921,10 @@ export async function createLandItineraryServices(
           total_cost: toTargetCurrency(svc.total_cost),
           client_price: toTargetCurrency(svc.client_price),
         })
+        if (depSvcError) {
+          console.error(`❌ Day ${dayNumber} (departure): Failed to insert "${svc.service_name}":`, depSvcError)
+          warnings.push(`Day ${dayNumber}: Failed to save service "${svc.service_name}" — ${depSvcError.message}`)
+        }
       }
       continue
     }
@@ -1693,8 +1727,10 @@ export async function createLandItineraryServices(
     }
 
     // Insert all services (with multi-currency tracking + currency conversion)
+    console.log(`📦 Day ${dayNumber}: inserting ${services.length} services for day_id=${day.id}`)
+    let insertedCount = 0
     for (const svc of services) {
-      await supabase.from('itinerary_services').insert({
+      const { error: svcError } = await supabase.from('itinerary_services').insert({
         itinerary_day_id: day.id,
         ...svc,
         // Multi-currency: all rates are EUR-based; store original cost + exchange rate
@@ -1705,7 +1741,14 @@ export async function createLandItineraryServices(
         total_cost: toTargetCurrency(svc.total_cost),
         client_price: toTargetCurrency(svc.client_price),
       })
+      if (svcError) {
+        console.error(`❌ Day ${dayNumber}: Failed to insert service "${svc.service_name}":`, svcError)
+        warnings.push(`Day ${dayNumber}: Failed to save service "${svc.service_name}" — ${svcError.message}`)
+      } else {
+        insertedCount++
+      }
     }
+    console.log(`✅ Day ${dayNumber}: ${insertedCount}/${services.length} services inserted successfully`)
 
     // Track for next iteration (intercity detection)
     previousDayData = dayData
