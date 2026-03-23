@@ -503,17 +503,22 @@ export async function POST(request: Request) {
       }
     }
 
-    // Determine Euro passport from nationality
+    // Determine Euro passport from nationality — match country names AND demonyms
     const detectedNationality = extracted.nationality || ''
-    const euCountries = [
-      'austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark',
-      'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland',
-      'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands',
-      'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden',
-      'norway', 'iceland', 'liechtenstein', 'switzerland'
+    const euTerms = [
+      'austria', 'belgian', 'belgium', 'bulgarian', 'bulgaria', 'croatian', 'croatia',
+      'cypriot', 'cyprus', 'czech', 'danish', 'denmark', 'estonian', 'estonia',
+      'finnish', 'finland', 'french', 'france', 'german', 'germany', 'greek', 'greece',
+      'hungarian', 'hungary', 'irish', 'ireland', 'italian', 'italy', 'latvian', 'latvia',
+      'lithuanian', 'lithuania', 'luxembourgish', 'luxembourg', 'maltese', 'malta',
+      'dutch', 'netherlands', 'polish', 'poland', 'portuguese', 'portugal',
+      'romanian', 'romania', 'slovak', 'slovakia', 'slovenian', 'slovenia',
+      'spanish', 'spain', 'swedish', 'sweden', 'norwegian', 'norway',
+      'icelandic', 'iceland', 'swiss', 'switzerland', 'liechtenstein',
+      'austrian', 'eu', 'eur', 'euro', 'european', 'schengen',
     ]
     const isEuroPassport = detectedNationality
-      ? euCountries.some(c => detectedNationality.toLowerCase().includes(c))
+      ? euTerms.some(t => detectedNationality.toLowerCase().includes(t))
       : null
 
     // ============================================

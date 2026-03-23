@@ -441,6 +441,7 @@ interface CityHotelRates {
   hotelRate: number
   hotelName: string | null
   selectedHotel: any
+  warning?: string  // Warning if fallback was used (wrong city hotel)
 }
 
 const _cityHotelCache = new Map<string, CityHotelRates>()
@@ -473,13 +474,15 @@ async function getHotelRatesForCity(
       selectedHotel: hotel,
     }
   } else {
-    // Fall back to primary rates if no hotel found for this city
+    // NO FALLBACK: Don't silently use a hotel from a different city
+    // Return zero rate with a warning so the user knows to add the hotel
     result = {
-      hotelRate: primaryRates.hotelRate,
-      hotelName: primaryRates.hotelName,
-      selectedHotel: primaryRates.selectedHotel,
+      hotelRate: 0,
+      hotelName: null,
+      selectedHotel: null,
+      warning: `No hotel found for ${city} (${tier} tier) — please add a hotel for this city in Rates`,
     }
-    console.warn(`⚠️ No hotel found for ${city}/${tier} — using primary hotel rate`)
+    console.warn(`⚠️ No hotel found for ${city}/${tier} — will show warning (not using wrong-city hotel)`)
   }
   _cityHotelCache.set(cacheKey, result)
   return result
@@ -736,11 +739,13 @@ export async function createLandItineraryServices(
       && (hasExplicitFlightInfo || hasDomesticFlightSignals)
     // Hybrid: domestic flight + international departure on same day
     // e.g., HRG→CAI by flight, sightseeing in Cairo, then international departure
+    // IMPORTANT: Only trust hasExplicitFlightInfo for hybrid detection — hasDomesticFlightSignals
+    // is too aggressive (e.g., Day 1 arrival description mentioning "flight to Aswan" for a future day)
     const isHybridDomesticDeparture = dayData.is_departure && !dayData.is_arrival
-      && (hasExplicitFlightInfo || hasDomesticFlightSignals)
+      && hasExplicitFlightInfo  // Only explicit AI flag, not fallback signals
     // Hybrid: international arrival + domestic flight on same day
     const isHybridDomesticArrival = dayData.is_arrival && !dayData.is_departure
-      && (hasExplicitFlightInfo || hasDomesticFlightSignals)
+      && hasExplicitFlightInfo  // Only explicit AI flag, not fallback signals
     const hasDomesticFlightOnThisDay = isDomesticFlight || isHybridDomesticDeparture || isHybridDomesticArrival
     if (hasDomesticFlightOnThisDay && !hasExplicitFlightInfo) {
       console.warn(`⚠️ Day ${dayNumber}: Detected domestic flight from activities/description but AI didn't set transport_type=flight`)
@@ -1011,9 +1016,10 @@ export async function createLandItineraryServices(
         }
 
         // Domestic flight needs TWO airport transfers (hotel→airport + airport→destination)
-        // Use per-city rates: departure from previous city, arrival at current city
+        // Departure: where they slept last night (previous overnight city)
+        // Arrival: where they're going (current overnight city or day destination)
         const flightDepCity = previousDayData?.overnight_city || previousDayData?.city || effectiveCity
-        const flightArrCity = dayData.city || effectiveCity
+        const flightArrCity = dayData.overnight_city || dayData.city || effectiveCity
         const flightDepTransport = await getTransportRatesForCity(supabase, flightDepCity, totalPax, isEuroPassport, rates)
         const flightArrTransport = await getTransportRatesForCity(supabase, flightArrCity, totalPax, isEuroPassport, rates)
 
@@ -1290,7 +1296,10 @@ export async function createLandItineraryServices(
     // Skip for domestic flight days — their transfers are already added above
     // For intercity days: skip if transfer-only (intercity vehicle is already the transport),
     // but ADD local sightseeing vehicle if there are attractions at the destination
-    const skipRegularTransport = hasDomesticFlightOnThisDay || (isIntercityTransfer && isTransferOnly)
+    // CRUISE DISEMBARKATION: If previous day was cruise, sightseeing at the disembarkation
+    // city (e.g., Luxor West Bank on checkout day) is PART of the cruise transport package
+    const isCruiseDisembarkationDay = previousWasCruise && !isCruiseDay
+    const skipRegularTransport = hasDomesticFlightOnThisDay || (isIntercityTransfer && isTransferOnly) || isCruiseDisembarkationDay
     if (!isFreeDay && !isCruiseDay && !skipRegularTransport) {
       // --- Per-day transport rate lookup ---
       // If the day is in a different city, fetch transport rate for THAT city
@@ -1481,6 +1490,7 @@ export async function createLandItineraryServices(
     if (entranceAttractions.length > 0 && !isTransferOnly && !isFreeDay) {
       let dayEntranceTotal = 0
       const matchedAttractions: string[] = []
+      const processedAttractionIds = new Set<string>()  // Deduplicate by DB record ID
 
       for (const attr of entranceAttractions) {
         // Skip if this attraction is in photo_stops (outside viewing only, no fee)
@@ -1522,6 +1532,14 @@ export async function createLandItineraryServices(
           // Check if it's an add-on (should be excluded from automatic pricing)
           if (fee.is_addon) continue
 
+          // DEDUPLICATION: skip if this exact DB record was already charged on this day
+          const feeId = fee.id || fee.attraction_name.toLowerCase()
+          if (processedAttractionIds.has(feeId)) {
+            console.log(`⏭️ Day ${dayNumber}: Skipping duplicate entrance fee "${attr}" → "${fee.attraction_name}" (already charged)`)
+            continue
+          }
+          processedAttractionIds.add(feeId)
+
           const feePerPerson = isEuroPassport
             ? toNumber(fee.eur_rate, 0)
             : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
@@ -1538,6 +1556,14 @@ export async function createLandItineraryServices(
             || normalizedAttr.toLowerCase().includes(ar.activity_name?.toLowerCase() || '')
           )
           if (activityMatch) {
+            // DEDUPLICATION: skip if this activity was already charged
+            const actId = activityMatch.id || activityMatch.activity_name?.toLowerCase()
+            if (processedAttractionIds.has(actId)) {
+              console.log(`⏭️ Day ${dayNumber}: Skipping duplicate activity "${attr}" → "${activityMatch.activity_name}" (already charged)`)
+              continue
+            }
+            processedAttractionIds.add(actId)
+
             const activityRate = isEuroPassport
               ? toNumber(activityMatch.base_rate_eur || activityMatch.eur_rate, 0)
               : toNumber(activityMatch.base_rate_non_eur || activityMatch.non_eur_rate, activityMatch.base_rate_eur || activityMatch.eur_rate || 0)
@@ -1655,7 +1681,11 @@ export async function createLandItineraryServices(
       // Use per-city hotel rate — overnight city determines which hotel to use
       const overnightForHotel = dayData.overnight_city || dayData.city || effectiveCity
       const cityHotel = await getHotelRatesForCity(supabase, overnightForHotel, tier, isEuroPassport, rates)
-      if (cityHotel.hotelRate > 0) {
+      // Propagate hotel lookup warning (e.g., no hotel found for this city)
+      if (cityHotel.warning) {
+        warnings.push(`Day ${dayNumber}: ${cityHotel.warning}`)
+      }
+      if (cityHotel.hotelRate > 0 && cityHotel.hotelName) {
         const hotelCost = cityHotel.hotelRate * totalPax
         services.push({
           service_type: 'accommodation',
@@ -1671,8 +1701,6 @@ export async function createLandItineraryServices(
         })
         totalSupplierCost += hotelCost
         totalClientPrice += withMargin(hotelCost)
-      } else {
-        warnings.push(`Day ${dayNumber}: No hotel found for ${overnightForHotel} (${tier} tier) — accommodation will be €0`)
       }
     }
 

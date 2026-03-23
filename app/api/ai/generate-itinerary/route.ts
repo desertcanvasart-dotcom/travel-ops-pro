@@ -266,11 +266,27 @@ export async function POST(request: NextRequest) {
 
     const totalPax = num_adults + num_children
 
-    // Passport type
+    // Passport type — match both country names AND demonyms (e.g., "French", "German")
     let isEuroPassport = is_euro_passport
     if (isEuroPassport === null && nationality) {
-      const euCountries = ['austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark', 'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland', 'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands', 'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden', 'norway', 'iceland', 'liechtenstein', 'switzerland']
-      isEuroPassport = euCountries.some(c => nationality.toLowerCase().includes(c))
+      const euTerms = [
+        // Country names
+        'austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark',
+        'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland',
+        'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands',
+        'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden',
+        'norway', 'iceland', 'liechtenstein', 'switzerland',
+        // Demonyms (nationality adjectives)
+        'austrian', 'belgian', 'bulgarian', 'croatian', 'cypriot', 'czech', 'danish',
+        'estonian', 'finnish', 'french', 'german', 'greek', 'hungarian', 'irish',
+        'italian', 'latvian', 'lithuanian', 'luxembourgish', 'maltese', 'dutch',
+        'polish', 'portuguese', 'romanian', 'slovak', 'slovenian', 'spanish', 'swedish',
+        'norwegian', 'icelandic', 'swiss',
+        // Common abbreviations
+        'eu', 'eur', 'euro', 'european', 'schengen',
+      ]
+      const natLower = nationality.toLowerCase().trim()
+      isEuroPassport = euTerms.some(t => natLower.includes(t))
     }
     isEuroPassport = isEuroPassport ?? false
 
