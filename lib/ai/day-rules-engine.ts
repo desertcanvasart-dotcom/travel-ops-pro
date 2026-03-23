@@ -25,10 +25,38 @@ const MEAL_VENUE_PATTERNS = [
   /khan\s*el[\s-]*khalili\s*(bazaar|market|cafe|restaurant)?$/i,
   /local\s*restaurant/i,
   /nubian\s*(restaurant|café|cafe)/i,
-  /felucca\s*ride/i,         // Activity, not an entrance-fee site
   /sound\s*(&|and)\s*light/i, // Separate ticketed event, priced differently
+]
+
+/**
+ * Geographic or vague terms the AI sometimes puts in attractions[]
+ * that are NOT bookable sites with entrance fees. These should be
+ * moved to photo_stops[] or removed entirely.
+ */
+const NON_ATTRACTION_PATTERNS = [
+  /^red\s*sea$/i,              // Geographic body of water, not a ticketed site
+  /^nile(\s*river)?$/i,        // Geographic, not a ticketed site
+  /^snorkeling\s*(sites?|spots?|areas?)?$/i,  // Part of Sea Trip activity
+  /^swimming$/i,
+  /^beach$/i,
+  /^free\s*(time|day|morning|afternoon)$/i,
+  /^leisure$/i,
+  /^shopping$/i,
+  /^bazaar$/i,
+]
+
+/**
+ * Activities that are bundled in the cruise transport package.
+ * On cruise days, these should NOT appear in attractions[] because
+ * they are included in the flat-rate cruise transport (felucca, carriage, motorboat, etc.)
+ * On NON-cruise days, these are also not entrance-fee sites — move to photo_stops.
+ */
+const CRUISE_BUNDLED_ACTIVITIES = [
+  /felucca\s*(sail\s*boat\s*)?(ride|trip|sailing)?/i,
+  /horse\s*carriage\s*(ride|trip)?/i,
+  /carriage\s*ride/i,
   /camel\s*ride/i,
-  /horse\s*carriage/i,
+  /motor\s*boat\s*(ride|trip)?/i,
 ]
 
 /**
@@ -143,28 +171,49 @@ export function applyDayRules(days: any[], packageType: string): any[] {
     }
 
     // ============================================
-    // RULE 4: Attraction cleanup — remove meal venues
+    // RULE 4: Attraction cleanup — remove meal venues and cruise-bundled activities
     // ============================================
     if (corrected.attractions && corrected.attractions.length > 0) {
       const cleaned: string[] = []
-      const removed: string[] = []
+      const removedMealVenues: string[] = []
+      const removedCruiseBundled: string[] = []
+
+      const isCruiseDay = corrected.is_cruise_day || corrected.accommodation_type === 'cruise'
 
       for (const attr of corrected.attractions) {
         const isMealVenue = MEAL_VENUE_PATTERNS.some(p => p.test(attr))
+        const isCruiseBundled = CRUISE_BUNDLED_ACTIVITIES.some(p => p.test(attr))
+        const isNonAttraction = NON_ATTRACTION_PATTERNS.some(p => p.test(attr))
 
-        if (isMealVenue) {
-          removed.push(attr)
+        if (isNonAttraction) {
+          // Geographic/vague terms — not bookable sites, just remove silently
+          console.log(`🧹 Day ${day.day_number || index + 1}: "${attr}" is not a bookable attraction — removed from attractions`)
+        } else if (isMealVenue) {
+          removedMealVenues.push(attr)
           // Move to photo_stops if not already there (no entrance fee, but still mentioned)
           if (!corrected.photo_stops?.some((ps: string) => ps.toLowerCase() === attr.toLowerCase())) {
             corrected.photo_stops = [...(corrected.photo_stops || []), attr]
+          }
+        } else if (isCruiseBundled) {
+          // On cruise days: silently remove (bundled in cruise transport package)
+          // On non-cruise days: also remove from attractions (not entrance-fee sites)
+          removedCruiseBundled.push(attr)
+          if (isCruiseDay) {
+            // Don't add to photo_stops on cruise days — it's part of the transport package
+            console.log(`🚢 Day ${day.day_number || index + 1}: "${attr}" is bundled in cruise transport — removed from attractions`)
+          } else {
+            // On non-cruise days, move to photo_stops (it's an activity, not an entrance fee)
+            if (!corrected.photo_stops?.some((ps: string) => ps.toLowerCase() === attr.toLowerCase())) {
+              corrected.photo_stops = [...(corrected.photo_stops || []), attr]
+            }
           }
         } else {
           cleaned.push(attr)
         }
       }
 
-      if (removed.length > 0) {
-        console.log(`🧹 Day ${day.day_number || index + 1}: Moved meal venues from attractions to photo_stops: ${removed.join(', ')}`)
+      if (removedMealVenues.length > 0) {
+        console.log(`🧹 Day ${day.day_number || index + 1}: Moved meal venues from attractions to photo_stops: ${removedMealVenues.join(', ')}`)
       }
 
       corrected.attractions = cleaned

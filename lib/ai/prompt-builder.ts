@@ -238,6 +238,17 @@ This is a ${packageType === 'cruise-package' ? 'CRUISE-ONLY' : 'CRUISE + LAND'} 
 - Cruise days do NOT need individual transport (transport is bundled)
 - Meals on cruise days are typically included (Full Board: breakfast, lunch, dinner)
 - The last day (departure/disembarkation) should have is_cruise_day: false
+
+⚠️ CRUISE TRANSPORT BUNDLE (CRITICAL — DO NOT ADD THESE AS ATTRACTIONS):
+On cruise days, the following are INCLUDED in the bundled cruise transport package.
+They are NOT separate attractions or activities — do NOT put them in attractions[] or photo_stops[]:
+- Felucca ride / Felucca sailboat ride (included in cruise transport)
+- Horse carriage ride (included in cruise transport)
+- Motorboat ride (included in cruise transport)
+- Camel ride (included in cruise transport)
+These are transport/experience items bundled with the cruise, not ticketed entrance sites.
+If the itinerary mentions a felucca ride on a cruise day, describe it in the day description
+but do NOT add it to attractions[]. It has no separate fee.
 ` : ''}
 ${language !== 'English' ? `
 ⚠️ LANGUAGE REQUIREMENT (CRITICAL):
@@ -576,6 +587,15 @@ PLANNING GUIDELINES:
 4. Group nearby attractions on the same day
 5. Include realistic driving times
 6. For ${tier} tier: ${TIER_DESCRIPTIONS[tier]}
+
+CRUISE TRANSPORT BUNDLE (if cruise days exist):
+On cruise days, the following are INCLUDED in the bundled cruise transport package.
+They are NOT separate attractions or activities — do NOT put them in attractions[] or photo_stops[]:
+- Felucca ride / Felucca sailboat ride (included in cruise transport)
+- Horse carriage ride (included in cruise transport)
+- Motorboat ride (included in cruise transport)
+- Camel ride (included in cruise transport)
+If mentioning these, describe them in the day description but NOT in attractions[].
 
 CRITICAL CONSTRAINTS:
 - ONLY use cities from the CITIES list above. Do NOT add cities not mentioned.
