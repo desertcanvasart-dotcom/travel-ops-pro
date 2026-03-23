@@ -1572,9 +1572,18 @@ export async function createLandItineraryServices(
       }
     }
 
+    // Detect if meals are hotel-provided for this day (All Inclusive, Full Board at hotel, etc.)
+    // Check: global meal plan AI, OR day description mentions hotel meals / all inclusive
+    const dayDesc = (dayData.description || '').toLowerCase()
+    const dayActivities = (dayData.activities || []).join(' ').toLowerCase()
+    const dayText = `${dayDesc} ${dayActivities}`
+    const hotelMealPatterns = /\b(all[- ]inclusive|full[- ]board|meals?\s+(at|in)\s+(the\s+)?hotel|lunch\s+(at|in)\s+(the\s+)?hotel|dinner\s+(at|in)\s+(the\s+)?hotel|hotel\s+(lunch|dinner|meals?))\b/i
+    const isHotelMealDay = isAllInclusive || hotelMealPatterns.test(dayText)
+
     // Lunch (only if included for this day) — strict city-scoped lookup
-    // Skip separate restaurant services for All Inclusive hotels — meals are part of hotel rate
-    if (dayIncludesLunch && !isAllInclusive) {
+    // Skip separate restaurant services when meals are hotel-provided (AI, FB at hotel)
+    const lunchAtHotel = isHotelMealDay || /lunch\s+(at|in)\s+(the\s+)?hotel/i.test(dayText)
+    if (dayIncludesLunch && !lunchAtHotel) {
       const lunch = findMealRate(mealCity, 'lunch')
       if (lunch.warning) warnings.push(`Day ${dayNumber}: ${lunch.warning}`)
       const lunchCost = lunch.rate * totalPax
@@ -1598,8 +1607,9 @@ export async function createLandItineraryServices(
     }
 
     // Dinner (only if included for this day) — strict city-scoped lookup
-    // Skip separate restaurant services for All Inclusive hotels — meals are part of hotel rate
-    if (dayIncludesDinner && !isAllInclusive) {
+    // Skip separate restaurant services when meals are hotel-provided
+    const dinnerAtHotel = isHotelMealDay || /dinner\s+(at|in)\s+(the\s+)?hotel/i.test(dayText)
+    if (dayIncludesDinner && !dinnerAtHotel) {
       const dinner = findMealRate(mealCity, 'dinner')
       if (dinner.warning) warnings.push(`Day ${dayNumber}: ${dinner.warning}`)
       const dinnerCost = dinner.rate * totalPax
