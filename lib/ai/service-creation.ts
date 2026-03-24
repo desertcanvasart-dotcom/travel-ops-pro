@@ -46,6 +46,12 @@ function normalizeAttractionForMatch(name: string): string {
   if (_aliasCache) {
     const dbMatch = _aliasCache.get(normalized)
     if (dbMatch) return dbMatch
+    // Try stripping "at/in/of <City>" suffix — AI often writes "Temple of Horus at Edfu"
+    const withoutCitySuffix = normalized.replace(/\s+(at|in|of|near)\s+\w+$/i, '').trim()
+    if (withoutCitySuffix !== normalized) {
+      const dbMatchStripped = _aliasCache.get(withoutCitySuffix)
+      if (dbMatchStripped) return dbMatchStripped
+    }
   }
 
   // 2. Hardcoded fallback map (kept as safety net, but DB aliases take priority)
@@ -78,6 +84,9 @@ function normalizeAttractionForMatch(name: string): string {
     'edfu': 'Edfu Temple',
     'edfu temple': 'Edfu Temple',
     'temple of horus': 'Edfu Temple',
+    'temple of horus at edfu': 'Edfu Temple',
+    'horus temple at edfu': 'Edfu Temple',
+    'horus temple': 'Edfu Temple',
     'kom ombo': 'Kom Ombo Temple',
     'kom ombo temple': 'Kom Ombo Temple',
     'philae': 'Philae Temple',
@@ -441,6 +450,7 @@ interface CityHotelRates {
   hotelRate: number
   hotelName: string | null
   selectedHotel: any
+  boardBasis: string | null  // RO|BB|HB|FB|AI — from accommodation_rates.board_basis
   warning?: string  // Warning if fallback was used (wrong city hotel)
 }
 
@@ -472,6 +482,7 @@ async function getHotelRatesForCity(
       hotelRate: isEuroPassport ? toNumber(hotel.pp_double_eur, 0) : toNumber(hotel.pp_double_non_eur, 0),
       hotelName: hotel.property_name,
       selectedHotel: hotel,
+      boardBasis: hotel.board_basis || null,
     }
   } else {
     // NO FALLBACK: Don't silently use a hotel from a different city
@@ -480,6 +491,7 @@ async function getHotelRatesForCity(
       hotelRate: 0,
       hotelName: null,
       selectedHotel: null,
+      boardBasis: null,
       warning: `No hotel found for ${city} (${tier} tier) — please add a hotel for this city in Rates`,
     }
     console.warn(`⚠️ No hotel found for ${city}/${tier} — will show warning (not using wrong-city hotel)`)
@@ -1621,12 +1633,24 @@ export async function createLandItineraryServices(
     }
 
     // Detect if meals are hotel-provided for this day (All Inclusive, Full Board at hotel, etc.)
-    // Check: global meal plan AI, OR day description mentions hotel meals / all inclusive
+    // Check THREE sources:
+    //   1. Global meal plan from WhatsApp parser (AI = All Inclusive)
+    //   2. Day description mentions hotel meals / all inclusive
+    //   3. The actual hotel's board_basis from the database (most reliable)
     const dayDesc = (dayData.description || '').toLowerCase()
     const dayActivities = (dayData.activities || []).join(' ').toLowerCase()
     const dayText = `${dayDesc} ${dayActivities}`
     const hotelMealPatterns = /\b(all[- ]inclusive|full[- ]board|meals?\s+(at|in)\s+(the\s+)?hotel|lunch\s+(at|in)\s+(the\s+)?hotel|dinner\s+(at|in)\s+(the\s+)?hotel|hotel\s+(lunch|dinner|meals?))\b/i
-    const isHotelMealDay = isAllInclusive || hotelMealPatterns.test(dayText)
+    // Fetch the hotel's board_basis from the DB (cached, so no extra DB call on the hotel section below)
+    const overnightForMealCheck = dayData.overnight_city || dayData.city || effectiveCity
+    const hotelForMealCheck = includesHotelForDay
+      ? await getHotelRatesForCity(supabase, overnightForMealCheck, tier, isEuroPassport, rates)
+      : null
+    const hotelBoardBasis = hotelForMealCheck?.boardBasis?.toUpperCase().trim() || ''
+    const isHotelAllInclusive = hotelBoardBasis === 'AI'
+    const isHotelFullBoard = hotelBoardBasis === 'FB'
+    const isHotelHalfBoard = hotelBoardBasis === 'HB'
+    const isHotelMealDay = isAllInclusive || isHotelAllInclusive || isHotelFullBoard || hotelMealPatterns.test(dayText)
 
     // Lunch (only if included for this day) — strict city-scoped lookup
     // Skip separate restaurant services when meals are hotel-provided (AI, FB at hotel)
@@ -1656,7 +1680,8 @@ export async function createLandItineraryServices(
 
     // Dinner (only if included for this day) — strict city-scoped lookup
     // Skip separate restaurant services when meals are hotel-provided
-    const dinnerAtHotel = isHotelMealDay || /dinner\s+(at|in)\s+(the\s+)?hotel/i.test(dayText)
+    // HB (Half Board) includes dinner at hotel, so skip restaurant dinner for HB too
+    const dinnerAtHotel = isHotelMealDay || isHotelHalfBoard || /dinner\s+(at|in)\s+(the\s+)?hotel/i.test(dayText)
     if (dayIncludesDinner && !dinnerAtHotel) {
       const dinner = findMealRate(mealCity, 'dinner')
       if (dinner.warning) warnings.push(`Day ${dayNumber}: ${dinner.warning}`)
