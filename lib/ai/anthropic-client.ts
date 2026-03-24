@@ -150,6 +150,8 @@ export function getUserFriendlyError(error: unknown): { message: string; status:
       return { message: 'AI service is temporarily unavailable. Please try again shortly.', status: 503 }
     case 401:
       return { message: 'AI service authentication failed. Please contact support.', status: 500 }
+    case 402:
+      return { message: 'AI service billing issue — insufficient credits or payment required. Please check your Anthropic account.', status: 402 }
     case 400:
       return { message: 'The request was too large or malformed for the AI service. Try shortening the input.', status: 400 }
   }
