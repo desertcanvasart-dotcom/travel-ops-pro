@@ -54,7 +54,8 @@ import {
   Globe,
   Mail,
   Droplets,
-  Upload
+  Upload,
+  Calculator
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -137,6 +138,7 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'suppliers', href: '/suppliers', icon: Building },
       { labelKey: 'itineraries', href: '/itineraries', icon: Route },
+      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase },
       { labelKey: 'documents', href: '/documents', icon: FileText },
       { labelKey: 'teamMembers', href: '/team-members', icon: Users },
