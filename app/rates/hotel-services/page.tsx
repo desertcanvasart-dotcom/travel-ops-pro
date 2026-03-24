@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 
@@ -17,7 +18,7 @@ import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 // ============================================
 
 const SERVICE_TYPES = ['porter', 'checkin_assist', 'full_service', 'concierge']
-const HOTEL_CATEGORIES = ['budget', 'standard', 'luxury', 'all']
+const HOTEL_CATEGORIES = ['budget', 'standard', 'deluxe', 'luxury', 'all']
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 // ============================================
@@ -28,7 +29,8 @@ interface HotelStaffRate {
   id: string
   service_code: string
   service_type: string
-  hotel_category: 'budget' | 'standard' | 'luxury' | 'all'
+  hotel_category: 'budget' | 'standard' | 'deluxe' | 'luxury' | 'all'
+  destination: string | null
   rate_eur: number
   description: string | null
   notes: string | null
@@ -177,6 +179,7 @@ export default function HotelServicesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedService, setSelectedService] = useState('all')
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedDestination, setSelectedDestination] = useState('all')
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingRate, setEditingRate] = useState<HotelStaffRate | null>(null)
@@ -189,7 +192,8 @@ export default function HotelServicesPage() {
   const [formData, setFormData] = useState({
     service_code: '',
     service_type: 'porter',
-    hotel_category: 'all' as 'budget' | 'standard' | 'luxury' | 'all',
+    hotel_category: 'all' as 'budget' | 'standard' | 'deluxe' | 'luxury' | 'all',
+    destination: '' as string,
     rate_eur: 0,
     description: '',
     notes: '',
@@ -219,7 +223,7 @@ export default function HotelServicesPage() {
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedService, selectedCategory, showInactive, itemsPerPage])
+  }, [searchTerm, selectedService, selectedCategory, selectedDestination, showInactive, itemsPerPage])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
@@ -236,7 +240,8 @@ export default function HotelServicesPage() {
   const generateCode = () => {
     const svc = formData.service_type.replace('_', '').toUpperCase().substring(0, 6)
     const cat = formData.hotel_category.toUpperCase().substring(0, 3)
-    return `HOTEL-${svc}-${cat}`
+    const dest = formData.destination ? `-${formData.destination.toUpperCase().substring(0, 3)}` : ''
+    return `HOTEL-${svc}-${cat}${dest}`
   }
 
   const handleAddNew = () => {
@@ -245,6 +250,7 @@ export default function HotelServicesPage() {
       service_code: '',
       service_type: 'porter',
       hotel_category: 'all',
+      destination: '',
       rate_eur: 0,
       description: '',
       notes: '',
@@ -259,6 +265,7 @@ export default function HotelServicesPage() {
       service_code: rate.service_code,
       service_type: rate.service_type,
       hotel_category: rate.hotel_category,
+      destination: rate.destination || '',
       rate_eur: rate.rate_eur,
       description: rate.description || '',
       notes: rate.notes || '',
@@ -325,8 +332,9 @@ export default function HotelServicesPage() {
       rate.description?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesService = selectedService === 'all' || rate.service_type === selectedService
     const matchesCategory = selectedCategory === 'all' || rate.hotel_category === selectedCategory
+    const matchesDestination = selectedDestination === 'all' || (rate.destination || '') === selectedDestination
     const matchesActive = showInactive || rate.is_active
-    return matchesSearch && matchesService && matchesCategory && matchesActive
+    return matchesSearch && matchesService && matchesCategory && matchesDestination && matchesActive
   })
 
   // Pagination calculations
@@ -451,6 +459,17 @@ export default function HotelServicesPage() {
                 <option key={c} value={c}>{t(`hotelCategories.${c}`)}</option>
               ))}
             </select>
+            <select
+              value={selectedDestination}
+              onChange={(e) => setSelectedDestination(e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600"
+              title={t('filters.allDestinations')}
+            >
+              <option value="all">{t('filters.allDestinations')}</option>
+              {EGYPT_CITIES.map(city => (
+                <option key={city} value={city}>{city}</option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => setShowInactive(!showInactive)}
@@ -474,6 +493,7 @@ export default function HotelServicesPage() {
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-rose-800">{t('table.serviceType')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-rose-800">{t('table.hotelCategory')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-rose-800">{t('table.destination')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-rose-800">{t('table.rate')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-rose-800">{t('table.description')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-rose-800">{tCommon('status')}</th>
@@ -496,12 +516,16 @@ export default function HotelServicesPage() {
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                         rate.hotel_category === 'luxury' ? 'bg-amber-100 text-amber-800' :
+                        rate.hotel_category === 'deluxe' ? 'bg-violet-100 text-violet-800' :
                         rate.hotel_category === 'standard' ? 'bg-blue-100 text-blue-800' :
                         rate.hotel_category === 'budget' ? 'bg-gray-100 text-gray-700' :
                         'bg-green-100 text-green-800'
                       }`}>
                         {t(`hotelCategories.${rate.hotel_category}`)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {rate.destination || <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
                       {formatRate(rate.rate_eur)}
@@ -540,7 +564,7 @@ export default function HotelServicesPage() {
                 ))}
                 {paginatedRates.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                       <ConciergeBell className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p className="font-medium">{t('emptyState.noRatesFound')}</p>
                       <button type="button" onClick={handleAddNew} className="mt-2 text-sm text-rose-600 hover:underline">
@@ -609,6 +633,21 @@ export default function HotelServicesPage() {
                     ))}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.destination')}</label>
+                <select
+                  name="destination"
+                  value={formData.destination}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600"
+                  title={t('form.destination')}
+                >
+                  <option value="">{t('form.allDestinations')}</option>
+                  {EGYPT_CITIES.map(city => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateEur')} *</label>

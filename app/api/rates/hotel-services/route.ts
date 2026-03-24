@@ -24,6 +24,11 @@ export async function POST(request: NextRequest) {
     const supabase = createClient()
     const body = await request.json()
 
+    // Normalize empty destination to null (means "all destinations")
+    if (body.destination === '' || body.destination === undefined) {
+      body.destination = null
+    }
+
     // Check for existing rate with same natural key
     let existingQuery = supabase
       .from('hotel_staff_rates')
@@ -37,6 +42,11 @@ export async function POST(request: NextRequest) {
       existingQuery = existingQuery.eq('hotel_category', body.hotel_category)
     } else {
       existingQuery = existingQuery.is('hotel_category', null)
+    }
+    if (body.destination) {
+      existingQuery = existingQuery.eq('destination', body.destination)
+    } else {
+      existingQuery = existingQuery.is('destination', null)
     }
     const { data: existing } = await existingQuery.limit(1)
 

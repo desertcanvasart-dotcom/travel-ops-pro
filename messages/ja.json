@@ -4615,6 +4615,7 @@
       "filters": {
         "allServices": "すべてのサービス",
         "allCategories": "すべてのカテゴリ",
+        "allDestinations": "すべての目的地",
         "showAll": "すべて表示",
         "activeOnly": "有効のみ",
         "showing": "{total}件中{filtered}件のホテルサービス料金を表示"
@@ -4622,6 +4623,7 @@
       "table": {
         "serviceType": "サービスタイプ",
         "hotelCategory": "ホテルカテゴリ",
+        "destination": "目的地",
         "rate": "料金",
         "description": "説明"
       },
@@ -4634,6 +4636,7 @@
       "hotelCategories": {
         "budget": "バジェット",
         "standard": "スタンダード",
+        "deluxe": "デラックス",
         "luxury": "ラグジュアリー",
         "all": "すべて"
       },
@@ -4648,6 +4651,8 @@
       "form": {
         "serviceType": "サービスタイプ",
         "hotelCategory": "ホテルカテゴリ",
+        "destination": "目的地",
+        "allDestinations": "すべての目的地（デフォルト）",
         "rateEur": "料金 (€)",
         "description": "説明",
         "descriptionPlaceholder": "例：ポーターサービス（1滞在あたり）",

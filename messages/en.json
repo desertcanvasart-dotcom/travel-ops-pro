@@ -3714,6 +3714,7 @@
       "filters": {
         "allServices": "All Services",
         "allCategories": "All Categories",
+        "allDestinations": "All Destinations",
         "showAll": "Show All",
         "activeOnly": "Active Only",
         "showing": "Showing {filtered} of {total} hotel service rates"
@@ -3721,6 +3722,7 @@
       "table": {
         "serviceType": "Service Type",
         "hotelCategory": "Hotel Category",
+        "destination": "Destination",
         "rate": "Rate",
         "description": "Description"
       },
@@ -3733,6 +3735,7 @@
       "hotelCategories": {
         "budget": "Budget",
         "standard": "Standard",
+        "deluxe": "Deluxe",
         "luxury": "Luxury",
         "all": "All"
       },
@@ -3747,6 +3750,8 @@
       "form": {
         "serviceType": "Service Type",
         "hotelCategory": "Hotel Category",
+        "destination": "Destination",
+        "allDestinations": "All Destinations (default)",
         "rateEur": "Rate (€)",
         "description": "Description",
         "descriptionPlaceholder": "e.g., Porter service per stay",

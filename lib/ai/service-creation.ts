@@ -778,9 +778,19 @@ export async function createLandItineraryServices(
       : currentCity
     )
     const previousWasCruise = previousDayData?.accommodation_type === 'cruise' || previousDayData?.is_cruise_day
+    // Cruise embarkation day: first cruise day after hotel stay (e.g., fly to Aswan, board cruise)
+    // Pre-boarding services (hotel checkout, airport services, transfers) should NOT be blocked
+    const isCruiseEmbarkationDay = isCruiseDay && !previousWasCruise && dayNumber > 1
     const isIntercityTransfer = previousDayData
       && previousOvernightCity
-      && previousOvernightCity.toLowerCase() !== currentCity.toLowerCase()
+      && (
+        // Standard: previous overnight city differs from current day's city
+        (previousOvernightCity.toLowerCase() !== currentCity.toLowerCase())
+        // Cruise disembarkation: guests are at dock city (currentCity) but overnight is elsewhere
+        // e.g., disembark at Luxor, sightsee, then transfer to Hurghada for overnight
+        || (previousWasCruise && dayData.overnight_city
+            && dayData.overnight_city.toLowerCase() !== currentCity.toLowerCase())
+      )
       && !hasDomesticFlightOnThisDay  // Any domestic flight means city change is by air, not road
       && !isCruiseDay  // Current day is NOT a cruise day (previous CAN be cruise — this handles checkout + drive)
       // Note: is_arrival is NOT excluded — arrival days CAN have intercity components
@@ -952,7 +962,8 @@ export async function createLandItineraryServices(
 
     // Airport Services (for arrivals/departures/domestic flights)
     // Skip on cruise days — bundled cruise transport covers airport staff + transfers
-    if (!isCruiseDay && (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info || hasDomesticFlightOnThisDay)) {
+    // EXCEPTION: cruise embarkation days with domestic flights still need airport services
+    if ((!isCruiseDay || (isCruiseEmbarkationDay && hasDomesticFlightOnThisDay)) && (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info || hasDomesticFlightOnThisDay)) {
       if (isDomesticFlight || isHybridDomesticDeparture || isHybridDomesticArrival) {
         // Domestic flight: airport services at BOTH departure and arrival airports
         services.push({
@@ -1094,7 +1105,9 @@ export async function createLandItineraryServices(
 
     // Hotel Services (for check-in/check-out — hotels only, not cruise)
     // On cruise days, check-in/check-out assistance is included in the bundled cruise transport
-    if (!isCruiseDay && (dayData.needs_hotel_service || dayData.is_arrival || dayData.is_departure) && !isFreeDay) {
+    // EXCEPTION: cruise embarkation days need hotel checkout (guests are leaving a hotel to board)
+    // Skip on intercity transfer days — the intercity section adds its own checkout + checkin services
+    if ((!isCruiseDay || isCruiseEmbarkationDay) && !isIntercityTransfer && (dayData.needs_hotel_service || dayData.is_arrival || dayData.is_departure || isCruiseEmbarkationDay) && !isFreeDay) {
       const isCruiseService = dayData.accommodation_type === 'cruise' || dayData.is_cruise_day
       services.push({
         service_type: 'hotel_service',
@@ -1115,8 +1128,17 @@ export async function createLandItineraryServices(
     // Detected when the day's city differs from the previous day's overnight city
     // This is SEPARATE from the local sightseeing vehicle at the destination
     if (isIntercityTransfer) {
-      const originCity = previousOvernightCity || effectiveCity
-      const destCity = currentCity
+      // Cruise disembarkation with onward transfer: guests are already at dock city (currentCity),
+      // the real transfer is from the sightseeing city to the overnight destination
+      // e.g., disembark at Luxor, visit West Bank, then drive to Hurghada
+      const isCruiseDisembarkOnward = previousWasCruise && dayData.overnight_city
+        && dayData.overnight_city.toLowerCase() !== currentCity.toLowerCase()
+      const originCity = isCruiseDisembarkOnward
+        ? currentCity
+        : (previousOvernightCity || effectiveCity)
+      const destCity = isCruiseDisembarkOnward
+        ? dayData.overnight_city
+        : currentCity
 
       // Try to fetch route-specific intercity rate from transportation_rates
       const { getTransportRateForPax: getIntercityRate } = await import('@/lib/transport-rate-utils')
