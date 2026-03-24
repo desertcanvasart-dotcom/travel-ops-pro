@@ -117,6 +117,47 @@ function normalizeAttractionForMatch(name: string): string {
 }
 
 // ============================================
+// AIRPORT CODE MAPPING
+// ============================================
+
+const CITY_TO_AIRPORT: Record<string, string> = {
+  cairo: 'CAI', giza: 'CAI',
+  luxor: 'LXR',
+  aswan: 'ASW',
+  hurghada: 'HRG', 'el gouna': 'HRG', safaga: 'HRG',
+  'sharm el sheikh': 'SSH', sharm: 'SSH', dahab: 'SSH', taba: 'SSH',
+}
+
+/**
+ * Get airport service rate for a specific city + direction.
+ * Falls back to any matching airport, then to a global fallback.
+ */
+function getAirportServiceRate(
+  allAirportRates: any[] | null,
+  city: string,
+  direction: 'arrival' | 'departure',
+  fallbackRate: number
+): number {
+  if (!allAirportRates?.length) return fallbackRate
+  const airportCode = CITY_TO_AIRPORT[city.toLowerCase()] || null
+
+  // 1. Try exact airport + direction match
+  if (airportCode) {
+    const exactMatch = allAirportRates.find(
+      (r: any) => r.airport_code === airportCode && (r.direction === direction || r.direction === 'both')
+    )
+    if (exactMatch) return toNumber(exactMatch.rate_eur, 0)
+
+    // 2. Try airport match (any direction)
+    const airportMatch = allAirportRates.find((r: any) => r.airport_code === airportCode)
+    if (airportMatch) return toNumber(airportMatch.rate_eur, 0)
+  }
+
+  // 3. Fallback: first row's rate (NOT sum of all rows)
+  return fallbackRate
+}
+
+// ============================================
 // PRICING RATES (fetched from DB)
 // ============================================
 
@@ -148,7 +189,8 @@ export interface PricingRates {
   lunchRate: number       // Fallback flat rate (kept for backward compat)
   dinnerRate: number      // Fallback flat rate (kept for backward compat)
   allMealRates: MealRateRecord[]  // All active meal rates for per-city lookup
-  airportServiceRate: number
+  airportServiceRate: number  // Legacy fallback (first row's rate)
+  allAirportRates: any[]     // All active airport_staff_rates rows for per-airport lookup
   hotelServiceRate: number
   hotelRate: number
   hotelName: string | null
@@ -265,9 +307,11 @@ export async function fetchAllPricingRates(
   if (!allMealRates?.length) console.warn('⚠️ No meal rates found in meal_rates table')
 
   // Airport services (airport_staff_rates table — managed via Rates > Airport Services UI)
+  // Fetch ALL active rows — per-airport rates are looked up dynamically via getAirportServiceRate()
   const { data: airportServicesData } = await supabase.from('airport_staff_rates').select('*').eq('is_active', true)
-  const airportServiceRate = airportServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
-  if (!airportServiceRate) console.warn('⚠️ No airport service rates found in airport_staff_rates — airport service will be €0')
+  if (!airportServicesData?.length) console.warn('⚠️ No airport service rates found in airport_staff_rates — airport service will be €0')
+  // Legacy: compute a fallback rate from the first row (NOT the sum of all rows)
+  const airportServiceRate = airportServicesData?.length ? toNumber(airportServicesData[0].rate_eur, 0) : 0
 
   // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
   const { data: hotelServicesData } = await supabase.from('hotel_staff_rates').select('*').eq('is_active', true)
@@ -361,6 +405,7 @@ export async function fetchAllPricingRates(
     dinnerRate,
     allMealRates: (allMealRates || []) as MealRateRecord[],
     airportServiceRate,
+    allAirportRates: airportServicesData || [],
     hotelServiceRate,
     hotelRate,
     hotelName: hotelName_final,
@@ -447,7 +492,8 @@ async function getTransportRatesForCity(
 // ============================================
 
 interface CityHotelRates {
-  hotelRate: number
+  hotelRate: number  // per-person in double occupancy
+  singleSupplement: number  // extra charge when 1 pax occupies a double room alone
   hotelName: string | null
   selectedHotel: any
   boardBasis: string | null  // RO|BB|HB|FB|AI — from accommodation_rates.board_basis
@@ -480,6 +526,7 @@ async function getHotelRatesForCity(
     const hotel = hotels[0]
     result = {
       hotelRate: isEuroPassport ? toNumber(hotel.pp_double_eur, 0) : toNumber(hotel.pp_double_non_eur, 0),
+      singleSupplement: isEuroPassport ? toNumber(hotel.single_supp_eur, 0) : toNumber(hotel.single_supp_non_eur, 0),
       hotelName: hotel.property_name,
       selectedHotel: hotel,
       boardBasis: hotel.board_basis || null,
@@ -489,6 +536,7 @@ async function getHotelRatesForCity(
     // Return zero rate with a warning so the user knows to add the hotel
     result = {
       hotelRate: 0,
+      singleSupplement: 0,
       hotelName: null,
       selectedHotel: null,
       boardBasis: null,
@@ -868,19 +916,20 @@ export async function createLandItineraryServices(
       const departureServices: any[] = []
 
       // Airport service (international departure)
+      const depAirportRate = getAirportServiceRate(rates.allAirportRates, currentCity, 'departure', rates.airportServiceRate)
       departureServices.push({
         service_type: 'airport_service',
         service_code: 'AIRPORT',
         service_name: 'Airport Meet & Assist (International)',
         quantity: 1,
-        rate_eur: rates.airportServiceRate,
-        rate_non_eur: rates.airportServiceRate,
-        total_cost: rates.airportServiceRate,
-        client_price: withMargin(rates.airportServiceRate),
+        rate_eur: depAirportRate,
+        rate_non_eur: depAirportRate,
+        total_cost: depAirportRate,
+        client_price: withMargin(depAirportRate),
         notes: dayData.flight_info ? `Flight: ${dayData.flight_info}` : 'Airport assistance'
       })
-      totalSupplierCost += rates.airportServiceRate
-      totalClientPrice += withMargin(rates.airportServiceRate)
+      totalSupplierCost += depAirportRate
+      totalClientPrice += withMargin(depAirportRate)
 
       // Hotel service (check-out assistance)
       const isCruiseCheckout = dayData.accommodation_type === 'cruise' || dayData.is_cruise_day
@@ -978,64 +1027,72 @@ export async function createLandItineraryServices(
     if ((!isCruiseDay || (isCruiseEmbarkationDay && hasDomesticFlightOnThisDay)) && (dayData.needs_airport_service || dayData.is_arrival || dayData.is_departure || dayData.flight_info || hasDomesticFlightOnThisDay)) {
       if (isDomesticFlight || isHybridDomesticDeparture || isHybridDomesticArrival) {
         // Domestic flight: airport services at BOTH departure and arrival airports
+        // Use per-airport rates based on the actual cities involved
+        const domDepCity = previousDayData?.overnight_city || previousDayData?.city || effectiveCity
+        const domArrCity = dayData.city || effectiveCity
+        const domDepAirportRate = getAirportServiceRate(rates.allAirportRates, domDepCity, 'departure', rates.airportServiceRate)
+        const domArrAirportRate = getAirportServiceRate(rates.allAirportRates, domArrCity, 'arrival', rates.airportServiceRate)
+
         services.push({
           service_type: 'airport_service',
           service_code: 'AIRPORT',
           service_name: 'Airport Meet & Assist - Departure (Domestic)',
           quantity: 1,
-          rate_eur: rates.airportServiceRate,
-          rate_non_eur: rates.airportServiceRate,
-          total_cost: rates.airportServiceRate,
-          client_price: withMargin(rates.airportServiceRate),
+          rate_eur: domDepAirportRate,
+          rate_non_eur: domDepAirportRate,
+          total_cost: domDepAirportRate,
+          client_price: withMargin(domDepAirportRate),
           notes: `Domestic flight departure: ${dayData.flight_info || ''}`
         })
-        totalSupplierCost += rates.airportServiceRate
-        totalClientPrice += withMargin(rates.airportServiceRate)
+        totalSupplierCost += domDepAirportRate
+        totalClientPrice += withMargin(domDepAirportRate)
 
         services.push({
           service_type: 'airport_service',
           service_code: 'AIRPORT',
           service_name: 'Airport Meet & Assist - Arrival (Domestic)',
           quantity: 1,
-          rate_eur: rates.airportServiceRate,
-          rate_non_eur: rates.airportServiceRate,
-          total_cost: rates.airportServiceRate,
-          client_price: withMargin(rates.airportServiceRate),
-          notes: `Domestic flight arrival at ${dayData.city || 'destination'}`
+          rate_eur: domArrAirportRate,
+          rate_non_eur: domArrAirportRate,
+          total_cost: domArrAirportRate,
+          client_price: withMargin(domArrAirportRate),
+          notes: `Domestic flight arrival at ${domArrCity}`
         })
-        totalSupplierCost += rates.airportServiceRate
-        totalClientPrice += withMargin(rates.airportServiceRate)
+        totalSupplierCost += domArrAirportRate
+        totalClientPrice += withMargin(domArrAirportRate)
 
         // HYBRID: If this day also has an international departure/arrival, add a 3rd airport service
         if (isHybridDomesticDeparture) {
+          const hybridDepRate = getAirportServiceRate(rates.allAirportRates, domArrCity, 'departure', rates.airportServiceRate)
           services.push({
             service_type: 'airport_service',
             service_code: 'AIRPORT',
             service_name: 'Airport Meet & Assist (International Departure)',
             quantity: 1,
-            rate_eur: rates.airportServiceRate,
-            rate_non_eur: rates.airportServiceRate,
-            total_cost: rates.airportServiceRate,
-            client_price: withMargin(rates.airportServiceRate),
+            rate_eur: hybridDepRate,
+            rate_non_eur: hybridDepRate,
+            total_cost: hybridDepRate,
+            client_price: withMargin(hybridDepRate),
             notes: `International departure: ${dayData.departure_flight_info || dayData.flight_info || ''}`
           })
-          totalSupplierCost += rates.airportServiceRate
-          totalClientPrice += withMargin(rates.airportServiceRate)
+          totalSupplierCost += hybridDepRate
+          totalClientPrice += withMargin(hybridDepRate)
         }
         if (isHybridDomesticArrival) {
+          const hybridArrRate = getAirportServiceRate(rates.allAirportRates, domDepCity, 'arrival', rates.airportServiceRate)
           services.push({
             service_type: 'airport_service',
             service_code: 'AIRPORT',
             service_name: 'Airport Meet & Assist (International Arrival)',
             quantity: 1,
-            rate_eur: rates.airportServiceRate,
-            rate_non_eur: rates.airportServiceRate,
-            total_cost: rates.airportServiceRate,
-            client_price: withMargin(rates.airportServiceRate),
+            rate_eur: hybridArrRate,
+            rate_non_eur: hybridArrRate,
+            total_cost: hybridArrRate,
+            client_price: withMargin(hybridArrRate),
             notes: `International arrival: ${dayData.arrival_flight_info || dayData.flight_info || ''}`
           })
-          totalSupplierCost += rates.airportServiceRate
-          totalClientPrice += withMargin(rates.airportServiceRate)
+          totalSupplierCost += hybridArrRate
+          totalClientPrice += withMargin(hybridArrRate)
         }
 
         // Domestic flight needs TWO airport transfers (hotel→airport + airport→destination)
@@ -1098,20 +1155,22 @@ export async function createLandItineraryServices(
         // International arrival/departure OR explicit needs_airport_service
         const isInternational = dayData.is_arrival || dayData.is_departure
         const serviceDesc = isInternational ? 'Airport Meet & Assist (International)' : 'Airport Meet & Assist (Domestic)'
+        const direction = dayData.is_departure ? 'departure' : 'arrival'
+        const intlAirportRate = getAirportServiceRate(rates.allAirportRates, currentCity, direction, rates.airportServiceRate)
 
         services.push({
           service_type: 'airport_service',
           service_code: 'AIRPORT',
           service_name: serviceDesc,
           quantity: 1,
-          rate_eur: rates.airportServiceRate,
-          rate_non_eur: rates.airportServiceRate,
-          total_cost: rates.airportServiceRate,
-          client_price: withMargin(rates.airportServiceRate),
+          rate_eur: intlAirportRate,
+          rate_non_eur: intlAirportRate,
+          total_cost: intlAirportRate,
+          client_price: withMargin(intlAirportRate),
           notes: dayData.flight_info ? `Flight: ${dayData.flight_info}` : 'Airport assistance'
         })
-        totalSupplierCost += rates.airportServiceRate
-        totalClientPrice += withMargin(rates.airportServiceRate)
+        totalSupplierCost += intlAirportRate
+        totalClientPrice += withMargin(intlAirportRate)
       }
     }
 
@@ -1733,18 +1792,23 @@ export async function createLandItineraryServices(
         warnings.push(`Day ${dayNumber}: ${cityHotel.warning}`)
       }
       if (cityHotel.hotelRate > 0 && cityHotel.hotelName) {
-        const hotelCost = cityHotel.hotelRate * totalPax
+        // Single pax: charge pp_double + single supplement (solo traveler occupies a full double room)
+        const isSinglePax = totalPax === 1
+        const singleSupp = isSinglePax ? cityHotel.singleSupplement : 0
+        const perPersonRate = cityHotel.hotelRate + singleSupp
+        const hotelCost = perPersonRate * totalPax  // totalPax is 1 for singles, so: pp_double + single_supp
+        const singleSuppNote = isSinglePax && singleSupp > 0 ? ` (incl. single supplement €${singleSupp})` : ''
         services.push({
           service_type: 'accommodation',
           service_code: cityHotel.selectedHotel?.id || 'HOTEL',
           service_name: `${cityHotel.hotelName} (${totalPax} ${totalPax > 1 ? 'persons' : 'person'})`,
           supplier_name: cityHotel.hotelName,
           quantity: totalPax,
-          rate_eur: cityHotel.hotelRate,
-          rate_non_eur: cityHotel.hotelRate,
+          rate_eur: perPersonRate,
+          rate_non_eur: perPersonRate,
           total_cost: hotelCost,
           client_price: withMargin(hotelCost),
-          notes: `Overnight at ${cityHotel.hotelName} in ${overnightForHotel}`
+          notes: `Overnight at ${cityHotel.hotelName} in ${overnightForHotel}${singleSuppNote}`
         })
         totalSupplierCost += hotelCost
         totalClientPrice += withMargin(hotelCost)
