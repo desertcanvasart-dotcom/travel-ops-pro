@@ -186,7 +186,13 @@ export async function POST(request: NextRequest) {
     // ============================================
     const guideLanguage = language || 'English'
     const contentLanguage = 'English'
-    const tier: ServiceTier = raw_tier ? normalizeTier(raw_tier) : budget_level !== 'standard' ? normalizeTier(budget_level) : userPrefs.default_tier
+    // Tier priority: explicit raw_tier > budget_level > user default
+    // Note: budget_level 'standard' IS a valid explicit choice, not a fallback signal
+    const tier: ServiceTier = raw_tier
+      ? normalizeTier(raw_tier)
+      : budget_level
+        ? normalizeTier(budget_level)
+        : userPrefs.default_tier
 
     if (!isValidDate(start_date)) {
       return NextResponse.json(

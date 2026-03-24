@@ -1832,6 +1832,10 @@ export async function createLandItineraryServices(
         isEuroPassport
       })
 
+      if (!landCruiseRate.found) {
+        warnings.push(`Day ${dayNumber}: No Nile cruise rate found for ${tier} tier / ${totalPax} pax / ${cruiseNightsInPackage} nights — cruise pricing will be missing. Please add a cruise rate in Rates > Nile Cruise.`)
+        console.warn(`⚠️ Day ${dayNumber}: getCruiseRate() returned found=false — tier=${tier}, pax=${totalPax}, nights=${cruiseNightsInPackage}`)
+      }
       if (landCruiseRate.found) {
         const nightCost = landCruiseRate.totalPerNight
         const cabinDesc = landCruiseRate.cabinAllocation.map((a: CabinAllocation) => `${a.count}×${a.type}`).join(' + ')
