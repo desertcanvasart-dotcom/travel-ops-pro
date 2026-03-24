@@ -139,6 +139,17 @@ function getStatusCode(error: unknown): number | null {
 export function getUserFriendlyError(error: unknown): { message: string; status: number } {
   const statusCode = getStatusCode(error)
 
+  // Log the raw error details for debugging (visible in server logs / Vercel)
+  const rawMessage = error instanceof Error ? error.message : String(error)
+  const rawBody = (error as any)?.error?.message || (error as any)?.message || ''
+  console.error(`[AI Error] status=${statusCode} message="${rawMessage}" body="${rawBody}"`)
+
+  // Check for billing/credit issues first — Anthropic may return these as 400 with
+  // "credit balance is too low" in the message body, not always as 402
+  if (statusCode === 402 || /credit.*(low|insufficient|balance)|billing|payment.*(required|failed)/i.test(rawBody + rawMessage)) {
+    return { message: 'AI service billing issue — insufficient credits or payment required. Please check your Anthropic account.', status: 402 }
+  }
+
   switch (statusCode) {
     case 429:
       return { message: 'AI service rate limit reached. Please wait a moment and try again.', status: 429 }
@@ -150,8 +161,6 @@ export function getUserFriendlyError(error: unknown): { message: string; status:
       return { message: 'AI service is temporarily unavailable. Please try again shortly.', status: 503 }
     case 401:
       return { message: 'AI service authentication failed. Please contact support.', status: 500 }
-    case 402:
-      return { message: 'AI service billing issue — insufficient credits or payment required. Please check your Anthropic account.', status: 402 }
     case 400:
       return { message: 'The request was too large or malformed for the AI service. Try shortening the input.', status: 400 }
   }
