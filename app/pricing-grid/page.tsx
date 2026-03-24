@@ -121,42 +121,31 @@ export default function PricingGridPage() {
       const res = await fetch('/api/pricing-grid/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, tier: config.tier })
+        body: JSON.stringify({ text, tier: config.tier, pax: config.pax })
       })
       const data = await res.json()
       if (data.success && data.days) {
-        // Map parsed days to GridDay format
+        // The API returns days with slots already enriched (real rate IDs, names, prices)
         const parsedDays: GridDay[] = data.days.map((pd: any, idx: number) => ({
           id: crypto.randomUUID(),
-          dayNumber: idx + 1,
+          dayNumber: pd.dayNumber || idx + 1,
           title: pd.title || `Day ${idx + 1}`,
           city: pd.city || '',
           description: pd.description || '',
-          isExpanded: idx === 0,  // Expand first day only
+          isExpanded: idx === 0,
           slots: SLOT_DEFINITIONS.map(def => {
-            const parsed = pd.services?.[def.slotId]
-            if (!parsed) return { slotId: def.slotId, selectedItems: [], customAmount: 0 }
-
-            // Map parsed service IDs to rate options
-            if (def.selectionMode === 'custom') {
-              return { slotId: def.slotId, selectedItems: [], customAmount: typeof parsed === 'number' ? parsed : 0 }
+            const slotData = pd.slots?.[def.slotId]
+            if (!slotData) return { slotId: def.slotId, selectedItems: [], customAmount: 0 }
+            return {
+              slotId: def.slotId,
+              selectedItems: (slotData.selectedItems || []).map((item: any) => ({
+                rateId: item.rateId,
+                name: item.name,
+                rateEur: item.rateEur || 0,
+                rateNonEur: item.rateNonEur || 0,
+              })),
+              customAmount: slotData.customAmount || 0,
             }
-
-            const ids = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : [])
-            const rateKey = def.slotId as keyof AllRates
-            const available = rates?.[rateKey] || []
-            const selectedItems = ids
-              .map((id: string) => {
-                // Try exact match, then fuzzy name match
-                const exact = available.find(r => r.id === id)
-                if (exact) return { rateId: exact.id, name: exact.name, rateEur: exact.rateEur, rateNonEur: exact.rateNonEur }
-                const fuzzy = available.find(r => r.name.toLowerCase().includes(id.toLowerCase()))
-                if (fuzzy) return { rateId: fuzzy.id, name: fuzzy.name, rateEur: fuzzy.rateEur, rateNonEur: fuzzy.rateNonEur }
-                return null
-              })
-              .filter(Boolean)
-
-            return { slotId: def.slotId, selectedItems, customAmount: 0 }
           }),
         }))
         setDays(parsedDays)
