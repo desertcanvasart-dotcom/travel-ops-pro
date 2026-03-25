@@ -332,10 +332,16 @@ export async function POST(request: NextRequest) {
 
       const isFirstDay = idx === 0
       const isLastDay = idx === totalDays - 1
-      const hasSightseeing = (slots.entrance_fees?.length > 0) ||
-        /visit|tour|explore|sightsee|temple|pyramid|museum|bazaar|mosque|church|tomb|pyramid|sphinx|khan|old cairo|bazaar|citadel|valley|west bank/i.test(day.description || day.title || '')
+      const isArrivalDay = isFirstDay || /\barrival\b/i.test(day.title || '')
+      const isDepartureDay = isLastDay || /\bdeparture\b/i.test(day.title || '')
       const isCruiseDay = /cruise|sailing|on board|nile cruise/i.test(day.title || day.description || '')
       const isCruiseEmbarkation = /embark|board.*cruise|cruise.*embark|flight.*aswan.*cruise|fly.*aswan.*board/i.test(day.title || day.description || '')
+      // Sightseeing detection: only from TITLE (not description — hotel names in descriptions cause false positives)
+      // AND never on arrival/departure days
+      const hasSightseeing = !isArrivalDay && !isDepartureDay && (
+        (slots.entrance_fees?.length > 0) ||
+        /visit|tour|explore|sightsee|temple|pyramid|museum|bazaar|mosque|church|tomb|sphinx|khan|old cairo|citadel|valley|west bank/i.test(day.title || '')
+      )
 
       // Helper: check if slot is empty (handles undefined, null, empty array)
       const isEmpty = (key: string) => !slots[key] || !Array.isArray(slots[key]) || slots[key].length === 0
@@ -354,8 +360,8 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Touring day: auto-fill guide if missing
-      if (hasSightseeing && !isCruiseDay && isEmpty('guide')) {
+      // Touring day: auto-fill guide if missing (NEVER on arrival/departure/cruise days)
+      if (hasSightseeing && !isCruiseDay && !isArrivalDay && !isDepartureDay && isEmpty('guide')) {
         const guide = rawRates.guideRates?.find((g: any) => /spanish|english/i.test(g.guide_language || ''))
           || rawRates.guideRates?.[0]
         if (guide) {
@@ -366,8 +372,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Touring day: auto-fill vehicle if missing
-      if (hasSightseeing && !isCruiseDay && isEmpty('vehicle')) {
+      // Touring day: auto-fill vehicle if missing (NEVER on cruise days)
+      if (hasSightseeing && !isCruiseDay && !isDepartureDay && isEmpty('vehicle')) {
         const paxNum = pax || 2
         const cityVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const vehicle = cityVehicles.find((t: any) =>
@@ -458,8 +464,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Touring day: auto-fill meals (lunch + dinner) if missing
-      if (hasSightseeing && !isCruiseDay && isEmpty('meals')) {
+      // Touring day: auto-fill meals (lunch + dinner) if missing (NEVER on arrival/departure/cruise)
+      if (hasSightseeing && !isCruiseDay && !isArrivalDay && !isDepartureDay && isEmpty('meals')) {
         const cityLower = day.city?.toLowerCase()
         const cityMeals = rawRates.mealRates?.filter((m: any) =>
           m.city?.toLowerCase() === cityLower
@@ -483,7 +489,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Touring day: auto-fill tipping if missing (driver + guide tip)
-      if (hasSightseeing && !isCruiseDay && isEmpty('tipping')) {
+      // Arrival/departure days get only driver tip (added below)
+      if (hasSightseeing && !isCruiseDay && !isArrivalDay && !isDepartureDay && isEmpty('tipping')) {
         const tips = rawRates.tippingRates || []
         const driverTip = tips.find((t: any) => /driver.*day|TIP-DRIVER-DAY/i.test(t.role || t.service_code || ''))
           || tips.find((t: any) => /driver/i.test(t.role || t.service_code || ''))
@@ -496,6 +503,17 @@ export async function POST(request: NextRequest) {
           console.log(`Day ${day.dayNumber}: AUTO-FILLED ${tipIds.length} tips`)
         } else {
           console.log(`Day ${day.dayNumber}: No tips found (${tips.length} total tip rates)`)
+        }
+      }
+
+      // Arrival/departure day: driver tip only
+      if ((isArrivalDay || isDepartureDay) && isEmpty('tipping')) {
+        const tips = rawRates.tippingRates || []
+        const driverTip = tips.find((t: any) => /driver.*half|TIP-DRIVER-HALF/i.test(t.role || t.service_code || ''))
+          || tips.find((t: any) => /driver/i.test(t.role || t.service_code || ''))
+        if (driverTip) {
+          slots.tipping = [driverTip.id]
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED arrival/departure driver tip`)
         }
       }
 
