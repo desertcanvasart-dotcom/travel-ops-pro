@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
       { data: entranceFees },
       { data: mealRates },
       { data: cruiseRates },
+      { data: cruiseTransportPkgs },
     ] = await Promise.all([
       supabase.from('transportation_rates').select('*').eq('is_active', true),
       supabase.from('guide_rates').select('*').eq('is_active', true),
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
       supabase.from('entrance_fees').select('*').eq('is_active', true),
       supabase.from('meal_rates').select('*').eq('is_active', true),
       supabase.from('cruise_rates').select('*').eq('is_active', true).eq('tier', tier),
+      supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
     ])
 
     // Map to RateOption format per slot
@@ -52,17 +54,36 @@ export async function GET(request: NextRequest) {
           service_type: r.service_type,
         })),
 
-      route: (transportRates || [])
-        .filter((r: any) => r.service_type === 'intercity_transfer' || r.service_type === 'airport_transfer')
-        .map((r: any) => ({
+      route: [
+        ...(transportRates || [])
+          .filter((r: any) => r.service_type === 'intercity_transfer' || r.service_type === 'airport_transfer')
+          .map((r: any) => ({
+            id: r.id,
+            name: `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code,
+            rateEur: toNum(r.base_rate_eur),
+            rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
+            city: r.origin_city,
+            details: `${r.service_type} | ${r.vehicle_type || ''}`,
+            service_type: r.service_type,
+          })),
+        // Cruise transport packages (bundled sightseeing vehicle for cruise days)
+        ...(cruiseTransportPkgs || []).map((r: any) => ({
           id: r.id,
-          name: `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code,
-          rateEur: toNum(r.base_rate_eur),
-          rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
+          name: `${r.package_name} (${r.origin_city}→${r.destination_city}, ${r.duration_days}d)`,
+          rateEur: toNum(r.sedan_rate), // Default to sedan; UI can adjust by pax
+          rateNonEur: toNum(r.sedan_rate),
           city: r.origin_city,
-          details: `${r.service_type} | ${r.vehicle_type || ''}`,
-          service_type: r.service_type,
+          details: `cruise_package | ${r.description || ''}`,
+          service_type: 'cruise_transport_package',
+          package_type: r.package_type,
+          // Store all vehicle rates for pax-based selection
+          sedan_rate: toNum(r.sedan_rate),
+          minivan_rate: toNum(r.minivan_rate),
+          van_rate: toNum(r.van_rate),
+          minibus_rate: toNum(r.minibus_rate),
+          bus_rate: toNum(r.bus_rate),
         })),
+      ],
 
       guide: (guideRates || []).map((r: any) => ({
         id: r.id,
@@ -75,21 +96,28 @@ export async function GET(request: NextRequest) {
 
       airport_services: (airportRates || []).map((r: any) => ({
         id: r.id,
-        name: `${r.airport_code} - ${r.direction || 'both'}`,
-        rateEur: toNum(r.rate_eur),
-        rateNonEur: toNum(r.rate_eur),  // Airport rates are typically same for all
-        city: r.airport_code,
-        details: r.direction,
-      })),
-
-      hotel_services: (hotelServiceRates || []).map((r: any) => ({
-        id: r.id,
-        name: `${r.service_type || 'Hotel Service'}${r.destination ? ` (${r.destination})` : ''}`,
+        name: `${r.airport_code} — ${r.direction || 'both'} (${r.airport_code})`,
         rateEur: toNum(r.rate_eur),
         rateNonEur: toNum(r.rate_eur),
-        category: r.hotel_category,
-        details: r.description,
+        city: r.airport_code,
+        details: `${r.direction || 'both'} | ${r.description || ''}`.trim(),
       })),
+
+      hotel_services: (hotelServiceRates || []).map((r: any) => {
+        // Build a readable name from service_type + category + destination
+        const typeLabel = (r.service_type || 'service').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+        const catLabel = r.hotel_category && r.hotel_category !== 'all' ? ` (${r.hotel_category})` : ''
+        const destLabel = r.destination ? ` — ${r.destination}` : ''
+        return {
+          id: r.id,
+          name: `${typeLabel}${catLabel}${destLabel}`,
+          rateEur: toNum(r.rate_eur),
+          rateNonEur: toNum(r.rate_eur),
+          category: r.hotel_category,
+          city: r.destination,  // Use destination as city for filtering
+          details: r.description || `${typeLabel} | ${r.hotel_category || 'all'}`,
+        }
+      }),
 
       tipping: (tippingRates || []).map((r: any) => ({
         id: r.id,

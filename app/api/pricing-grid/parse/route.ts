@@ -177,19 +177,75 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 }
 \`\`\`
 
-## RULES
+## DAY TYPE RULES
+
+### Arrival Day (first day, international arrival)
+- airport_services: arrival service for the city's airport (Cairo=CAI, Luxor=LXR, Aswan=ASW, Hurghada=HRG, Sharm=SSH)
+- hotel_services: check-in service
+- vehicle: airport transfer matching pax and city
+- tipping: driver tip ONLY
+- accommodation: hotel in arrival city
+- NO guide, NO entrance fees, NO meals (arrival day = rest)
+
+### Departure Day (last day, international departure)
+- airport_services: departure service for the city's airport
+- hotel_services: check-out service
+- vehicle: hotel-to-airport transfer
+- tipping: driver tip ONLY
+- NO guide, NO entrance fees, NO meals, NO accommodation
+
+### Touring Day (ANY day with sightseeing, visits, temples, museums, pyramids, bazaar, old city, etc.)
+- vehicle: day-tour vehicle matching pax and city
+- guide: ALWAYS add a guide for touring days — pick the guide matching the requested language
+- entrance_fees: match EVERY attraction/site mentioned by name
+- meals: ALWAYS add lunch AND dinner for the day's city. Pick restaurant meals matching city.
+- water: ALWAYS add water
+- hotel_services: check-in/check-out service
+- tipping: driver tip + guide tip
+- accommodation: hotel in overnight city (if not last day)
+
+### Cruise Embarkation Day (fly/transfer to cruise, board the ship)
+- If there is a DOMESTIC FLIGHT: add airport_services for BOTH departure and arrival airports, add vehicle for airport transfers at both cities
+- hotel_services: check-out from hotel
+- cruise: SELECT THE CRUISE RATE — this is the per-person cabin rate for the entire cruise stay
+- tipping: driver tip
+- accommodation: NONE (sleeping on cruise)
+- meals: NONE on cruise (included)
+
+### Cruise Sailing/Touring Day (on board the Nile cruise, may visit temples at stops)
+- entrance_fees: match any temples/sites visited during stops (e.g., Kom Ombo, Edfu/Horus Temple)
+- tipping: NONE (cruise tips are separate)
+- vehicle: NONE (transport included in cruise package)
+- guide: NONE (included in cruise)
+- accommodation: NONE (cruise cabin)
+- meals: NONE (included in cruise)
+- cruise: EMPTY (already selected on embarkation day — cruise is charged ONCE for the entire stay)
+
+### Cruise Disembarkation Day (leave cruise, transfer to next destination)
+- vehicle: NONE (cruise transport package covers sightseeing vehicle on checkout day)
+- entrance_fees: match any sites visited (e.g., Valley of the Kings, Hatshepsut Temple)
+- If transferring to another city: add route (intercity transfer from dock city to overnight city)
+- hotel_services: cruise disembarkation + hotel check-in at destination
+- tipping: driver tip
+- accommodation: hotel in overnight city
+- meals: lunch + dinner at overnight city (if NOT all-inclusive hotel)
+
+### Free/Leisure Day (beach, resort, no sightseeing)
+- accommodation: hotel
+- water: add water
+- vehicle: NONE
+- guide: NONE
+- meals: ONLY if hotel is NOT all-inclusive (board_basis != AI)
+
+## MATCHING RULES
 - ALWAYS use actual IDs from the catalogs. If no matching rate exists, use an empty array [].
-- Arrival day: airport arrival service, hotel check-in, vehicle for transfer, driver tip. NO guide, NO entrance fees.
-- Departure day: airport departure service, hotel check-out, vehicle for transfer, driver tip. NO guide, NO meals.
-- Touring day: vehicle (for city), guide, entrance fees for sites visited, lunch + dinner meals for city, water, driver tip + guide tip.
-- Cruise day: cruise rate, tipping only. NO separate accommodation, NO separate meals (included in cruise).
-- Free/leisure day: accommodation only. Maybe water.
 - Match accommodation by CITY — pick the hotel in the correct city.
-- Match entrance fees by the ATTRACTION NAMES mentioned in the day's activities.
-- Match meals by CITY and meal type (lunch/dinner).
-- Match airport services by CITY (Cairo=CAI, Luxor=LXR, Aswan=ASW, Hurghada=HRG).
-- For vehicle, pick one that fits the pax count (capacity_min <= pax <= capacity_max) and matches the city.
-- For intercity transfers, match origin→destination cities.
+- Match entrance fees by ATTRACTION NAMES mentioned. Use fuzzy matching: "Temple of Horus" = "Edfu Temple", "Pyramids" = "Giza Plateau", "Khan el-Khalili" = "El-Muizz Street".
+- Match meals by CITY and meal type (lunch/dinner). For each touring day, add ONE lunch and ONE dinner.
+- Match airport services by CITY airport code.
+- Match vehicle by pax capacity AND city.
+- For intercity transfers (route slot), match origin→destination cities.
+- The cruise rate is charged ONCE on the embarkation day for the full cruise duration.
 
 Output ONLY valid JSON, no other text.`
 }

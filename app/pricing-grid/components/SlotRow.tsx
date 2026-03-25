@@ -6,13 +6,14 @@ import type { SlotDefinition, SlotValue, RateOption, SelectedItem, PassportType 
 interface SlotRowProps {
   definition: SlotDefinition
   value: SlotValue
-  options: RateOption[]
+  options: RateOption[]        // Filtered options (city-relevant)
+  allOptions?: RateOption[]    // All available options (for search fallback)
   passport: PassportType
   onChange: (value: SlotValue) => void
   hidden?: boolean
 }
 
-export default function SlotRow({ definition, value, options, passport, onChange, hidden }: SlotRowProps) {
+export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden }: SlotRowProps) {
   const [search, setSearch] = useState('')
 
   if (hidden) return null
@@ -24,9 +25,11 @@ export default function SlotRow({ definition, value, options, passport, onChange
     ? value.customAmount
     : value.selectedItems.reduce((sum, item) => sum + item[rateKey], 0)
 
-  // Filter options by search
+  // When searching, search across ALL options (not just filtered/city-relevant ones)
+  // When not searching, show only the filtered (city-relevant) options
+  const searchPool = search ? (allOptions || options) : options
   const filteredOptions = search
-    ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
+    ? searchPool.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
     : options
 
   // Toggle an item in multi-select

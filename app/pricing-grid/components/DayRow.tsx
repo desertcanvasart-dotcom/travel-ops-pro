@@ -28,20 +28,54 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
     return rates[key] || []
   }
 
-  // Filter options by day city where relevant
+  // Filter options by day city/context — show only relevant items by default
+  // Users can still find others via search in SlotRow
   const getFilteredOptions = (slotId: string) => {
     const allOptions = getSlotOptions(slotId)
     const city = day.city?.toLowerCase()
     if (!city) return allOptions
 
-    // For city-specific slots, show matching city first, then others
-    if (['accommodation', 'meals', 'entrance_fees'].includes(slotId)) {
-      const cityMatch = allOptions.filter(o => o.city?.toLowerCase() === city)
-      const others = allOptions.filter(o => o.city?.toLowerCase() !== city)
-      return [...cityMatch, ...others]
+    // City-to-airport code mapping
+    const cityToAirport: Record<string, string> = {
+      cairo: 'CAI', luxor: 'LXR', aswan: 'ASW', hurghada: 'HRG',
+      'sharm el sheikh': 'SSH', sharm: 'SSH', giza: 'CAI',
     }
+
+    // Airport services: filter by city's airport code
+    if (slotId === 'airport_services') {
+      const code = cityToAirport[city]
+      if (code) {
+        const match = allOptions.filter(o => o.city === code)
+        if (match.length > 0) return match
+      }
+      return allOptions
+    }
+
+    // Entrance fees, meals, experiences, boat rides: filter by city
+    if (['entrance_fees', 'meals', 'experiences', 'boat_rides'].includes(slotId)) {
+      const match = allOptions.filter(o => o.city?.toLowerCase() === city)
+      return match.length > 0 ? match : allOptions
+    }
+
+    // Accommodation: filter by city (already tier-filtered at API level)
+    if (slotId === 'accommodation') {
+      const match = allOptions.filter(o => o.city?.toLowerCase() === city)
+      return match.length > 0 ? match : allOptions
+    }
+
+    // Vehicle: filter by city
+    if (slotId === 'vehicle') {
+      const match = allOptions.filter(o => o.city?.toLowerCase() === city)
+      return match.length > 0 ? match : allOptions
+    }
+
+    // Route: show all (intercity routes aren't city-specific in the same way)
+    // Hotel services, tipping, guide: show all (not city-dependent)
     return allOptions
   }
+
+  // All options (unfiltered) for search fallback in SlotRow
+  const getAllOptions = (slotId: string) => getSlotOptions(slotId)
 
   return (
     <div className="bg-white border rounded-lg shadow-sm overflow-hidden mb-3">
@@ -118,6 +152,7 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
                 definition={def}
                 value={getSlotValue(def.slotId)}
                 options={getFilteredOptions(def.slotId)}
+                allOptions={getAllOptions(def.slotId)}
                 passport={config.passport}
                 onChange={(val) => onUpdateSlot(def.slotId, val)}
                 hidden={def.slotId === 'guide' && !config.withGuide}
@@ -139,6 +174,7 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
                 definition={def}
                 value={getSlotValue(def.slotId)}
                 options={getFilteredOptions(def.slotId)}
+                allOptions={getAllOptions(def.slotId)}
                 passport={config.passport}
                 onChange={(val) => onUpdateSlot(def.slotId, val)}
               />
