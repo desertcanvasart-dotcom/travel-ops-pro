@@ -382,6 +382,82 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Auto-fill route (airport transfers + intercity transfers) if missing
+      if (isEmpty('route')) {
+        const routes = rawRates.transportRates?.filter((t: any) =>
+          t.service_type === 'airport_transfer' || t.service_type === 'intercity_transfer'
+        ) || []
+        const routeIds: string[] = []
+        const cityLower = day.city?.toLowerCase()
+        const prevCity = idx > 0 ? (parsed.days[idx - 1]?.city || '')?.toLowerCase() : ''
+        const nextCity = idx < totalDays - 1 ? (parsed.days[idx + 1]?.city || '')?.toLowerCase() : ''
+        const overnightCity = (day.overnight_city || day.city || '')?.toLowerCase()
+
+        // Arrival day: airport transfer (airport → hotel)
+        if (isFirstDay) {
+          const airportTransfer = routes.find((r: any) =>
+            r.service_type === 'airport_transfer' &&
+            (r.origin_city?.toLowerCase() === cityLower || r.destination_city?.toLowerCase() === cityLower)
+          )
+          if (airportTransfer) routeIds.push(airportTransfer.id)
+        }
+
+        // Departure day: airport transfer (hotel → airport)
+        if (isLastDay) {
+          const airportTransfer = routes.find((r: any) =>
+            r.service_type === 'airport_transfer' &&
+            (r.origin_city?.toLowerCase() === cityLower || r.destination_city?.toLowerCase() === cityLower)
+          )
+          if (airportTransfer && !routeIds.includes(airportTransfer.id)) routeIds.push(airportTransfer.id)
+        }
+
+        // Domestic flight day (e.g., Cairo → Aswan): airport transfers at BOTH cities
+        if (/flight|fly/i.test(day.title || day.description || '') && !isFirstDay && !isLastDay) {
+          // Departure airport transfer (from previous city)
+          const depTransfer = routes.find((r: any) =>
+            r.service_type === 'airport_transfer' &&
+            (r.origin_city?.toLowerCase() === prevCity || r.destination_city?.toLowerCase() === prevCity)
+          )
+          if (depTransfer) routeIds.push(depTransfer.id)
+          // Arrival airport transfer (at new city)
+          const arrTransfer = routes.find((r: any) =>
+            r.service_type === 'airport_transfer' &&
+            (r.origin_city?.toLowerCase() === cityLower || r.destination_city?.toLowerCase() === cityLower) &&
+            r.id !== depTransfer?.id
+          )
+          if (arrTransfer) routeIds.push(arrTransfer.id)
+        }
+
+        // Intercity transfer: when previous overnight city differs from current city (not by flight)
+        if (!isFirstDay && !isLastDay && !/flight|fly/i.test(day.title || day.description || '')) {
+          if (prevCity && cityLower && prevCity !== cityLower && prevCity !== 'cruise') {
+            const intercity = routes.find((r: any) =>
+              r.service_type === 'intercity_transfer' &&
+              r.origin_city?.toLowerCase() === prevCity &&
+              r.destination_city?.toLowerCase() === cityLower
+            ) || routes.find((r: any) =>
+              r.service_type === 'intercity_transfer' &&
+              r.origin_city?.toLowerCase() === prevCity
+            )
+            if (intercity) routeIds.push(intercity.id)
+          }
+          // Also check if current city → overnight city differs (e.g., Luxor sightseeing → Hurghada overnight)
+          if (overnightCity && overnightCity !== cityLower) {
+            const onward = routes.find((r: any) =>
+              r.service_type === 'intercity_transfer' &&
+              r.origin_city?.toLowerCase() === cityLower &&
+              r.destination_city?.toLowerCase() === overnightCity
+            )
+            if (onward && !routeIds.includes(onward.id)) routeIds.push(onward.id)
+          }
+        }
+
+        if (routeIds.length > 0) {
+          slots.route = routeIds
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED ${routeIds.length} routes`)
+        }
+      }
+
       // Touring day: auto-fill meals (lunch + dinner) if missing
       if (hasSightseeing && !isCruiseDay && isEmpty('meals')) {
         const cityLower = day.city?.toLowerCase()
