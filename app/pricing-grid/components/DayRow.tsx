@@ -93,12 +93,15 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
 
     // Route: filter to relevant transfers (airport + intercity for this city)
     // Also include cruise transport packages on cruise-adjacent days
+    // Route is multi-select: a day can have multiple routes (e.g., airport + intercity)
     if (slotId === 'route') {
+      // Also include any currently selected items so they remain visible
+      const selectedIds = new Set(getSlotItems('route').map(i => i.rateId))
       return allOptions.filter(o => {
+        // Always show currently selected items
+        if (selectedIds.has(o.id)) return true
         // Always show cruise transport packages on cruise days
         if ((o as any).service_type === 'cruise_transport_package') return isCruiseDay
-        // Hide regular routes on cruise days
-        if (isCruiseDay) return false
         if (!city && !overnightCity) return false
         const originCity = (o as any).origin_city?.toLowerCase().trim() || ''
         const destCity = (o as any).destination_city?.toLowerCase().trim() || ''

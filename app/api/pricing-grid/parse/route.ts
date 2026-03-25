@@ -457,8 +457,12 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Touring day: auto-fill guide if missing (NEVER on arrival/departure/cruise days)
-      if (hasSightseeing && !isCruiseDay && !isArrivalDay && !isDepartureDay && isEmpty('guide')) {
+      // Touring day: auto-fill guide if missing
+      // Guide IS needed on cruise sightseeing days (embarkation sightseeing, disembarkation sightseeing)
+      // Guide is NOT needed on pure sailing days, arrival-only, departure-only
+      const needsGuide = hasSightseeing || isCruiseEmbarkation ||
+        /visit|tour|explore|sightsee|temple|pyramid|museum|tomb|valley|west bank|east bank|karnak|edfu|kom ombo|high dam|philae/i.test(day.title || day.description || '')
+      if (needsGuide && !isDepartureDay && isEmpty('guide')) {
         const guide = rawRates.guideRates?.find((g: any) => /spanish|english/i.test(g.guide_language || ''))
           || rawRates.guideRates?.[0]
         if (guide) {
@@ -488,76 +492,89 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Auto-fill route (airport transfers + intercity transfers) if missing
-      // Skip if in cruise range (cruise transport package covers all transfers)
-      // BUT: the day AFTER cruise range needs its onward transfer (e.g., Luxor → Hurghada)
-      if (isEmpty('route') && !isInCruiseRange) {
+      // Auto-fill route (airport transfers + intercity transfers)
+      // Route is now multi-select — a day can have multiple routes
+      // Cruise transport package is handled separately below and ADDED to routes (not replacing them)
+      {
         const routes = rawRates.transportRates?.filter((t: any) =>
           t.service_type === 'airport_transfer' || t.service_type === 'intercity_transfer'
         ) || []
-        const routeIds: string[] = []
+        const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
         const paxNum = pax || 2
         const tier = pickTierForPax(paxNum)
         const cityLower = day.city?.toLowerCase()?.trim()
         const prevDay = idx > 0 ? parsed.days[idx - 1] : null
         const prevCity = prevDay?.city?.toLowerCase()?.trim() || ''
         const prevOvernightCity = (prevDay?.overnight_city || prevDay?.city || '')?.toLowerCase()?.trim()
-        const nextCity = idx < totalDays - 1 ? (parsed.days[idx + 1]?.city || '')?.toLowerCase()?.trim() : ''
+        const nextDay = idx < totalDays - 1 ? parsed.days[idx + 1] : null
+        const nextCity = nextDay?.city?.toLowerCase()?.trim() || ''
         const overnightCity = (day.overnight_city || day.city || '')?.toLowerCase()?.trim()
 
         // Helper: match city flexibly (handles "Cairo" vs "cairo", partial matches)
         const cityMatch = (dbCity: string | undefined, target: string) => {
           if (!dbCity || !target) return false
           const db = dbCity.toLowerCase().trim()
+          // Filter out "cruise" as a city name
+          if (db === 'cruise' || target === 'cruise') return false
           return db === target || db.includes(target) || target.includes(db)
         }
 
-        // Helper: push tiered route ID
-        const pushRoute = (service: any) => {
+        // Helper: push tiered route ID (avoid duplicates)
+        const pushRoute = (service: any, label: string) => {
           const tieredId = `${service.id}__${tier}`
-          if (!routeIds.includes(tieredId)) routeIds.push(tieredId)
+          if (!routeIds.includes(tieredId)) {
+            routeIds.push(tieredId)
+            console.log(`Day ${day.dayNumber}: Route added: ${label} → ${service.service_type} ${service.origin_city}→${service.destination_city} (${tieredId})`)
+          }
         }
 
-        // Arrival day: airport transfer (airport → hotel)
+        // --- AIRPORT TRANSFERS ---
+
+        // Arrival day (first day): airport → hotel
         if (isFirstDay) {
           const airportTransfer = routes.find((r: any) =>
             r.service_type === 'airport_transfer' &&
             (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
           )
-          if (airportTransfer) {
-            pushRoute(airportTransfer)
-          } else {
-            console.log(`Day ${day.dayNumber}: No airport_transfer found for city "${cityLower}" (${routes.filter((r: any) => r.service_type === 'airport_transfer').length} airport transfers in DB)`)
-          }
+          if (airportTransfer) pushRoute(airportTransfer, 'arrival airport transfer')
         }
 
-        // Departure day: airport transfer (hotel → airport)
+        // Departure day (last day): hotel → airport
+        // The airport transfer is for the DEPARTURE city (this day's city, where the airport is)
         if (isLastDay) {
           const airportTransfer = routes.find((r: any) =>
             r.service_type === 'airport_transfer' &&
             (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
           )
-          if (airportTransfer) pushRoute(airportTransfer)
+          if (airportTransfer) pushRoute(airportTransfer, 'departure airport transfer')
         }
 
-        // Domestic flight day (e.g., Cairo → Aswan): airport transfers at BOTH cities
-        if (/flight|fly/i.test(day.title || day.description || '') && !isFirstDay && !isLastDay) {
+        // Domestic flight day: airport transfers at BOTH departure city and arrival city
+        const isFlightDay = /flight|fly/i.test(day.title || day.description || '')
+        if (isFlightDay && !isFirstDay && !isLastDay) {
+          // Departure city = where we slept last night (previous overnight city)
           const depCity = prevOvernightCity || prevCity
-          const depTransfer = routes.find((r: any) =>
-            r.service_type === 'airport_transfer' &&
-            (cityMatch(r.origin_city, depCity) || cityMatch(r.destination_city, depCity))
-          )
-          if (depTransfer) pushRoute(depTransfer)
-          const arrTransfer = routes.find((r: any) =>
-            r.service_type === 'airport_transfer' &&
-            (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!)) &&
-            r.id !== depTransfer?.id
-          )
-          if (arrTransfer) pushRoute(arrTransfer)
+          if (depCity && depCity !== 'cruise') {
+            const depTransfer = routes.find((r: any) =>
+              r.service_type === 'airport_transfer' &&
+              (cityMatch(r.origin_city, depCity) || cityMatch(r.destination_city, depCity))
+            )
+            if (depTransfer) pushRoute(depTransfer, 'flight departure airport transfer')
+          }
+          // Arrival city = this day's city
+          if (cityLower) {
+            const arrTransfer = routes.find((r: any) =>
+              r.service_type === 'airport_transfer' &&
+              (cityMatch(r.origin_city, cityLower) || cityMatch(r.destination_city, cityLower)) &&
+              !routeIds.includes(`${r.id}__${tier}`) // avoid duplicate if same city
+            )
+            if (arrTransfer) pushRoute(arrTransfer, 'flight arrival airport transfer')
+          }
         }
 
-        // Intercity transfer: when previous overnight city differs from current city (not by flight)
-        if (!isFirstDay && !isLastDay && !/flight|fly/i.test(day.title || day.description || '')) {
+        // --- INTERCITY TRANSFERS ---
+        // When previous overnight city differs from current day's city (and not a flight)
+        if (!isFirstDay && !isFlightDay) {
           const effectivePrevCity = prevOvernightCity || prevCity
           if (effectivePrevCity && cityLower && effectivePrevCity !== cityLower && effectivePrevCity !== 'cruise') {
             const intercity = routes.find((r: any) =>
@@ -568,25 +585,40 @@ export async function POST(request: NextRequest) {
               r.service_type === 'intercity_transfer' &&
               cityMatch(r.origin_city, effectivePrevCity)
             )
-            if (intercity) pushRoute(intercity)
-          }
-          // Also check if current city → overnight city differs
-          if (overnightCity && overnightCity !== cityLower) {
-            const onward = routes.find((r: any) =>
-              r.service_type === 'intercity_transfer' &&
-              cityMatch(r.origin_city, cityLower!) &&
-              cityMatch(r.destination_city, overnightCity)
-            )
-            if (onward) pushRoute(onward)
+            if (intercity) pushRoute(intercity, 'intercity from previous city')
           }
         }
 
+        // Onward transfer: when current day ends in a different city than it started
+        // e.g., Luxor sightseeing then transfer to Hurghada (overnight_city = Hurghada)
+        if (overnightCity && overnightCity !== cityLower && overnightCity !== 'cruise') {
+          const onward = routes.find((r: any) =>
+            r.service_type === 'intercity_transfer' &&
+            cityMatch(r.origin_city, cityLower!) &&
+            cityMatch(r.destination_city, overnightCity)
+          )
+          if (onward) pushRoute(onward, 'onward intercity transfer')
+        }
+
+        // Also check if NEXT day is in a different city and this isn't a flight/cruise day
+        // This catches cases like Day 6 (last cruise sightseeing in Luxor) going to Hurghada
+        if (!isLastDay && nextCity && nextCity !== cityLower && nextCity !== 'cruise' &&
+            overnightCity === cityLower && !isFlightDay) {
+          // Check if next day is NOT a flight (the next day handles its own airport transfers)
+          const nextIsFlightDay = /flight|fly/i.test(nextDay?.title || nextDay?.description || '')
+          if (!nextIsFlightDay) {
+            const onwardToNext = routes.find((r: any) =>
+              r.service_type === 'intercity_transfer' &&
+              cityMatch(r.origin_city, cityLower!) &&
+              cityMatch(r.destination_city, nextCity)
+            )
+            if (onwardToNext) pushRoute(onwardToNext, 'onward to next day city')
+          }
+        }
+
+        // Store all collected routes (but don't overwrite if cruise package handler will add more)
         if (routeIds.length > 0) {
           slots.route = routeIds
-          console.log(`Day ${day.dayNumber}: AUTO-FILLED ${routeIds.length} routes`)
-        } else if (isFirstDay || isLastDay) {
-          console.log(`Day ${day.dayNumber}: Route auto-fill found 0 matches. City="${cityLower}", DB routes:`,
-            routes.map((r: any) => `${r.service_type}: ${r.origin_city}→${r.destination_city}`).slice(0, 5))
         }
       }
 
@@ -670,28 +702,36 @@ export async function POST(request: NextRequest) {
       }
 
       // Cruise transport package handling:
-      // - On embarkation day (cruise range start): add the transport package to route slot
-      // - On ALL days in cruise range: clear vehicle, route (except package), and boat_rides
-      //   because the package covers ALL transportation (cars, felucca, motorboat, horse carriage, etc.)
+      // - On embarkation day (cruise range start): ADD the transport package to route slot
+      //   (alongside any airport transfers that were already added above)
+      // - On ALL days in cruise range: clear vehicle and boat_rides
+      //   because the package covers ALL transportation within cruise (cars, felucca, motorboat, horse carriage)
+      // - Route slot keeps any airport/intercity transfers that are OUTSIDE the cruise scope
+      //   (e.g., Cairo airport transfer on the flight day, Luxor→Hurghada after cruise)
       if (isInCruiseRange) {
-        // Clear individual transport slots — package covers everything
+        // Clear individual transport slots — package covers everything within cruise
         slots.vehicle = []
         slots.boat_rides = []
 
         if (isCruiseRangeStart) {
-          // Add cruise transport package on the first cruise day
+          // Add cruise transport package on the first cruise day (alongside existing routes)
           const pkg = rawRates.cruiseTransportPkgs?.[0]
           if (pkg) {
-            slots.route = [pkg.id]
-            console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise transport package → ${pkg.package_name} (covers days ${cruiseStartIdx + 1}-${cruiseEndIdx + 1})`)
+            const existingRoutes = Array.isArray(slots.route) ? slots.route : []
+            if (!existingRoutes.includes(pkg.id)) {
+              slots.route = [...existingRoutes, pkg.id]
+            }
+            console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise transport package → ${pkg.package_name} (covers days ${cruiseStartIdx + 1}-${cruiseEndIdx + 1}), total routes: ${slots.route.length}`)
           } else {
             console.log(`Day ${day.dayNumber}: No cruise transport packages in DB`)
-            slots.route = []
           }
-        } else {
-          // Non-embarkation cruise days: no route (package is on embarkation day)
-          slots.route = []
+        } else if (idx !== cruiseEndIdx) {
+          // Mid-cruise sailing days: no individual routes needed (package is on embarkation day)
+          // But keep any routes that were already set (e.g., from AI parse)
+          if (isEmpty('route')) slots.route = []
         }
+        // On cruise END day (last sightseeing): keep any onward transfers (e.g., Luxor→Hurghada)
+        // These were already added by the route auto-fill above
       }
 
       console.log(`Day ${day.dayNumber} "${day.title}": sightseeing=${hasSightseeing}, cruise=${isCruiseDay}, embark=${isCruiseEmbarkation}`,

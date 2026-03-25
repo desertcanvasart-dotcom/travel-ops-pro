@@ -38,7 +38,7 @@ export interface SlotDefinition {
 export const SLOT_DEFINITIONS: SlotDefinition[] = [
   // GROUP SERVICES (charged once, divided by pax)
   { slotId: 'vehicle',          label: 'Vehicle',          bucket: 'group',      selectionMode: 'auto',   icon: '🚗', rateTable: 'transportation_rates' },
-  { slotId: 'route',            label: 'Route',            bucket: 'group',      selectionMode: 'single', icon: '🛣️', rateTable: 'transportation_rates' },
+  { slotId: 'route',            label: 'Route',            bucket: 'group',      selectionMode: 'multi',  icon: '🛣️', rateTable: 'transportation_rates' },
   { slotId: 'guide',            label: 'Guide',            bucket: 'group',      selectionMode: 'single', icon: '👨‍🏫', rateTable: 'guide_rates' },
   { slotId: 'airport_services', label: 'Airport Services', bucket: 'group',      selectionMode: 'multi',  icon: '✈️', rateTable: 'airport_staff_rates' },
   { slotId: 'hotel_services',   label: 'Hotel Services',   bucket: 'group',      selectionMode: 'multi',  icon: '🏨', rateTable: 'hotel_staff_rates' },
