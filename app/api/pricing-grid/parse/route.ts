@@ -302,12 +302,31 @@ export async function POST(request: NextRequest) {
     const totalDays = parsed.days?.length || 0
     const processedDays = (parsed.days || []).map((day: any, idx: number) => {
       const slots = day.slots || {}
+
+      // Normalize all slot values to arrays (AI sometimes returns strings or single IDs)
+      for (const [key, val] of Object.entries(slots)) {
+        if (typeof val === 'string') slots[key] = val ? [val] : []
+        else if (typeof val === 'number') continue  // custom amounts
+        else if (!Array.isArray(val)) slots[key] = []
+      }
+
+      // Validate IDs: remove any that don't exist in the rate map
+      for (const [key, val] of Object.entries(slots)) {
+        if (Array.isArray(val)) {
+          const validIds = (val as string[]).filter(id => allRatesFlat.has(id))
+          if (validIds.length !== (val as string[]).length) {
+            console.log(`Day ${day.dayNumber} "${key}": dropped ${(val as string[]).length - validIds.length} invalid IDs`)
+          }
+          slots[key] = validIds
+        }
+      }
+
       const isFirstDay = idx === 0
       const isLastDay = idx === totalDays - 1
       const hasSightseeing = (slots.entrance_fees?.length > 0) ||
-        /visit|tour|explore|sightsee|temple|pyramid|museum|bazaar|mosque|church|tomb/i.test(day.description || day.title || '')
+        /visit|tour|explore|sightsee|temple|pyramid|museum|bazaar|mosque|church|tomb|pyramid|sphinx|khan|old cairo|bazaar|citadel|valley|west bank/i.test(day.description || day.title || '')
       const isCruiseDay = /cruise|sailing|on board|nile cruise/i.test(day.title || day.description || '')
-      const isCruiseEmbarkation = /embark|board.*cruise|cruise.*embark/i.test(day.title || day.description || '')
+      const isCruiseEmbarkation = /embark|board.*cruise|cruise.*embark|flight.*aswan.*cruise|fly.*aswan.*board/i.test(day.title || day.description || '')
 
       // Touring day: auto-fill guide if missing
       if (hasSightseeing && !isCruiseDay && (!slots.guide || slots.guide.length === 0)) {

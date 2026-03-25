@@ -69,8 +69,32 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
       return match.length > 0 ? match : allOptions
     }
 
-    // Route: show all (intercity routes aren't city-specific in the same way)
-    // Hotel services, tipping, guide: show all (not city-dependent)
+    // Hotel services: filter by tier
+    if (slotId === 'hotel_services') {
+      const tierMatch = allOptions.filter(o =>
+        (o as any).category === config.tier || (o as any).category === 'all'
+      )
+      return tierMatch.length > 0 ? tierMatch : allOptions
+    }
+
+    // Tipping: filter out irrelevant tips
+    // Show driver tip always, guide tip only if withGuide, and contextual tips
+    if (slotId === 'tipping') {
+      return allOptions.filter(o => {
+        const name = o.name?.toLowerCase() || ''
+        // Always show driver-related tips
+        if (/driver/i.test(name)) return true
+        // Show guide tips only when guide is enabled
+        if (/guide/i.test(name)) return config.withGuide
+        // Show porter/airport tips (always relevant)
+        if (/porter|airport/i.test(name)) return true
+        // Hide cruise/felucca tips unless relevant
+        if (/cruise|felucca|motor/i.test(name)) return false
+        return true
+      })
+    }
+
+    // Route, guide: show all
     return allOptions
   }
 
