@@ -14,18 +14,7 @@ import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic
 // ============================================
 
 async function buildRateCatalog(supabase: any, tier: string) {
-  const [
-    { data: transportRates },
-    { data: guideRates },
-    { data: airportRates },
-    { data: hotelServiceRates },
-    { data: tippingRates },
-    { data: activityRates },
-    { data: accommodationRates },
-    { data: entranceFees },
-    { data: mealRates },
-    { data: cruiseRates },
-  ] = await Promise.all([
+  const results = await Promise.all([
     supabase.from('transportation_rates').select('id, service_code, service_type, vehicle_type, origin_city, destination_city, capacity_min, capacity_max, base_rate_eur').eq('is_active', true),
     supabase.from('guide_rates').select('id, service_code, guide_language, guide_type, city, base_rate_eur, rate_eur').eq('is_active', true),
     supabase.from('airport_staff_rates').select('id, service_code, airport_code, direction, rate_eur').eq('is_active', true),
@@ -37,6 +26,25 @@ async function buildRateCatalog(supabase: any, tier: string) {
     supabase.from('meal_rates').select('id, service_code, restaurant_name, meal_type, city, base_rate_eur, base_rate_non_eur, rate_eur, rate_non_eur, tier').eq('is_active', true),
     supabase.from('cruise_rates').select('id, service_code, ship_name, route, nights, cabin_type, tier, season, rate_single_eur, rate_double_eur, rate_triple_eur').eq('is_active', true).eq('tier', tier),
   ])
+
+  // Log any Supabase errors
+  const tableNames = ['transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates', 'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'cruise_rates']
+  results.forEach((r: any, i: number) => {
+    if (r.error) console.error(`❌ DB ERROR fetching ${tableNames[i]}:`, r.error.message, r.error.details || '')
+  })
+
+  const [
+    { data: transportRates },
+    { data: guideRates },
+    { data: airportRates },
+    { data: hotelServiceRates },
+    { data: tippingRates },
+    { data: activityRates },
+    { data: accommodationRates },
+    { data: entranceFees },
+    { data: mealRates },
+    { data: cruiseRates },
+  ] = results
 
   // Build concise catalog strings for the AI prompt
   const catalog: Record<string, string> = {}
