@@ -54,14 +54,28 @@ async function buildRateCatalog(supabase: any, tier: string) {
   // Build concise catalog strings for the AI prompt
   const catalog: Record<string, string> = {}
 
+  // Vehicle tiers: expand each service row into options per vehicle type
+  const VEHICLE_TIERS = [
+    { key: 'sedan',   label: 'Sedan',   capMin: 1,  capMax: 2  },
+    { key: 'minivan', label: 'Minivan', capMin: 3,  capMax: 7  },
+    { key: 'van',     label: 'Van',     capMin: 8,  capMax: 12 },
+    { key: 'minibus', label: 'Minibus', capMin: 13, capMax: 20 },
+    { key: 'bus',     label: 'Bus',     capMin: 21, capMax: 45 },
+  ]
+
+  const expandCatalogTiers = (r: any, prefix: string) =>
+    VEHICLE_TIERS
+      .filter(t => parseFloat(r[`${t.key}_rate_eur`]) > 0)
+      .map(t => `ID:${r.id}__${t.key} | ${t.label} (${t.capMin}-${t.capMax}pax) | ${prefix} | ${r.origin_city || r.city || 'any'} | €${r[`${t.key}_rate_eur`]}`)
+
   catalog.vehicle = (transportRates || [])
     .filter((r: any) => r.service_type === 'day_tour')
-    .map((r: any) => `ID:${r.id} | ${r.vehicle_type} | ${r.capacity_min}-${r.capacity_max}pax | ${r.origin_city || 'any'} | €${r.base_rate_eur}`)
+    .flatMap((r: any) => expandCatalogTiers(r, r.route_name || r.service_code || 'Day Tour'))
     .join('\n')
 
   catalog.route = (transportRates || [])
     .filter((r: any) => ['intercity_transfer', 'airport_transfer'].includes(r.service_type))
-    .map((r: any) => `ID:${r.id} | ${r.service_type} | ${r.origin_city || ''}→${r.destination_city || ''} | ${r.vehicle_type} | €${r.base_rate_eur}`)
+    .flatMap((r: any) => expandCatalogTiers(r, `${r.service_type} | ${r.origin_city || ''}→${r.destination_city || ''}`))
     .join('\n')
 
   catalog.guide = (guideRates || [])
@@ -332,6 +346,15 @@ export async function POST(request: NextRequest) {
     // 5. Enrich parsed days with actual rate data (prices, names, etc.)
     const allRatesFlat = buildFlatRateMap(rawRates)
 
+    // Helper: pick the right vehicle tier key for a given pax count
+    const pickTierForPax = (paxNum: number): string => {
+      if (paxNum <= 2) return 'sedan'
+      if (paxNum <= 7) return 'minivan'
+      if (paxNum <= 12) return 'van'
+      if (paxNum <= 20) return 'minibus'
+      return 'bus'
+    }
+
     // 6. Post-process: fill obvious gaps the AI missed (deterministic rules)
     const totalDays = parsed.days?.length || 0
     const processedDays = (parsed.days || []).map((day: any, idx: number) => {
@@ -398,27 +421,33 @@ export async function POST(request: NextRequest) {
       }
 
       // Touring day: auto-fill vehicle if missing (NEVER on cruise days)
+      // Selects the correct vehicle tier (sedan/minivan/van/etc.) based on pax count
       if (hasSightseeing && !isCruiseDay && !isDepartureDay && isEmpty('vehicle')) {
         const paxNum = pax || 2
         const cityVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
-        const vehicle = cityVehicles.find((t: any) =>
-          (!t.origin_city || t.origin_city?.toLowerCase() === day.city?.toLowerCase()) &&
-          t.capacity_min <= paxNum && t.capacity_max >= paxNum
-        ) || cityVehicles.find((t: any) =>
-          t.capacity_min <= paxNum && t.capacity_max >= paxNum
+        // Find the service matching city
+        const service = cityVehicles.find((t: any) =>
+          t.origin_city?.toLowerCase()?.trim() === day.city?.toLowerCase()?.trim() ||
+          t.city?.toLowerCase()?.trim() === day.city?.toLowerCase()?.trim()
         ) || cityVehicles[0]
-        if (vehicle) {
-          slots.vehicle = [vehicle.id]
-          console.log(`Day ${day.dayNumber}: AUTO-FILLED vehicle → ${vehicle.vehicle_type} (${vehicle.id})`)
+        if (service) {
+          // Pick the right vehicle tier for pax count
+          const tier = pickTierForPax(paxNum)
+          const tierId = `${service.id}__${tier}`
+          slots.vehicle = [tierId]
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED vehicle → ${tier} for ${paxNum} pax (${tierId})`)
         }
       }
 
       // Auto-fill route (airport transfers + intercity transfers) if missing
+      // Uses tiered composite IDs: ${serviceId}__${tierKey}
       if (isEmpty('route')) {
         const routes = rawRates.transportRates?.filter((t: any) =>
           t.service_type === 'airport_transfer' || t.service_type === 'intercity_transfer'
         ) || []
         const routeIds: string[] = []
+        const paxNum = pax || 2
+        const tier = pickTierForPax(paxNum)
         const cityLower = day.city?.toLowerCase()?.trim()
         const prevDay = idx > 0 ? parsed.days[idx - 1] : null
         const prevCity = prevDay?.city?.toLowerCase()?.trim() || ''
@@ -433,6 +462,12 @@ export async function POST(request: NextRequest) {
           return db === target || db.includes(target) || target.includes(db)
         }
 
+        // Helper: push tiered route ID
+        const pushRoute = (service: any) => {
+          const tieredId = `${service.id}__${tier}`
+          if (!routeIds.includes(tieredId)) routeIds.push(tieredId)
+        }
+
         // Arrival day: airport transfer (airport → hotel)
         if (isFirstDay) {
           const airportTransfer = routes.find((r: any) =>
@@ -440,7 +475,7 @@ export async function POST(request: NextRequest) {
             (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
           )
           if (airportTransfer) {
-            routeIds.push(airportTransfer.id)
+            pushRoute(airportTransfer)
           } else {
             console.log(`Day ${day.dayNumber}: No airport_transfer found for city "${cityLower}" (${routes.filter((r: any) => r.service_type === 'airport_transfer').length} airport transfers in DB)`)
           }
@@ -452,7 +487,7 @@ export async function POST(request: NextRequest) {
             r.service_type === 'airport_transfer' &&
             (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
           )
-          if (airportTransfer && !routeIds.includes(airportTransfer.id)) routeIds.push(airportTransfer.id)
+          if (airportTransfer) pushRoute(airportTransfer)
         }
 
         // Domestic flight day (e.g., Cairo → Aswan): airport transfers at BOTH cities
@@ -462,13 +497,13 @@ export async function POST(request: NextRequest) {
             r.service_type === 'airport_transfer' &&
             (cityMatch(r.origin_city, depCity) || cityMatch(r.destination_city, depCity))
           )
-          if (depTransfer) routeIds.push(depTransfer.id)
+          if (depTransfer) pushRoute(depTransfer)
           const arrTransfer = routes.find((r: any) =>
             r.service_type === 'airport_transfer' &&
             (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!)) &&
             r.id !== depTransfer?.id
           )
-          if (arrTransfer) routeIds.push(arrTransfer.id)
+          if (arrTransfer) pushRoute(arrTransfer)
         }
 
         // Intercity transfer: when previous overnight city differs from current city (not by flight)
@@ -483,7 +518,7 @@ export async function POST(request: NextRequest) {
               r.service_type === 'intercity_transfer' &&
               cityMatch(r.origin_city, effectivePrevCity)
             )
-            if (intercity) routeIds.push(intercity.id)
+            if (intercity) pushRoute(intercity)
           }
           // Also check if current city → overnight city differs
           if (overnightCity && overnightCity !== cityLower) {
@@ -492,7 +527,7 @@ export async function POST(request: NextRequest) {
               cityMatch(r.origin_city, cityLower!) &&
               cityMatch(r.destination_city, overnightCity)
             )
-            if (onward && !routeIds.includes(onward.id)) routeIds.push(onward.id)
+            if (onward) pushRoute(onward)
           }
         }
 
@@ -640,10 +675,29 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
     }
   }
 
-  addAll(rawRates.transportRates, (r: any) => ({
-    rateId: r.id, name: `${r.vehicle_type || 'Vehicle'} — ${r.origin_city || ''}${r.destination_city ? '→' + r.destination_city : ''}`,
-    rateEur: toNum(r.base_rate_eur), rateNonEur: toNum(r.base_rate_eur),
-  }))
+  // Expand transport rows into vehicle-tier entries (sedan, minivan, van, minibus, bus)
+  const TIERS = [
+    { key: 'sedan',   label: 'Sedan',   capMin: 1,  capMax: 2  },
+    { key: 'minivan', label: 'Minivan', capMin: 3,  capMax: 7  },
+    { key: 'van',     label: 'Van',     capMin: 8,  capMax: 12 },
+    { key: 'minibus', label: 'Minibus', capMin: 13, capMax: 20 },
+    { key: 'bus',     label: 'Bus',     capMin: 21, capMax: 45 },
+  ]
+  for (const r of rawRates.transportRates || []) {
+    if (!r.id) continue
+    const routeLabel = r.route_name || r.service_code || `${r.origin_city || ''}${r.destination_city ? '→' + r.destination_city : ''}`
+    for (const t of TIERS) {
+      const rate = toNum(r[`${t.key}_rate_eur`])
+      if (rate > 0) {
+        map.set(`${r.id}__${t.key}`, {
+          rateId: `${r.id}__${t.key}`,
+          name: `${t.label} (${t.capMin}-${t.capMax} pax) — ${routeLabel}`,
+          rateEur: rate,
+          rateNonEur: toNum(r[`${t.key}_rate_non_eur`] || r[`${t.key}_rate_eur`]),
+        })
+      }
+    }
+  }
   addAll(rawRates.guideRates, (r: any) => ({
     rateId: r.id, name: `${r.guide_language} ${r.guide_type || 'Guide'}`,
     rateEur: toNum(r.base_rate_eur || r.rate_eur), rateNonEur: toNum(r.base_rate_eur || r.rate_eur),

@@ -41,44 +41,58 @@ export async function GET(request: NextRequest) {
     ])
 
     // Map to RateOption format per slot
+    // Vehicle tiers: each transport row expands into up to 5 options (one per vehicle type)
+    const VEHICLE_TIERS = [
+      { key: 'sedan',   label: 'Sedan',   capMin: 1,  capMax: 2  },
+      { key: 'minivan', label: 'Minivan', capMin: 3,  capMax: 7  },
+      { key: 'van',     label: 'Van',     capMin: 8,  capMax: 12 },
+      { key: 'minibus', label: 'Minibus', capMin: 13, capMax: 20 },
+      { key: 'bus',     label: 'Bus',     capMin: 21, capMax: 45 },
+    ]
+
+    const expandTiers = (r: any, namePrefix: string) => {
+      return VEHICLE_TIERS
+        .filter(t => toNum(r[`${t.key}_rate_eur`]) > 0)
+        .map(t => ({
+          id: `${r.id}__${t.key}`,
+          name: `${t.label} (${r[`${t.key}_capacity_min`] || t.capMin}-${r[`${t.key}_capacity_max`] || t.capMax} pax) — ${namePrefix}`,
+          rateEur: toNum(r[`${t.key}_rate_eur`]),
+          rateNonEur: toNum(r[`${t.key}_rate_non_eur`] || r[`${t.key}_rate_eur`]),
+          city: r.origin_city || r.city,
+          details: `${t.label} | ${r.service_type}`,
+          capacity_min: r[`${t.key}_capacity_min`] || t.capMin,
+          capacity_max: r[`${t.key}_capacity_max`] || t.capMax,
+          service_type: r.service_type,
+          origin_city: r.origin_city,
+          destination_city: r.destination_city,
+        }))
+    }
+
     const rates = {
       vehicle: (transportRates || [])
         .filter((r: any) => r.service_type === 'day_tour')
-        .map((r: any) => ({
-          id: r.id,
-          name: `${r.vehicle_type || 'Vehicle'} (${r.capacity_min}-${r.capacity_max} pax)`,
-          rateEur: toNum(r.base_rate_eur),
-          rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
-          city: r.origin_city || r.city,
-          details: r.vehicle_type,
-          capacity_min: r.capacity_min,
-          capacity_max: r.capacity_max,
-          service_type: r.service_type,
-        })),
+        .flatMap((r: any) => {
+          const label = r.route_name || r.service_code || `${r.origin_city || r.city || ''} Day Tour`
+          return expandTiers(r, label)
+        }),
 
       route: [
         ...(transportRates || [])
           .filter((r: any) => r.service_type === 'intercity_transfer' || r.service_type === 'airport_transfer')
-          .map((r: any) => ({
-            id: r.id,
-            name: `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code,
-            rateEur: toNum(r.base_rate_eur),
-            rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
-            city: r.origin_city,
-            details: `${r.service_type} | ${r.vehicle_type || ''}`,
-            service_type: r.service_type,
-          })),
+          .flatMap((r: any) => {
+            const label = r.route_name || `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code
+            return expandTiers(r, label)
+          }),
         // Cruise transport packages (bundled sightseeing vehicle for cruise days)
         ...(cruiseTransportPkgs || []).map((r: any) => ({
           id: r.id,
           name: `${r.package_name} (${r.origin_city}→${r.destination_city}, ${r.duration_days}d)`,
-          rateEur: toNum(r.sedan_rate), // Default to sedan; UI can adjust by pax
+          rateEur: toNum(r.sedan_rate),
           rateNonEur: toNum(r.sedan_rate),
           city: r.origin_city,
           details: `cruise_package | ${r.description || ''}`,
           service_type: 'cruise_transport_package',
           package_type: r.package_type,
-          // Store all vehicle rates for pax-based selection
           sedan_rate: toNum(r.sedan_rate),
           minivan_rate: toNum(r.minivan_rate),
           van_rate: toNum(r.van_rate),
