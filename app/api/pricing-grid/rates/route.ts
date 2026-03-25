@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       { data: mealRates },
       { data: cruiseRates },
       { data: cruiseTransportPkgs },
+      { data: flightRates },
     ] = await Promise.all([
       supabase.from('transportation_rates').select('*').eq('is_active', true),
       supabase.from('guide_rates').select('*').eq('is_active', true),
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
       supabase.from('meal_rates').select('*').eq('is_active', true),
       supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
       supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
+      supabase.from('flight_rates').select('*').eq('is_active', true),
     ])
 
     // Map to RateOption format per slot
@@ -159,7 +161,16 @@ export async function GET(request: NextRequest) {
         category: r.category,
       })),
 
-      flights: [],  // Flights are manual entry
+      flights: (flightRates || []).map((r: any) => ({
+        id: r.id,
+        name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,
+        rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur),
+        rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur) + toNum(r.tax_non_eur || r.tax_eur),
+        city: r.route_from,
+        details: `${r.airline} | ${r.flight_number || ''} | ${r.cabin_class}`,
+        route_from: r.route_from,
+        route_to: r.route_to,
+      })),
 
       experiences: (activityRates || [])
         .filter((r: any) => !/boat|felucca|motor/i.test(r.activity_name || r.category || ''))

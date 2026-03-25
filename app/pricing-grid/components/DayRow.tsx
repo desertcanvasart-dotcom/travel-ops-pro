@@ -144,10 +144,17 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
       })
     }
 
-    // Flights: empty by default (user adds manually), unless description mentions flight
+    // Flights: show matching routes when day mentions flight, otherwise empty
     if (slotId === 'flights') {
       if (!/flight|fly|domestic/i.test(day.title || day.description || '')) return []
-      return allOptions
+      if (!city) return allOptions
+      // Filter to flights from/to this city
+      const matched = allOptions.filter(o => {
+        const from = ((o as any).route_from || '').toLowerCase().trim()
+        const to = ((o as any).route_to || '').toLowerCase().trim()
+        return from === city || to === city
+      })
+      return matched.length > 0 ? matched : allOptions
     }
 
     // Cruise: show all (already tier-filtered by API)

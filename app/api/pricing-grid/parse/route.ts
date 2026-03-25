@@ -27,10 +27,11 @@ async function buildRateCatalog(supabase: any, tier: string) {
     supabase.from('meal_rates').select('*').eq('is_active', true),
     supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
     supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
+    supabase.from('flight_rates').select('*').eq('is_active', true),
   ])
 
   // Log any Supabase errors
-  const tableNames = ['transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates', 'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'nile_cruises', 'b2b_transport_packages']
+  const tableNames = ['transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates', 'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'nile_cruises', 'b2b_transport_packages', 'flight_rates']
   results.forEach((r: any, i: number) => {
     if (r.error) console.error(`❌ DB ERROR fetching ${tableNames[i]}:`, r.error.message, r.error.details || '')
   })
@@ -47,6 +48,7 @@ async function buildRateCatalog(supabase: any, tier: string) {
     { data: mealRates },
     { data: cruiseRates },
     { data: cruiseTransportPkgs },
+    { data: flightRates },
   ] = results
 
   // Build concise catalog strings for the AI prompt
@@ -108,7 +110,11 @@ async function buildRateCatalog(supabase: any, tier: string) {
     .map((r: any) => `ID:${r.id} | ${r.package_name} | ${r.origin_city}→${r.destination_city} | ${r.duration_days}d | Sedan €${r.sedan_rate} | Minivan €${r.minivan_rate} | Van €${r.van_rate} | Includes: ${r.includes || 'vehicle + guide + boat rides'}`)
     .join('\n')
 
-  return { catalog, rawRates: { transportRates, guideRates, airportRates, hotelServiceRates, tippingRates, activityRates, accommodationRates, entranceFees, mealRates, cruiseRates, cruiseTransportPkgs } }
+  catalog.flights = (flightRates || [])
+    .map((r: any) => `ID:${r.id} | ${r.airline} | ${r.route_from}→${r.route_to} | ${r.cabin_class} | €${r.base_rate_eur}${r.tax_eur ? ` +tax €${r.tax_eur}` : ''}`)
+    .join('\n')
+
+  return { catalog, rawRates: { transportRates, guideRates, airportRates, hotelServiceRates, tippingRates, activityRates, accommodationRates, entranceFees, mealRates, cruiseRates, cruiseTransportPkgs, flightRates } }
 }
 
 // ============================================
@@ -152,6 +158,9 @@ ${catalog.experiences || '(none available)'}
 
 ### MEALS (per person — match by city and meal type)
 ${catalog.meals || '(none available)'}
+
+### FLIGHTS (per person — domestic flights between Egyptian cities)
+${catalog.flights || '(none available)'}
 
 ### NILE CRUISE (per person — for cruise days)
 ${catalog.cruise || '(none available)'}
@@ -201,22 +210,25 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 ## DAY TYPE RULES
 
 ### Arrival Day (first day, international arrival)
+- route: airport transfer for the arrival city (from the ROUTE catalog, NOT the vehicle catalog)
 - airport_services: arrival service for the city's airport (Cairo=CAI, Luxor=LXR, Aswan=ASW, Hurghada=HRG, Sharm=SSH)
 - hotel_services: check-in service
-- vehicle: airport transfer matching pax and city
 - tipping: driver tip ONLY
 - accommodation: hotel in arrival city
+- vehicle: EMPTY [] (no day-tour vehicle on arrival — the airport transfer goes in ROUTE)
 - NO guide, NO entrance fees, NO meals (arrival day = rest)
 
 ### Departure Day (last day, international departure)
+- route: airport transfer for the departure city (from the ROUTE catalog, NOT the vehicle catalog)
 - airport_services: departure service for the city's airport
 - hotel_services: check-out service
-- vehicle: hotel-to-airport transfer
 - tipping: driver tip ONLY
+- vehicle: EMPTY [] (no day-tour vehicle on departure — the airport transfer goes in ROUTE)
 - NO guide, NO entrance fees, NO meals, NO accommodation
 
 ### Touring Day (ANY day with sightseeing, visits, temples, museums, pyramids, bazaar, old city, etc.)
-- vehicle: day-tour vehicle matching pax and city
+- vehicle: day-tour vehicle matching pax and city (from the VEHICLE catalog)
+- route: EMPTY [] unless transferring between cities (then use intercity_transfer from ROUTE catalog)
 - guide: ALWAYS add a guide for touring days — pick the guide matching the requested language
 - entrance_fees: match EVERY attraction/site mentioned by name
 - meals: ALWAYS add lunch AND dinner for the day's city. Pick restaurant meals matching city.
@@ -226,7 +238,8 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 - accommodation: hotel in overnight city (if not last day)
 
 ### Cruise Embarkation Day (fly/transfer to cruise, board the ship)
-- If there is a DOMESTIC FLIGHT: add airport_services for BOTH departure and arrival airports, add vehicle for airport transfers at both cities
+- If there is a DOMESTIC FLIGHT: add the flight to the "flights" slot as an entry. Add airport_services for BOTH departure and arrival airports. Add route: airport transfers at BOTH departure and arrival cities (from ROUTE catalog).
+- vehicle: EMPTY [] (airport transfers go in ROUTE, NOT vehicle)
 - hotel_services: check-out from hotel
 - cruise: SELECT THE CRUISE RATE — this is the per-person cabin rate for the entire cruise stay
 - tipping: driver tip
@@ -674,6 +687,11 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   addAll(rawRates.cruiseTransportPkgs, (r: any) => ({
     rateId: r.id, name: `${r.package_name} (${r.origin_city}→${r.destination_city})`,
     rateEur: toNum(r.sedan_rate), rateNonEur: toNum(r.sedan_rate),
+  }))
+  // Flights
+  addAll(rawRates.flightRates, (r: any) => ({
+    rateId: r.id, name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,
+    rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur), rateNonEur: toNum(r.base_rate_non_eur) + toNum(r.tax_non_eur),
   }))
 
   // Water (hardcoded — not from DB)

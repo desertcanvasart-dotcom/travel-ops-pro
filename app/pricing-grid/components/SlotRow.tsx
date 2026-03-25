@@ -100,24 +100,34 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
             className="w-full px-2 py-1 text-sm border rounded"
           />
         ) : definition.selectionMode === 'single' || definition.selectionMode === 'auto' ? (
-          <select
-            value={value.selectedItems[0]?.rateId || ''}
-            onChange={(e) => {
-              const opt = options.find(o => o.id === e.target.value)
-                || (allOptions || []).find(o => o.id === e.target.value)
-                || null
-              selectSingle(opt)
-            }}
-            className="w-full px-2 py-1 text-sm border rounded bg-white"
-          >
-            <option value="">— Select —</option>
-            {options.map(opt => (
-              <option key={opt.id} value={opt.id}>
-                {opt.name} — €{opt[rateKey].toFixed(2)}
-                {opt.details ? ` (${opt.details})` : ''}
-              </option>
-            ))}
-          </select>
+          (() => {
+            // Build display options: filtered options + currently selected item (if not already in list)
+            const selected = value.selectedItems[0]
+            const selectedInOptions = selected && options.some(o => o.id === selected.rateId)
+            const displayOpts = selected && !selectedInOptions
+              ? [{ id: selected.rateId, name: selected.name, rateEur: selected.rateEur, rateNonEur: selected.rateNonEur } as RateOption, ...options]
+              : options
+            return (
+              <select
+                value={selected?.rateId || ''}
+                onChange={(e) => {
+                  const opt = displayOpts.find(o => o.id === e.target.value)
+                    || (allOptions || []).find(o => o.id === e.target.value)
+                    || null
+                  selectSingle(opt)
+                }}
+                className="w-full px-2 py-1 text-sm border rounded bg-white"
+              >
+                <option value="">— Select —</option>
+                {displayOpts.map(opt => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name} — €{opt[rateKey].toFixed(2)}
+                    {opt.details ? ` (${opt.details})` : ''}
+                  </option>
+                ))}
+              </select>
+            )
+          })()
         ) : (
           /* Multi-select: selected chips + collapsible "Add" dropdown */
           <div className="space-y-1">
