@@ -328,66 +328,113 @@ export async function POST(request: NextRequest) {
       const isCruiseDay = /cruise|sailing|on board|nile cruise/i.test(day.title || day.description || '')
       const isCruiseEmbarkation = /embark|board.*cruise|cruise.*embark|flight.*aswan.*cruise|fly.*aswan.*board/i.test(day.title || day.description || '')
 
+      // Helper: check if slot is empty (handles undefined, null, empty array)
+      const isEmpty = (key: string) => !slots[key] || !Array.isArray(slots[key]) || slots[key].length === 0
+
+      // Log DB rate counts for debugging
+      if (idx === 0) {
+        console.log('DB rate counts:', {
+          guideRates: rawRates.guideRates?.length || 0,
+          transportRates: rawRates.transportRates?.length || 0,
+          mealRates: rawRates.mealRates?.length || 0,
+          tippingRates: rawRates.tippingRates?.length || 0,
+          hotelServiceRates: rawRates.hotelServiceRates?.length || 0,
+          cruiseRates: rawRates.cruiseRates?.length || 0,
+          accommodationRates: rawRates.accommodationRates?.length || 0,
+          entranceFees: rawRates.entranceFees?.length || 0,
+        })
+      }
+
       // Touring day: auto-fill guide if missing
-      if (hasSightseeing && !isCruiseDay && (!slots.guide || slots.guide.length === 0)) {
-        const guide = rawRates.guideRates?.find((g: any) => g.guide_language?.toLowerCase().includes('english'))
+      if (hasSightseeing && !isCruiseDay && isEmpty('guide')) {
+        const guide = rawRates.guideRates?.find((g: any) => /spanish|english/i.test(g.guide_language || ''))
           || rawRates.guideRates?.[0]
-        if (guide) slots.guide = [guide.id]
+        if (guide) {
+          slots.guide = [guide.id]
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED guide → ${guide.guide_language} (${guide.id})`)
+        } else {
+          console.log(`Day ${day.dayNumber}: FAILED to auto-fill guide — no guide rates in DB`)
+        }
       }
 
       // Touring day: auto-fill vehicle if missing
-      if (hasSightseeing && !isCruiseDay && (!slots.vehicle || slots.vehicle.length === 0)) {
+      if (hasSightseeing && !isCruiseDay && isEmpty('vehicle')) {
         const paxNum = pax || 2
-        const vehicle = rawRates.transportRates?.find((t: any) =>
-          t.service_type === 'day_tour' &&
+        const cityVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
+        const vehicle = cityVehicles.find((t: any) =>
           (!t.origin_city || t.origin_city?.toLowerCase() === day.city?.toLowerCase()) &&
           t.capacity_min <= paxNum && t.capacity_max >= paxNum
-        )
-        if (vehicle) slots.vehicle = [vehicle.id]
+        ) || cityVehicles.find((t: any) =>
+          t.capacity_min <= paxNum && t.capacity_max >= paxNum
+        ) || cityVehicles[0]
+        if (vehicle) {
+          slots.vehicle = [vehicle.id]
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED vehicle → ${vehicle.vehicle_type} (${vehicle.id})`)
+        }
       }
 
       // Touring day: auto-fill meals (lunch + dinner) if missing
-      if (hasSightseeing && !isCruiseDay && (!slots.meals || slots.meals.length === 0)) {
+      if (hasSightseeing && !isCruiseDay && isEmpty('meals')) {
+        const cityLower = day.city?.toLowerCase()
         const cityMeals = rawRates.mealRates?.filter((m: any) =>
-          m.city?.toLowerCase() === day.city?.toLowerCase()
+          m.city?.toLowerCase() === cityLower
         ) || []
-        const lunch = cityMeals.find((m: any) => m.meal_type?.toLowerCase() === 'lunch')
-        const dinner = cityMeals.find((m: any) => m.meal_type?.toLowerCase() === 'dinner')
-        const mealIds = []
+        const lunch = cityMeals.find((m: any) => /lunch/i.test(m.meal_type || ''))
+        const dinner = cityMeals.find((m: any) => /dinner/i.test(m.meal_type || ''))
+        const mealIds: string[] = []
         if (lunch) mealIds.push(lunch.id)
         if (dinner) mealIds.push(dinner.id)
-        if (mealIds.length > 0) slots.meals = mealIds
+        if (mealIds.length > 0) {
+          slots.meals = mealIds
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED ${mealIds.length} meals for ${day.city}`)
+        } else {
+          console.log(`Day ${day.dayNumber}: No meals found for city "${day.city}" (${rawRates.mealRates?.length || 0} total meal rates)`)
+        }
       }
 
       // Auto-fill water if missing on non-cruise, non-departure days
-      if (!isCruiseDay && !isLastDay && (!slots.water || slots.water.length === 0)) {
+      if (!isCruiseDay && !isLastDay && isEmpty('water')) {
         slots.water = ['water-standard']
       }
 
       // Touring day: auto-fill tipping if missing (driver + guide tip)
-      if (hasSightseeing && !isCruiseDay && (!slots.tipping || slots.tipping.length === 0)) {
+      if (hasSightseeing && !isCruiseDay && isEmpty('tipping')) {
         const tips = rawRates.tippingRates || []
-        const driverTip = tips.find((t: any) => /driver/i.test(t.role || t.service_code || ''))
+        const driverTip = tips.find((t: any) => /driver.*day|TIP-DRIVER-DAY/i.test(t.role || t.service_code || ''))
+          || tips.find((t: any) => /driver/i.test(t.role || t.service_code || ''))
         const guideTip = tips.find((t: any) => /guide/i.test(t.role || t.service_code || '') && !/driver/i.test(t.role || t.service_code || ''))
-        const tipIds = []
+        const tipIds: string[] = []
         if (driverTip) tipIds.push(driverTip.id)
         if (guideTip) tipIds.push(guideTip.id)
-        if (tipIds.length > 0) slots.tipping = tipIds
+        if (tipIds.length > 0) {
+          slots.tipping = tipIds
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED ${tipIds.length} tips`)
+        } else {
+          console.log(`Day ${day.dayNumber}: No tips found (${tips.length} total tip rates)`)
+        }
       }
 
       // Hotel services: auto-fill if missing on non-cruise, non-last day
-      if (!isCruiseDay && !isLastDay && (!slots.hotel_services || slots.hotel_services.length === 0)) {
+      if (!isCruiseDay && !isLastDay && isEmpty('hotel_services')) {
         const hotelSvc = rawRates.hotelServiceRates?.find((h: any) =>
           h.service_type === 'full_service' &&
           (h.hotel_category === (tier || 'standard') || h.hotel_category === 'all')
-        )
-        if (hotelSvc) slots.hotel_services = [hotelSvc.id]
+        ) || rawRates.hotelServiceRates?.[0]
+        if (hotelSvc) {
+          slots.hotel_services = [hotelSvc.id]
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED hotel service → ${hotelSvc.service_type} ${hotelSvc.hotel_category}`)
+        }
       }
 
       // Cruise embarkation: auto-fill cruise if missing
-      if (isCruiseEmbarkation && (!slots.cruise || slots.cruise.length === 0)) {
+      if (isCruiseEmbarkation && isEmpty('cruise')) {
         const cruise = rawRates.cruiseRates?.[0]
-        if (cruise) slots.cruise = [cruise.id]
+        if (cruise) {
+          slots.cruise = [cruise.id]
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise → ${cruise.ship_name}`)
+        } else {
+          console.log(`Day ${day.dayNumber}: FAILED cruise auto-fill — ${rawRates.cruiseRates?.length || 0} cruise rates`)
+        }
       }
 
       console.log(`Day ${day.dayNumber} "${day.title}": sightseeing=${hasSightseeing}, cruise=${isCruiseDay}, embark=${isCruiseEmbarkation}`,
