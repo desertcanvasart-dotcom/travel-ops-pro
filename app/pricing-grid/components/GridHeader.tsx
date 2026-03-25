@@ -54,6 +54,17 @@ export default function GridHeader({ config, onChange }: GridHeaderProps) {
           />
         </div>
 
+        {/* Start Date (for seasonality) */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-gray-500 uppercase">Start Date</label>
+          <input
+            type="date"
+            value={config.startDate}
+            onChange={(e) => update({ startDate: e.target.value })}
+            className="px-2 py-1.5 text-sm border rounded-lg"
+          />
+        </div>
+
         {/* Passport Toggle */}
         <button
           type="button"

@@ -17,6 +17,7 @@ export interface GridConfig {
   currency: string
   marginPercent: number
   exchangeRate: number | null  // EUR → target currency
+  startDate: string  // ISO date string (YYYY-MM-DD) — for seasonality pricing
 }
 
 // --- Slot Definitions (fixed structure) ---

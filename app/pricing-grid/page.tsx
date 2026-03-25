@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: GridConfig = {
   currency: 'EUR',
   marginPercent: 25,
   exchangeRate: null,
+  startDate: new Date().toISOString().split('T')[0],  // Today's date
 }
 
 // ============================================
