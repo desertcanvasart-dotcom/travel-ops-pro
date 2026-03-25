@@ -14,17 +14,18 @@ import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic
 // ============================================
 
 async function buildRateCatalog(supabase: any, tier: string) {
+  // Use select('*') — specific column selects fail silently if a column name doesn't match
   const results = await Promise.all([
-    supabase.from('transportation_rates').select('id, service_code, service_type, vehicle_type, origin_city, destination_city, capacity_min, capacity_max, base_rate_eur').eq('is_active', true),
-    supabase.from('guide_rates').select('id, service_code, guide_language, guide_type, city, base_rate_eur, rate_eur').eq('is_active', true),
-    supabase.from('airport_staff_rates').select('id, service_code, airport_code, direction, rate_eur').eq('is_active', true),
-    supabase.from('hotel_staff_rates').select('id, service_code, service_type, hotel_category, destination, rate_eur').eq('is_active', true),
-    supabase.from('tipping_rates').select('id, service_code, role, rate_eur, amount_eur, description').eq('is_active', true),
-    supabase.from('activity_rates').select('id, service_code, activity_name, city, rate_eur, base_rate_eur, category, pricing_type').eq('is_active', true),
-    supabase.from('accommodation_rates').select('id, service_code, property_name, city, tier, board_basis, pp_double_eur, pp_double_non_eur, single_supp_eur, single_supp_non_eur').eq('is_active', true).eq('tier', tier),
-    supabase.from('entrance_fees').select('id, service_code, attraction_name, city, eur_rate, non_eur_rate, category').eq('is_active', true),
-    supabase.from('meal_rates').select('id, service_code, restaurant_name, meal_type, city, base_rate_eur, base_rate_non_eur, rate_eur, rate_non_eur, tier').eq('is_active', true),
-    supabase.from('cruise_rates').select('id, service_code, ship_name, route, nights, cabin_type, tier, season, rate_single_eur, rate_double_eur, rate_triple_eur').eq('is_active', true).eq('tier', tier),
+    supabase.from('transportation_rates').select('*').eq('is_active', true),
+    supabase.from('guide_rates').select('*').eq('is_active', true),
+    supabase.from('airport_staff_rates').select('*').eq('is_active', true),
+    supabase.from('hotel_staff_rates').select('*').eq('is_active', true),
+    supabase.from('tipping_rates').select('*').eq('is_active', true),
+    supabase.from('activity_rates').select('*').eq('is_active', true),
+    supabase.from('accommodation_rates').select('*').eq('is_active', true).eq('tier', tier),
+    supabase.from('entrance_fees').select('*').eq('is_active', true),
+    supabase.from('meal_rates').select('*').eq('is_active', true),
+    supabase.from('cruise_rates').select('*').eq('is_active', true).eq('tier', tier),
   ])
 
   // Log any Supabase errors
