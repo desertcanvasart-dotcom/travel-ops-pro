@@ -26,10 +26,11 @@ async function buildRateCatalog(supabase: any, tier: string) {
     supabase.from('entrance_fees').select('*').eq('is_active', true),
     supabase.from('meal_rates').select('*').eq('is_active', true),
     supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
+    supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
   ])
 
   // Log any Supabase errors
-  const tableNames = ['transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates', 'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'nile_cruises']
+  const tableNames = ['transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates', 'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'nile_cruises', 'b2b_transport_packages']
   results.forEach((r: any, i: number) => {
     if (r.error) console.error(`❌ DB ERROR fetching ${tableNames[i]}:`, r.error.message, r.error.details || '')
   })
@@ -45,6 +46,7 @@ async function buildRateCatalog(supabase: any, tier: string) {
     { data: entranceFees },
     { data: mealRates },
     { data: cruiseRates },
+    { data: cruiseTransportPkgs },
   ] = results
 
   // Build concise catalog strings for the AI prompt
@@ -102,7 +104,11 @@ async function buildRateCatalog(supabase: any, tier: string) {
     .map((r: any) => `ID:${r.id} | ${r.ship_name} | ${r.route_name || ''} | ${r.duration_nights}N | ${r.cabin_type} | ${r.tier} | Double €${r.rate_double_eur || r.rate_low_double_eur}`)
     .join('\n')
 
-  return { catalog, rawRates: { transportRates, guideRates, airportRates, hotelServiceRates, tippingRates, activityRates, accommodationRates, entranceFees, mealRates, cruiseRates } }
+  catalog.cruise_transport_package = (cruiseTransportPkgs || [])
+    .map((r: any) => `ID:${r.id} | ${r.package_name} | ${r.origin_city}→${r.destination_city} | ${r.duration_days}d | Sedan €${r.sedan_rate} | Minivan €${r.minivan_rate} | Van €${r.van_rate} | Includes: ${r.includes || 'vehicle + guide + boat rides'}`)
+    .join('\n')
+
+  return { catalog, rawRates: { transportRates, guideRates, airportRates, hotelServiceRates, tippingRates, activityRates, accommodationRates, entranceFees, mealRates, cruiseRates, cruiseTransportPkgs } }
 }
 
 // ============================================
@@ -149,6 +155,12 @@ ${catalog.meals || '(none available)'}
 
 ### NILE CRUISE (per person — for cruise days)
 ${catalog.cruise || '(none available)'}
+
+### CRUISE TRANSPORT PACKAGE (group — bundled vehicle + guide + boat rides for ALL Nile cruise days)
+${catalog.cruise_transport_package || '(none available)'}
+When a quotation includes a Nile cruise (any duration: 3N, 4N, or 7N), ALWAYS add the cruise transport package.
+This package covers ALL transportation for the entire cruise: felucca rides, motorboat, buses, horse carriages, and other transfers.
+Add it as a ROUTE on the cruise embarkation day. The same package applies regardless of cruise duration.
 
 ## OUTPUT FORMAT
 
@@ -394,41 +406,53 @@ export async function POST(request: NextRequest) {
           t.service_type === 'airport_transfer' || t.service_type === 'intercity_transfer'
         ) || []
         const routeIds: string[] = []
-        const cityLower = day.city?.toLowerCase()
-        const prevCity = idx > 0 ? (parsed.days[idx - 1]?.city || '')?.toLowerCase() : ''
-        const nextCity = idx < totalDays - 1 ? (parsed.days[idx + 1]?.city || '')?.toLowerCase() : ''
-        const overnightCity = (day.overnight_city || day.city || '')?.toLowerCase()
+        const cityLower = day.city?.toLowerCase()?.trim()
+        const prevDay = idx > 0 ? parsed.days[idx - 1] : null
+        const prevCity = prevDay?.city?.toLowerCase()?.trim() || ''
+        const prevOvernightCity = (prevDay?.overnight_city || prevDay?.city || '')?.toLowerCase()?.trim()
+        const nextCity = idx < totalDays - 1 ? (parsed.days[idx + 1]?.city || '')?.toLowerCase()?.trim() : ''
+        const overnightCity = (day.overnight_city || day.city || '')?.toLowerCase()?.trim()
+
+        // Helper: match city flexibly (handles "Cairo" vs "cairo", partial matches)
+        const cityMatch = (dbCity: string | undefined, target: string) => {
+          if (!dbCity || !target) return false
+          const db = dbCity.toLowerCase().trim()
+          return db === target || db.includes(target) || target.includes(db)
+        }
 
         // Arrival day: airport transfer (airport → hotel)
         if (isFirstDay) {
           const airportTransfer = routes.find((r: any) =>
             r.service_type === 'airport_transfer' &&
-            (r.origin_city?.toLowerCase() === cityLower || r.destination_city?.toLowerCase() === cityLower)
+            (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
           )
-          if (airportTransfer) routeIds.push(airportTransfer.id)
+          if (airportTransfer) {
+            routeIds.push(airportTransfer.id)
+          } else {
+            console.log(`Day ${day.dayNumber}: No airport_transfer found for city "${cityLower}" (${routes.filter((r: any) => r.service_type === 'airport_transfer').length} airport transfers in DB)`)
+          }
         }
 
         // Departure day: airport transfer (hotel → airport)
         if (isLastDay) {
           const airportTransfer = routes.find((r: any) =>
             r.service_type === 'airport_transfer' &&
-            (r.origin_city?.toLowerCase() === cityLower || r.destination_city?.toLowerCase() === cityLower)
+            (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
           )
           if (airportTransfer && !routeIds.includes(airportTransfer.id)) routeIds.push(airportTransfer.id)
         }
 
         // Domestic flight day (e.g., Cairo → Aswan): airport transfers at BOTH cities
         if (/flight|fly/i.test(day.title || day.description || '') && !isFirstDay && !isLastDay) {
-          // Departure airport transfer (from previous city)
+          const depCity = prevOvernightCity || prevCity
           const depTransfer = routes.find((r: any) =>
             r.service_type === 'airport_transfer' &&
-            (r.origin_city?.toLowerCase() === prevCity || r.destination_city?.toLowerCase() === prevCity)
+            (cityMatch(r.origin_city, depCity) || cityMatch(r.destination_city, depCity))
           )
           if (depTransfer) routeIds.push(depTransfer.id)
-          // Arrival airport transfer (at new city)
           const arrTransfer = routes.find((r: any) =>
             r.service_type === 'airport_transfer' &&
-            (r.origin_city?.toLowerCase() === cityLower || r.destination_city?.toLowerCase() === cityLower) &&
+            (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!)) &&
             r.id !== depTransfer?.id
           )
           if (arrTransfer) routeIds.push(arrTransfer.id)
@@ -436,23 +460,24 @@ export async function POST(request: NextRequest) {
 
         // Intercity transfer: when previous overnight city differs from current city (not by flight)
         if (!isFirstDay && !isLastDay && !/flight|fly/i.test(day.title || day.description || '')) {
-          if (prevCity && cityLower && prevCity !== cityLower && prevCity !== 'cruise') {
+          const effectivePrevCity = prevOvernightCity || prevCity
+          if (effectivePrevCity && cityLower && effectivePrevCity !== cityLower && effectivePrevCity !== 'cruise') {
             const intercity = routes.find((r: any) =>
               r.service_type === 'intercity_transfer' &&
-              r.origin_city?.toLowerCase() === prevCity &&
-              r.destination_city?.toLowerCase() === cityLower
+              cityMatch(r.origin_city, effectivePrevCity) &&
+              cityMatch(r.destination_city, cityLower)
             ) || routes.find((r: any) =>
               r.service_type === 'intercity_transfer' &&
-              r.origin_city?.toLowerCase() === prevCity
+              cityMatch(r.origin_city, effectivePrevCity)
             )
             if (intercity) routeIds.push(intercity.id)
           }
-          // Also check if current city → overnight city differs (e.g., Luxor sightseeing → Hurghada overnight)
+          // Also check if current city → overnight city differs
           if (overnightCity && overnightCity !== cityLower) {
             const onward = routes.find((r: any) =>
               r.service_type === 'intercity_transfer' &&
-              r.origin_city?.toLowerCase() === cityLower &&
-              r.destination_city?.toLowerCase() === overnightCity
+              cityMatch(r.origin_city, cityLower!) &&
+              cityMatch(r.destination_city, overnightCity)
             )
             if (onward && !routeIds.includes(onward.id)) routeIds.push(onward.id)
           }
@@ -461,6 +486,9 @@ export async function POST(request: NextRequest) {
         if (routeIds.length > 0) {
           slots.route = routeIds
           console.log(`Day ${day.dayNumber}: AUTO-FILLED ${routeIds.length} routes`)
+        } else if (isFirstDay || isLastDay) {
+          console.log(`Day ${day.dayNumber}: Route auto-fill found 0 matches. City="${cityLower}", DB routes:`,
+            routes.map((r: any) => `${r.service_type}: ${r.origin_city}→${r.destination_city}`).slice(0, 5))
         }
       }
 
@@ -483,8 +511,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Auto-fill water if missing on non-cruise, non-departure days
-      if (!isCruiseDay && !isLastDay && isEmpty('water')) {
+      // Auto-fill water on EVERY day (people drink water every day)
+      if (isEmpty('water')) {
         slots.water = ['water-standard']
       }
 
@@ -537,6 +565,33 @@ export async function POST(request: NextRequest) {
           console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise → ${cruise.ship_name}`)
         } else {
           console.log(`Day ${day.dayNumber}: FAILED cruise auto-fill — ${rawRates.cruiseRates?.length || 0} cruise rates`)
+        }
+      }
+
+      // Cruise transport package: auto-fill on embarkation day (covers entire cruise transport)
+      // This package bundles felucca, motorboat, buses, horse carriages for ALL cruise days
+      if (isCruiseDay || isCruiseEmbarkation) {
+        const hasCruiseTransport = !isEmpty('route') && (slots.route || []).some((id: string) => {
+          const pkg = rawRates.cruiseTransportPkgs?.find((p: any) => p.id === id)
+          return !!pkg
+        })
+        if (!hasCruiseTransport && isCruiseEmbarkation) {
+          const pkg = rawRates.cruiseTransportPkgs?.[0]
+          if (pkg) {
+            // Pick rate by pax count
+            const paxNum = pax || 2
+            let pkgRate = pkg.sedan_rate
+            if (paxNum > (pkg.sedan_capacity || 3)) pkgRate = pkg.minivan_rate
+            if (paxNum > (pkg.minivan_capacity || 7)) pkgRate = pkg.van_rate
+            if (paxNum > (pkg.van_capacity || 12)) pkgRate = pkg.minibus_rate
+            if (paxNum > (pkg.minibus_capacity || 20)) pkgRate = pkg.bus_rate
+            // Add to route slot
+            const existingRoutes = Array.isArray(slots.route) ? slots.route : []
+            slots.route = [...existingRoutes, pkg.id]
+            console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise transport package → ${pkg.package_name} (€${pkgRate})`)
+          } else {
+            console.log(`Day ${day.dayNumber}: No cruise transport packages in DB`)
+          }
         }
       }
 
@@ -614,6 +669,18 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
     rateId: r.id, name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
     rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur), rateNonEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
   }))
+
+  // Cruise transport packages
+  addAll(rawRates.cruiseTransportPkgs, (r: any) => ({
+    rateId: r.id, name: `${r.package_name} (${r.origin_city}→${r.destination_city})`,
+    rateEur: toNum(r.sedan_rate), rateNonEur: toNum(r.sedan_rate),
+  }))
+
+  // Water (hardcoded — not from DB)
+  map.set('water-standard', {
+    rateId: 'water-standard', name: 'Water Bottles',
+    rateEur: 0.50, rateNonEur: 0.50,
+  })
 
   return map
 }
