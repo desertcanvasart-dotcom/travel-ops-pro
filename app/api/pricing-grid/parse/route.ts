@@ -25,11 +25,11 @@ async function buildRateCatalog(supabase: any, tier: string) {
     supabase.from('accommodation_rates').select('*').eq('is_active', true).eq('tier', tier),
     supabase.from('entrance_fees').select('*').eq('is_active', true),
     supabase.from('meal_rates').select('*').eq('is_active', true),
-    supabase.from('cruise_rates').select('*').eq('is_active', true).eq('tier', tier),
+    supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
   ])
 
   // Log any Supabase errors
-  const tableNames = ['transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates', 'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'cruise_rates']
+  const tableNames = ['transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates', 'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'nile_cruises']
   results.forEach((r: any, i: number) => {
     if (r.error) console.error(`❌ DB ERROR fetching ${tableNames[i]}:`, r.error.message, r.error.details || '')
   })
@@ -99,7 +99,7 @@ async function buildRateCatalog(supabase: any, tier: string) {
     .join('\n')
 
   catalog.cruise = (cruiseRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.ship_name} | ${r.route || ''} | ${r.nights}N | ${r.cabin_type} | ${r.season || ''} | Double €${r.rate_double_eur}`)
+    .map((r: any) => `ID:${r.id} | ${r.ship_name} | ${r.route_name || ''} | ${r.duration_nights}N | ${r.cabin_type} | ${r.tier} | Double €${r.rate_double_eur || r.rate_low_double_eur}`)
     .join('\n')
 
   return { catalog, rawRates: { transportRates, guideRates, airportRates, hotelServiceRates, tippingRates, activityRates, accommodationRates, entranceFees, mealRates, cruiseRates } }
@@ -517,8 +517,8 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
     rateEur: toNum(r.base_rate_eur || r.rate_eur), rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
   }))
   addAll(rawRates.cruiseRates, (r: any) => ({
-    rateId: r.id, name: `${r.ship_name} (${r.nights}N, ${r.cabin_type})`,
-    rateEur: toNum(r.rate_double_eur), rateNonEur: toNum(r.rate_double_eur),
+    rateId: r.id, name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
+    rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur), rateNonEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
   }))
 
   return map

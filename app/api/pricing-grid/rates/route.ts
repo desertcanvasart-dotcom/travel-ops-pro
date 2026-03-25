@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       supabase.from('accommodation_rates').select('*').eq('is_active', true).eq('tier', tier),
       supabase.from('entrance_fees').select('*').eq('is_active', true),
       supabase.from('meal_rates').select('*').eq('is_active', true),
-      supabase.from('cruise_rates').select('*').eq('is_active', true).eq('tier', tier),
+      supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
       supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
     ])
 
@@ -188,12 +188,14 @@ export async function GET(request: NextRequest) {
 
       cruise: (cruiseRates || []).map((r: any) => ({
         id: r.id,
-        name: `${r.ship_name} (${r.nights}N, ${r.cabin_type})`,
-        rateEur: toNum(r.rate_double_eur || r.pp_double_eur),
-        rateNonEur: toNum(r.rate_double_non_eur || r.pp_double_non_eur || r.rate_double_eur || r.pp_double_eur),
-        details: `${r.route || ''} | ${r.season || ''} | ${r.cabin_type || 'Standard'}`,
-        single_rate_eur: toNum(r.rate_single_eur),
-        single_rate_non_eur: toNum(r.rate_single_non_eur),
+        name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
+        rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
+        rateNonEur: toNum(r.rate_double_non_eur || r.rate_low_double_non_eur || r.rate_double_eur || r.rate_low_double_eur),
+        details: `${r.route_name || ''} | ${r.tier || ''} | ${r.cabin_type || 'Standard'}`,
+        single_rate_eur: toNum(r.rate_single_eur || r.rate_low_single_eur),
+        single_rate_non_eur: toNum(r.rate_single_non_eur || r.rate_low_single_non_eur),
+        duration_nights: r.duration_nights,
+        ship_category: r.ship_category,
       })),
     }
 
