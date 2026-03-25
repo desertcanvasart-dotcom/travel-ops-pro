@@ -52,16 +52,14 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
 
     } else if (PP_SLOT_IDS.has(slot.slotId)) {
       if (slot.slotId === 'accommodation') {
-        // Accommodation: (rate × rooms) ÷ pax, + single supplement for 1 pax
-        // For now, selectedItems[0] is the hotel rate (pp_double)
-        // Single supplement is stored as a second item if pax === 1
+        // Accommodation: pp_double_eur is already a per-person rate
+        // For single pax, add single supplement on top
         if (slot.selectedItems.length > 0) {
           const ppDouble = getRate(slot.selectedItems[0], passport)
           const singleSupp = pax === 1 && slot.selectedItems.length > 1
             ? getRate(slot.selectedItems[1], passport)
             : 0
-          const rooms = Math.ceil(pax / 2)
-          perPersonTotal += (ppDouble * rooms) / pax + (pax === 1 ? singleSupp : 0)
+          perPersonTotal += ppDouble + (pax === 1 ? singleSupp : 0)
         }
       } else {
         perPersonTotal += cost
