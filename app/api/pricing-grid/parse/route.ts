@@ -270,30 +270,31 @@ Transportation AFTER the last cruise sightseeing day (e.g., Luxor → Hurghada) 
 - route: EMPTY [] (cruise transport package will be auto-added by the system)
 - boat_rides: EMPTY [] (covered by cruise transport package)
 - hotel_services: check-out from hotel
-- cruise: SELECT THE CRUISE RATE — per-person cabin rate for the entire cruise stay
+- cruise: SELECT THE CRUISE RATE — this is the per-person PER NIGHT cabin rate. Add it on EVERY night the guest sleeps on the ship.
 - tipping: driver tip
 - accommodation: NONE (sleeping on cruise)
 - meals: NONE on cruise (included)
 
 ### Cruise Sailing/Touring Day (on board the Nile cruise, may visit temples at stops)
+- cruise: SELECT THE SAME CRUISE RATE again — the rate is PER NIGHT, so add it on every night spent on the ship
 - entrance_fees: match any temples/sites visited during stops (e.g., Kom Ombo, Edfu/Horus Temple)
 - vehicle: EMPTY [] (covered by cruise transport package)
 - route: EMPTY [] (covered by cruise transport package)
 - boat_rides: EMPTY [] (covered by cruise transport package)
 - guide: NONE (included in cruise)
 - tipping: NONE (cruise tips are separate)
-- accommodation: NONE (cruise cabin)
+- accommodation: NONE (cruise cabin — the cruise rate IS the accommodation)
 - meals: NONE (included in cruise)
-- cruise: EMPTY (already selected on embarkation day — charged ONCE)
 
-### Cruise Disembarkation + Sightseeing Day (leave cruise, visit sites like Valley of the Kings)
+### Cruise Disembarkation + Sightseeing Day (leave cruise in the morning, visit sites like Valley of the Kings)
+- cruise: EMPTY [] — the guest does NOT sleep on the ship this night (they move to a hotel)
 - entrance_fees: match any sites visited (e.g., Valley of the Kings, Hatshepsut Temple, Karnak)
 - vehicle: EMPTY [] (covered by cruise transport package)
 - route: EMPTY [] (covered by cruise transport package)
 - boat_rides: EMPTY [] (covered by cruise transport package)
 - hotel_services: hotel check-in at destination
 - tipping: driver tip
-- accommodation: hotel in overnight city
+- accommodation: hotel in overnight city (they sleep in a hotel after disembarking)
 - meals: lunch + dinner at overnight city (if NOT all-inclusive hotel)
 
 ### First Day AFTER Cruise Range (transfer to next destination, e.g., Luxor → Hurghada)
@@ -317,7 +318,7 @@ Transportation AFTER the last cruise sightseeing day (e.g., Luxor → Hurghada) 
 - Match airport services by CITY airport code.
 - Match vehicle by pax capacity AND city.
 - For intercity transfers (route slot), match origin→destination cities.
-- The cruise rate is charged ONCE on the embarkation day for the full cruise duration.
+- The cruise rate is PER PERSON PER NIGHT. Add it on every day the guest sleeps on the ship (embarkation + sailing days, NOT on disembarkation day).
 
 Output ONLY valid JSON, no other text.`
 }
@@ -654,12 +655,15 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Cruise embarkation: auto-fill cruise if missing
-      if (isCruiseEmbarkation && isEmpty('cruise')) {
+      // Cruise rate: charged per person per NIGHT (not flat for entire stay)
+      // Add on every night the guest sleeps on the ship:
+      // - All days in cruise range EXCEPT the last day (disembarkation day = sleep in hotel)
+      const sleepsOnCruise = isInCruiseRange && idx < cruiseEndIdx
+      if (sleepsOnCruise && isEmpty('cruise')) {
         const cruise = rawRates.cruiseRates?.[0]
         if (cruise) {
           slots.cruise = [cruise.id]
-          console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise → ${cruise.ship_name}`)
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise night → ${cruise.ship_name} (€${cruise.rate_double_eur || cruise.rate_low_double_eur}/pp/night)`)
         } else {
           console.log(`Day ${day.dayNumber}: FAILED cruise auto-fill — ${rawRates.cruiseRates?.length || 0} cruise rates`)
         }
