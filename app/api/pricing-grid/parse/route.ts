@@ -251,32 +251,56 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 - tipping: driver tip + guide tip
 - accommodation: hotel in overnight city (if not last day)
 
+### IMPORTANT: Nile Cruise Transport Package Rule
+When a Nile cruise is part of the itinerary, a CRUISE TRANSPORT PACKAGE covers ALL transportation from the cruise embarkation day through the last cruise sightseeing day. This includes:
+- Airport transfers at the cruise city
+- All sightseeing vehicles during cruise days
+- Felucca rides, motorboat rides, horse carriages
+- All transfers between temples and sites
+Therefore, on ALL cruise-related days (embarkation through final cruise sightseeing):
+- vehicle: EMPTY [] (covered by transport package)
+- route: EMPTY [] (covered by transport package)
+- boat_rides: EMPTY [] (covered by transport package)
+Transportation BEFORE the cruise (e.g., Cairo day tours, Cairo airport) uses normal vehicle/route.
+Transportation AFTER the last cruise sightseeing day (e.g., Luxor → Hurghada) uses normal route.
+
 ### Cruise Embarkation Day (fly/transfer to cruise, board the ship)
-- If there is a DOMESTIC FLIGHT: add the flight to the "flights" slot as an entry. Add airport_services for BOTH departure and arrival airports. Add route: airport transfers at BOTH departure and arrival cities (from ROUTE catalog).
-- vehicle: EMPTY [] (airport transfers go in ROUTE, NOT vehicle)
+- If there is a DOMESTIC FLIGHT: add the flight to the "flights" slot. Add airport_services for BOTH departure and arrival airports.
+- vehicle: EMPTY [] (covered by cruise transport package)
+- route: EMPTY [] (cruise transport package will be auto-added by the system)
+- boat_rides: EMPTY [] (covered by cruise transport package)
 - hotel_services: check-out from hotel
-- cruise: SELECT THE CRUISE RATE — this is the per-person cabin rate for the entire cruise stay
+- cruise: SELECT THE CRUISE RATE — per-person cabin rate for the entire cruise stay
 - tipping: driver tip
 - accommodation: NONE (sleeping on cruise)
 - meals: NONE on cruise (included)
 
 ### Cruise Sailing/Touring Day (on board the Nile cruise, may visit temples at stops)
 - entrance_fees: match any temples/sites visited during stops (e.g., Kom Ombo, Edfu/Horus Temple)
-- tipping: NONE (cruise tips are separate)
-- vehicle: NONE (transport included in cruise package)
+- vehicle: EMPTY [] (covered by cruise transport package)
+- route: EMPTY [] (covered by cruise transport package)
+- boat_rides: EMPTY [] (covered by cruise transport package)
 - guide: NONE (included in cruise)
+- tipping: NONE (cruise tips are separate)
 - accommodation: NONE (cruise cabin)
 - meals: NONE (included in cruise)
-- cruise: EMPTY (already selected on embarkation day — cruise is charged ONCE for the entire stay)
+- cruise: EMPTY (already selected on embarkation day — charged ONCE)
 
-### Cruise Disembarkation Day (leave cruise, transfer to next destination)
-- vehicle: NONE (cruise transport package covers sightseeing vehicle on checkout day)
-- entrance_fees: match any sites visited (e.g., Valley of the Kings, Hatshepsut Temple)
-- If transferring to another city: add route (intercity transfer from dock city to overnight city)
-- hotel_services: cruise disembarkation + hotel check-in at destination
+### Cruise Disembarkation + Sightseeing Day (leave cruise, visit sites like Valley of the Kings)
+- entrance_fees: match any sites visited (e.g., Valley of the Kings, Hatshepsut Temple, Karnak)
+- vehicle: EMPTY [] (covered by cruise transport package)
+- route: EMPTY [] (covered by cruise transport package)
+- boat_rides: EMPTY [] (covered by cruise transport package)
+- hotel_services: hotel check-in at destination
 - tipping: driver tip
 - accommodation: hotel in overnight city
 - meals: lunch + dinner at overnight city (if NOT all-inclusive hotel)
+
+### First Day AFTER Cruise Range (transfer to next destination, e.g., Luxor → Hurghada)
+- This day is NOT covered by the cruise transport package
+- route: intercity transfer from cruise end city to next destination (from ROUTE catalog)
+- vehicle: day-tour vehicle if sightseeing, otherwise EMPTY
+- Normal auto-fill rules apply from this day onward
 
 ### Free/Leisure Day (beach, resort, no sightseeing)
 - accommodation: hotel
@@ -357,6 +381,27 @@ export async function POST(request: NextRequest) {
 
     // 6. Post-process: fill obvious gaps the AI missed (deterministic rules)
     const totalDays = parsed.days?.length || 0
+
+    // Pre-scan: detect cruise day range (embarkation through last cruise sightseeing day)
+    // Days within this range get the cruise transport package; vehicle/route/boat_rides are suppressed
+    let cruiseStartIdx = -1  // embarkation day index
+    let cruiseEndIdx = -1    // last cruise-related day (disembarkation sightseeing)
+    for (let i = 0; i < totalDays; i++) {
+      const d = parsed.days[i]
+      const titleDesc = `${d.title || ''} ${d.description || ''}`.toLowerCase()
+      const isCruise = /cruise|sailing|on board|nile cruise|embark|disembark/.test(titleDesc)
+      // Also detect post-cruise sightseeing (e.g., "Luxor East Bank" after disembarkation)
+      const isPostCruiseSightseeing = cruiseEndIdx === i - 1 && cruiseEndIdx >= 0 &&
+        /valley|west bank|east bank|karnak|hatshepsut|luxor temple|colossi|edfu|kom ombo/i.test(titleDesc)
+      if (isCruise || isPostCruiseSightseeing) {
+        if (cruiseStartIdx === -1) cruiseStartIdx = i
+        cruiseEndIdx = i
+      }
+    }
+    if (cruiseStartIdx >= 0) {
+      console.log(`Cruise range detected: Day ${cruiseStartIdx + 1} through Day ${cruiseEndIdx + 1}`)
+    }
+
     const processedDays = (parsed.days || []).map((day: any, idx: number) => {
       const slots = day.slots || {}
 
@@ -384,6 +429,9 @@ export async function POST(request: NextRequest) {
       const isDepartureDay = isLastDay || /\bdeparture\b/i.test(day.title || '')
       const isCruiseDay = /cruise|sailing|on board|nile cruise/i.test(day.title || day.description || '')
       const isCruiseEmbarkation = /embark|board.*cruise|cruise.*embark|flight.*aswan.*cruise|fly.*aswan.*board/i.test(day.title || day.description || '')
+      // Is this day within the cruise transport package range?
+      const isInCruiseRange = cruiseStartIdx >= 0 && idx >= cruiseStartIdx && idx <= cruiseEndIdx
+      const isCruiseRangeStart = idx === cruiseStartIdx
       // Sightseeing detection: only from TITLE (not description — hotel names in descriptions cause false positives)
       // AND never on arrival/departure days
       const hasSightseeing = !isArrivalDay && !isDepartureDay && (
@@ -420,9 +468,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Touring day: auto-fill vehicle if missing (NEVER on cruise days)
-      // Selects the correct vehicle tier (sedan/minivan/van/etc.) based on pax count
-      if (hasSightseeing && !isCruiseDay && !isDepartureDay && isEmpty('vehicle')) {
+      // Touring day: auto-fill vehicle if missing
+      // Skip if in cruise range (cruise transport package covers all vehicles)
+      if (hasSightseeing && !isCruiseDay && !isInCruiseRange && !isDepartureDay && isEmpty('vehicle')) {
         const paxNum = pax || 2
         const cityVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         // Find the service matching city
@@ -440,8 +488,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Auto-fill route (airport transfers + intercity transfers) if missing
-      // Uses tiered composite IDs: ${serviceId}__${tierKey}
-      if (isEmpty('route')) {
+      // Skip if in cruise range (cruise transport package covers all transfers)
+      // BUT: the day AFTER cruise range needs its onward transfer (e.g., Luxor → Hurghada)
+      if (isEmpty('route') && !isInCruiseRange) {
         const routes = rawRates.transportRates?.filter((t: any) =>
           t.service_type === 'airport_transfer' || t.service_type === 'intercity_transfer'
         ) || []
@@ -616,30 +665,28 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Cruise transport package: auto-fill on embarkation day (covers entire cruise transport)
-      // This package bundles felucca, motorboat, buses, horse carriages for ALL cruise days
-      if (isCruiseDay || isCruiseEmbarkation) {
-        const hasCruiseTransport = !isEmpty('route') && (slots.route || []).some((id: string) => {
-          const pkg = rawRates.cruiseTransportPkgs?.find((p: any) => p.id === id)
-          return !!pkg
-        })
-        if (!hasCruiseTransport && isCruiseEmbarkation) {
+      // Cruise transport package handling:
+      // - On embarkation day (cruise range start): add the transport package to route slot
+      // - On ALL days in cruise range: clear vehicle, route (except package), and boat_rides
+      //   because the package covers ALL transportation (cars, felucca, motorboat, horse carriage, etc.)
+      if (isInCruiseRange) {
+        // Clear individual transport slots — package covers everything
+        slots.vehicle = []
+        slots.boat_rides = []
+
+        if (isCruiseRangeStart) {
+          // Add cruise transport package on the first cruise day
           const pkg = rawRates.cruiseTransportPkgs?.[0]
           if (pkg) {
-            // Pick rate by pax count
-            const paxNum = pax || 2
-            let pkgRate = pkg.sedan_rate
-            if (paxNum > (pkg.sedan_capacity || 3)) pkgRate = pkg.minivan_rate
-            if (paxNum > (pkg.minivan_capacity || 7)) pkgRate = pkg.van_rate
-            if (paxNum > (pkg.van_capacity || 12)) pkgRate = pkg.minibus_rate
-            if (paxNum > (pkg.minibus_capacity || 20)) pkgRate = pkg.bus_rate
-            // Add to route slot
-            const existingRoutes = Array.isArray(slots.route) ? slots.route : []
-            slots.route = [...existingRoutes, pkg.id]
-            console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise transport package → ${pkg.package_name} (€${pkgRate})`)
+            slots.route = [pkg.id]
+            console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise transport package → ${pkg.package_name} (covers days ${cruiseStartIdx + 1}-${cruiseEndIdx + 1})`)
           } else {
             console.log(`Day ${day.dayNumber}: No cruise transport packages in DB`)
+            slots.route = []
           }
+        } else {
+          // Non-embarkation cruise days: no route (package is on embarkation day)
+          slots.route = []
         }
       }
 
