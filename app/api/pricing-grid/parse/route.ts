@@ -297,7 +297,87 @@ export async function POST(request: NextRequest) {
 
     // 5. Enrich parsed days with actual rate data (prices, names, etc.)
     const allRatesFlat = buildFlatRateMap(rawRates)
-    const enrichedDays = (parsed.days || []).map((day: any) => ({
+
+    // 6. Post-process: fill obvious gaps the AI missed (deterministic rules)
+    const totalDays = parsed.days?.length || 0
+    const processedDays = (parsed.days || []).map((day: any, idx: number) => {
+      const slots = day.slots || {}
+      const isFirstDay = idx === 0
+      const isLastDay = idx === totalDays - 1
+      const hasSightseeing = (slots.entrance_fees?.length > 0) ||
+        /visit|tour|explore|sightsee|temple|pyramid|museum|bazaar|mosque|church|tomb/i.test(day.description || day.title || '')
+      const isCruiseDay = /cruise|sailing|on board|nile cruise/i.test(day.title || day.description || '')
+      const isCruiseEmbarkation = /embark|board.*cruise|cruise.*embark/i.test(day.title || day.description || '')
+
+      // Touring day: auto-fill guide if missing
+      if (hasSightseeing && !isCruiseDay && (!slots.guide || slots.guide.length === 0)) {
+        const guide = rawRates.guideRates?.find((g: any) => g.guide_language?.toLowerCase().includes('english'))
+          || rawRates.guideRates?.[0]
+        if (guide) slots.guide = [guide.id]
+      }
+
+      // Touring day: auto-fill vehicle if missing
+      if (hasSightseeing && !isCruiseDay && (!slots.vehicle || slots.vehicle.length === 0)) {
+        const paxNum = pax || 2
+        const vehicle = rawRates.transportRates?.find((t: any) =>
+          t.service_type === 'day_tour' &&
+          (!t.origin_city || t.origin_city?.toLowerCase() === day.city?.toLowerCase()) &&
+          t.capacity_min <= paxNum && t.capacity_max >= paxNum
+        )
+        if (vehicle) slots.vehicle = [vehicle.id]
+      }
+
+      // Touring day: auto-fill meals (lunch + dinner) if missing
+      if (hasSightseeing && !isCruiseDay && (!slots.meals || slots.meals.length === 0)) {
+        const cityMeals = rawRates.mealRates?.filter((m: any) =>
+          m.city?.toLowerCase() === day.city?.toLowerCase()
+        ) || []
+        const lunch = cityMeals.find((m: any) => m.meal_type?.toLowerCase() === 'lunch')
+        const dinner = cityMeals.find((m: any) => m.meal_type?.toLowerCase() === 'dinner')
+        const mealIds = []
+        if (lunch) mealIds.push(lunch.id)
+        if (dinner) mealIds.push(dinner.id)
+        if (mealIds.length > 0) slots.meals = mealIds
+      }
+
+      // Auto-fill water if missing on non-cruise, non-departure days
+      if (!isCruiseDay && !isLastDay && (!slots.water || slots.water.length === 0)) {
+        slots.water = ['water-standard']
+      }
+
+      // Touring day: auto-fill tipping if missing (driver + guide tip)
+      if (hasSightseeing && !isCruiseDay && (!slots.tipping || slots.tipping.length === 0)) {
+        const tips = rawRates.tippingRates || []
+        const driverTip = tips.find((t: any) => /driver/i.test(t.role || t.service_code || ''))
+        const guideTip = tips.find((t: any) => /guide/i.test(t.role || t.service_code || '') && !/driver/i.test(t.role || t.service_code || ''))
+        const tipIds = []
+        if (driverTip) tipIds.push(driverTip.id)
+        if (guideTip) tipIds.push(guideTip.id)
+        if (tipIds.length > 0) slots.tipping = tipIds
+      }
+
+      // Hotel services: auto-fill if missing on non-cruise, non-last day
+      if (!isCruiseDay && !isLastDay && (!slots.hotel_services || slots.hotel_services.length === 0)) {
+        const hotelSvc = rawRates.hotelServiceRates?.find((h: any) =>
+          h.service_type === 'full_service' &&
+          (h.hotel_category === (tier || 'standard') || h.hotel_category === 'all')
+        )
+        if (hotelSvc) slots.hotel_services = [hotelSvc.id]
+      }
+
+      // Cruise embarkation: auto-fill cruise if missing
+      if (isCruiseEmbarkation && (!slots.cruise || slots.cruise.length === 0)) {
+        const cruise = rawRates.cruiseRates?.[0]
+        if (cruise) slots.cruise = [cruise.id]
+      }
+
+      console.log(`Day ${day.dayNumber} "${day.title}": sightseeing=${hasSightseeing}, cruise=${isCruiseDay}, embark=${isCruiseEmbarkation}`,
+        Object.fromEntries(Object.entries(slots).map(([k, v]) => [k, Array.isArray(v) ? v.length : v])))
+
+      return { ...day, slots }
+    })
+
+    const enrichedDays = processedDays.map((day: any) => ({
       ...day,
       slots: enrichSlots(day.slots || {}, allRatesFlat)
     }))
