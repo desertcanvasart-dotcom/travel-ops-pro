@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { SlotDefinition, SlotValue, RateOption, SelectedItem, PassportType } from '../types'
 
 interface SlotRowProps {
@@ -15,6 +16,7 @@ interface SlotRowProps {
 
 export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden }: SlotRowProps) {
   const [search, setSearch] = useState('')
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   if (hidden) return null
 
@@ -26,9 +28,8 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
     : value.selectedItems.reduce((sum, item) => sum + item[rateKey], 0)
 
   // When searching, search across ALL options (not just filtered/city-relevant ones)
-  // When not searching, show only the filtered (city-relevant) options
   const searchPool = search ? (allOptions || options) : options
-  const filteredOptions = search
+  const dropdownOptions = search
     ? searchPool.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
     : options
 
@@ -75,6 +76,9 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
     onChange({ ...value, selectedItems: items })
   }
 
+  // Count how many filtered options are not yet selected
+  const unselectedCount = options.filter(o => !value.selectedItems.some(i => i.rateId === o.id)).length
+
   return (
     <div className="flex items-stretch border-b border-gray-100 min-h-[44px] hover:bg-gray-50/50 transition-colors">
       {/* Label */}
@@ -99,13 +103,15 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           <select
             value={value.selectedItems[0]?.rateId || ''}
             onChange={(e) => {
-              const opt = options.find(o => o.id === e.target.value) || null
+              const opt = options.find(o => o.id === e.target.value)
+                || (allOptions || []).find(o => o.id === e.target.value)
+                || null
               selectSingle(opt)
             }}
             className="w-full px-2 py-1 text-sm border rounded bg-white"
           >
             <option value="">— Select —</option>
-            {filteredOptions.map(opt => (
+            {options.map(opt => (
               <option key={opt.id} value={opt.id}>
                 {opt.name} — €{opt[rateKey].toFixed(2)}
                 {opt.details ? ` (${opt.details})` : ''}
@@ -113,7 +119,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
             ))}
           </select>
         ) : (
-          /* Multi-select: chips + dropdown */
+          /* Multi-select: selected chips + collapsible "Add" dropdown */
           <div className="space-y-1">
             {/* Selected chips */}
             {value.selectedItems.length > 0 && (
@@ -125,52 +131,77 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                     onClick={() => onChange({ ...value, selectedItems: value.selectedItems.filter(i => i.rateId !== item.rateId) })}
                     title="Click to remove"
                   >
-                    {item.name.length > 30 ? item.name.substring(0, 30) + '...' : item.name}
-                    <span className="font-bold">×</span>
+                    {item.name.length > 35 ? item.name.substring(0, 35) + '...' : item.name}
+                    {' '}€{item[rateKey].toFixed(2)}
+                    <span className="font-bold ml-0.5">×</span>
                   </span>
                 ))}
               </div>
             )}
-            {/* Search + dropdown */}
-            {options.length > 5 && (
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search..."
-                className="w-full px-2 py-0.5 text-xs border rounded"
-              />
+
+            {/* Add/Change button — collapsed by default */}
+            {options.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { setIsDropdownOpen(!isDropdownOpen); setSearch('') }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              >
+                {isDropdownOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                {value.selectedItems.length === 0 ? 'Select...' : `Change (${unselectedCount} more)`}
+              </button>
             )}
-            <div className="max-h-[120px] overflow-y-auto">
-              {filteredOptions.slice(0, 20).map(opt => {
-                const isSelected = value.selectedItems.some(i => i.rateId === opt.id)
-                return (
-                  <label
-                    key={opt.id}
-                    className={`flex items-center gap-2 px-1 py-0.5 text-xs cursor-pointer rounded hover:bg-blue-50 ${
-                      isSelected ? 'bg-blue-50 font-medium' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleItem(opt)}
-                      className="w-3 h-3 text-blue-600 rounded"
-                    />
-                    <span className="flex-1 truncate">
-                      {opt.name}
-                      {opt.city ? ` (${opt.city})` : ''}
-                    </span>
-                    <span className="text-gray-500 whitespace-nowrap">€{opt[rateKey].toFixed(2)}</span>
-                  </label>
-                )
-              })}
-              {filteredOptions.length > 20 && (
-                <div className="text-xs text-gray-400 px-1 py-0.5">
-                  +{filteredOptions.length - 20} more — use search to filter
+            {options.length === 0 && value.selectedItems.length === 0 && (
+              <span className="text-xs text-gray-300 px-1">No options for this city</span>
+            )}
+
+            {/* Collapsible dropdown */}
+            {isDropdownOpen && (
+              <div className="border rounded bg-white shadow-sm">
+                {/* Search input */}
+                <div className="px-2 py-1 border-b">
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={search ? 'Searching all options...' : 'Search (shows all options)...'}
+                    className="w-full px-1 py-0.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-blue-300"
+                  />
                 </div>
-              )}
-            </div>
+                <div className="max-h-[150px] overflow-y-auto">
+                  {dropdownOptions.length === 0 && (
+                    <div className="text-xs text-gray-400 px-2 py-2">No matching options</div>
+                  )}
+                  {dropdownOptions.slice(0, 25).map(opt => {
+                    const isSelected = value.selectedItems.some(i => i.rateId === opt.id)
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center gap-2 px-2 py-1 text-xs cursor-pointer hover:bg-blue-50 ${
+                          isSelected ? 'bg-blue-50 font-medium' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleItem(opt)}
+                          className="w-3 h-3 text-blue-600 rounded"
+                        />
+                        <span className="flex-1 truncate">
+                          {opt.name}
+                          {opt.city && search ? ` (${opt.city})` : ''}
+                        </span>
+                        <span className="text-gray-500 whitespace-nowrap">€{opt[rateKey].toFixed(2)}</span>
+                      </label>
+                    )
+                  })}
+                  {dropdownOptions.length > 25 && (
+                    <div className="text-xs text-gray-400 px-2 py-1">
+                      +{dropdownOptions.length - 25} more — refine search
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

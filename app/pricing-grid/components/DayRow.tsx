@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
-import type { GridDay, GridConfig, AllRates, SlotValue, DayCalc } from '../types'
+import type { GridDay, GridConfig, AllRates, SlotValue, DayCalc, SelectedItem } from '../types'
 import { GROUP_SLOTS, PP_SLOTS } from '../types'
 import { calculateDay } from '../lib/calculator'
 import SlotRow from './SlotRow'
@@ -28,14 +28,20 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
     return rates[key] || []
   }
 
+  // Helper: read current slot state from the slots array
+  const getSlotItems = (slotId: string): SelectedItem[] => {
+    const slot = day.slots.find(s => s.slotId === slotId)
+    return slot?.selectedItems || []
+  }
+
   // Filter options by day city/context — show only relevant items
   // Users can still find others via search (allOptions) in SlotRow
   const getFilteredOptions = (slotId: string) => {
     const allOptions = getSlotOptions(slotId)
-    const city = day.city?.toLowerCase()
+    const city = day.city?.toLowerCase().trim()
     const isCruiseDay = /cruise|sailing|on board/i.test(day.title || day.city || '')
     const isArrival = day.dayNumber === 1
-    const overnightCity = (day.overnight_city || day.city || '').toLowerCase()
+    const overnightCity = ((day as any).overnight_city || day.city || '').toLowerCase().trim()
 
     // City-to-airport code mapping
     const cityToAirport: Record<string, string> = {
@@ -47,89 +53,90 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
     if (slotId === 'airport_services') {
       const code = city ? cityToAirport[city] : null
       if (code) return allOptions.filter(o => o.city === code)
-      return [] // No airport for cruise/unknown city
+      return []
     }
 
     // Entrance fees: only this city's attractions (empty if cruise/no match)
     if (slotId === 'entrance_fees') {
       if (isCruiseDay || !city) return []
-      return allOptions.filter(o => o.city?.toLowerCase() === city)
+      return allOptions.filter(o => o.city?.toLowerCase().trim() === city)
     }
 
     // Meals: only this city's restaurants (empty on cruise days — meals included)
     if (slotId === 'meals') {
       if (isCruiseDay) return []
-      // Use overnight city for meals (that's where dinner happens)
       const mealCity = overnightCity || city
       if (!mealCity) return []
-      return allOptions.filter(o => o.city?.toLowerCase() === mealCity)
+      return allOptions.filter(o => o.city?.toLowerCase().trim() === mealCity)
     }
 
     // Experiences & Boat rides: filter by city
     if (['experiences', 'boat_rides'].includes(slotId)) {
       if (!city || isCruiseDay) return []
-      return allOptions.filter(o => o.city?.toLowerCase() === city)
+      return allOptions.filter(o => o.city?.toLowerCase().trim() === city)
     }
 
     // Accommodation: filter by overnight city (already tier-filtered at API level)
     if (slotId === 'accommodation') {
-      if (isCruiseDay) return [] // Sleeping on cruise
+      if (isCruiseDay) return []
       const accCity = overnightCity || city
-      if (!accCity) return allOptions
-      const match = allOptions.filter(o => o.city?.toLowerCase() === accCity)
-      return match.length > 0 ? match : allOptions
+      if (!accCity) return []
+      return allOptions.filter(o => o.city?.toLowerCase().trim() === accCity)
     }
 
     // Vehicle: filter by city
     if (slotId === 'vehicle') {
-      if (isCruiseDay) return [] // Transport included in cruise
-      if (!city) return allOptions
-      const match = allOptions.filter(o => !o.city || o.city?.toLowerCase() === city)
-      return match.length > 0 ? match : allOptions
+      if (isCruiseDay) return []
+      if (!city) return []
+      return allOptions.filter(o => !o.city || o.city?.toLowerCase().trim() === city)
     }
 
     // Route: filter to relevant transfers (airport + intercity for this city)
     if (slotId === 'route') {
       if (isCruiseDay) return []
+      if (!city && !overnightCity) return []
       return allOptions.filter(o => {
-        const details = (o.details || o.name || '').toLowerCase()
-        const originCity = (o as any).origin_city?.toLowerCase() || ''
-        const destCity = (o as any).destination_city?.toLowerCase() || ''
-        // Show if origin or destination matches day city or overnight city
+        const originCity = (o as any).origin_city?.toLowerCase().trim() || ''
+        const destCity = (o as any).destination_city?.toLowerCase().trim() || ''
         return (city && (originCity === city || destCity === city)) ||
                (overnightCity && (originCity === overnightCity || destCity === overnightCity))
       })
     }
 
-    // Hotel services: filter by tier only
+    // Hotel services: filter by tier AND city/destination
     if (slotId === 'hotel_services') {
       if (isCruiseDay) return []
-      const tierMatch = allOptions.filter(o =>
-        (o as any).category === config.tier || (o as any).category === 'all'
-      )
-      return tierMatch.length > 0 ? tierMatch : allOptions
+      return allOptions.filter(o => {
+        const tierOk = (o as any).category === config.tier || (o as any).category === 'all'
+        if (!tierOk) return false
+        // Also filter by destination/city if available
+        const dest = o.city?.toLowerCase().trim()
+        if (!dest || !city) return tierOk // No destination info → tier match is enough
+        return dest === city || dest === overnightCity
+      })
     }
 
     // Tipping: show only contextually relevant tips for this day type
     if (slotId === 'tipping') {
       if (isCruiseDay) {
-        // Cruise days: only cruise-related tips
         return allOptions.filter(o => /cruise/i.test(o.name || ''))
       }
-      const hasGuide = !!(day.slots?.guide?.length > 0) || config.withGuide
-      const hasAirport = !!(day.slots?.airport_services?.length > 0) || isArrival
-      const hasRoute = !!(day.slots?.route?.length > 0)
+      // Read actual slot state, not keyed object
+      const hasGuide = getSlotItems('guide').length > 0 || config.withGuide
+      const hasAirport = getSlotItems('airport_services').length > 0 || isArrival
+      const hasRoute = getSlotItems('route').length > 0
+      const hasMeals = getSlotItems('meals').length > 0
       return allOptions.filter(o => {
         const name = o.name?.toLowerCase() || ''
-        if (/driver.*day|TIP-DRIVER-DAY/i.test(name)) return true // Standard day driver tip
-        if (/driver.*half|TIP-DRIVER-HALF/i.test(name)) return hasRoute // Half-day driver for transfers
+        if (/driver.*day|TIP-DRIVER-DAY/i.test(name)) return true
+        if (/driver.*half|TIP-DRIVER-HALF/i.test(name)) return hasRoute
         if (/driver.*transfer|TIP-DRIVER-TRANSFER/i.test(name)) return hasRoute
         if (/guide/i.test(name)) return hasGuide
         if (/porter.*hotel|TIP-PORTER-HOTEL/i.test(name)) return true
         if (/porter.*airport|TIP-PORTER-AIRPORT/i.test(name)) return hasAirport
-        if (/restaurant/i.test(name)) return true // Restaurant tip for meal days
+        if (/restaurant/i.test(name)) return hasMeals
         if (/cruise|felucca|motor/i.test(name)) return false
-        return false // Hide anything not explicitly matched
+        return false
       })
     }
 
