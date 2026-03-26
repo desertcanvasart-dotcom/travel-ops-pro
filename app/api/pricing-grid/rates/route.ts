@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     ]
 
     const expandTiers = (r: any, namePrefix: string) => {
-      return VEHICLE_TIERS
+      const tiered = VEHICLE_TIERS
         .filter(t => toNum(r[`${t.key}_rate_eur`]) > 0)
         .map(t => ({
           id: `${r.id}__${t.key}`,
@@ -66,6 +66,23 @@ export async function GET(request: NextRequest) {
           origin_city: r.origin_city,
           destination_city: r.destination_city,
         }))
+      // Fallback: if no tiered columns, use legacy base_rate_eur for all tiers
+      if (tiered.length === 0 && toNum(r.base_rate_eur) > 0) {
+        return VEHICLE_TIERS.map(t => ({
+          id: `${r.id}__${t.key}`,
+          name: `${t.label} (${t.capMin}-${t.capMax} pax) — ${namePrefix}`,
+          rateEur: toNum(r.base_rate_eur),
+          rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
+          city: r.origin_city || r.city,
+          details: `${t.label} | ${r.service_type} (legacy rate)`,
+          capacity_min: t.capMin,
+          capacity_max: t.capMax,
+          service_type: r.service_type,
+          origin_city: r.origin_city,
+          destination_city: r.destination_city,
+        }))
+      }
+      return tiered
     }
 
     const rates = {

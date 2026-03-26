@@ -124,6 +124,7 @@ export function mapServicesToSlots(
     rate_non_eur: number
     total_cost: number
     notes?: string | null
+    description?: string | null
   }>,
   pax: number
 ): SlotValue[] {
@@ -138,12 +139,13 @@ export function mapServicesToSlots(
   }
 
   for (const svc of services) {
-    // Try to extract original slotId from notes (if saved by our system)
+    // Try to extract original slotId from grid metadata
+    // Check description first (new format: __grid:slot:xxx|rate_id:yyy)
+    // Then notes (legacy format: slot:xxx|rate_id:yyy)
     let slotId: string | null = null
-    if (svc.notes) {
-      const slotMatch = svc.notes.match(/slot:(\w+)/)
-      if (slotMatch) slotId = slotMatch[1]
-    }
+    const metaSource = svc.description || svc.notes || ''
+    const slotMatch = metaSource.match(/slot:(\w+)/)
+    if (slotMatch) slotId = slotMatch[1]
 
     // Fall back to service_type reverse mapping
     if (!slotId) {
@@ -154,17 +156,15 @@ export function mapServicesToSlots(
     if (!slot) continue
 
     // Check if this was a custom amount
-    if (svc.notes?.includes('custom_amount')) {
+    if (metaSource.includes('custom_amount')) {
       slot.customAmount = svc.rate_eur
       continue
     }
 
-    // Extract original rate_id from notes if available
+    // Extract original rate_id from metadata if available
     let rateId = svc.id // fallback to service row ID
-    if (svc.notes) {
-      const rateMatch = svc.notes.match(/rate_id:(.+?)(\||$)/)
-      if (rateMatch) rateId = rateMatch[1]
-    }
+    const rateMatch = metaSource.match(/rate_id:(.+?)(\||$)/)
+    if (rateMatch) rateId = rateMatch[1]
 
     slot.selectedItems.push({
       rateId,

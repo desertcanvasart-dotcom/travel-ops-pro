@@ -862,9 +862,11 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   for (const r of rawRates.transportRates || []) {
     if (!r.id) continue
     const routeLabel = r.route_name || r.service_code || `${r.origin_city || ''}${r.destination_city ? '→' + r.destination_city : ''}`
+    let hasTieredRates = false
     for (const t of TIERS) {
       const rate = toNum(r[`${t.key}_rate_eur`])
       if (rate > 0) {
+        hasTieredRates = true
         map.set(`${r.id}__${t.key}`, {
           rateId: `${r.id}__${t.key}`,
           name: `${t.label} (${t.capMin}-${t.capMax} pax) — ${routeLabel}`,
@@ -872,6 +874,19 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
           rateNonEur: toNum(r[`${t.key}_rate_non_eur`] || r[`${t.key}_rate_eur`]),
         })
       }
+    }
+    // Fallback: if no tiered columns exist, use legacy base_rate_eur
+    if (!hasTieredRates && toNum(r.base_rate_eur) > 0) {
+      const fallbackRate = toNum(r.base_rate_eur)
+      for (const t of TIERS) {
+        map.set(`${r.id}__${t.key}`, {
+          rateId: `${r.id}__${t.key}`,
+          name: `${t.label} (${t.capMin}-${t.capMax} pax) — ${routeLabel}`,
+          rateEur: fallbackRate,
+          rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
+        })
+      }
+      console.log(`Transport "${routeLabel}" (${r.id}): using legacy base_rate_eur=${fallbackRate} (no tiered columns)`)
     }
   }
   addAll(rawRates.guideRates, (r: any) => ({
