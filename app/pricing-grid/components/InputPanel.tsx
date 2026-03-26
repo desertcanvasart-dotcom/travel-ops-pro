@@ -1,16 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, FileText, Upload, Loader2 } from 'lucide-react'
+import { Plus, FileText, Upload, Loader2, Trash2 } from 'lucide-react'
 
 interface InputPanelProps {
   onParseDays: (text: string) => Promise<void>
   onAddDay: () => void
   onLoadItinerary: (itineraryId: string) => Promise<void>
+  onClearAll?: () => void
   isParsing: boolean
+  hasDays?: boolean
 }
 
-export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, isParsing }: InputPanelProps) {
+export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, onClearAll, isParsing, hasDays }: InputPanelProps) {
   const [text, setText] = useState('')
   const [showPaste, setShowPaste] = useState(false)
   const [itineraryId, setItineraryId] = useState('')
@@ -57,6 +59,22 @@ export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, isP
           <Plus className="w-4 h-4" />
           Add Day
         </button>
+
+        {/* Clear All / New Quote — only show when there's data */}
+        {hasDays && onClearAll && (
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Clear all days and start a new quote? This cannot be undone.')) {
+                onClearAll()
+              }
+            }}
+            className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors ml-auto"
+          >
+            <Trash2 className="w-4 h-4" />
+            New Quote
+          </button>
+        )}
       </div>
 
       {/* Paste Area */}
@@ -67,7 +85,7 @@ export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, isP
             onChange={(e) => setText(e.target.value)}
             rows={6}
             className="w-full px-3 py-2 text-sm border rounded-lg resize-y focus:ring-2 focus:ring-blue-300"
-            placeholder="Paste WhatsApp conversation, email text, or itinerary description here...&#10;&#10;The AI will parse it into days with services."
+            placeholder={'Paste WhatsApp conversation, email text, or itinerary description here...\n\nThe AI will parse it into days with services.'}
           />
           <div className="flex items-center gap-2">
             <button

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay } from './lib/calculator'
@@ -8,6 +8,40 @@ import GridHeader from './components/GridHeader'
 import InputPanel from './components/InputPanel'
 import DayRow from './components/DayRow'
 import GridSummary from './components/GridSummary'
+
+// ============================================
+// LOCAL STORAGE PERSISTENCE
+// ============================================
+
+const STORAGE_KEY_CONFIG = 'pricing-grid-config'
+const STORAGE_KEY_DAYS = 'pricing-grid-days'
+
+function saveToStorage(key: string, data: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data))
+  } catch (e) {
+    // Storage full or unavailable — silently ignore
+  }
+}
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const stored = localStorage.getItem(key)
+    if (stored) return JSON.parse(stored) as T
+  } catch (e) {
+    // Corrupted data — silently ignore
+  }
+  return fallback
+}
+
+function clearStorage() {
+  try {
+    localStorage.removeItem(STORAGE_KEY_CONFIG)
+    localStorage.removeItem(STORAGE_KEY_DAYS)
+  } catch (e) {
+    // Silently ignore
+  }
+}
 
 // ============================================
 // DEFAULT CONFIG
@@ -50,11 +84,36 @@ function createEmptyDay(dayNumber: number): GridDay {
 // ============================================
 
 export default function PricingGridPage() {
-  const [config, setConfig] = useState<GridConfig>(DEFAULT_CONFIG)
-  const [days, setDays] = useState<GridDay[]>([])
+  // Initialize state from localStorage (runs once on mount)
+  const [config, setConfig] = useState<GridConfig>(() =>
+    loadFromStorage(STORAGE_KEY_CONFIG, DEFAULT_CONFIG)
+  )
+  const [days, setDays] = useState<GridDay[]>(() =>
+    loadFromStorage(STORAGE_KEY_DAYS, [])
+  )
   const [rates, setRates] = useState<AllRates | null>(null)
   const [loading, setLoading] = useState(true)
   const [isParsing, setIsParsing] = useState(false)
+
+  // Track if initial load is done (avoid saving defaults over stored data)
+  const isInitialLoad = useRef(true)
+
+  // --- Persist config to localStorage on change ---
+  useEffect(() => {
+    if (isInitialLoad.current) return
+    saveToStorage(STORAGE_KEY_CONFIG, config)
+  }, [config])
+
+  // --- Persist days to localStorage on change ---
+  useEffect(() => {
+    if (isInitialLoad.current) return
+    saveToStorage(STORAGE_KEY_DAYS, days)
+  }, [days])
+
+  // Mark initial load as done after first render
+  useEffect(() => {
+    isInitialLoad.current = false
+  }, [])
 
   // --- Fetch rates when tier changes ---
   const fetchRates = useCallback(async (tier: string) => {
@@ -119,6 +178,13 @@ export default function PricingGridPage() {
         slots: d.slots.map(s => s.slotId === slotId ? value : s)
       }
     }))
+  }
+
+  // --- Clear all data (new quote) ---
+  const handleClearAll = () => {
+    setDays([])
+    setConfig(DEFAULT_CONFIG)
+    clearStorage()
   }
 
   // --- Parse Text via AI ---
@@ -225,7 +291,9 @@ export default function PricingGridPage() {
         onParseDays={handleParseDays}
         onAddDay={addDay}
         onLoadItinerary={handleLoadItinerary}
+        onClearAll={handleClearAll}
         isParsing={isParsing}
+        hasDays={days.length > 0}
       />
 
       {/* Days Grid */}
