@@ -194,9 +194,7 @@ export async function POST(request: NextRequest) {
             rate_eur: slot.customAmount,
             rate_non_eur: slot.customAmount,
             total_cost: isGroup ? slot.customAmount : slot.customAmount * (config.pax || 1),
-            notes: null,
-            // Store grid metadata in description (not displayed in detail page)
-            description: `__grid:custom_amount|slot:${slot.slotId}`,
+            notes: `__grid:custom_amount|slot:${slot.slotId}`,
           })
           continue
         }
@@ -212,9 +210,7 @@ export async function POST(request: NextRequest) {
             rate_eur: item.rateEur,
             rate_non_eur: item.rateNonEur,
             total_cost: isGroup ? rate : rate * (config.pax || 1),
-            notes: null,
-            // Store grid metadata in description (prefixed so it can be parsed on load)
-            description: `__grid:slot:${slot.slotId}|rate_id:${item.rateId}`,
+            notes: `__grid:slot:${slot.slotId}|rate_id:${item.rateId}`,
           })
         }
       }

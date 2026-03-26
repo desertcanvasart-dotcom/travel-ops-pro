@@ -1657,7 +1657,7 @@ export default function ViewItineraryPage() {
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
                                 <p className="text-xs text-gray-500">{tEdit.has(`serviceTypes.${service.service_type}`) ? tEdit(`serviceTypes.${service.service_type}`) : service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}</p>
-                                {service.notes && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
+                                {service.notes && !service.notes.startsWith('__grid:') && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
                               </div>
                             </div>
                             <div className="text-right">
