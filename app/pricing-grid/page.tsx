@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
-import { calculateGrandTotals } from './lib/calculator'
+import { calculateGrandTotals, calculateDay } from './lib/calculator'
 import GridHeader from './components/GridHeader'
 import InputPanel from './components/InputPanel'
 import DayRow from './components/DayRow'
@@ -22,7 +22,7 @@ const DEFAULT_CONFIG: GridConfig = {
   currency: 'EUR',
   marginPercent: 25,
   exchangeRate: null,
-  startDate: new Date().toISOString().split('T')[0],  // Today's date
+  startDate: new Date().toISOString().split('T')[0],
 }
 
 // ============================================
@@ -36,7 +36,7 @@ function createEmptyDay(dayNumber: number): GridDay {
     title: `Day ${dayNumber}`,
     city: '',
     description: '',
-    isExpanded: true,
+    isExpanded: false,
     slots: SLOT_DEFINITIONS.map(def => ({
       slotId: def.slotId,
       selectedItems: [],
@@ -87,7 +87,6 @@ export default function PricingGridPage() {
   const removeDay = (dayId: string) => {
     setDays(prev => {
       const filtered = prev.filter(d => d.id !== dayId)
-      // Re-number days
       return filtered.map((d, i) => ({ ...d, dayNumber: i + 1 }))
     })
   }
@@ -96,6 +95,14 @@ export default function PricingGridPage() {
     setDays(prev => prev.map(d =>
       d.id === dayId ? { ...d, isExpanded: !d.isExpanded } : d
     ))
+  }
+
+  const expandAll = () => {
+    setDays(prev => prev.map(d => ({ ...d, isExpanded: true })))
+  }
+
+  const collapseAll = () => {
+    setDays(prev => prev.map(d => ({ ...d, isExpanded: false })))
   }
 
   const updateDay = (dayId: string, partial: Partial<GridDay>) => {
@@ -126,14 +133,13 @@ export default function PricingGridPage() {
       })
       const data = await res.json()
       if (data.success && data.days) {
-        // The API returns days with slots already enriched (real rate IDs, names, prices)
         const parsedDays: GridDay[] = data.days.map((pd: any, idx: number) => ({
           id: crypto.randomUUID(),
           dayNumber: pd.dayNumber || idx + 1,
           title: pd.title || `Day ${idx + 1}`,
           city: pd.city || '',
           description: pd.description || '',
-          isExpanded: idx === 0,
+          isExpanded: false,
           slots: SLOT_DEFINITIONS.map(def => {
             const slotData = pd.slots?.[def.slotId]
             if (!slotData) return { slotId: def.slotId, selectedItems: [], customAmount: 0 }
@@ -174,7 +180,7 @@ export default function PricingGridPage() {
           title: dayData.title || `Day ${idx + 1}`,
           city: dayData.city || '',
           description: dayData.description || '',
-          isExpanded: idx === 0,
+          isExpanded: false,
           slots: SLOT_DEFINITIONS.map(def => ({
             slotId: def.slotId,
             selectedItems: [],
@@ -201,22 +207,18 @@ export default function PricingGridPage() {
 
   if (loading && !rates) {
     return (
-      <div className="max-w-6xl mx-auto p-4">
+      <div className="max-w-7xl mx-auto p-6">
         <div className="text-center py-20 text-gray-500">Loading rates...</div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4">
-      {/* Page Title */}
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Pricing Grid</h1>
-        <p className="text-sm text-gray-500">Fixed-slot pricing calculator — select services per day</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8 bg-gray-50 min-h-screen">
+      {/* Sticky Header with Controls + Live Summary */}
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-2 bg-gray-50">
+        <GridHeader config={config} onChange={setConfig} totals={totals} />
       </div>
-
-      {/* Header Controls */}
-      <GridHeader config={config} onChange={setConfig} />
 
       {/* Input Panel */}
       <InputPanel
@@ -228,24 +230,54 @@ export default function PricingGridPage() {
 
       {/* Days Grid */}
       {days.length === 0 ? (
-        <div className="text-center py-20 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-          <p className="text-lg mb-2">No days yet</p>
-          <p className="text-sm">Paste text, load an itinerary, or add days manually</p>
+        <div className="text-center py-24 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">
+          <div className="text-3xl mb-3 opacity-50">+</div>
+          <p className="text-base mb-1 font-medium">No days yet</p>
+          <p className="text-sm text-gray-400">Paste text, load an itinerary, or add days manually</p>
         </div>
       ) : (
         <>
-          {days.map(day => (
-            <DayRow
-              key={day.id}
-              day={day}
-              config={config}
-              rates={rates || {} as AllRates}
-              onToggleExpand={() => toggleExpand(day.id)}
-              onUpdateSlot={(slotId, value) => updateSlot(day.id, slotId, value)}
-              onUpdateDay={(partial) => updateDay(day.id, partial)}
-              onRemoveDay={() => removeDay(day.id)}
-            />
-          ))}
+          {/* Toolbar: Expand/Collapse + Day Count */}
+          <div className="flex items-center justify-between mb-2 px-1">
+            <div className="text-xs text-gray-500">
+              <span className="font-semibold text-gray-700">{days.length}</span> days
+              {' \u00B7 '}
+              <span className="font-semibold text-gray-700">{config.pax}</span> pax
+              {' \u00B7 '}
+              <span className="font-semibold text-gray-700 capitalize">{config.tier}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={expandAll}
+                className="px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+              >
+                Expand All
+              </button>
+              <span className="text-gray-300">|</span>
+              <button
+                onClick={collapseAll}
+                className="px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+              >
+                Collapse All
+              </button>
+            </div>
+          </div>
+
+          {/* Day Cards */}
+          <div className="space-y-2">
+            {days.map(day => (
+              <DayRow
+                key={day.id}
+                day={day}
+                config={config}
+                rates={rates || {} as AllRates}
+                onToggleExpand={() => toggleExpand(day.id)}
+                onUpdateSlot={(slotId, value) => updateSlot(day.id, slotId, value)}
+                onUpdateDay={(partial) => updateDay(day.id, partial)}
+                onRemoveDay={() => removeDay(day.id)}
+              />
+            ))}
+          </div>
 
           {/* Grand Summary */}
           <GridSummary totals={totals} config={config} dayCount={days.length} />
