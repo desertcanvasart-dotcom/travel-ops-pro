@@ -85,8 +85,8 @@ export async function POST(request: NextRequest) {
     let itineraryCode: string
 
     // Sanitize numeric values to avoid overflow
-    itineraryData.total_cost = Math.round((itineraryData.total_cost || 0) * 100) / 100
-    itineraryData.partner_commission_percent = Math.round((itineraryData.partner_commission_percent || 0) * 100) / 100
+    itineraryData.total_cost = Math.min(Math.round((itineraryData.total_cost || 0) * 100) / 100, 99999999.99)
+    itineraryData.partner_commission_percent = Math.min(Math.max(Math.round((itineraryData.partner_commission_percent || 0) * 100) / 100, 0), 100)
     itineraryData.num_adults = Math.min(itineraryData.num_adults || 1, 999)
 
     console.log('Pricing grid save - itinerary data:', JSON.stringify(itineraryData, null, 2))

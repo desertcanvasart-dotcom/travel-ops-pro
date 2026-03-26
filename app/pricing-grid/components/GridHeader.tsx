@@ -100,7 +100,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
               max={50}
               value={config.pax}
               onChange={(e) => update({ pax: Math.max(1, parseInt(e.target.value) || 1) })}
-              className="w-16 px-2 py-1 text-sm border border-gray-200 rounded-lg text-center font-bold bg-white focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all"
+              className="w-20 h-8 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center font-bold text-gray-900 bg-white focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all"
             />
           </div>
 
@@ -111,7 +111,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
               type="date"
               value={config.startDate}
               onChange={(e) => update({ startDate: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-200 transition-all"
+              className="px-2 h-8 text-sm border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-200 transition-all"
             />
           </div>
 
@@ -210,7 +210,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
               max={100}
               value={config.marginPercent}
               onChange={(e) => update({ marginPercent: Math.min(parseFloat(e.target.value) || 0, 100) })}
-              className="w-16 px-2 py-1 text-sm border border-gray-200 rounded-lg text-center font-bold bg-white focus:ring-2 focus:ring-blue-200 transition-all"
+              className="w-20 h-8 px-2 py-1 text-sm border border-gray-300 rounded-lg text-center font-bold text-gray-900 bg-white focus:ring-2 focus:ring-blue-200 transition-all"
             />
           </div>
         </div>
