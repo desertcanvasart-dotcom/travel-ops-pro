@@ -98,6 +98,8 @@ export default function PricingGridPage() {
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null)
+  const [savedQuoteNumber, setSavedQuoteNumber] = useState<string | null>(null)
 
   const isInitialLoad = useRef(true)
 
@@ -302,7 +304,39 @@ export default function PricingGridPage() {
           itineraryId: data.itineraryId,
           itineraryCode: data.itineraryCode,
         }))
-        setSaveMessage(`Saved as ${data.itineraryCode}`)
+
+        // For B2B: automatically create a B2B quote from the saved itinerary
+        if (config.clientType === 'b2b') {
+          try {
+            const quoteRes = await fetch('/api/b2b/quote-from-itinerary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                itinerary_id: data.itineraryId,
+                partner_id: config.partnerId || undefined,
+                margin_percent: config.marginPercent,
+                is_eur_passport: config.passport === 'eu',
+                language: 'English',
+              })
+            })
+            const quoteData = await quoteRes.json()
+            if (quoteData.id) {
+              setSavedQuoteId(quoteData.id)
+              setSavedQuoteNumber(quoteData.quote_number || null)
+              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteData.quote_number || ''}`)
+            } else {
+              // Quote creation failed, but itinerary saved
+              setSaveMessage(`Saved as ${data.itineraryCode} (B2B quote creation failed: ${quoteData.error || 'unknown error'})`)
+            }
+          } catch (quoteErr) {
+            console.error('B2B quote creation error:', quoteErr)
+            setSaveMessage(`Saved as ${data.itineraryCode} (B2B quote creation failed)`)
+          }
+        } else {
+          setSavedQuoteId(null)
+          setSavedQuoteNumber(null)
+          setSaveMessage(`Saved as ${data.itineraryCode}`)
+        }
       } else {
         alert(`Save failed: ${data.error}`)
       }
@@ -409,6 +443,8 @@ export default function PricingGridPage() {
             isSaving={isSaving}
             savedItineraryId={config.itineraryId}
             savedItineraryCode={config.itineraryCode}
+            savedQuoteId={savedQuoteId}
+            savedQuoteNumber={savedQuoteNumber}
             saveMessage={saveMessage}
           />
         </>

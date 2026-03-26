@@ -11,13 +11,28 @@ interface GridSummaryProps {
   isSaving?: boolean
   savedItineraryId?: string | null
   savedItineraryCode?: string | null
+  savedQuoteId?: string | null
+  savedQuoteNumber?: string | null
   saveMessage?: string | null
 }
 
-export default function GridSummary({ totals, config, dayCount, onSave, isSaving, savedItineraryId, savedItineraryCode, saveMessage }: GridSummaryProps) {
+export default function GridSummary({ totals, config, dayCount, onSave, isSaving, savedItineraryId, savedItineraryCode, savedQuoteId, savedQuoteNumber, saveMessage }: GridSummaryProps) {
   const { pax, marginPercent, currency } = config
-  const sym = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : currency === 'GBP' ? '£' : currency
+  const sym = currency === 'EUR' ? '\u20AC' : currency === 'USD' ? '$' : currency === 'GBP' ? '\u00A3' : currency
   const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const isB2B = config.clientType === 'b2b'
+
+  // Determine the primary view link based on B2B/B2C
+  const viewLink = isB2B && savedQuoteId
+    ? `/b2b/quotes/${savedQuoteId}`
+    : savedItineraryId
+      ? `/itineraries/${savedItineraryId}`
+      : null
+
+  const viewLabel = isB2B && savedQuoteId
+    ? `View B2B Quote${savedQuoteNumber ? ` (${savedQuoteNumber})` : ''}`
+    : 'View Itinerary'
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-4">
@@ -26,8 +41,8 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
         <div>
           <h3 className="text-sm font-bold uppercase tracking-wider">Grand Summary</h3>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            {dayCount} days · {pax} pax · {config.passport === 'eu' ? 'EU' : 'Non-EU'} · {config.tier} · {config.clientType.toUpperCase()}
-            {savedItineraryCode && <span className="ml-2 text-green-400">— {savedItineraryCode}</span>}
+            {dayCount} days {'\u00B7'} {pax} pax {'\u00B7'} {config.passport === 'eu' ? 'EU' : 'Non-EU'} {'\u00B7'} {config.tier} {'\u00B7'} {config.clientType.toUpperCase()}
+            {savedItineraryCode && <span className="ml-2 text-green-400">{'\u2014'} {savedItineraryCode}</span>}
           </p>
         </div>
         <div className="text-right">
@@ -60,14 +75,23 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
             <button
               onClick={onSave}
               disabled={isSaving}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+              className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors ${
+                isB2B
+                  ? 'bg-purple-600 hover:bg-purple-700'
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
             >
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              {isSaving ? 'Saving...' : savedItineraryId ? 'Update Itinerary' : 'Save as Itinerary'}
+              {isSaving
+                ? 'Saving...'
+                : savedItineraryId
+                  ? (isB2B ? 'Update B2B Quote' : 'Update Itinerary')
+                  : (isB2B ? 'Save as B2B Quote' : 'Save as Itinerary')
+              }
             </button>
 
             {/* Success message */}
@@ -76,16 +100,32 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
             )}
           </div>
 
-          {/* View Itinerary Link */}
-          {savedItineraryId && (
-            <a
-              href={`/itineraries/${savedItineraryId}`}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-            >
-              View Itinerary
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          )}
+          {/* View Link — routes to B2B quotes for B2B, itineraries for B2C */}
+          <div className="flex items-center gap-2">
+            {viewLink && (
+              <a
+                href={viewLink}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  isB2B
+                    ? 'text-purple-600 hover:text-purple-800 hover:bg-purple-50'
+                    : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
+                }`}
+              >
+                {viewLabel}
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+            {/* Also show itinerary link for B2B (secondary) */}
+            {isB2B && savedItineraryId && savedQuoteId && (
+              <a
+                href={`/itineraries/${savedItineraryId}`}
+                className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                View Itinerary
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>
