@@ -89,23 +89,29 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
     // Transport (route): all transport types — day tours, airport, intercity, cruise packages
     if (slotId === 'route') {
       const selectedIds = new Set(getSlotItems('route').map(i => i.rateId))
+      // Check if this day involves a flight or transfer to another city
+      const isFlightDay = /flight|fly/i.test(day.title || day.description || '')
+      const isTransferDay = /transfer|hurghada|departure/i.test(day.title || day.description || '')
+      const prevCity = ((day as any).prev_city || '').toLowerCase().trim()
       return allOptions.filter(o => {
         // Always show currently selected items
         if (selectedIds.has(o.id)) return true
-        // Always show cruise transport packages on cruise days
+        // Always show cruise transport packages on cruise-related days
         if ((o as any).service_type === 'cruise_transport_package') return isCruiseDay
-        // On cruise days, hide individual transport (package covers it)
-        if (isCruiseDay) return false
+        // On pure cruise sailing days (not flight/transfer), hide individual transport
+        if (isCruiseDay && !isFlightDay && !isTransferDay) return false
         if (!city && !overnightCity) return false
         const originCity = (o as any).origin_city?.toLowerCase().trim() || ''
         const destCity = (o as any).destination_city?.toLowerCase().trim() || ''
         // Day tours: match by origin_city or city
         if ((o as any).service_type === 'day_tour') {
+          if (isCruiseDay) return false // No day tours on cruise days
           return !originCity || (city && (originCity === city || destCity === city))
         }
-        // Airport/intercity transfers: match by origin or destination
+        // Airport/intercity transfers: match by origin or destination city
+        // Also match by overnight city for onward transfers
         return (city && (originCity === city || destCity === city)) ||
-               (overnightCity && (originCity === overnightCity || destCity === overnightCity))
+               (overnightCity && overnightCity !== city && (originCity === overnightCity || destCity === overnightCity))
       })
     }
 

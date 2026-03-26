@@ -547,12 +547,17 @@ export async function POST(request: NextRequest) {
         if (isFlightDay && !isFirstDay && !isLastDay) {
           // Departure city = where we slept last night (previous overnight city)
           const depCity = prevOvernightCity || prevCity
+          console.log(`Day ${day.dayNumber}: Flight day detected. depCity="${depCity}", arrCity="${cityLower}", airport_transfers in DB: ${routes.filter((r: any) => r.service_type === 'airport_transfer').map((r: any) => `${r.origin_city}/${r.destination_city}`).join(', ')}`)
           if (depCity && depCity !== 'cruise') {
             const depTransfer = routes.find((r: any) =>
               r.service_type === 'airport_transfer' &&
               (cityMatch(r.origin_city, depCity) || cityMatch(r.destination_city, depCity))
             )
-            if (depTransfer) pushRoute(depTransfer, 'flight departure airport transfer')
+            if (depTransfer) {
+              pushRoute(depTransfer, 'flight departure airport transfer')
+            } else {
+              console.log(`Day ${day.dayNumber}: WARNING — No airport transfer found for departure city "${depCity}"`)
+            }
           }
           // Arrival city = this day's city
           if (cityLower) {
@@ -561,14 +566,30 @@ export async function POST(request: NextRequest) {
               (cityMatch(r.origin_city, cityLower) || cityMatch(r.destination_city, cityLower)) &&
               !routeIds.includes(`${r.id}__${tier}`) // avoid duplicate if same city
             )
-            if (arrTransfer) pushRoute(arrTransfer, 'flight arrival airport transfer')
+            if (arrTransfer) {
+              pushRoute(arrTransfer, 'flight arrival airport transfer')
+            } else {
+              console.log(`Day ${day.dayNumber}: WARNING — No airport transfer found for arrival city "${cityLower}"`)
+            }
           }
         }
 
         // --- INTERCITY TRANSFERS ---
         // When previous overnight city differs from current day's city (and not a flight)
         if (!isFirstDay && !isFlightDay) {
-          const effectivePrevCity = prevOvernightCity || prevCity
+          // For cruise range end days, the "previous city" might be "Cruise" —
+          // use the day before's actual city instead (e.g., Luxor for Nile cruise)
+          let effectivePrevCity = prevOvernightCity || prevCity
+          if (effectivePrevCity === 'cruise' || !effectivePrevCity) {
+            // Walk back to find the last real city before the cruise
+            for (let j = idx - 1; j >= 0; j--) {
+              const pc = (parsed.days[j]?.city || '').toLowerCase().trim()
+              if (pc && pc !== 'cruise') {
+                effectivePrevCity = pc
+                break
+              }
+            }
+          }
           if (effectivePrevCity && cityLower && effectivePrevCity !== cityLower && effectivePrevCity !== 'cruise') {
             const intercity = routes.find((r: any) =>
               r.service_type === 'intercity_transfer' &&
