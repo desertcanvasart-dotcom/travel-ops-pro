@@ -117,7 +117,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
           <button
             type="button"
             onClick={togglePassport}
-            className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all ${
+            className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all whitespace-nowrap ${
               config.passport === 'eu'
                 ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
                 : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
