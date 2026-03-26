@@ -317,20 +317,20 @@ const DEFAULT_RATES: Record<ServiceTier, {
   vehicle: number
 }> = {
   budget: {
-    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
-    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
+    hotelPPD: 35, hotelSingleSupp: 20, cruisePPDNight: 60, cruiseSingleSuppNight: 30,
+    guide: 40, lunch: 15, dinner: 20, tips: 10, airportService: 25, hotelService: 15, vehicle: 30
   },
   standard: {
-    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
-    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
+    hotelPPD: 68, hotelSingleSupp: 35, cruisePPDNight: 110, cruiseSingleSuppNight: 55,
+    guide: 50, lunch: 30, dinner: 40, tips: 20, airportService: 30, hotelService: 20, vehicle: 39
   },
   deluxe: {
-    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
-    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
+    hotelPPD: 120, hotelSingleSupp: 60, cruisePPDNight: 180, cruiseSingleSuppNight: 90,
+    guide: 60, lunch: 40, dinner: 55, tips: 25, airportService: 35, hotelService: 25, vehicle: 55
   },
   luxury: {
-    hotelPPD: 0, hotelSingleSupp: 0, cruisePPDNight: 0, cruiseSingleSuppNight: 0,
-    guide: 0, lunch: 0, dinner: 0, tips: 0, airportService: 0, hotelService: 0, vehicle: 0
+    hotelPPD: 250, hotelSingleSupp: 120, cruisePPDNight: 300, cruiseSingleSuppNight: 150,
+    guide: 80, lunch: 55, dinner: 75, tips: 30, airportService: 40, hotelService: 30, vehicle: 75
   }
 }
 
@@ -1124,18 +1124,21 @@ export async function getGuideRate(
     // 1. Try guide_rates table first (has per-language/type/duration rates)
     const { data: guideRate } = await supabaseAdmin
       .from('guide_rates')
-      .select('id, service_code, guide_language, base_rate_eur, supplier_id')
+      .select('*')
       .eq('is_active', true)
       .ilike('guide_language', `%${language}%`)
       .limit(1)
       .single()
 
-    if (guideRate && (guideRate.base_rate_eur ?? 0) > 0) {
-      console.log(`✅ Guide (guide_rates): ${language} | €${guideRate.base_rate_eur}/day`)
-      return {
-        id: guideRate.id,
-        name: `${language} Speaking Guide`,
-        dailyRate: guideRate.base_rate_eur
+    if (guideRate) {
+      const dailyRate = guideRate.base_rate_eur || guideRate.rate_eur || 0
+      if (dailyRate > 0) {
+        console.log(`✅ Guide (guide_rates): ${language} | €${dailyRate}/day`)
+        return {
+          id: guideRate.id,
+          name: `${language} Speaking Guide`,
+          dailyRate
+        }
       }
     }
 
@@ -1162,18 +1165,20 @@ export async function getGuideRate(
     // 3. Try any active guide_rates entry regardless of language
     const { data: anyRate } = await supabaseAdmin
       .from('guide_rates')
-      .select('id, service_code, guide_language, base_rate_eur')
+      .select('*')
       .eq('is_active', true)
-      .gt('base_rate_eur', 0)
       .limit(1)
       .single()
 
     if (anyRate) {
-      console.log(`✅ Guide (guide_rates fallback): ${anyRate.guide_language} | €${anyRate.base_rate_eur}/day`)
-      return {
-        id: anyRate.id,
-        name: `${anyRate.guide_language || language} Speaking Guide`,
-        dailyRate: anyRate.base_rate_eur
+      const anyDailyRate = anyRate.base_rate_eur || anyRate.rate_eur || 0
+      if (anyDailyRate > 0) {
+        console.log(`✅ Guide (guide_rates fallback): ${anyRate.guide_language} | €${anyDailyRate}/day`)
+        return {
+          id: anyRate.id,
+          name: `${anyRate.guide_language || language} Speaking Guide`,
+          dailyRate: anyDailyRate
+        }
       }
     }
 
@@ -1324,10 +1329,13 @@ export async function buildTransportCache(): Promise<Map<string, TransportRate>>
   if (!allRates) return cache
 
   for (const rate of allRates) {
+    // Use origin_city as fallback for city (some records use origin_city instead)
+    const effectiveCity = rate.city || rate.origin_city || ''
+
     // Build multiple keys for flexible lookup (no vehicle_type — one row has all tiers)
     const baseKey = [
       rate.service_type || '',
-      (rate.city || '').toLowerCase(),
+      effectiveCity.toLowerCase(),
       rate.duration || '',
       rate.area || ''
     ].join('|')
@@ -1337,13 +1345,25 @@ export async function buildTransportCache(): Promise<Map<string, TransportRate>>
     // Also cache without area for fallback
     const keyNoArea = [
       rate.service_type || '',
-      (rate.city || '').toLowerCase(),
+      effectiveCity.toLowerCase(),
       rate.duration || '',
       ''
     ].join('|')
 
     if (!cache.has(keyNoArea)) {
       cache.set(keyNoArea, rate)
+    }
+
+    // Also cache without duration AND area for maximum fallback
+    const keyNoDurationNoArea = [
+      rate.service_type || '',
+      effectiveCity.toLowerCase(),
+      '',
+      ''
+    ].join('|')
+
+    if (!cache.has(keyNoDurationNoArea)) {
+      cache.set(keyNoDurationNoArea, rate)
     }
 
     // For intercity, also cache by origin-destination
@@ -1355,9 +1375,17 @@ export async function buildTransportCache(): Promise<Map<string, TransportRate>>
       ].join('|')
       cache.set(intercityKey, rate)
     }
+
+    // Also cache by service_code for direct lookups
+    if (rate.service_code) {
+      cache.set(`code:${rate.service_code.toLowerCase()}`, rate)
+    }
   }
 
-  console.log(`📦 Built transport cache with ${cache.size} entries`)
+  console.log(`📦 Built transport cache with ${cache.size} entries from ${allRates.length} DB records`)
+  // Log cache keys for debugging
+  const keys = Array.from(cache.keys()).filter(k => !k.startsWith('code:')).slice(0, 20)
+  console.log('📦 Sample cache keys:', keys)
   return cache
 }
 
