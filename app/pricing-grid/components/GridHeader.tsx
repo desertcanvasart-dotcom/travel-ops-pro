@@ -205,7 +205,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
                 onChange={(e) => update({ marginPercent: parseFloat(e.target.value) || 0 })}
                 className="w-14 px-2 py-1 text-sm border border-l-0 border-gray-200 text-center bg-gray-50 focus:bg-white transition-all"
               />
-              <span className="px-1.5 py-1 text-[10px] bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-gray-500 font-bold uppercase tracking-wider">
+              <span className="px-1.5 py-1 text-[10px] bg-gray-100 border border-l-0 border-gray-200 rounded-r-lg text-gray-500 font-bold uppercase tracking-wider whitespace-nowrap">
                 Markup %
               </span>
             </div>
