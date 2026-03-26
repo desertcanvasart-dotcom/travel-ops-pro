@@ -658,9 +658,17 @@ export function UnifiedMessageThread({
       return `${sender}: ${content}`
     }).join('\n')
 
+    // Encode conversation as URL-safe base64
+    const encoder = new TextEncoder()
+    const bytes = encoder.encode(formattedConversation)
+    const base64 = btoa(String.fromCharCode(...bytes))
+    const encoded = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
     // Build query params
     const params = new URLSearchParams()
-    params.set('conversation', formattedConversation)
+    params.set('conversation', encoded)
+    params.set('encoded', 'base64')
+    params.set('source', conversation.channel)
 
     // Pass client ID if linked
     if (conversation.client_id) {
@@ -671,9 +679,12 @@ export function UnifiedMessageThread({
     if (conversation.channel === 'whatsapp' && conversation.contact_info) {
       params.set('phone', conversation.contact_info)
     }
+    if (conversation.client_email) {
+      params.set('email', conversation.client_email)
+    }
 
-    // Navigate to parser
-    router.push(`/whatsapp-parser?${params.toString()}`)
+    // Navigate to pricing grid
+    router.push(`/pricing-grid?${params.toString()}`)
   }
 
   // Group messages by date
