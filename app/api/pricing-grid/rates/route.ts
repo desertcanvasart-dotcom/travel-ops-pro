@@ -157,12 +157,12 @@ export async function GET(request: NextRequest) {
 
       accommodation: (accommodationRates || []).map((r: any) => ({
         id: r.id,
-        name: `${r.property_name} (${r.city})`,
+        name: `${r.property_name} ${r.city} (${r.tier} | ${r.board_basis || 'BB'})`,
         rateEur: toNum(r.pp_double_eur),
         rateNonEur: toNum(r.pp_double_non_eur),
         city: r.city,
-        details: `${r.tier} | ${r.board_basis || 'RO'}`,
-        board_basis: r.board_basis,
+        details: `${r.tier} | ${r.board_basis || 'BB'}`,
+        board_basis: r.board_basis || 'BB',
         single_supp_eur: toNum(r.single_supp_eur),
         single_supp_non_eur: toNum(r.single_supp_non_eur),
       })),

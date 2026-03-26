@@ -615,22 +615,94 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Touring day: auto-fill meals (lunch + dinner) if missing (NEVER on arrival/departure/cruise)
-      if (hasSightseeing && !isCruiseDay && !isArrivalDay && !isDepartureDay && isEmpty('meals')) {
-        const cityLower = day.city?.toLowerCase()
-        const cityMeals = rawRates.mealRates?.filter((m: any) =>
-          m.city?.toLowerCase() === cityLower
-        ) || []
-        const lunch = cityMeals.find((m: any) => /lunch/i.test(m.meal_type || ''))
-        const dinner = cityMeals.find((m: any) => /dinner/i.test(m.meal_type || ''))
-        const mealIds: string[] = []
-        if (lunch) mealIds.push(lunch.id)
-        if (dinner) mealIds.push(dinner.id)
-        if (mealIds.length > 0) {
-          slots.meals = mealIds
-          console.log(`Day ${day.dayNumber}: AUTO-FILLED ${mealIds.length} meals for ${day.city}`)
-        } else {
-          console.log(`Day ${day.dayNumber}: No meals found for city "${day.city}" (${rawRates.mealRates?.length || 0} total meal rates)`)
+      // Auto-fill meals — respecting cruise full-board and hotel board basis
+      // Rules:
+      //   Cruise embarkation: lunch on board, dinner on board → NO outside meals
+      //   Cruise sailing: all meals on board → NO outside meals
+      //   Cruise disembarkation: breakfast on board only → may need lunch + dinner if sightseeing
+      //   Hotel BB (bed & breakfast): needs lunch + dinner
+      //   Hotel HB (half board): needs lunch only (dinner included)
+      //   Hotel FB (full board): NO outside meals
+      //   Hotel AI (all inclusive): NO outside meals
+      //   Hotel RO (room only) or no board: needs lunch + dinner
+      //   Arrival/departure days: no meals auto-filled
+      if (isEmpty('meals') && !isArrivalDay && !isDepartureDay) {
+        // Determine which meals are needed based on board type
+        let needsLunch = false
+        let needsDinner = false
+
+        if (isInCruiseRange) {
+          // Cruise range: full board on all days EXCEPT disembarkation (last cruise day)
+          if (idx === cruiseEndIdx) {
+            // Disembarkation day: breakfast on board, may need lunch + dinner if sightseeing
+            if (hasSightseeing) {
+              needsLunch = true
+              needsDinner = true
+            }
+            console.log(`Day ${day.dayNumber}: Cruise disembarkation — breakfast on board, sightseeing=${hasSightseeing}`)
+          } else {
+            // Embarkation or sailing: all meals on board
+            console.log(`Day ${day.dayNumber}: Cruise day — all meals on board, skipping outside meals`)
+          }
+        } else if (hasSightseeing) {
+          // Non-cruise touring day: check hotel board basis
+          const accIds = slots.accommodation || []
+          let boardBasis = 'BB' // Default: bed & breakfast (needs lunch + dinner)
+
+          if (accIds.length > 0) {
+            // Look up the accommodation from DB to get board_basis
+            const accId = accIds[0]
+            const accRate = rawRates.accommodationRates?.find((r: any) => r.id === accId)
+            if (accRate?.board_basis) {
+              boardBasis = accRate.board_basis.toUpperCase()
+            }
+            // Also check the flat rate map for board_basis
+            const flatRate = allRatesFlat.get(accId)
+            if (flatRate?.board_basis) {
+              boardBasis = flatRate.board_basis.toUpperCase()
+            }
+          }
+
+          switch (boardBasis) {
+            case 'FB': // Full board: breakfast + lunch + dinner included
+            case 'AI': // All inclusive: everything included
+              console.log(`Day ${day.dayNumber}: Hotel is ${boardBasis} — no outside meals needed`)
+              break
+            case 'HB': // Half board: breakfast + dinner included
+              needsLunch = true
+              console.log(`Day ${day.dayNumber}: Hotel is HB — only lunch needed from outside`)
+              break
+            case 'BB': // Bed & breakfast: only breakfast included
+            case 'RO': // Room only: nothing included
+            default:
+              needsLunch = true
+              needsDinner = true
+              console.log(`Day ${day.dayNumber}: Hotel is ${boardBasis} — lunch + dinner needed from outside`)
+              break
+          }
+        }
+
+        // Find and add the needed meals
+        if (needsLunch || needsDinner) {
+          const cityLower = day.city?.toLowerCase()
+          const cityMeals = rawRates.mealRates?.filter((m: any) =>
+            m.city?.toLowerCase() === cityLower
+          ) || []
+          const mealIds: string[] = []
+          if (needsLunch) {
+            const lunch = cityMeals.find((m: any) => /lunch/i.test(m.meal_type || ''))
+            if (lunch) mealIds.push(lunch.id)
+          }
+          if (needsDinner) {
+            const dinner = cityMeals.find((m: any) => /dinner/i.test(m.meal_type || ''))
+            if (dinner) mealIds.push(dinner.id)
+          }
+          if (mealIds.length > 0) {
+            slots.meals = mealIds
+            console.log(`Day ${day.dayNumber}: AUTO-FILLED ${mealIds.length} meals for ${day.city}`)
+          } else {
+            console.log(`Day ${day.dayNumber}: No meals found for city "${day.city}" (${rawRates.mealRates?.length || 0} total meal rates)`)
+          }
         }
       }
 

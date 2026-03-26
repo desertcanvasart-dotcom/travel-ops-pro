@@ -62,8 +62,13 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
       return allOptions.filter(o => o.city?.toLowerCase().trim() === city)
     }
 
+    // Meals: filter by city, hide on cruise days (meals included on board)
+    // On hotel days, the auto-fill already respects board_basis — the dropdown
+    // shows all city meals so user can manually add/remove if needed
     if (slotId === 'meals') {
-      if (isCruiseDay) return []
+      // Hide meals on cruise sailing days (all meals on board)
+      // But show on embarkation (user might want to adjust) and disembarkation (need outside meals)
+      if (isCruiseDay && !/embark|disembark|east bank|west bank/i.test(day.title || '')) return []
       const mealCity = overnightCity || city
       if (!mealCity) return []
       return allOptions.filter(o => o.city?.toLowerCase().trim() === mealCity)
