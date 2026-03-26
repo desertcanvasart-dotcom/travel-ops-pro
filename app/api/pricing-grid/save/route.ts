@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
         await supabase
           .from('itinerary_services')
           .delete()
-          .in('day_id', dayIds)
+          .in('itinerary_day_id', dayIds)
         // Delete days
         await supabase
           .from('itinerary_days')
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
         // Custom amount slots
         if (slot.customAmount > 0) {
           serviceInserts.push({
-            day_id: dayDbId,
+            itinerary_day_id: dayDbId,
             service_type: serviceType,
             service_name: slot.slotId === 'other_group' ? 'Other (Group)' : 'Other (Per Person)',
             quantity: isGroup ? 1 : (config.pax || 1),
@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
         for (const item of (slot.selectedItems || [])) {
           const rate = passport === 'eu' ? item.rateEur : item.rateNonEur
           serviceInserts.push({
-            day_id: dayDbId,
+            itinerary_day_id: dayDbId,
             service_type: serviceType,
             service_name: item.name,
             quantity: isGroup ? 1 : (config.pax || 1),
