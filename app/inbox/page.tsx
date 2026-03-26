@@ -531,7 +531,7 @@ ${bodyText}`
     if (matchedClient) params.set('clientId', matchedClient.id)
     if (senderEmail) params.set('email', senderEmail)
     
-    window.location.href = `/whatsapp-parser?${params.toString()}`
+    window.location.href = `/pricing-grid?${params.toString()}`
   }
   useEffect(() => {
     if (isConnected) {

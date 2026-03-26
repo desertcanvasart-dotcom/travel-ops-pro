@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay } from './lib/calculator'
@@ -87,6 +88,14 @@ function createEmptyDay(dayNumber: number): GridDay {
 // ============================================
 
 export default function PricingGridPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto p-6 text-center text-gray-500">Loading...</div>}>
+      <PricingGridContent />
+    </Suspense>
+  )
+}
+
+function PricingGridContent() {
   const [config, setConfig] = useState<GridConfig>(() =>
     loadFromStorage(STORAGE_KEY_CONFIG, DEFAULT_CONFIG)
   )
@@ -135,6 +144,68 @@ export default function PricingGridPage() {
   useEffect(() => {
     fetchRates(config.tier)
   }, [config.tier, fetchRates])
+
+  // --- URL Params: Auto-load conversation from inbox redirect ---
+  const searchParams = useSearchParams()
+  const hasProcessedParams = useRef(false)
+
+  useEffect(() => {
+    if (hasProcessedParams.current) return
+    const conversationParam = searchParams?.get('conversation')
+    if (!conversationParam) return
+    hasProcessedParams.current = true
+
+    // Decode conversation (handle both standard and URL-safe base64)
+    const isBase64 = searchParams?.get('encoded') === 'base64'
+    let decodedText = conversationParam
+
+    if (isBase64) {
+      try {
+        // Convert URL-safe base64 back to standard base64
+        let base64 = conversationParam.replace(/-/g, '+').replace(/_/g, '/')
+        while (base64.length % 4) base64 += '='
+        // Proper Unicode base64 decoding
+        const binaryString = atob(base64)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
+        }
+        decodedText = new TextDecoder('utf-8').decode(bytes)
+      } catch (e) {
+        console.error('Failed to decode base64 conversation:', e)
+        try { decodedText = decodeURIComponent(conversationParam) } catch { /* use raw */ }
+      }
+    }
+
+    // Pre-fill client info from URL params
+    const emailParam = searchParams?.get('email')
+    const phoneParam = searchParams?.get('phone')
+    if (emailParam || phoneParam) {
+      setConfig(prev => ({
+        ...prev,
+        clientEmail: emailParam || prev.clientEmail,
+        clientPhone: phoneParam || prev.clientPhone,
+      }))
+    }
+
+    // Clean URL (remove params without page reload)
+    window.history.replaceState({}, '', '/pricing-grid')
+
+    // Auto-trigger parse after a short delay (wait for rates to load)
+    const autoParse = async () => {
+      // Wait for rates to be loaded
+      let attempts = 0
+      while (!rates && attempts < 20) {
+        await new Promise(r => setTimeout(r, 500))
+        attempts++
+      }
+      if (decodedText.trim()) {
+        handleParseDays(decodedText)
+      }
+    }
+    autoParse()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, rates])
 
   // --- Day Management ---
   const addDay = () => setDays(prev => [...prev, createEmptyDay(prev.length + 1)])
