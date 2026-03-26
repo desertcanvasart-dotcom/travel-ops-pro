@@ -391,10 +391,12 @@ function PricingGridContent() {
               })
             })
             const quoteData = await quoteRes.json()
-            if (quoteData.id) {
-              setSavedQuoteId(quoteData.id)
-              setSavedQuoteNumber(quoteData.quote_number || null)
-              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteData.quote_number || ''}`)
+            const quoteId = quoteData.data?.id || quoteData.id
+            const quoteNum = quoteData.data?.quote_number || quoteData.quote_number
+            if (quoteId) {
+              setSavedQuoteId(quoteId)
+              setSavedQuoteNumber(quoteNum || null)
+              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''}`)
             } else {
               // Quote creation failed, but itinerary saved
               setSaveMessage(`Saved as ${data.itineraryCode} (B2B quote creation failed: ${quoteData.error || 'unknown error'})`)
@@ -411,9 +413,9 @@ function PricingGridContent() {
       } else {
         alert(`Save failed: ${data.error}`)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save error:', err)
-      alert('Failed to save itinerary')
+      alert(`Failed to save itinerary: ${err?.message || 'Network error'}`)
     } finally {
       setIsSaving(false)
     }
