@@ -84,6 +84,13 @@ export async function POST(request: NextRequest) {
     let itineraryId: string
     let itineraryCode: string
 
+    // Sanitize numeric values to avoid overflow
+    itineraryData.total_cost = Math.round((itineraryData.total_cost || 0) * 100) / 100
+    itineraryData.partner_commission_percent = Math.round((itineraryData.partner_commission_percent || 0) * 100) / 100
+    itineraryData.num_adults = Math.min(itineraryData.num_adults || 1, 999)
+
+    console.log('Pricing grid save - itinerary data:', JSON.stringify(itineraryData, null, 2))
+
     if (isUpdate) {
       // Update existing itinerary
       const { data, error } = await supabase
@@ -214,6 +221,14 @@ export async function POST(request: NextRequest) {
           })
         }
       }
+    }
+
+    // Sanitize all service numeric values
+    for (const svc of serviceInserts) {
+      svc.rate_eur = Math.round((svc.rate_eur || 0) * 100) / 100
+      svc.rate_non_eur = Math.round((svc.rate_non_eur || 0) * 100) / 100
+      svc.total_cost = Math.round((svc.total_cost || 0) * 100) / 100
+      svc.quantity = Math.min(svc.quantity || 1, 999)
     }
 
     if (serviceInserts.length > 0) {

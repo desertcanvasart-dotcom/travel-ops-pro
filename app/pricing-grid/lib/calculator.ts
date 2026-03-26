@@ -92,7 +92,9 @@ export function calculateGrandTotals(days: GridDay[], config: GridConfig): GridT
   }
 
   const totalCost = costPerPerson * pax
-  const marginMultiplier = 1 + marginPercent / 100
+  // Clamp margin to reasonable range (0-200%)
+  const safeMargin = Math.max(0, Math.min(isNaN(marginPercent) ? 0 : marginPercent, 200))
+  const marginMultiplier = 1 + safeMargin / 100
   const sellingPricePerPerson = round2(costPerPerson * marginMultiplier)
   const sellingPriceTotal = round2(sellingPricePerPerson * pax)
   const marginAmount = round2(sellingPriceTotal - totalCost)

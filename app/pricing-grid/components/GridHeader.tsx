@@ -73,7 +73,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
       update({
         partnerId: partner.id,
         partnerName: partner.company_name,
-        marginPercent: partner.default_margin_percent || DEFAULT_MARGINS.b2b,
+        marginPercent: Math.min(partner.default_margin_percent || DEFAULT_MARGINS.b2b, 100),
       })
     } else {
       update({ partnerId: null, partnerName: '' })
@@ -209,7 +209,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
               min={0}
               max={100}
               value={config.marginPercent}
-              onChange={(e) => update({ marginPercent: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => update({ marginPercent: Math.min(parseFloat(e.target.value) || 0, 100) })}
               className="w-16 px-2 py-1 text-sm border border-gray-200 rounded-lg text-center font-bold bg-white focus:ring-2 focus:ring-blue-200 transition-all"
             />
           </div>
