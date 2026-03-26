@@ -115,8 +115,8 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}
-            {/* Also show itinerary link for B2B (secondary) */}
-            {isB2B && savedItineraryId && savedQuoteId && (
+            {/* B2C only: show itinerary link */}
+            {!isB2B && savedItineraryId && (
               <a
                 href={`/itineraries/${savedItineraryId}`}
                 className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"

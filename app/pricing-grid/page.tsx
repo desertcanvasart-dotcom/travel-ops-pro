@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay } from './lib/calculator'
@@ -96,6 +96,7 @@ export default function PricingGridPage() {
 }
 
 function PricingGridContent() {
+  const router = useRouter()
   const [config, setConfig] = useState<GridConfig>(() =>
     loadFromStorage(STORAGE_KEY_CONFIG, DEFAULT_CONFIG)
   )
@@ -376,9 +377,10 @@ function PricingGridContent() {
           itineraryCode: data.itineraryCode,
         }))
 
-        // For B2B: automatically create a B2B quote from the saved itinerary
+        // For B2B: create quote + template, then redirect to /tours/manage
         if (config.clientType === 'b2b') {
           try {
+            // Step 1: Create B2B quote
             const quoteRes = await fetch('/api/b2b/quote-from-itinerary', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -396,14 +398,31 @@ function PricingGridContent() {
             if (quoteId) {
               setSavedQuoteId(quoteId)
               setSavedQuoteNumber(quoteNum || null)
-              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''}`)
+            }
+
+            // Step 2: Create tour template from itinerary
+            const templateRes = await fetch('/api/b2b/create-template-from-itinerary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                itinerary_id: data.itineraryId,
+                tier: config.tier || 'standard',
+              })
+            })
+            const templateData = await templateRes.json()
+
+            if (templateData.success && templateData.data?.template_id) {
+              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} — Redirecting to Tour Manager...`)
+              // Redirect to /tours/manage with template pre-selected
+              setTimeout(() => {
+                router.push(`/tours/manage?templateId=${templateData.data.template_id}&variationId=${templateData.data.variation_id || ''}`)
+              }, 1000)
             } else {
-              // Quote creation failed, but itinerary saved
-              setSaveMessage(`Saved as ${data.itineraryCode} (B2B quote creation failed: ${quoteData.error || 'unknown error'})`)
+              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} (template creation: ${templateData.error || 'failed'})`)
             }
           } catch (quoteErr) {
-            console.error('B2B quote creation error:', quoteErr)
-            setSaveMessage(`Saved as ${data.itineraryCode} (B2B quote creation failed)`)
+            console.error('B2B quote/template creation error:', quoteErr)
+            setSaveMessage(`Saved as ${data.itineraryCode} (B2B processing failed)`)
           }
         } else {
           setSavedQuoteId(null)
