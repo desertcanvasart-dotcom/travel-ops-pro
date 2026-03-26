@@ -389,6 +389,7 @@ export default function PricingGridPage() {
               <DayRow
                 key={day.id}
                 day={day}
+                allDays={days}
                 config={config}
                 rates={rates || {} as AllRates}
                 onToggleExpand={() => toggleExpand(day.id)}

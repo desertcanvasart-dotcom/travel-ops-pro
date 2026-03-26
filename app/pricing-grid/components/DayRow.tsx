@@ -8,6 +8,7 @@ import SlotRow from './SlotRow'
 
 interface DayRowProps {
   day: GridDay
+  allDays: GridDay[]
   config: GridConfig
   rates: AllRates
   onToggleExpand: () => void
@@ -16,7 +17,7 @@ interface DayRowProps {
   onRemoveDay: () => void
 }
 
-export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlot, onUpdateDay, onRemoveDay }: DayRowProps) {
+export default function DayRow({ day, allDays, config, rates, onToggleExpand, onUpdateSlot, onUpdateDay, onRemoveDay }: DayRowProps) {
   const calc: DayCalc = calculateDay(day, config)
 
   const getSlotValue = (slotId: string): SlotValue => {
@@ -52,8 +53,20 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
     }
 
     if (slotId === 'airport_services') {
-      const code = city ? cityToAirport[city] : null
-      if (code) return allOptions.filter(o => o.city === code)
+      // On flight/transfer days, show airport services for ALL relevant cities
+      const isFlightDay = /flight|fly/i.test(day.title || day.description || '')
+      const isTransferDay = /transfer/i.test(day.title || day.description || '')
+      const codes = new Set<string>()
+      if (city && cityToAirport[city]) codes.add(cityToAirport[city])
+      if (overnightCity && cityToAirport[overnightCity]) codes.add(cityToAirport[overnightCity])
+      // On flight days, include departure city airport (previous overnight city)
+      if (isFlightDay || isTransferDay) {
+        const dayIdx = allDays.findIndex(d => d.id === day.id)
+        const prevDay = dayIdx > 0 ? allDays[dayIdx - 1] : null
+        const prevCity = (prevDay?.city || '').toLowerCase().trim()
+        if (prevCity && cityToAirport[prevCity]) codes.add(cityToAirport[prevCity])
+      }
+      if (codes.size > 0) return allOptions.filter(o => codes.has(o.city || ''))
       return []
     }
 
@@ -87,12 +100,43 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
     }
 
     // Transport (route): all transport types — day tours, airport, intercity, cruise packages
+    // SYSTEMATIC RULE: Show routes relevant to ALL cities involved in this day
+    // A day may involve multiple cities: departure city (previous overnight), current city, overnight city, next city
     if (slotId === 'route') {
       const selectedIds = new Set(getSlotItems('route').map(i => i.rateId))
-      // Check if this day involves a flight or transfer to another city
       const isFlightDay = /flight|fly/i.test(day.title || day.description || '')
-      const isTransferDay = /transfer|hurghada|departure/i.test(day.title || day.description || '')
-      const prevCity = ((day as any).prev_city || '').toLowerCase().trim()
+      const isTransferDay = /transfer/i.test(day.title || day.description || '')
+      const isMultiCityDay = isFlightDay || isTransferDay || (overnightCity && overnightCity !== city)
+
+      // Derive previous and next day cities from allDays
+      const dayIdx = allDays.findIndex(d => d.id === day.id)
+      const prevDay = dayIdx > 0 ? allDays[dayIdx - 1] : null
+      const nextDay = dayIdx < allDays.length - 1 ? allDays[dayIdx + 1] : null
+      const prevOvernightCity = (prevDay?.city || '').toLowerCase().trim()
+      const nextCity = (nextDay?.city || '').toLowerCase().trim()
+
+      // Build the set of ALL relevant cities for this day
+      const relevantCities = new Set<string>()
+      if (city && city !== 'cruise') relevantCities.add(city)
+      if (overnightCity && overnightCity !== 'cruise') relevantCities.add(overnightCity)
+      // On flight/transfer days, include the departure city (where we slept last night)
+      if (isMultiCityDay && prevOvernightCity && prevOvernightCity !== 'cruise') {
+        relevantCities.add(prevOvernightCity)
+      }
+      // If next day is in a different city (we might need onward transfer)
+      if (nextCity && nextCity !== 'cruise' && nextCity !== city && nextCity !== overnightCity) {
+        relevantCities.add(nextCity)
+      }
+
+      const cityMatches = (testCity: string) => {
+        if (!testCity) return false
+        const tc = testCity.toLowerCase().trim()
+        for (const rc of relevantCities) {
+          if (tc === rc || tc.includes(rc) || rc.includes(tc)) return true
+        }
+        return false
+      }
+
       return allOptions.filter(o => {
         // Always show currently selected items
         if (selectedIds.has(o.id)) return true
@@ -100,18 +144,16 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
         if ((o as any).service_type === 'cruise_transport_package') return isCruiseDay
         // On pure cruise sailing days (not flight/transfer), hide individual transport
         if (isCruiseDay && !isFlightDay && !isTransferDay) return false
-        if (!city && !overnightCity) return false
+        if (relevantCities.size === 0) return false
         const originCity = (o as any).origin_city?.toLowerCase().trim() || ''
         const destCity = (o as any).destination_city?.toLowerCase().trim() || ''
-        // Day tours: match by origin_city or city
+        // Day tours: match by origin_city (the city where the tour happens)
         if ((o as any).service_type === 'day_tour') {
-          if (isCruiseDay) return false // No day tours on cruise days
-          return !originCity || (city && (originCity === city || destCity === city))
+          if (isCruiseDay) return false
+          return !originCity || cityMatches(originCity)
         }
-        // Airport/intercity transfers: match by origin or destination city
-        // Also match by overnight city for onward transfers
-        return (city && (originCity === city || destCity === city)) ||
-               (overnightCity && overnightCity !== city && (originCity === overnightCity || destCity === overnightCity))
+        // Airport/intercity transfers: match if EITHER origin OR destination is a relevant city
+        return cityMatches(originCity) || cityMatches(destCity)
       })
     }
 

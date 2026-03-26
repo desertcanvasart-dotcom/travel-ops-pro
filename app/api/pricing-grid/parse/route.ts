@@ -492,6 +492,22 @@ export async function POST(request: NextRequest) {
         const nextCity = nextDay?.city?.toLowerCase()?.trim() || ''
         const overnightCity = (day.overnight_city || day.city || '')?.toLowerCase()?.trim()
 
+        // Extract ALL cities mentioned in this day's title and description
+        // This catches multi-city days like "Luxor West Bank and Transfer to Hurghada"
+        const KNOWN_CITIES = ['cairo', 'luxor', 'aswan', 'hurghada', 'sharm el sheikh', 'sharm', 'giza', 'alexandria', 'dahab', 'marsa alam', 'el gouna', 'siwa']
+        const dayText = `${day.title || ''} ${day.description || ''}`.toLowerCase()
+        const mentionedCities = KNOWN_CITIES.filter(c => dayText.includes(c))
+        // Build complete set of cities involved in this day
+        const allDayCities = new Set<string>()
+        if (cityLower && cityLower !== 'cruise') allDayCities.add(cityLower)
+        if (overnightCity && overnightCity !== 'cruise') allDayCities.add(overnightCity)
+        mentionedCities.forEach(c => allDayCities.add(c))
+        // On flight/transfer days, include the previous overnight city
+        if (/flight|fly|transfer/i.test(day.title || day.description || '') && prevOvernightCity && prevOvernightCity !== 'cruise') {
+          allDayCities.add(prevOvernightCity)
+        }
+        console.log(`Day ${day.dayNumber}: allDayCities=[${[...allDayCities].join(', ')}], city=${cityLower}, overnight=${overnightCity}, prevOvernight=${prevOvernightCity}`)
+
         // Helper: match city flexibly (handles "Cairo" vs "cairo", partial matches)
         const cityMatch = (dbCity: string | undefined, target: string) => {
           if (!dbCity || !target) return false
@@ -499,6 +515,15 @@ export async function POST(request: NextRequest) {
           // Filter out "cruise" as a city name
           if (db === 'cruise' || target === 'cruise') return false
           return db === target || db.includes(target) || target.includes(db)
+        }
+
+        // Helper: check if a DB city matches ANY of the day's cities
+        const matchesAnyDayCity = (dbCity: string | undefined) => {
+          if (!dbCity) return false
+          for (const dc of allDayCities) {
+            if (cityMatch(dbCity, dc)) return true
+          }
+          return false
         }
 
         // Helper: push tiered route ID (avoid duplicates)
@@ -575,59 +600,62 @@ export async function POST(request: NextRequest) {
         }
 
         // --- INTERCITY TRANSFERS ---
-        // When previous overnight city differs from current day's city (and not a flight)
-        if (!isFirstDay && !isFlightDay) {
-          // For cruise range end days, the "previous city" might be "Cruise" —
-          // use the day before's actual city instead (e.g., Luxor for Nile cruise)
+        // SYSTEMATIC APPROACH: Use allDayCities to find ALL relevant intercity transfers.
+        // For any pair of cities mentioned in this day, check if there's a transfer route.
+        // This handles: arrival from previous city, onward transfer, multi-city days, post-cruise transfers.
+        {
+          // Determine effective previous city (walk back past cruise days if needed)
           let effectivePrevCity = prevOvernightCity || prevCity
           if (effectivePrevCity === 'cruise' || !effectivePrevCity) {
-            // Walk back to find the last real city before the cruise
             for (let j = idx - 1; j >= 0; j--) {
-              const pc = (parsed.days[j]?.city || '').toLowerCase().trim()
+              const pc = (parsed.days[j]?.overnight_city || parsed.days[j]?.city || '').toLowerCase().trim()
               if (pc && pc !== 'cruise') {
                 effectivePrevCity = pc
                 break
               }
             }
           }
-          if (effectivePrevCity && cityLower && effectivePrevCity !== cityLower && effectivePrevCity !== 'cruise') {
-            const intercity = routes.find((r: any) =>
-              r.service_type === 'intercity_transfer' &&
-              cityMatch(r.origin_city, effectivePrevCity) &&
-              cityMatch(r.destination_city, cityLower)
-            ) || routes.find((r: any) =>
-              r.service_type === 'intercity_transfer' &&
-              cityMatch(r.origin_city, effectivePrevCity)
-            )
-            if (intercity) pushRoute(intercity, 'intercity from previous city')
+          // Add effective previous city to our city set for this day
+          if (effectivePrevCity && effectivePrevCity !== 'cruise') {
+            allDayCities.add(effectivePrevCity)
           }
-        }
-
-        // Onward transfer: when current day ends in a different city than it started
-        // e.g., Luxor sightseeing then transfer to Hurghada (overnight_city = Hurghada)
-        if (overnightCity && overnightCity !== cityLower && overnightCity !== 'cruise') {
-          const onward = routes.find((r: any) =>
-            r.service_type === 'intercity_transfer' &&
-            cityMatch(r.origin_city, cityLower!) &&
-            cityMatch(r.destination_city, overnightCity)
-          )
-          if (onward) pushRoute(onward, 'onward intercity transfer')
-        }
-
-        // Also check if NEXT day is in a different city and this isn't a flight/cruise day
-        // This catches cases like Day 6 (last cruise sightseeing in Luxor) going to Hurghada
-        if (!isLastDay && nextCity && nextCity !== cityLower && nextCity !== 'cruise' &&
-            overnightCity === cityLower && !isFlightDay) {
-          // Check if next day is NOT a flight (the next day handles its own airport transfers)
-          const nextIsFlightDay = /flight|fly/i.test(nextDay?.title || nextDay?.description || '')
-          if (!nextIsFlightDay) {
-            const onwardToNext = routes.find((r: any) =>
-              r.service_type === 'intercity_transfer' &&
-              cityMatch(r.origin_city, cityLower!) &&
-              cityMatch(r.destination_city, nextCity)
-            )
-            if (onwardToNext) pushRoute(onwardToNext, 'onward to next day city')
+          // Also add next day's city if it's different (for onward transfers)
+          if (nextCity && nextCity !== 'cruise') {
+            allDayCities.add(nextCity)
           }
+
+          // Now find all intercity transfers where BOTH origin and destination are in our city set
+          const dayCityArray = [...allDayCities]
+          const addedTransfers = new Set<string>()
+          for (let i = 0; i < dayCityArray.length; i++) {
+            for (let j = 0; j < dayCityArray.length; j++) {
+              if (i === j) continue
+              const fromCity = dayCityArray[i]
+              const toCity = dayCityArray[j]
+              // Only add if the transfer makes sense for this day:
+              // 1. Arrival: effectivePrevCity → cityLower (coming from previous overnight)
+              // 2. Onward: cityLower → overnightCity (going to overnight city)
+              // 3. Onward to next: cityLower → nextCity (going to next day's city)
+              const isArrivalTransfer = fromCity === effectivePrevCity && allDayCities.has(toCity) && fromCity !== cityLower
+              const isOnwardTransfer = toCity === overnightCity && fromCity !== toCity
+              const isNextDayTransfer = toCity === nextCity && fromCity !== toCity && (!isFlightDay)
+              if (!isArrivalTransfer && !isOnwardTransfer && !isNextDayTransfer) continue
+
+              const transferKey = `${fromCity}->${toCity}`
+              if (addedTransfers.has(transferKey)) continue
+
+              const transfer = routes.find((r: any) =>
+                r.service_type === 'intercity_transfer' &&
+                cityMatch(r.origin_city, fromCity) &&
+                cityMatch(r.destination_city, toCity)
+              )
+              if (transfer) {
+                addedTransfers.add(transferKey)
+                pushRoute(transfer, `intercity ${fromCity}→${toCity}`)
+              }
+            }
+          }
+          console.log(`Day ${day.dayNumber}: Intercity check with cities=[${dayCityArray.join(', ')}], effectivePrev=${effectivePrevCity}, found ${addedTransfers.size} transfers`)
         }
 
         // Store all collected routes (but don't overwrite if cruise package handler will add more)
