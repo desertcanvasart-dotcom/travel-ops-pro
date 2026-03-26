@@ -18,6 +18,18 @@ export interface GridConfig {
   marginPercent: number
   exchangeRate: number | null  // EUR → target currency
   startDate: string  // ISO date string (YYYY-MM-DD) — for seasonality pricing
+  // Client & trip info (maps to itineraries table)
+  clientName: string
+  clientEmail: string
+  clientPhone: string
+  tourName: string
+  nationality: string
+  // Linked itinerary (set after save or load)
+  itineraryId: string | null
+  itineraryCode: string | null
+  // B2B partner (when clientType === 'b2b')
+  partnerId: string | null
+  partnerName: string
 }
 
 // --- Slot Definitions (fixed structure) ---

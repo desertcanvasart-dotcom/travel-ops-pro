@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay } from './lib/calculator'
+import { mapServicesToSlots } from './lib/slot-mapping'
 import GridHeader from './components/GridHeader'
+import ClientInfoBar from './components/ClientInfoBar'
 import InputPanel from './components/InputPanel'
 import DayRow from './components/DayRow'
 import GridSummary from './components/GridSummary'
@@ -17,20 +19,14 @@ const STORAGE_KEY_CONFIG = 'pricing-grid-config'
 const STORAGE_KEY_DAYS = 'pricing-grid-days'
 
 function saveToStorage(key: string, data: any) {
-  try {
-    localStorage.setItem(key, JSON.stringify(data))
-  } catch (e) {
-    // Storage full or unavailable — silently ignore
-  }
+  try { localStorage.setItem(key, JSON.stringify(data)) } catch (e) { /* ignore */ }
 }
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
     const stored = localStorage.getItem(key)
     if (stored) return JSON.parse(stored) as T
-  } catch (e) {
-    // Corrupted data — silently ignore
-  }
+  } catch (e) { /* ignore */ }
   return fallback
 }
 
@@ -38,9 +34,7 @@ function clearStorage() {
   try {
     localStorage.removeItem(STORAGE_KEY_CONFIG)
     localStorage.removeItem(STORAGE_KEY_DAYS)
-  } catch (e) {
-    // Silently ignore
-  }
+  } catch (e) { /* ignore */ }
 }
 
 // ============================================
@@ -57,6 +51,15 @@ const DEFAULT_CONFIG: GridConfig = {
   marginPercent: 25,
   exchangeRate: null,
   startDate: new Date().toISOString().split('T')[0],
+  clientName: '',
+  clientEmail: '',
+  clientPhone: '',
+  tourName: '',
+  nationality: '',
+  itineraryId: null,
+  itineraryCode: null,
+  partnerId: null,
+  partnerName: '',
 }
 
 // ============================================
@@ -84,7 +87,6 @@ function createEmptyDay(dayNumber: number): GridDay {
 // ============================================
 
 export default function PricingGridPage() {
-  // Initialize state from localStorage (runs once on mount)
   const [config, setConfig] = useState<GridConfig>(() =>
     loadFromStorage(STORAGE_KEY_CONFIG, DEFAULT_CONFIG)
   )
@@ -94,38 +96,33 @@ export default function PricingGridPage() {
   const [rates, setRates] = useState<AllRates | null>(null)
   const [loading, setLoading] = useState(true)
   const [isParsing, setIsParsing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
-  // Track if initial load is done (avoid saving defaults over stored data)
   const isInitialLoad = useRef(true)
 
-  // --- Persist config to localStorage on change ---
+  // Persist to localStorage
   useEffect(() => {
     if (isInitialLoad.current) return
     saveToStorage(STORAGE_KEY_CONFIG, config)
   }, [config])
 
-  // --- Persist days to localStorage on change ---
   useEffect(() => {
     if (isInitialLoad.current) return
     saveToStorage(STORAGE_KEY_DAYS, days)
   }, [days])
 
-  // Mark initial load as done after first render
   useEffect(() => {
     isInitialLoad.current = false
   }, [])
 
-  // --- Fetch rates when tier changes ---
+  // Fetch rates
   const fetchRates = useCallback(async (tier: string) => {
     try {
       setLoading(true)
       const res = await fetch(`/api/pricing-grid/rates?tier=${tier}`)
       const data = await res.json()
-      if (data.success) {
-        setRates(data.data)
-      } else {
-        console.error('Failed to fetch rates:', data.error)
-      }
+      if (data.success) setRates(data.data)
     } catch (err) {
       console.error('Failed to fetch rates:', err)
     } finally {
@@ -138,60 +135,43 @@ export default function PricingGridPage() {
   }, [config.tier, fetchRates])
 
   // --- Day Management ---
-
-  const addDay = () => {
-    setDays(prev => [...prev, createEmptyDay(prev.length + 1)])
-  }
+  const addDay = () => setDays(prev => [...prev, createEmptyDay(prev.length + 1)])
 
   const removeDay = (dayId: string) => {
-    setDays(prev => {
-      const filtered = prev.filter(d => d.id !== dayId)
-      return filtered.map((d, i) => ({ ...d, dayNumber: i + 1 }))
-    })
+    setDays(prev => prev.filter(d => d.id !== dayId).map((d, i) => ({ ...d, dayNumber: i + 1 })))
   }
 
   const toggleExpand = (dayId: string) => {
-    setDays(prev => prev.map(d =>
-      d.id === dayId ? { ...d, isExpanded: !d.isExpanded } : d
-    ))
+    setDays(prev => prev.map(d => d.id === dayId ? { ...d, isExpanded: !d.isExpanded } : d))
   }
 
-  const expandAll = () => {
-    setDays(prev => prev.map(d => ({ ...d, isExpanded: true })))
-  }
-
-  const collapseAll = () => {
-    setDays(prev => prev.map(d => ({ ...d, isExpanded: false })))
-  }
+  const expandAll = () => setDays(prev => prev.map(d => ({ ...d, isExpanded: true })))
+  const collapseAll = () => setDays(prev => prev.map(d => ({ ...d, isExpanded: false })))
 
   const updateDay = (dayId: string, partial: Partial<GridDay>) => {
-    setDays(prev => prev.map(d =>
-      d.id === dayId ? { ...d, ...partial } : d
-    ))
+    setDays(prev => prev.map(d => d.id === dayId ? { ...d, ...partial } : d))
   }
 
   const updateSlot = (dayId: string, slotId: string, value: SlotValue) => {
     setDays(prev => prev.map(d => {
       if (d.id !== dayId) return d
-      return {
-        ...d,
-        slots: d.slots.map(s => s.slotId === slotId ? value : s)
-      }
+      return { ...d, slots: d.slots.map(s => s.slotId === slotId ? value : s) }
     }))
   }
 
-  // --- Clear all data (new quote) ---
+  // --- Clear All ---
   const handleClearAll = () => {
     setDays([])
     setConfig(DEFAULT_CONFIG)
     clearStorage()
+    setSaveMessage(null)
   }
 
   // --- Parse Text via AI ---
-
   const handleParseDays = async (text: string) => {
     try {
       setIsParsing(true)
+      setSaveMessage(null)
       const res = await fetch('/api/pricing-grid/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,6 +202,8 @@ export default function PricingGridPage() {
           }),
         }))
         setDays(parsedDays)
+        // Reset itinerary link (new parse = new quote)
+        setConfig(prev => ({ ...prev, itineraryId: null, itineraryCode: null }))
       } else {
         alert(data.error || 'Failed to parse text')
       }
@@ -233,29 +215,61 @@ export default function PricingGridPage() {
     }
   }
 
-  // --- Load from Existing Itinerary ---
-
+  // --- Load from Existing Itinerary (full restore) ---
   const handleLoadItinerary = async (itineraryId: string) => {
     try {
-      const res = await fetch(`/api/itineraries/${itineraryId}/days?language=en`)
-      const data = await res.json()
-      if (data.success && data.data) {
-        const loadedDays: GridDay[] = data.data.map((dayData: any, idx: number) => ({
-          id: crypto.randomUUID(),
-          dayNumber: dayData.day_number || idx + 1,
-          title: dayData.title || `Day ${idx + 1}`,
-          city: dayData.city || '',
-          description: dayData.description || '',
-          isExpanded: false,
-          slots: SLOT_DEFINITIONS.map(def => ({
-            slotId: def.slotId,
-            selectedItems: [],
-            customAmount: 0,
-          })),
-        }))
-        setDays(loadedDays)
-      } else {
+      // Fetch itinerary header
+      const headerRes = await fetch(`/api/itineraries/${itineraryId}`)
+      const headerData = await headerRes.json()
+
+      if (!headerData.success || !headerData.data) {
         alert('Failed to load itinerary')
+        return
+      }
+
+      const itn = headerData.data
+
+      // Update config from itinerary
+      setConfig(prev => ({
+        ...prev,
+        clientName: itn.client_name || '',
+        clientEmail: itn.client_email || '',
+        clientPhone: itn.client_phone || '',
+        tourName: itn.trip_name || '',
+        pax: itn.num_adults || 2,
+        tier: itn.tier || 'standard',
+        currency: itn.currency || 'EUR',
+        startDate: itn.start_date || prev.startDate,
+        clientType: itn.source?.startsWith('b2b') ? 'b2b' : 'b2c',
+        partnerId: itn.partner_id || null,
+        itineraryId: itn.id,
+        itineraryCode: itn.itinerary_code,
+      }))
+
+      // Fetch days with services
+      const daysRes = await fetch(`/api/itineraries/${itineraryId}/days?language=en`)
+      const daysData = await daysRes.json()
+
+      if (daysData.success && daysData.data) {
+        const loadedDays: GridDay[] = daysData.data.map((dayData: any, idx: number) => {
+          // Reverse-map services to slots
+          const services = dayData.services || []
+          const slots = services.length > 0
+            ? mapServicesToSlots(services, itn.num_adults || 2)
+            : SLOT_DEFINITIONS.map(def => ({ slotId: def.slotId, selectedItems: [], customAmount: 0 }))
+
+          return {
+            id: crypto.randomUUID(),
+            dayNumber: dayData.day_number || idx + 1,
+            title: dayData.title || `Day ${idx + 1}`,
+            city: dayData.city || '',
+            description: dayData.description || '',
+            isExpanded: false,
+            slots,
+          }
+        })
+        setDays(loadedDays)
+        setSaveMessage(`Loaded ${itn.itinerary_code}`)
       }
     } catch (err) {
       console.error('Load error:', err)
@@ -263,14 +277,49 @@ export default function PricingGridPage() {
     }
   }
 
-  // --- Calculate Totals ---
+  // --- Save to Database ---
+  const handleSave = async () => {
+    if (days.length === 0) {
+      alert('No days to save. Parse or add days first.')
+      return
+    }
 
+    try {
+      setIsSaving(true)
+      setSaveMessage(null)
+
+      const res = await fetch('/api/pricing-grid/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config, days, totals })
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        setConfig(prev => ({
+          ...prev,
+          itineraryId: data.itineraryId,
+          itineraryCode: data.itineraryCode,
+        }))
+        setSaveMessage(`Saved as ${data.itineraryCode}`)
+      } else {
+        alert(`Save failed: ${data.error}`)
+      }
+    } catch (err) {
+      console.error('Save error:', err)
+      alert('Failed to save itinerary')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // --- Calculate Totals ---
   const totals: GridTotals = days.length > 0
     ? calculateGrandTotals(days, config)
     : { costPerPerson: 0, totalCost: 0, marginAmount: 0, sellingPricePerPerson: 0, sellingPriceTotal: 0 }
 
   // --- Render ---
-
   if (loading && !rates) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -281,10 +330,13 @@ export default function PricingGridPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8 bg-gray-50 min-h-screen">
-      {/* Sticky Header with Controls + Live Summary */}
+      {/* Sticky Header */}
       <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-2 bg-gray-50">
         <GridHeader config={config} onChange={setConfig} totals={totals} />
       </div>
+
+      {/* Client Info */}
+      <ClientInfoBar config={config} onChange={setConfig} />
 
       {/* Input Panel */}
       <InputPanel
@@ -305,7 +357,7 @@ export default function PricingGridPage() {
         </div>
       ) : (
         <>
-          {/* Toolbar: Expand/Collapse + Day Count */}
+          {/* Toolbar */}
           <div className="flex items-center justify-between mb-2 px-1">
             <div className="text-xs text-gray-500">
               <span className="font-semibold text-gray-700">{days.length}</span> days
@@ -313,19 +365,19 @@ export default function PricingGridPage() {
               <span className="font-semibold text-gray-700">{config.pax}</span> pax
               {' · '}
               <span className="font-semibold text-gray-700 capitalize">{config.tier}</span>
+              {config.itineraryCode && (
+                <>
+                  {' · '}
+                  <span className="font-semibold text-green-700">{config.itineraryCode}</span>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-1">
-              <button
-                onClick={expandAll}
-                className="px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-              >
+              <button onClick={expandAll} className="px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
                 Expand All
               </button>
               <span className="text-gray-300">|</span>
-              <button
-                onClick={collapseAll}
-                className="px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-              >
+              <button onClick={collapseAll} className="px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
                 Collapse All
               </button>
             </div>
@@ -347,8 +399,17 @@ export default function PricingGridPage() {
             ))}
           </div>
 
-          {/* Grand Summary */}
-          <GridSummary totals={totals} config={config} dayCount={days.length} />
+          {/* Grand Summary + Save */}
+          <GridSummary
+            totals={totals}
+            config={config}
+            dayCount={days.length}
+            onSave={handleSave}
+            isSaving={isSaving}
+            savedItineraryId={config.itineraryId}
+            savedItineraryCode={config.itineraryCode}
+            saveMessage={saveMessage}
+          />
         </>
       )}
     </div>

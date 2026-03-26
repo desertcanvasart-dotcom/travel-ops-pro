@@ -1,11 +1,19 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import type { GridConfig, GridTotals, Tier, ClientType, PassportType } from '../types'
 
 interface GridHeaderProps {
   config: GridConfig
   onChange: (config: GridConfig) => void
   totals?: GridTotals
+}
+
+interface B2BPartner {
+  id: string
+  company_name: string
+  partner_code: string
+  default_margin_percent: number
 }
 
 const TIERS: { value: Tier; label: string }[] = [
@@ -23,24 +31,54 @@ const DEFAULT_MARGINS: Record<ClientType, number> = {
 }
 
 export default function GridHeader({ config, onChange, totals }: GridHeaderProps) {
+  const [partners, setPartners] = useState<B2BPartner[]>([])
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
   const sym = config.currency === 'EUR' ? '€' : config.currency === 'USD' ? '$' : config.currency === 'GBP' ? '£' : config.currency
+  const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  // Fetch B2B partners when switching to B2B
+  useEffect(() => {
+    if (config.clientType === 'b2b' && partners.length === 0) {
+      fetch('/api/b2b/partners')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data) setPartners(data.data)
+          else if (Array.isArray(data)) setPartners(data)
+        })
+        .catch(err => console.error('Failed to fetch partners:', err))
+    }
+  }, [config.clientType, partners.length])
 
   const toggleClientType = () => {
     const newType: ClientType = config.clientType === 'b2b' ? 'b2c' : 'b2b'
-    update({ clientType: newType, marginPercent: DEFAULT_MARGINS[newType] })
+    update({
+      clientType: newType,
+      marginPercent: DEFAULT_MARGINS[newType],
+      partnerId: null,
+      partnerName: '',
+    })
   }
 
   const togglePassport = () => {
-    const newPassport: PassportType = config.passport === 'eu' ? 'non_eu' : 'eu'
-    update({ passport: newPassport })
+    update({ passport: config.passport === 'eu' ? 'non_eu' : 'eu' })
   }
 
   const toggleGuide = () => {
     update({ withGuide: !config.withGuide })
   }
 
-  const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const selectPartner = (partnerId: string) => {
+    const partner = partners.find(p => p.id === partnerId)
+    if (partner) {
+      update({
+        partnerId: partner.id,
+        partnerName: partner.company_name,
+        marginPercent: partner.default_margin_percent || DEFAULT_MARGINS.b2b,
+      })
+    } else {
+      update({ partnerId: null, partnerName: '' })
+    }
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4">
@@ -109,6 +147,20 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
           {config.clientType.toUpperCase()}
         </button>
 
+        {/* B2B Partner Selector */}
+        {config.clientType === 'b2b' && (
+          <select
+            value={config.partnerId || ''}
+            onChange={(e) => selectPartner(e.target.value)}
+            className="px-2 py-1 text-sm border border-purple-200 rounded-lg font-medium bg-purple-50 text-purple-700 focus:bg-white focus:ring-2 focus:ring-purple-200 transition-all max-w-[180px]"
+          >
+            <option value="">Select Partner...</option>
+            {partners.map(p => (
+              <option key={p.id} value={p.id}>{p.company_name}</option>
+            ))}
+          </select>
+        )}
+
         {/* Guide Toggle */}
         <button
           type="button"
@@ -149,7 +201,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
         </div>
       </div>
 
-      {/* Row 2: Live Summary Bar (only show when there are totals) */}
+      {/* Row 2: Live Summary Bar */}
       {totals && totals.totalCost > 0 && (
         <div className="border-t border-gray-100 bg-gradient-to-r from-gray-50 to-white">
           <div className="grid grid-cols-5 divide-x divide-gray-100">
