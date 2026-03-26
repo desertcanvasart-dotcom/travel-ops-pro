@@ -473,32 +473,14 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Touring day: auto-fill vehicle if missing
-      // Skip if in cruise range (cruise transport package covers all vehicles)
-      if (hasSightseeing && !isCruiseDay && !isInCruiseRange && !isDepartureDay && isEmpty('vehicle')) {
-        const paxNum = pax || 2
-        const cityVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
-        // Find the service matching city
-        const service = cityVehicles.find((t: any) =>
-          t.origin_city?.toLowerCase()?.trim() === day.city?.toLowerCase()?.trim() ||
-          t.city?.toLowerCase()?.trim() === day.city?.toLowerCase()?.trim()
-        ) || cityVehicles[0]
-        if (service) {
-          // Pick the right vehicle tier for pax count
-          const tier = pickTierForPax(paxNum)
-          const tierId = `${service.id}__${tier}`
-          slots.vehicle = [tierId]
-          console.log(`Day ${day.dayNumber}: AUTO-FILLED vehicle → ${tier} for ${paxNum} pax (${tierId})`)
-        }
-      }
-
-      // Auto-fill route (airport transfers + intercity transfers)
+      // Auto-fill route (all transport: day-tour vehicles + airport transfers + intercity transfers)
       // Route is now multi-select — a day can have multiple routes
       // Cruise transport package is handled separately below and ADDED to routes (not replacing them)
       {
         const routes = rawRates.transportRates?.filter((t: any) =>
           t.service_type === 'airport_transfer' || t.service_type === 'intercity_transfer'
         ) || []
+        const dayTourVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
         const paxNum = pax || 2
         const tier = pickTierForPax(paxNum)
@@ -525,6 +507,17 @@ export async function POST(request: NextRequest) {
           if (!routeIds.includes(tieredId)) {
             routeIds.push(tieredId)
             console.log(`Day ${day.dayNumber}: Route added: ${label} → ${service.service_type} ${service.origin_city}→${service.destination_city} (${tieredId})`)
+          }
+        }
+
+        // --- DAY-TOUR VEHICLES (merged into route) ---
+        // Touring days (not arrival/departure/cruise) get a day-tour vehicle
+        if (hasSightseeing && !isCruiseDay && !isInCruiseRange && !isDepartureDay && !isArrivalDay) {
+          const service = dayTourVehicles.find((t: any) =>
+            cityMatch(t.origin_city, cityLower!) || cityMatch(t.city, cityLower!)
+          ) || dayTourVehicles[0]
+          if (service) {
+            pushRoute(service, 'day-tour vehicle')
           }
         }
 
@@ -710,7 +703,6 @@ export async function POST(request: NextRequest) {
       //   (e.g., Cairo airport transfer on the flight day, Luxor→Hurghada after cruise)
       if (isInCruiseRange) {
         // Clear individual transport slots — package covers everything within cruise
-        slots.vehicle = []
         slots.boat_rides = []
 
         if (isCruiseRangeStart) {

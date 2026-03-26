@@ -10,7 +10,7 @@ interface GridSummaryProps {
 
 export default function GridSummary({ totals, config, dayCount }: GridSummaryProps) {
   const { pax, marginPercent, currency } = config
-  const sym = currency === 'EUR' ? '\u20AC' : currency === 'USD' ? '$' : currency === 'GBP' ? '\u00A3' : currency
+  const sym = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : currency === 'GBP' ? '£' : currency
   const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return (
@@ -20,7 +20,7 @@ export default function GridSummary({ totals, config, dayCount }: GridSummaryPro
         <div>
           <h3 className="text-sm font-bold uppercase tracking-wider">Grand Summary</h3>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            {dayCount} days \u00B7 {pax} pax \u00B7 {config.passport === 'eu' ? 'EU' : 'Non-EU'} \u00B7 {config.tier} \u00B7 {config.clientType.toUpperCase()}
+            {dayCount} days · {pax} pax · {config.passport === 'eu' ? 'EU' : 'Non-EU'} · {config.tier} · {config.clientType.toUpperCase()}
           </p>
         </div>
         <div className="text-right">

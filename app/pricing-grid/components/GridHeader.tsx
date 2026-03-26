@@ -24,7 +24,7 @@ const DEFAULT_MARGINS: Record<ClientType, number> = {
 
 export default function GridHeader({ config, onChange, totals }: GridHeaderProps) {
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
-  const sym = config.currency === 'EUR' ? '\u20AC' : config.currency === 'USD' ? '$' : config.currency === 'GBP' ? '\u00A3' : config.currency
+  const sym = config.currency === 'EUR' ? '€' : config.currency === 'USD' ? '$' : config.currency === 'GBP' ? '£' : config.currency
 
   const toggleClientType = () => {
     const newType: ClientType = config.clientType === 'b2b' ? 'b2c' : 'b2b'

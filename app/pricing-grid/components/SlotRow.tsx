@@ -118,10 +118,10 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                   selected ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 text-gray-400'
                 } focus:bg-white focus:ring-1 focus:ring-blue-200`}
               >
-                <option value="">\u2014 Select \u2014</option>
+                <option value="">— Select —</option>
                 {displayOpts.map(opt => (
                   <option key={opt.id} value={opt.id}>
-                    {opt.name} \u2014 \u20AC{opt[rateKey].toFixed(2)}
+                    {opt.name} — €{opt[rateKey].toFixed(2)}
                     {opt.details ? ` (${opt.details})` : ''}
                   </option>
                 ))}
@@ -141,8 +141,8 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                     title="Click to remove"
                   >
                     {item.name.length > 30 ? item.name.substring(0, 30) + '...' : item.name}
-                    {' '}\u20AC{item[rateKey].toFixed(2)}
-                    <span className="font-bold ml-0.5 text-[10px]">\u00D7</span>
+                    {' '}€{item[rateKey].toFixed(2)}
+                    <span className="font-bold ml-0.5 text-[10px]">×</span>
                   </span>
                 ))}
               </div>
@@ -196,13 +196,13 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                           {opt.name}
                           {opt.city && search ? ` (${opt.city})` : ''}
                         </span>
-                        <span className="text-gray-500 whitespace-nowrap">\u20AC{opt[rateKey].toFixed(2)}</span>
+                        <span className="text-gray-500 whitespace-nowrap">€{opt[rateKey].toFixed(2)}</span>
                       </label>
                     )
                   })}
                   {dropdownOptions.length > 25 && (
                     <div className="text-[11px] text-gray-400 px-2 py-1 border-t border-gray-100">
-                      +{dropdownOptions.length - 25} more \u2014 refine search
+                      +{dropdownOptions.length - 25} more — refine search
                     </div>
                   )}
                 </div>
@@ -217,7 +217,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
         <span className={`text-xs font-bold tabular-nums ${
           slotCost > 0 ? 'text-green-600' : 'text-gray-200'
         }`}>
-          \u20AC{slotCost.toFixed(2)}
+          €{slotCost.toFixed(2)}
         </span>
       </div>
     </div>

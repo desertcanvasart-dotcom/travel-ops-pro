@@ -241,9 +241,9 @@ export default function PricingGridPage() {
           <div className="flex items-center justify-between mb-2 px-1">
             <div className="text-xs text-gray-500">
               <span className="font-semibold text-gray-700">{days.length}</span> days
-              {' \u00B7 '}
+              {' · '}
               <span className="font-semibold text-gray-700">{config.pax}</span> pax
-              {' \u00B7 '}
+              {' · '}
               <span className="font-semibold text-gray-700 capitalize">{config.tier}</span>
             </div>
             <div className="flex items-center gap-1">

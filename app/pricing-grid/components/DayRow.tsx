@@ -81,20 +81,24 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
       return allOptions.filter(o => o.city?.toLowerCase().trim() === accCity)
     }
 
-    if (slotId === 'vehicle') {
-      if (isCruiseDay) return []
-      if (!city) return []
-      return allOptions.filter(o => !o.city || o.city?.toLowerCase().trim() === city)
-    }
-
+    // Transport (route): all transport types — day tours, airport, intercity, cruise packages
     if (slotId === 'route') {
       const selectedIds = new Set(getSlotItems('route').map(i => i.rateId))
       return allOptions.filter(o => {
+        // Always show currently selected items
         if (selectedIds.has(o.id)) return true
+        // Always show cruise transport packages on cruise days
         if ((o as any).service_type === 'cruise_transport_package') return isCruiseDay
+        // On cruise days, hide individual transport (package covers it)
+        if (isCruiseDay) return false
         if (!city && !overnightCity) return false
         const originCity = (o as any).origin_city?.toLowerCase().trim() || ''
         const destCity = (o as any).destination_city?.toLowerCase().trim() || ''
+        // Day tours: match by origin_city or city
+        if ((o as any).service_type === 'day_tour') {
+          return !originCity || (city && (originCity === city || destCity === city))
+        }
+        // Airport/intercity transfers: match by origin or destination
         return (city && (originCity === city || destCity === city)) ||
                (overnightCity && (originCity === overnightCity || destCity === overnightCity))
       })
@@ -194,10 +198,10 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
             {!day.isExpanded && calc.dailyPerPerson > 0 && (
               <div className="hidden sm:flex items-center gap-2 text-[10px] text-gray-400">
                 <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded font-medium">
-                  Grp \u20AC{calc.groupPerPerson.toFixed(0)}
+                  Grp €{calc.groupPerPerson.toFixed(0)}
                 </span>
                 <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded font-medium">
-                  PP \u20AC{calc.perPersonTotal.toFixed(0)}
+                  PP €{calc.perPersonTotal.toFixed(0)}
                 </span>
                 <span className="text-gray-300">{filledSlots}/{totalSlots} slots</span>
               </div>
@@ -208,10 +212,10 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
         {/* Price */}
         <div className="text-right shrink-0 mr-2">
           <div className={`text-sm font-bold ${calc.dailyPerPerson > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
-            \u20AC{calc.dailyPerPerson.toFixed(2)}/pp
+            €{calc.dailyPerPerson.toFixed(2)}/pp
           </div>
           <div className="text-[11px] text-gray-400">
-            \u20AC{calc.dailyTotal.toFixed(2)} total
+            €{calc.dailyTotal.toFixed(2)} total
           </div>
         </div>
 
@@ -255,7 +259,7 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
             <div className="px-4 py-1.5 bg-amber-50/70 border-b border-amber-100/50 flex items-center justify-between">
               <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Group Services</span>
               <span className="text-[11px] text-amber-600 font-medium">
-                \u20AC{calc.groupTotal.toFixed(2)} \u00F7 {config.pax} pax = <strong>\u20AC{calc.groupPerPerson.toFixed(2)}/pp</strong>
+                €{calc.groupTotal.toFixed(2)} ÷ {config.pax} pax = <strong>€{calc.groupPerPerson.toFixed(2)}/pp</strong>
               </span>
             </div>
             {GROUP_SLOTS.map(def => (
@@ -277,7 +281,7 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
             <div className="px-4 py-1.5 bg-emerald-50/70 border-b border-emerald-100/50 flex items-center justify-between">
               <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Per-Person Services</span>
               <span className="text-[11px] text-emerald-600 font-medium">
-                <strong>\u20AC{calc.perPersonTotal.toFixed(2)}/pp</strong>
+                <strong>€{calc.perPersonTotal.toFixed(2)}/pp</strong>
               </span>
             </div>
             {PP_SLOTS.map(def => (
@@ -297,8 +301,8 @@ export default function DayRow({ day, config, rates, onToggleExpand, onUpdateSlo
           <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
             <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">Day {day.dayNumber} Total</span>
             <div className="text-right flex items-center gap-4">
-              <span className="text-xs text-gray-400">\u00D7 {config.pax} pax = \u20AC{calc.dailyTotal.toFixed(2)}</span>
-              <span className="text-sm font-bold text-gray-900">\u20AC{calc.dailyPerPerson.toFixed(2)}/pp</span>
+              <span className="text-xs text-gray-400">× {config.pax} pax = €{calc.dailyTotal.toFixed(2)}</span>
+              <span className="text-sm font-bold text-gray-900">€{calc.dailyPerPerson.toFixed(2)}/pp</span>
             </div>
           </div>
         </div>

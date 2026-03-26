@@ -69,14 +69,15 @@ export async function GET(request: NextRequest) {
     }
 
     const rates = {
-      vehicle: (transportRates || [])
-        .filter((r: any) => r.service_type === 'day_tour')
-        .flatMap((r: any) => {
-          const label = r.route_name || r.service_code || `${r.origin_city || r.city || ''} Day Tour`
-          return expandTiers(r, label)
-        }),
-
       route: [
+        // Day tour vehicles (merged into route — all transport in one slot)
+        ...(transportRates || [])
+          .filter((r: any) => r.service_type === 'day_tour')
+          .flatMap((r: any) => {
+            const label = r.route_name || r.service_code || `${r.origin_city || r.city || ''} Day Tour`
+            return expandTiers(r, label)
+          }),
+        // Airport + intercity transfers
         ...(transportRates || [])
           .filter((r: any) => r.service_type === 'intercity_transfer' || r.service_type === 'airport_transfer')
           .flatMap((r: any) => {

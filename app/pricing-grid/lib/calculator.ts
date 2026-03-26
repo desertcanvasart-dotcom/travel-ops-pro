@@ -19,7 +19,7 @@ function slotTotal(slot: SlotValue, passport: 'eu' | 'non_eu'): number {
 // --- Per-Day Calculation ---
 
 const GROUP_SLOT_IDS = new Set([
-  'vehicle', 'route', 'guide', 'airport_services', 'hotel_services',
+  'route', 'guide', 'airport_services', 'hotel_services',
   'tipping', 'boat_rides', 'other_group'
 ])
 
