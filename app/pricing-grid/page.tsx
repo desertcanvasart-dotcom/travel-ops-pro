@@ -411,11 +411,11 @@ function PricingGridContent() {
             })
             const templateData = await templateRes.json()
 
-            if (templateData.success && templateData.data?.template_id) {
-              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} — Redirecting to Tour Manager...`)
-              // Redirect to /tours/manage with template pre-selected
+            if (templateData.success && templateData.data?.variation_id) {
+              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} — Redirecting to B2B Calculator...`)
+              // Redirect to B2B calculator which has full Plus 0/Plus 1 pricing table
               setTimeout(() => {
-                router.push(`/tours/manage?templateId=${templateData.data.template_id}&variationId=${templateData.data.variation_id || ''}`)
+                router.push(`/b2b/calculator/${templateData.data.variation_id}`)
               }, 1000)
             } else {
               setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} (template creation: ${templateData.error || 'failed'})`)
