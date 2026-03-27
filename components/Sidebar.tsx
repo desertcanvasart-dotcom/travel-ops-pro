@@ -127,7 +127,6 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
       { labelKey: 'emailInbox', href: '/inbox', icon: Mail },
-      { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: Send },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
     ]
   },
