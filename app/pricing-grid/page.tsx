@@ -178,16 +178,25 @@ function PricingGridContent() {
       }
     }
 
-    // Pre-fill client info from URL params
+    // Clear existing state — start fresh for this new conversation
+    setDays([])
+    setSaveMessage(null)
+    setSavedQuoteId(null)
+    setSavedQuoteNumber(null)
+
+    // Pre-fill client info from URL params and reset itinerary link
     const emailParam = searchParams?.get('email')
     const phoneParam = searchParams?.get('phone')
-    if (emailParam || phoneParam) {
-      setConfig(prev => ({
-        ...prev,
-        clientEmail: emailParam || prev.clientEmail,
-        clientPhone: phoneParam || prev.clientPhone,
-      }))
-    }
+    setConfig(prev => ({
+      ...prev,
+      clientEmail: emailParam || '',
+      clientPhone: phoneParam || '',
+      itineraryId: null,
+      itineraryCode: null,
+    }))
+
+    // Clear localStorage so reload doesn't bring back old data
+    clearStorage()
 
     // Clean URL (remove params without page reload)
     window.history.replaceState({}, '', '/pricing-grid')
