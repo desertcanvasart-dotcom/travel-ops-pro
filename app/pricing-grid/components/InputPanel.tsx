@@ -19,6 +19,25 @@ export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, onC
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
+      {/* New Quote banner — shown when existing itinerary is loaded */}
+      {hasDays && onClearAll && (
+        <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+          <span className="text-sm text-amber-700">An existing itinerary is loaded. Start fresh?</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('Clear all days and start a new quote?')) {
+                onClearAll()
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Quote
+          </button>
+        </div>
+      )}
+
       {/* Action Bar — three distinct modes */}
       <div className="flex items-stretch divide-x divide-gray-200">
 
