@@ -259,6 +259,10 @@ function PricingGridContent() {
     try {
       setIsParsing(true)
       setSaveMessage(null)
+      // Clear old data immediately so the loading indicator shows
+      // and the user knows a fresh parse is starting
+      setDays([])
+      setConfig(prev => ({ ...prev, itineraryId: null, itineraryCode: null }))
       const res = await fetch('/api/pricing-grid/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
