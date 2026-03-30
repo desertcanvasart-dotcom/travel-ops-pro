@@ -645,11 +645,12 @@ export async function POST(request: NextRequest) {
       // Is this day within the cruise transport package range?
       const isInCruiseRange = cruiseStartIdx >= 0 && idx >= cruiseStartIdx && idx <= cruiseEndIdx
       const isCruiseRangeStart = idx === cruiseStartIdx
-      // Sightseeing detection: only from TITLE (not description — hotel names in descriptions cause false positives)
-      // AND never on arrival/departure days
-      const hasSightseeing = !isArrivalDay && !isDepartureDay && (
+      // Sightseeing detection: from TITLE (not description — hotel names cause false positives)
+      // NOTE: Arrival and departure days CAN have sightseeing (e.g., arrive Cairo + Alexandria day trip,
+      // or departure day with Grand Museum visit). Don't exclude them.
+      const hasSightseeing = (
         (slots.entrance_fees?.length > 0) ||
-        /visit|tour|explore|sightsee|temple|pyramid|museum|bazaar|mosque|church|tomb|sphinx|khan|old cairo|citadel|valley|west bank/i.test(day.title || '')
+        /visit|tour|explore|sightsee|temple|pyramid|museum|bazaar|mosque|church|tomb|sphinx|khan|old cairo|citadel|valley|west bank|grand museum|memphis|alexandria|day tour/i.test(day.title || day.description || '')
       )
 
       // Helper: check if slot is empty (handles undefined, null, empty array)
@@ -750,10 +751,12 @@ export async function POST(request: NextRequest) {
         }
 
         // --- DAY-TOUR VEHICLES (merged into route) ---
-        // Touring days (not arrival/departure/cruise) get a day-tour vehicle
-        if (hasSightseeing && !isCruiseDay && !isInCruiseRange && !isDepartureDay && !isArrivalDay) {
+        // Any day with sightseeing gets a day-tour vehicle (including arrival/departure days with tours)
+        // Exception: cruise days (covered by cruise transport package)
+        if (hasSightseeing && !isCruiseDay && !isInCruiseRange) {
+          const sightseeingCity = cityLower
           const service = dayTourVehicles.find((t: any) =>
-            cityMatch(t.origin_city, cityLower!) || cityMatch(t.city, cityLower!)
+            cityMatch(t.origin_city, sightseeingCity!) || cityMatch(t.city, sightseeingCity!)
           ) || dayTourVehicles[0]
           if (service) {
             pushRoute(service, 'day-tour vehicle')
@@ -788,7 +791,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Domestic flight day: airport transfers at BOTH departure city and arrival city
-        if (isFlightDay && !isFirstDay && !isLastDay) {
+        // This also applies on first/last days that involve a domestic flight
+        // (e.g., last day: fly from Hurghada to Cairo, sightsee, depart internationally)
+        if (isFlightDay) {
           // Departure city = where we slept last night (previous overnight city)
           const depCity = prevOvernightCity || prevCity
           console.log(`Day ${day.dayNumber}: Flight day detected. depCity="${depCity}", arrCity="${cityLower}", airport_transfers in DB: ${routes.filter((r: any) => r.service_type === 'airport_transfer').map((r: any) => `${r.origin_city}/${r.destination_city}`).join(', ')}`)
@@ -1003,8 +1008,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Touring day: auto-fill tipping if missing (driver + guide tip)
-      // Arrival/departure days get only driver tip (added below)
-      if (hasSightseeing && !isCruiseDay && !isArrivalDay && !isDepartureDay && isEmpty('tipping')) {
+      // This includes arrival/departure days that have sightseeing
+      if (hasSightseeing && !isCruiseDay && isEmpty('tipping')) {
         const tips = rawRates.tippingRates || []
         const driverTip = tips.find((t: any) => /driver.*day|TIP-DRIVER-DAY/i.test(t.role || t.service_code || ''))
           || tips.find((t: any) => /driver/i.test(t.role || t.service_code || ''))
