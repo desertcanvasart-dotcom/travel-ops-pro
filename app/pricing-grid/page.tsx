@@ -506,11 +506,29 @@ function PricingGridContent() {
 
       {/* Days Grid */}
       {days.length === 0 ? (
-        <div className="text-center py-24 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">
-          <div className="text-3xl mb-3 opacity-50">+</div>
-          <p className="text-base mb-1 font-medium">No days yet</p>
-          <p className="text-sm text-gray-400">Paste text, load an itinerary, or add days manually</p>
-        </div>
+        isParsing ? (
+          <div className="text-center py-24 border-2 border-dashed border-green-200 rounded-xl bg-white">
+            <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-full bg-green-50">
+              <svg className="w-8 h-8 text-green-600 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+            <p className="text-base font-semibold text-gray-700 mb-1">Building your itinerary...</p>
+            <p className="text-sm text-gray-500 mb-4">Matching services to rates and filling in details</p>
+            <div className="flex items-center justify-center gap-1.5">
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-24 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-white">
+            <div className="text-3xl mb-3 opacity-50">+</div>
+            <p className="text-base mb-1 font-medium">No days yet</p>
+            <p className="text-sm text-gray-400">Paste text, load an itinerary, or add days manually</p>
+          </div>
+        )
       ) : (
         <>
           {/* Toolbar */}
