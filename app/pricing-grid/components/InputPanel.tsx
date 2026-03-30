@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Plus, FileText, Upload, Loader2, Trash2 } from 'lucide-react'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface InputPanelProps {
   onParseDays: (text: string) => Promise<void>
@@ -16,6 +17,7 @@ export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, onC
   const [text, setText] = useState('')
   const [showPaste, setShowPaste] = useState(false)
   const [itineraryId, setItineraryId] = useState('')
+  const { confirm } = useConfirmDialog()
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
@@ -25,10 +27,15 @@ export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, onC
           <span className="text-sm text-amber-700">An existing itinerary is loaded. Start fresh?</span>
           <button
             type="button"
-            onClick={() => {
-              if (confirm('Clear all days and start a new quote?')) {
-                onClearAll()
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: 'Start New Quote',
+                message: 'This will clear all days and reset the pricing grid. Any unsaved changes will be lost.',
+                confirmText: 'New Quote',
+                cancelText: 'Cancel',
+                variant: 'warning',
+              })
+              if (ok) onClearAll()
             }}
             className="flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors"
           >
@@ -98,10 +105,15 @@ export default function InputPanel({ onParseDays, onAddDay, onLoadItinerary, onC
             {hasDays && onClearAll && (
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm('Clear all days and start a new quote? This cannot be undone.')) {
-                    onClearAll()
-                  }
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Clear All Days',
+                    message: 'This will remove all days and reset the pricing grid. This cannot be undone.',
+                    confirmText: 'Clear All',
+                    cancelText: 'Cancel',
+                    variant: 'danger',
+                  })
+                  if (ok) onClearAll()
                 }}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                 title="Clear all days and start fresh"
