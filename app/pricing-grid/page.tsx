@@ -149,7 +149,9 @@ function PricingGridContent() {
   // --- URL Params: Auto-load conversation from inbox redirect ---
   const searchParams = useSearchParams()
   const hasProcessedParams = useRef(false)
+  const pendingParseText = useRef<string | null>(null)
 
+  // Effect 1: Decode URL params and store text for parsing
   useEffect(() => {
     if (hasProcessedParams.current) return
     const conversationParam = searchParams?.get('conversation')
@@ -203,21 +205,21 @@ function PricingGridContent() {
     // Clean URL (remove params without page reload)
     window.history.replaceState({}, '', '/pricing-grid')
 
-    // Auto-trigger parse after a short delay (wait for rates to load)
-    const autoParse = async () => {
-      // Wait for rates to be loaded
-      let attempts = 0
-      while (!rates && attempts < 20) {
-        await new Promise(r => setTimeout(r, 500))
-        attempts++
-      }
-      if (decodedText.trim()) {
-        handleParseDays(decodedText)
-      }
+    // Store decoded text — the rates effect will trigger parsing when ready
+    if (decodedText.trim()) {
+      pendingParseText.current = decodedText
     }
-    autoParse()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, rates])
+  }, [searchParams])
+
+  // Effect 2: Auto-parse once rates are loaded (fires immediately if rates already exist)
+  useEffect(() => {
+    if (!rates || !pendingParseText.current) return
+    const text = pendingParseText.current
+    pendingParseText.current = null // Clear to prevent re-firing
+    handleParseDays(text)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rates])
 
   // --- Day Management ---
   const addDay = () => setDays(prev => [...prev, createEmptyDay(prev.length + 1)])
