@@ -874,10 +874,14 @@ export async function POST(request: NextRequest) {
               // 1. Arrival: effectivePrevCity → cityLower (coming from previous overnight)
               // 2. Onward: cityLower → overnightCity (going to overnight city)
               // 3. Onward to next: cityLower → nextCity (going to next day's city)
+              // 4. Day trip: overnightCity → mentioned city (round-trip day tour to another city)
               const isArrivalTransfer = fromCity === effectivePrevCity && allDayCities.has(toCity) && fromCity !== cityLower
               const isOnwardTransfer = toCity === overnightCity && fromCity !== toCity
               const isNextDayTransfer = toCity === nextCity && fromCity !== toCity && (!isFlightDay)
-              if (!isArrivalTransfer && !isOnwardTransfer && !isNextDayTransfer) continue
+              // Day trip: from the overnight city to a mentioned city that isn't the overnight city
+              // (e.g., Cairo→Alexandria day trip when sleeping in Cairo)
+              const isDayTripTransfer = fromCity === overnightCity && toCity !== overnightCity && mentionedCities.includes(toCity)
+              if (!isArrivalTransfer && !isOnwardTransfer && !isNextDayTransfer && !isDayTripTransfer) continue
 
               const transferKey = `${fromCity}->${toCity}`
               if (addedTransfers.has(transferKey)) continue
