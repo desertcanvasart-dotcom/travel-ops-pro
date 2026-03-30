@@ -751,13 +751,14 @@ export async function POST(request: NextRequest) {
         }
 
         // --- DAY-TOUR VEHICLES (merged into route) ---
-        // Any day with sightseeing gets a day-tour vehicle (including arrival/departure days with tours)
+        // Any day with sightseeing gets a day-tour vehicle for the sightseeing city.
         // Exception: cruise days (covered by cruise transport package)
+        // No fallback: if no vehicle exists for this city, skip (intercity transfer covers it for day trips)
         if (hasSightseeing && !isCruiseDay && !isInCruiseRange) {
           const sightseeingCity = cityLower
           const service = dayTourVehicles.find((t: any) =>
             cityMatch(t.origin_city, sightseeingCity!) || cityMatch(t.city, sightseeingCity!)
-          ) || dayTourVehicles[0]
+          )
           if (service) {
             pushRoute(service, 'day-tour vehicle')
           }
@@ -857,10 +858,6 @@ export async function POST(request: NextRequest) {
           if (effectivePrevCity && effectivePrevCity !== 'cruise' && !isCruiseEndDay) {
             allDayCities.add(effectivePrevCity)
           }
-          // Also add next day's city if it's different (for onward transfers)
-          if (nextCity && nextCity !== 'cruise') {
-            allDayCities.add(nextCity)
-          }
 
           // Now find all intercity transfers where BOTH origin and destination are in our city set
           const dayCityArray = [...allDayCities]
@@ -877,16 +874,14 @@ export async function POST(request: NextRequest) {
 
               // Only add if the transfer makes sense for this day:
               // 1. Arrival: effectivePrevCity → cityLower (coming from previous overnight)
-              // 2. Onward: cityLower → overnightCity (going to overnight city)
-              // 3. Onward to next: cityLower → nextCity (going to next day's city)
-              // 4. Day trip: overnightCity → mentioned city (round-trip day tour to another city)
+              // 2. Onward: fromCity → overnightCity (relocating to a different overnight city)
+              // 3. Day trip: overnightCity → mentioned city (round-trip to another city, returning same day)
               const isArrivalTransfer = fromCity === effectivePrevCity && allDayCities.has(toCity) && fromCity !== cityLower
               const isOnwardTransfer = toCity === overnightCity && fromCity !== toCity
-              const isNextDayTransfer = toCity === nextCity && fromCity !== toCity && (!isFlightDay)
               // Day trip: from the overnight city to a mentioned city that isn't the overnight city
               // (e.g., Cairo→Alexandria day trip when sleeping in Cairo)
               const isDayTripTransfer = fromCity === overnightCity && toCity !== overnightCity && mentionedCities.includes(toCity)
-              if (!isArrivalTransfer && !isOnwardTransfer && !isNextDayTransfer && !isDayTripTransfer) continue
+              if (!isArrivalTransfer && !isOnwardTransfer && !isDayTripTransfer) continue
 
               const transferKey = `${fromCity}->${toCity}`
               if (addedTransfers.has(transferKey)) continue
