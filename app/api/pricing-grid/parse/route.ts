@@ -74,8 +74,8 @@ async function buildRateCatalog(supabase: any, tier: string) {
     .join('\n')
 
   catalog.route = (transportRates || [])
-    .filter((r: any) => ['intercity_transfer', 'airport_transfer'].includes(r.service_type))
-    .flatMap((r: any) => expandCatalogTiers(r, `${r.service_type} | ${r.origin_city || ''}→${r.destination_city || ''}`))
+    .filter((r: any) => r.service_type !== 'day_tour')
+    .flatMap((r: any) => expandCatalogTiers(r, `${r.service_type} | ${r.origin_city || r.city || ''}→${r.destination_city || ''}`))
     .join('\n')
 
   catalog.guide = (guideRates || [])
@@ -690,7 +690,7 @@ export async function POST(request: NextRequest) {
       // Cruise transport package is handled separately below and ADDED to routes (not replacing them)
       {
         const routes = rawRates.transportRates?.filter((t: any) =>
-          t.service_type === 'airport_transfer' || t.service_type === 'intercity_transfer'
+          t.service_type !== 'day_tour'
         ) || []
         const dayTourVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
@@ -760,11 +760,18 @@ export async function POST(request: NextRequest) {
 
         // --- AIRPORT TRANSFERS ---
 
+        // Helper: match transport record's origin to a city (origin_city falls back to city field)
+        const matchOrigin = (r: any, target: string) =>
+          cityMatch(r.origin_city, target) || cityMatch(r.city, target)
+        const matchDest = (r: any, target: string) =>
+          cityMatch(r.destination_city, target)
+        const matchAnyCity = (r: any, target: string) =>
+          matchOrigin(r, target) || matchDest(r, target)
+
         // Arrival day (first day): airport → hotel
         if (isFirstDay) {
           const airportTransfer = routes.find((r: any) =>
-            r.service_type === 'airport_transfer' &&
-            (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
+            r.service_type === 'airport_transfer' && matchAnyCity(r, cityLower!)
           )
           if (airportTransfer) pushRoute(airportTransfer, 'arrival airport transfer')
         }
@@ -773,8 +780,7 @@ export async function POST(request: NextRequest) {
         // The airport transfer is for the DEPARTURE city (this day's city, where the airport is)
         if (isLastDay) {
           const airportTransfer = routes.find((r: any) =>
-            r.service_type === 'airport_transfer' &&
-            (cityMatch(r.origin_city, cityLower!) || cityMatch(r.destination_city, cityLower!))
+            r.service_type === 'airport_transfer' && matchAnyCity(r, cityLower!)
           )
           if (airportTransfer) pushRoute(airportTransfer, 'departure airport transfer')
         }
@@ -787,8 +793,7 @@ export async function POST(request: NextRequest) {
           console.log(`Day ${day.dayNumber}: Flight day detected. depCity="${depCity}", arrCity="${cityLower}", airport_transfers in DB: ${routes.filter((r: any) => r.service_type === 'airport_transfer').map((r: any) => `${r.origin_city}/${r.destination_city}`).join(', ')}`)
           if (depCity && depCity !== 'cruise') {
             const depTransfer = routes.find((r: any) =>
-              r.service_type === 'airport_transfer' &&
-              (cityMatch(r.origin_city, depCity) || cityMatch(r.destination_city, depCity))
+              r.service_type === 'airport_transfer' && matchAnyCity(r, depCity)
             )
             if (depTransfer) {
               pushRoute(depTransfer, 'flight departure airport transfer')
@@ -800,7 +805,7 @@ export async function POST(request: NextRequest) {
           if (cityLower) {
             const arrTransfer = routes.find((r: any) =>
               r.service_type === 'airport_transfer' &&
-              (cityMatch(r.origin_city, cityLower) || cityMatch(r.destination_city, cityLower)) &&
+              matchAnyCity(r, cityLower) &&
               !routeIds.includes(`${r.id}__${tier}`) // avoid duplicate if same city
             )
             if (arrTransfer) {
@@ -857,9 +862,9 @@ export async function POST(request: NextRequest) {
               if (addedTransfers.has(transferKey)) continue
 
               const transfer = routes.find((r: any) =>
-                r.service_type === 'intercity_transfer' &&
-                cityMatch(r.origin_city, fromCity) &&
-                cityMatch(r.destination_city, toCity)
+                ['intercity_transfer', 'intercity', 'city_transfer'].includes(r.service_type) &&
+                matchOrigin(r, fromCity) &&
+                matchDest(r, toCity)
               )
               if (transfer) {
                 addedTransfers.add(transferKey)
@@ -1101,7 +1106,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   ]
   for (const r of rawRates.transportRates || []) {
     if (!r.id) continue
-    const routeLabel = r.route_name || r.service_code || `${r.origin_city || ''}${r.destination_city ? '→' + r.destination_city : ''}`
+    const routeLabel = r.route_name || r.service_code || `${r.origin_city || r.city || ''}${r.destination_city ? '→' + r.destination_city : ''}`
     let hasTieredRates = false
     for (const t of TIERS) {
       const rate = toNum(r[`${t.key}_rate_eur`])

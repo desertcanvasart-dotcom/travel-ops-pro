@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           capacity_min: r[`${t.key}_capacity_min`] || t.capMin,
           capacity_max: r[`${t.key}_capacity_max`] || t.capMax,
           service_type: r.service_type,
-          origin_city: r.origin_city,
+          origin_city: r.origin_city || r.city,
           destination_city: r.destination_city,
         }))
       // Fallback: if no tiered columns, use legacy base_rate_eur for all tiers
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
           capacity_min: t.capMin,
           capacity_max: t.capMax,
           service_type: r.service_type,
-          origin_city: r.origin_city,
+          origin_city: r.origin_city || r.city,
           destination_city: r.destination_city,
         }))
       }
@@ -94,9 +94,9 @@ export async function GET(request: NextRequest) {
             const label = r.route_name || r.service_code || `${r.origin_city || r.city || ''} Day Tour`
             return expandTiers(r, label)
           }),
-        // Airport + intercity transfers
+        // All other transport types (airport transfers, intercity, city transfers, dinner transfers, etc.)
         ...(transportRates || [])
-          .filter((r: any) => r.service_type === 'intercity_transfer' || r.service_type === 'airport_transfer')
+          .filter((r: any) => r.service_type !== 'day_tour')
           .flatMap((r: any) => {
             const label = r.route_name || `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code
             return expandTiers(r, label)
