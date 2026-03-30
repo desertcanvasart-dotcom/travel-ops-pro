@@ -146,6 +146,31 @@ function PricingGridContent() {
     fetchRates(config.tier)
   }, [config.tier, fetchRates])
 
+  // Fetch exchange rate when currency changes
+  useEffect(() => {
+    if (config.currency === 'EUR') {
+      // No conversion needed for EUR (base currency)
+      if (config.exchangeRate !== null) {
+        setConfig(prev => ({ ...prev, exchangeRate: null }))
+      }
+      return
+    }
+    // Fetch rate from API
+    const fetchRate = async () => {
+      try {
+        const res = await fetch('/api/exchange-rates?base=EUR')
+        const data = await res.json()
+        if (data.success && data.data?.rates?.[config.currency]) {
+          setConfig(prev => ({ ...prev, exchangeRate: data.data.rates[prev.currency] }))
+        }
+      } catch (err) {
+        console.error('Failed to fetch exchange rate:', err)
+      }
+    }
+    fetchRate()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.currency])
+
   // --- URL Params: Auto-load conversation from inbox redirect ---
   const searchParams = useSearchParams()
   const hasProcessedParams = useRef(false)

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { GridConfig, GridTotals, Tier, ClientType, PassportType } from '../types'
+import { convertAmount } from '../lib/calculator'
 
 interface GridHeaderProps {
   config: GridConfig
@@ -35,6 +36,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
   const sym = config.currency === 'EUR' ? '\u20AC' : config.currency === 'USD' ? '$' : config.currency === 'GBP' ? '\u00A3' : config.currency
   const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const cv = (n: number) => convertAmount(n, config.exchangeRate)
 
   // Fetch B2B partners when switching to B2B
   useEffect(() => {
@@ -230,23 +232,23 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
             <div className="flex-1 grid grid-cols-5 divide-x divide-green-100">
               <div className="px-3 py-2">
                 <div className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Cost/PP</div>
-                <div className="text-sm font-bold text-gray-700">{sym}{fmt(totals.costPerPerson)}</div>
+                <div className="text-sm font-bold text-gray-700">{sym}{fmt(cv(totals.costPerPerson))}</div>
               </div>
               <div className="px-3 py-2">
                 <div className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Total Cost</div>
-                <div className="text-sm font-bold text-gray-700">{sym}{fmt(totals.totalCost)}</div>
+                <div className="text-sm font-bold text-gray-700">{sym}{fmt(cv(totals.totalCost))}</div>
               </div>
               <div className="px-3 py-2">
                 <div className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Margin ({config.marginPercent}%)</div>
-                <div className={`text-sm font-bold ${totals.marginAmount > 0 ? 'text-amber-600' : 'text-red-500'}`}>{sym}{fmt(totals.marginAmount)}</div>
+                <div className={`text-sm font-bold ${totals.marginAmount > 0 ? 'text-amber-600' : 'text-red-500'}`}>{sym}{fmt(cv(totals.marginAmount))}</div>
               </div>
               <div className="px-3 py-2 bg-green-50/50">
                 <div className="text-[10px] text-green-600 uppercase tracking-wider font-medium">Sell/PP</div>
-                <div className="text-sm font-extrabold text-green-700">{sym}{fmt(totals.sellingPricePerPerson)}</div>
+                <div className="text-sm font-extrabold text-green-700">{sym}{fmt(cv(totals.sellingPricePerPerson))}</div>
               </div>
               <div className="px-3 py-2 bg-green-50/50">
                 <div className="text-[10px] text-green-600 uppercase tracking-wider font-medium">Sell Total</div>
-                <div className="text-sm font-extrabold text-green-700">{sym}{fmt(totals.sellingPriceTotal)}</div>
+                <div className="text-sm font-extrabold text-green-700">{sym}{fmt(cv(totals.sellingPriceTotal))}</div>
               </div>
             </div>
           </div>

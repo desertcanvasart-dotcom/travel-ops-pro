@@ -3,7 +3,7 @@
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import type { GridDay, GridConfig, AllRates, SlotValue, DayCalc, SelectedItem } from '../types'
 import { GROUP_SLOTS, PP_SLOTS } from '../types'
-import { calculateDay } from '../lib/calculator'
+import { calculateDay, convertAmount } from '../lib/calculator'
 import SlotRow from './SlotRow'
 
 interface DayRowProps {
@@ -19,6 +19,8 @@ interface DayRowProps {
 
 export default function DayRow({ day, allDays, config, rates, onToggleExpand, onUpdateSlot, onUpdateDay, onRemoveDay }: DayRowProps) {
   const calc: DayCalc = calculateDay(day, config)
+  const cv = (n: number) => convertAmount(n, config.exchangeRate)
+  const sym = config.currency === 'EUR' ? '€' : config.currency === 'USD' ? '$' : config.currency === 'GBP' ? '£' : config.currency
 
   const getSlotValue = (slotId: string): SlotValue => {
     return day.slots.find(s => s.slotId === slotId) || { slotId, selectedItems: [], customAmount: 0 }
@@ -251,10 +253,10 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
             {!day.isExpanded && calc.dailyPerPerson > 0 && (
               <div className="hidden sm:flex items-center gap-2 text-[10px] text-gray-400">
                 <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded font-medium">
-                  Grp €{calc.groupPerPerson.toFixed(0)}
+                  Grp {sym}{cv(calc.groupPerPerson).toFixed(0)}
                 </span>
                 <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded font-medium">
-                  PP €{calc.perPersonTotal.toFixed(0)}
+                  PP {sym}{cv(calc.perPersonTotal).toFixed(0)}
                 </span>
                 <span className="text-gray-300">{filledSlots}/{totalSlots} slots</span>
               </div>
@@ -265,10 +267,10 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
         {/* Price */}
         <div className="text-right shrink-0 mr-2">
           <div className={`text-sm font-bold ${calc.dailyPerPerson > 0 ? 'text-gray-900' : 'text-gray-300'}`}>
-            €{calc.dailyPerPerson.toFixed(2)}/pp
+            {sym}{cv(calc.dailyPerPerson).toFixed(2)}/pp
           </div>
           <div className="text-[11px] text-gray-400">
-            €{calc.dailyTotal.toFixed(2)} total
+            {sym}{cv(calc.dailyTotal).toFixed(2)} total
           </div>
         </div>
 
@@ -312,7 +314,7 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
             <div className="px-4 py-1.5 bg-amber-50/70 border-b border-amber-100/50 flex items-center justify-between">
               <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Group Services</span>
               <span className="text-[11px] text-amber-600 font-medium">
-                €{calc.groupTotal.toFixed(2)} ÷ {config.pax} pax = <strong>€{calc.groupPerPerson.toFixed(2)}/pp</strong>
+                {sym}{cv(calc.groupTotal).toFixed(2)} ÷ {config.pax} pax = <strong>{sym}{cv(calc.groupPerPerson).toFixed(2)}/pp</strong>
               </span>
             </div>
             {GROUP_SLOTS.map(def => (
@@ -334,7 +336,7 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
             <div className="px-4 py-1.5 bg-emerald-50/70 border-b border-emerald-100/50 flex items-center justify-between">
               <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Per-Person Services</span>
               <span className="text-[11px] text-emerald-600 font-medium">
-                <strong>€{calc.perPersonTotal.toFixed(2)}/pp</strong>
+                <strong>{sym}{cv(calc.perPersonTotal).toFixed(2)}/pp</strong>
               </span>
             </div>
             {PP_SLOTS.map(def => (
@@ -354,8 +356,8 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
           <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
             <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">Day {day.dayNumber} Total</span>
             <div className="text-right flex items-center gap-4">
-              <span className="text-xs text-gray-400">× {config.pax} pax = €{calc.dailyTotal.toFixed(2)}</span>
-              <span className="text-sm font-bold text-gray-900">€{calc.dailyPerPerson.toFixed(2)}/pp</span>
+              <span className="text-xs text-gray-400">× {config.pax} pax = {sym}{cv(calc.dailyTotal).toFixed(2)}</span>
+              <span className="text-sm font-bold text-gray-900">{sym}{cv(calc.dailyPerPerson).toFixed(2)}/pp</span>
             </div>
           </div>
         </div>

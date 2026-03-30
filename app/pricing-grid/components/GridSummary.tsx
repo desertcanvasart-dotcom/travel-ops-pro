@@ -2,6 +2,7 @@
 
 import { Save, ExternalLink, Loader2 } from 'lucide-react'
 import type { GridTotals, GridConfig } from '../types'
+import { convertAmount } from '../lib/calculator'
 
 interface GridSummaryProps {
   totals: GridTotals
@@ -20,6 +21,7 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
   const { pax, marginPercent, currency } = config
   const sym = currency === 'EUR' ? '\u20AC' : currency === 'USD' ? '$' : currency === 'GBP' ? '\u00A3' : currency
   const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const cv = (n: number) => convertAmount(n, config.exchangeRate)
 
   const isB2B = config.clientType === 'b2b'
 
@@ -48,23 +50,23 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
         <div className="text-right">
           <div className="text-[10px] text-gray-400 uppercase">Avg per day</div>
           <div className="text-sm font-bold text-gray-300">
-            {sym}{dayCount > 0 ? fmt(totals.costPerPerson / dayCount) : '0.00'}/pp
+            {sym}{dayCount > 0 ? fmt(cv(totals.costPerPerson / dayCount)) : '0.00'}/pp
           </div>
         </div>
       </div>
 
       {/* Numbers */}
       <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-gray-100">
-        <SummaryCell label="Cost / Person" value={totals.costPerPerson} symbol={sym} />
-        <SummaryCell label="Total Cost" value={totals.totalCost} symbol={sym} />
+        <SummaryCell label="Cost / Person" value={cv(totals.costPerPerson)} symbol={sym} />
+        <SummaryCell label="Total Cost" value={cv(totals.totalCost)} symbol={sym} />
         <SummaryCell
           label={`Margin (${marginPercent}%)`}
-          value={totals.marginAmount}
+          value={cv(totals.marginAmount)}
           symbol={sym}
           color={totals.marginAmount > 0 ? 'text-amber-600' : 'text-red-500'}
         />
-        <SummaryCell label="Selling / Person" value={totals.sellingPricePerPerson} symbol={sym} color="text-green-600" highlight />
-        <SummaryCell label="Selling Total" value={totals.sellingPriceTotal} symbol={sym} color="text-green-700" highlight />
+        <SummaryCell label="Selling / Person" value={cv(totals.sellingPricePerPerson)} symbol={sym} color="text-green-600" highlight />
+        <SummaryCell label="Selling Total" value={cv(totals.sellingPriceTotal)} symbol={sym} color="text-green-700" highlight />
       </div>
 
       {/* Save Actions */}
