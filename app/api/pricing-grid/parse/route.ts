@@ -320,6 +320,34 @@ Transportation AFTER the last cruise sightseeing day (e.g., Luxor → Hurghada) 
 - For intercity transfers (route slot), match origin→destination cities.
 - The cruise rate is PER PERSON PER NIGHT. Add it on every day the guest sleeps on the ship (embarkation + sailing days, NOT on disembarkation day).
 
+## METADATA EXTRACTION
+
+In addition to parsing days, extract trip metadata from the conversation text. Return a "metadata" object at the top level alongside "days":
+
+\`\`\`json
+{
+  "metadata": {
+    "clientName": "John Smith or null if not found",
+    "pax": 3,
+    "startDate": "2026-04-15",
+    "passport": "eu or non_eu",
+    "tourName": "Descriptive name for the tour",
+    "nationality": "American, British, etc."
+  },
+  "days": [...]
+}
+\`\`\`
+
+Rules for metadata:
+- **clientName**: Extract the client's name from the conversation. Look for introductions, signatures, or how the person identifies themselves. Return null if not found.
+- **pax**: Count the number of travelers mentioned (e.g., "2 adults", "my wife and I" = 2, "family of 4" = 4, "solo traveler" = 1). Return null if not determinable.
+- **startDate**: Extract the trip start date in YYYY-MM-DD format. Look for specific dates, "arriving on March 15", etc. Return null if not found.
+- **passport**: Infer from nationality. European nationalities (German, French, Italian, Spanish, Dutch, Belgian, Austrian, Swedish, Danish, Finnish, Norwegian, Portuguese, Greek, Irish, Polish, Czech, Hungarian, Romanian, Bulgarian, Croatian, Slovenian, Slovak, Estonian, Latvian, Lithuanian, Luxembourgish, Maltese, Cypriot, Swiss, British) = "eu". All others = "non_eu". Return null if nationality is unknown.
+- **tourName**: Generate a short descriptive name for the tour based on the destinations and activities (e.g., "Cairo & Luxor Cultural Tour", "Egypt Nile Cruise & Red Sea Adventure"). Always generate this.
+- **nationality**: Extract nationality if mentioned (e.g., "I'm American", "from Japan", "Brazilian couple"). Return null if not found.
+
+Return null for any field that cannot be determined from the conversation.
+
 Output ONLY valid JSON, no other text.`
 }
 
@@ -858,7 +886,7 @@ export async function POST(request: NextRequest) {
       slots: enrichSlots(day.slots || {}, allRatesFlat)
     }))
 
-    return NextResponse.json({ success: true, days: enrichedDays })
+    return NextResponse.json({ success: true, days: enrichedDays, metadata: parsed.metadata || null })
   } catch (error) {
     console.error('Parse error:', error)
     const { message, status } = getUserFriendlyError(error)

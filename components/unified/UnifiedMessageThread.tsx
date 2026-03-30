@@ -683,6 +683,13 @@ export function UnifiedMessageThread({
       params.set('email', conversation.client_email)
     }
 
+    // Pass client name if available
+    const clientName = conversation.client_name
+      || (conversation.client ? `${conversation.client.first_name || ''} ${conversation.client.last_name || ''}`.trim() : '')
+    if (clientName) {
+      params.set('clientName', clientName)
+    }
+
     // Navigate to pricing grid
     router.push(`/pricing-grid?${params.toString()}`)
   }

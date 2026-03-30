@@ -790,7 +790,16 @@ export default function WhatsAppInboxPage() {
     const base64 = btoa(String.fromCharCode(...bytes))
     // Make it URL-safe: replace + with -, / with _, remove =
     const encoded = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-    router.push(`/pricing-grid?conversation=${encoded}&encoded=base64&clientId=${selectedConversation.client_id || ''}&phone=${selectedConversation.phone_number}`)
+    const clientName = selectedConversation.client_name || selectedConversation.clients?.full_name || ''
+    const params = new URLSearchParams({
+      conversation: encoded,
+      encoded: 'base64',
+      clientId: selectedConversation.client_id || '',
+      phone: selectedConversation.phone_number,
+    })
+    if (clientName) params.set('clientName', clientName)
+    if (selectedConversation.clients?.email) params.set('email', selectedConversation.clients.email)
+    router.push(`/pricing-grid?${params.toString()}`)
   }
 
   // Select conversation

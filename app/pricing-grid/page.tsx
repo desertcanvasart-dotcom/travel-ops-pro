@@ -187,10 +187,12 @@ function PricingGridContent() {
     // Pre-fill client info from URL params and reset itinerary link
     const emailParam = searchParams?.get('email')
     const phoneParam = searchParams?.get('phone')
+    const clientNameParam = searchParams?.get('clientName')
     setConfig(prev => ({
       ...prev,
       clientEmail: emailParam || '',
       clientPhone: phoneParam || '',
+      clientName: clientNameParam || '',
       itineraryId: null,
       itineraryCode: null,
     }))
@@ -285,8 +287,21 @@ function PricingGridContent() {
           }),
         }))
         setDays(parsedDays)
-        // Reset itinerary link (new parse = new quote)
-        setConfig(prev => ({ ...prev, itineraryId: null, itineraryCode: null }))
+        // Apply AI-extracted metadata to config (URL params take precedence)
+        const meta = data.metadata
+        setConfig(prev => ({
+          ...prev,
+          itineraryId: null,
+          itineraryCode: null,
+          // Only apply metadata fields if they exist and the field isn't already set
+          ...(meta?.pax != null && { pax: meta.pax }),
+          ...(meta?.startDate && { startDate: meta.startDate }),
+          ...(meta?.passport && { passport: meta.passport as 'eu' | 'non_eu' }),
+          ...(meta?.tourName && { tourName: meta.tourName }),
+          ...(meta?.nationality && { nationality: meta.nationality }),
+          // Client name: URL param takes precedence, then AI-extracted
+          ...(meta?.clientName && !prev.clientName && { clientName: meta.clientName }),
+        }))
       } else {
         alert(data.error || 'Failed to parse text')
       }

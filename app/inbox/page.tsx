@@ -528,9 +528,13 @@ ${bodyText}`
       encoded: 'base64'
     })
     
-    if (matchedClient) params.set('clientId', matchedClient.id)
+    if (matchedClient) {
+      params.set('clientId', matchedClient.id)
+      if (matchedClient.name) params.set('clientName', matchedClient.name)
+      if (matchedClient.phone) params.set('phone', matchedClient.phone)
+    }
     if (senderEmail) params.set('email', senderEmail)
-    
+
     window.location.href = `/pricing-grid?${params.toString()}`
   }
   useEffect(() => {
