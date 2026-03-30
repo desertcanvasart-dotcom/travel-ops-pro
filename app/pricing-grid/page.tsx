@@ -146,6 +146,61 @@ function PricingGridContent() {
     fetchRates(config.tier)
   }, [config.tier, fetchRates])
 
+  // Auto-swap accommodation and cruise when tier changes
+  const prevTierRef = useRef(config.tier)
+  useEffect(() => {
+    if (!rates || days.length === 0) return
+    // Only run when tier actually changed (not on initial load)
+    if (prevTierRef.current === config.tier) return
+    prevTierRef.current = config.tier
+
+    setDays(prevDays => prevDays.map(day => ({
+      ...day,
+      slots: day.slots.map(slot => {
+        // Swap accommodation: match by city
+        if (slot.slotId === 'accommodation' && slot.selectedItems.length > 0) {
+          const dayCity = day.city?.toLowerCase()?.trim()
+          const newHotel = (rates as AllRates).accommodation.find(
+            (r: any) => r.city?.toLowerCase()?.trim() === dayCity
+          )
+          if (newHotel) {
+            return {
+              ...slot,
+              selectedItems: [{
+                rateId: newHotel.id,
+                name: newHotel.name,
+                rateEur: newHotel.rateEur,
+                rateNonEur: newHotel.rateNonEur,
+              }],
+            }
+          }
+          // No hotel in new tier for this city — clear selection
+          return { ...slot, selectedItems: [] }
+        }
+
+        // Swap cruise: pick the first cruise in the new tier
+        if (slot.slotId === 'cruise' && slot.selectedItems.length > 0) {
+          const newCruise = (rates as AllRates).cruise[0]
+          if (newCruise) {
+            return {
+              ...slot,
+              selectedItems: [{
+                rateId: newCruise.id,
+                name: newCruise.name,
+                rateEur: newCruise.rateEur,
+                rateNonEur: newCruise.rateNonEur,
+              }],
+            }
+          }
+          return { ...slot, selectedItems: [] }
+        }
+
+        return slot
+      }),
+    })))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rates])
+
   // Fetch exchange rate when currency changes
   useEffect(() => {
     if (config.currency === 'EUR') {
