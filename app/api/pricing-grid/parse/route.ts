@@ -688,10 +688,12 @@ export async function POST(request: NextRequest) {
       // Auto-fill route (all transport: day-tour vehicles + airport transfers + intercity transfers)
       // Route is now multi-select — a day can have multiple routes
       // Cruise transport package is handled separately below and ADDED to routes (not replacing them)
+      const allTransportRoutes = rawRates.transportRates?.filter((t: any) =>
+        t.service_type !== 'day_tour'
+      ) || []
+      const isFlightDay = /flight|fly/i.test(day.title || day.description || '')
       {
-        const routes = rawRates.transportRates?.filter((t: any) =>
-          t.service_type !== 'day_tour'
-        ) || []
+        const routes = allTransportRoutes
         const dayTourVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
         const paxNum = pax || 2
@@ -786,7 +788,6 @@ export async function POST(request: NextRequest) {
         }
 
         // Domestic flight day: airport transfers at BOTH departure city and arrival city
-        const isFlightDay = /flight|fly/i.test(day.title || day.description || '')
         if (isFlightDay && !isFirstDay && !isLastDay) {
           // Departure city = where we slept last night (previous overnight city)
           const depCity = prevOvernightCity || prevCity
@@ -820,6 +821,11 @@ export async function POST(request: NextRequest) {
         // SYSTEMATIC APPROACH: Use allDayCities to find ALL relevant intercity transfers.
         // For any pair of cities mentioned in this day, check if there's a transfer route.
         // This handles: arrival from previous city, onward transfer, multi-city days, post-cruise transfers.
+        //
+        // CRUISE RANGE RULE: On the cruise END day (disembarkation), the cruise transport package
+        // already covers getting from the cruise start city to the cruise end city. So we must NOT
+        // add an intercity transfer that duplicates the cruise route (e.g., Aswan→Luxor when cruise
+        // goes Aswan→Luxor). Only add transfers BEYOND the cruise (e.g., Luxor→Hurghada onward).
         {
           // Determine effective previous city (walk back past cruise days if needed)
           let effectivePrevCity = prevOvernightCity || prevCity
@@ -832,8 +838,18 @@ export async function POST(request: NextRequest) {
               }
             }
           }
-          // Add effective previous city to our city set for this day
-          if (effectivePrevCity && effectivePrevCity !== 'cruise') {
+
+          // For cruise end day: the effectivePrevCity is the cruise START city (e.g., Aswan).
+          // We should NOT add an intercity transfer from that city — the cruise package covers it.
+          // Instead, only add transfers from the cruise END city (e.g., Luxor) onward.
+          const isCruiseEndDay = cruiseEndIdx >= 0 && idx === cruiseEndIdx
+          const cruiseStartCity = isCruiseEndDay && cruiseStartIdx >= 0
+            ? (parsed.days[cruiseStartIdx]?.city || '').toLowerCase().trim()
+            : ''
+
+          // Add effective previous city to our city set ONLY if not on cruise end day
+          // (on cruise end day, the "previous city" is the cruise start city which is already covered)
+          if (effectivePrevCity && effectivePrevCity !== 'cruise' && !isCruiseEndDay) {
             allDayCities.add(effectivePrevCity)
           }
           // Also add next day's city if it's different (for onward transfers)
@@ -849,6 +865,11 @@ export async function POST(request: NextRequest) {
               if (i === j) continue
               const fromCity = dayCityArray[i]
               const toCity = dayCityArray[j]
+
+              // On cruise end day: skip any transfer FROM the cruise start city
+              // (the cruise package already covers transport from cruise start to end city)
+              if (isCruiseEndDay && cruiseStartCity && cityMatch(fromCity, cruiseStartCity)) continue
+
               // Only add if the transfer makes sense for this day:
               // 1. Arrival: effectivePrevCity → cityLower (coming from previous overnight)
               // 2. Onward: cityLower → overnightCity (going to overnight city)
@@ -872,7 +893,7 @@ export async function POST(request: NextRequest) {
               }
             }
           }
-          console.log(`Day ${day.dayNumber}: Intercity check with cities=[${dayCityArray.join(', ')}], effectivePrev=${effectivePrevCity}, found ${addedTransfers.size} transfers`)
+          console.log(`Day ${day.dayNumber}: Intercity check with cities=[${dayCityArray.join(', ')}], effectivePrev=${effectivePrevCity}, isCruiseEnd=${isCruiseEndDay}, found ${addedTransfers.size} transfers`)
         }
 
         // Store all collected routes (but don't overwrite if cruise package handler will add more)
@@ -1044,8 +1065,34 @@ export async function POST(request: NextRequest) {
         slots.boat_rides = []
 
         if (isCruiseRangeStart) {
-          // Add cruise transport package on the first cruise day (alongside existing routes)
+          // Cruise embarkation day: ADD the transport package alongside any pre-cruise transfers
+          // (e.g., Cairo airport transfer for the flight to the cruise city)
           const pkg = rawRates.cruiseTransportPkgs?.[0]
+
+          // On flight days, also ensure the departure city airport transfer is present
+          // The flight-day code above should have added it, but verify it's in slots.route
+          if (isFlightDay) {
+            const prevDayData = idx > 0 ? parsed.days[idx - 1] : null
+            const depCity = (prevDayData?.overnight_city || prevDayData?.city || '').toLowerCase().trim()
+            const paxTier = pickTierForPax(pax || 2)
+            const dayCityLower = day.city?.toLowerCase()?.trim()
+            if (depCity && depCity !== 'cruise' && depCity !== dayCityLower) {
+              const depTransfer = allTransportRoutes.find((r: any) => {
+                if (r.service_type !== 'airport_transfer') return false
+                const rc = (r.origin_city || r.city || '').toLowerCase().trim()
+                return rc === depCity || rc.includes(depCity) || depCity.includes(rc)
+              })
+              if (depTransfer) {
+                const tieredId = `${depTransfer.id}__${paxTier}`
+                const currentRoutes = Array.isArray(slots.route) ? slots.route : []
+                if (!currentRoutes.includes(tieredId)) {
+                  slots.route = [...currentRoutes, tieredId]
+                  console.log(`Day ${day.dayNumber}: Ensured pre-cruise airport transfer for ${depCity} (${tieredId})`)
+                }
+              }
+            }
+          }
+
           if (pkg) {
             const existingRoutes = Array.isArray(slots.route) ? slots.route : []
             if (!existingRoutes.includes(pkg.id)) {
@@ -1061,7 +1108,7 @@ export async function POST(request: NextRequest) {
           if (isEmpty('route')) slots.route = []
         }
         // On cruise END day (last sightseeing): keep any onward transfers (e.g., Luxor→Hurghada)
-        // These were already added by the route auto-fill above
+        // Transfers within the cruise route are excluded by the intercity logic above
       }
 
       console.log(`Day ${day.dayNumber} "${day.title}": sightseeing=${hasSightseeing}, cruise=${isCruiseDay}, embark=${isCruiseEmbarkation}`,
