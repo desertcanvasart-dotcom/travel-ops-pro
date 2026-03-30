@@ -352,6 +352,155 @@ Output ONLY valid JSON, no other text.`
 }
 
 // ============================================
+// GENERATIVE PROMPT (fallback for vague inquiries)
+// ============================================
+
+function buildGenerativePrompt(catalog: Record<string, string>) {
+  return `You are a travel itinerary designer for Egypt tours. The input is a VAGUE travel inquiry — NOT a detailed day-by-day itinerary. Your job is to DESIGN a suggested itinerary based on the destinations, dates, interests, and group size mentioned, then map each service to ACTUAL RATE IDs from the catalog below.
+
+## DESIGN RULES
+- If the client mentions specific destinations (Cairo, Luxor, Aswan, Hurghada, etc.), include them.
+- If the client mentions a Nile Cruise (SS Sudan, Oberoi, Sonesta, etc.), design a cruise itinerary with embarkation, sailing, and disembarkation days.
+- If duration is mentioned (e.g., "5 days", "a week"), use that. Otherwise, suggest 7-10 days based on destinations.
+- If no specific cities are mentioned but Egypt is implied, suggest a classic Cairo + Luxor + Aswan itinerary.
+- If the client mentions "beach" or "Red Sea", include Hurghada or Sharm El Sheikh.
+- Design a realistic, well-paced itinerary — don't cram too many sites into one day.
+- Always start with an arrival day and end with a departure day.
+
+## RATE CATALOGS (use these exact IDs)
+
+### VEHICLE (group — auto-select by pax count for the day's city)
+${catalog.vehicle || '(none available)'}
+
+### ROUTE (group — intercity/airport transfers)
+${catalog.route || '(none available)'}
+
+### GUIDE (group)
+${catalog.guide || '(none available)'}
+
+### AIRPORT SERVICES (group — match airport code by city: Cairo=CAI, Luxor=LXR, Aswan=ASW, Hurghada=HRG, Sharm=SSH)
+${catalog.airport_services || '(none available)'}
+
+### HOTEL SERVICES (group — check-in/check-out porterage)
+${catalog.hotel_services || '(none available)'}
+
+### TIPPING (group — add driver_tip for any day with vehicle, guide_tip for days with guide)
+${catalog.tipping || '(none available)'}
+
+### BOAT RIDES (group)
+${catalog.boat_rides || '(none available)'}
+
+### ACCOMMODATION (per person — match by city, only for nights with hotel stay, NOT last day)
+${catalog.accommodation || '(none available)'}
+
+### ENTRANCE FEES (per person — match attractions mentioned)
+${catalog.entrance_fees || '(none available)'}
+
+### EXPERIENCES (per person — hot air balloon, horse carriage, etc.)
+${catalog.experiences || '(none available)'}
+
+### MEALS (per person — match by city and meal type)
+${catalog.meals || '(none available)'}
+
+### FLIGHTS (per person — domestic flights between Egyptian cities)
+${catalog.flights || '(none available)'}
+
+### NILE CRUISE (per person — for cruise days)
+${catalog.cruise || '(none available)'}
+
+### CRUISE TRANSPORT PACKAGE (group — bundled vehicle + guide + boat rides for ALL Nile cruise days)
+${catalog.cruise_transport_package || '(none available)'}
+When a quotation includes a Nile cruise (any duration: 3N, 4N, or 7N), ALWAYS add the cruise transport package.
+
+## OUTPUT FORMAT
+
+Return a JSON object with "metadata" and "days" — same format as a parsed itinerary:
+
+\`\`\`json
+{
+  "metadata": {
+    "clientName": "extracted or null",
+    "pax": 2,
+    "startDate": "YYYY-MM-DD or null",
+    "passport": "eu or non_eu or null",
+    "tourName": "Descriptive tour name",
+    "nationality": "extracted or null"
+  },
+  "days": [
+    {
+      "dayNumber": 1,
+      "title": "Arrival in Cairo",
+      "city": "Cairo",
+      "description": "Arrive at Cairo airport, transfer to hotel.",
+      "slots": {
+        "vehicle": [],
+        "route": ["<airport_transfer_id>"],
+        "guide": [],
+        "airport_services": ["<airport_id>"],
+        "hotel_services": ["<check_in_id>"],
+        "tipping": ["<driver_tip_id>"],
+        "boat_rides": [],
+        "other_group": 0,
+        "accommodation": ["<hotel_id>"],
+        "entrance_fees": [],
+        "flights": [],
+        "experiences": [],
+        "meals": [],
+        "water": [],
+        "cruise": [],
+        "other_pp": 0
+      }
+    }
+  ]
+}
+\`\`\`
+
+## DAY TYPE RULES
+
+### Arrival Day (first day)
+- route: airport transfer, airport_services: arrival, hotel_services: check-in, tipping: driver tip, accommodation: hotel
+- NO guide, NO entrance fees, NO meals
+
+### Touring Day (sightseeing)
+- vehicle: day-tour vehicle, guide: ALWAYS, entrance_fees: match sites, meals: lunch + dinner, water: ALWAYS
+- tipping: driver + guide tip, accommodation: hotel, hotel_services: porterage
+
+### Cruise Embarkation Day
+- flights: if domestic flight needed, airport_services: both airports
+- cruise: per-night rate, hotel_services: check-out from hotel
+- NO accommodation (sleeping on cruise), NO outside meals
+
+### Cruise Sailing Day
+- cruise: per-night rate, entrance_fees: if visiting temples at stops
+- NO vehicle, NO route, NO guide, NO meals, NO accommodation
+
+### Cruise Disembarkation + Sightseeing Day
+- entrance_fees: match sites visited, accommodation: hotel in overnight city
+- meals: lunch + dinner, hotel_services: check-in
+- NO cruise rate (not sleeping on ship)
+
+### Free/Leisure Day (beach, resort)
+- accommodation: hotel, water: yes
+- NO vehicle, NO guide
+
+### Departure Day (last day)
+- route: airport transfer, airport_services: departure, hotel_services: check-out, tipping: driver tip
+- NO guide, NO entrance fees, NO meals, NO accommodation
+
+## MATCHING RULES
+- ALWAYS use actual IDs from the catalogs. If no matching rate exists, use an empty array [].
+- Match accommodation by CITY. Match entrance fees by attraction name. Match meals by CITY.
+- Match vehicle by pax capacity AND city. Match airport services by city airport code.
+
+## METADATA RULES
+- Extract client name, pax, nationality, dates from the text if mentioned. Return null if not found.
+- Infer passport type from nationality (European = "eu", others = "non_eu").
+- Always generate a descriptive tourName.
+
+Output ONLY valid JSON, no other text.`
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -394,7 +543,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to parse AI response' }, { status: 500 })
     }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    let parsed = JSON.parse(jsonMatch[0])
+    let generationMode: 'parsed' | 'generated' = 'parsed'
+
+    // 4b. Fallback: if AI returned 0 days (vague inquiry), retry with generative prompt
+    if (!parsed.days || parsed.days.length === 0) {
+      console.log('Parse returned 0 days — falling back to generative mode')
+      generationMode = 'generated'
+
+      const genPrompt = buildGenerativePrompt(catalog)
+      const genResponse = await createMessageWithRetry({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8192,
+        system: genPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: `Design a suggested Egypt itinerary based on this inquiry. Pax: ${pax || 2}. Tier: ${tier || 'standard'}.\n\n${text}`
+          }
+        ]
+      })
+
+      const genText = genResponse.content
+        .filter((block: any) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('')
+
+      const genJsonMatch = genText.match(/\{[\s\S]*\}/)
+      if (genJsonMatch) {
+        const genParsed = JSON.parse(genJsonMatch[0])
+        // Merge: keep metadata from first pass if generative didn't extract it
+        parsed = {
+          metadata: { ...(parsed.metadata || {}), ...(genParsed.metadata || {}) },
+          days: genParsed.days || [],
+        }
+      }
+    }
 
     // 5. Enrich parsed days with actual rate data (prices, names, etc.)
     const allRatesFlat = buildFlatRateMap(rawRates)
@@ -886,7 +1070,7 @@ export async function POST(request: NextRequest) {
       slots: enrichSlots(day.slots || {}, allRatesFlat)
     }))
 
-    return NextResponse.json({ success: true, days: enrichedDays, metadata: parsed.metadata || null })
+    return NextResponse.json({ success: true, days: enrichedDays, metadata: parsed.metadata || null, generationMode })
   } catch (error) {
     console.error('Parse error:', error)
     const { message, status } = getUserFriendlyError(error)
