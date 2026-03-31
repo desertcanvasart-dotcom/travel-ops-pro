@@ -367,7 +367,45 @@ function PricingGridContent() {
   const updateSlot = (dayId: string, slotId: string, value: SlotValue) => {
     setDays(prev => prev.map(d => {
       if (d.id !== dayId) return d
-      return { ...d, slots: d.slots.map(s => s.slotId === slotId ? value : s) }
+      let updatedSlots = d.slots.map(s => s.slotId === slotId ? value : s)
+
+      // Reactive meal adjustment: when accommodation changes, update meals based on board basis
+      if (slotId === 'accommodation' && rates) {
+        const hotelId = value.selectedItems[0]?.rateId
+        const hotelRate = (rates as AllRates).accommodation.find((r: any) => r.id === hotelId)
+        const boardBasis = ((hotelRate as any)?.board_basis || 'BB').toUpperCase()
+        const cityLower = d.city?.toLowerCase()?.trim()
+
+        // Determine which outside meals are needed
+        let needsLunch = false
+        let needsDinner = false
+        switch (boardBasis) {
+          case 'FB': case 'AI': break // All meals included
+          case 'HB': needsLunch = true; break // Dinner included, need lunch
+          case 'BB': case 'RO': default: needsLunch = true; needsDinner = true; break
+        }
+
+        // Find meal rates for this city
+        const cityMeals = (rates as AllRates).meals.filter(
+          (m: any) => m.city?.toLowerCase()?.trim() === cityLower
+        )
+        const lunch = cityMeals.find((m: any) => /lunch/i.test(m.category || m.name || ''))
+        const dinner = cityMeals.find((m: any) => /dinner/i.test(m.category || m.name || ''))
+
+        const mealItems: typeof value.selectedItems = []
+        if (needsLunch && lunch) {
+          mealItems.push({ rateId: lunch.id, name: lunch.name, rateEur: lunch.rateEur, rateNonEur: lunch.rateNonEur })
+        }
+        if (needsDinner && dinner) {
+          mealItems.push({ rateId: dinner.id, name: dinner.name, rateEur: dinner.rateEur, rateNonEur: dinner.rateNonEur })
+        }
+
+        updatedSlots = updatedSlots.map(s =>
+          s.slotId === 'meals' ? { ...s, selectedItems: mealItems } : s
+        )
+      }
+
+      return { ...d, slots: updatedSlots }
     }))
   }
 
