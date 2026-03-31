@@ -128,6 +128,38 @@ function PricingGridContent() {
     isInitialLoad.current = false
   }, [])
 
+  // Load user preferences as defaults (tier, margin, currency) on first load
+  const hasLoadedPrefs = useRef(false)
+  useEffect(() => {
+    if (hasLoadedPrefs.current) return
+    hasLoadedPrefs.current = true
+    // Only apply preferences if config is at defaults (no localStorage override)
+    const isDefault = config.tier === DEFAULT_CONFIG.tier &&
+      config.marginPercent === DEFAULT_CONFIG.marginPercent &&
+      config.currency === DEFAULT_CONFIG.currency
+    if (!isDefault) return
+
+    const loadPrefs = async () => {
+      try {
+        const res = await fetch('/api/user-preferences')
+        const data = await res.json()
+        if (data.success && data.data) {
+          const prefs = data.data
+          setConfig(prev => ({
+            ...prev,
+            tier: prefs.default_tier || prev.tier,
+            marginPercent: prefs.default_margin_percent ?? prev.marginPercent,
+            currency: prefs.default_currency || prev.currency,
+          }))
+        }
+      } catch (err) {
+        console.error('Failed to load user preferences:', err)
+      }
+    }
+    loadPrefs()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Fetch rates
   const fetchRates = useCallback(async (tier: string) => {
     try {
