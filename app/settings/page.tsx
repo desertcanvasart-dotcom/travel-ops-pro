@@ -70,7 +70,6 @@ interface NotificationPreference {
 interface UserPreferences {
   id?: string
   user_id?: string
-  default_cost_mode: 'auto' | 'manual'
   default_tier: string
   default_margin_percent: number
   default_currency: string
@@ -130,7 +129,6 @@ function SettingsContent() {
     in_app_enabled: true
   })
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
-    default_cost_mode: 'auto',
     default_tier: 'standard',
     default_margin_percent: 25,
     default_currency: 'USD'
@@ -209,7 +207,6 @@ function SettingsContent() {
         setUserPreferences({
           id: data.id,
           user_id: data.user_id,
-          default_cost_mode: data.default_cost_mode || 'auto',
           default_tier: data.default_tier || 'standard',
           default_margin_percent: data.default_margin_percent || 25,
           default_currency: data.default_currency || 'USD'
@@ -275,7 +272,6 @@ function SettingsContent() {
   
       const prefData = {
         user_id: user.id,
-        default_cost_mode: userPreferences.default_cost_mode,
         default_tier: userPreferences.default_tier,
         default_margin_percent: userPreferences.default_margin_percent,
         default_currency: userPreferences.default_currency,
@@ -836,71 +832,6 @@ function SettingsContent() {
       <div>
         <h3 className="text-lg font-medium text-gray-900">{t('itineraryPreferences')}</h3>
         <p className="text-sm text-gray-500 mt-1">{t('configureDefaults')}</p>
-      </div>
-
-      {/* Cost Mode Setting */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Calculator className="w-5 h-5 text-blue-600" />
-          <h4 className="text-sm font-bold text-gray-900">{t('costCalculationMode')}</h4>
-        </div>
-
-        <p className="text-xs text-gray-600 mb-4">
-          {t('costModeDescription')}
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {[
-            { value: 'auto', labelKey: 'autoCalculate', descKey: 'autoCalculateDesc', icon: Calculator },
-            { value: 'manual', labelKey: 'manualEntry', descKey: 'manualEntryDesc', icon: Settings }
-          ].map((option) => {
-            const Icon = option.icon
-            const isSelected = userPreferences.default_cost_mode === option.value
-
-            return (
-              <button
-                key={option.value}
-                onClick={() => setUserPreferences(prev => ({ ...prev, default_cost_mode: option.value as 'auto' | 'manual' }))}
-                className={`p-4 rounded-lg border-2 text-left transition-all ${
-                  isSelected
-                    ? 'border-[#647C47] bg-[#647C47]/5'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#647C47]/10' : 'bg-gray-100'}`}>
-                    <Icon className={`w-5 h-5 ${isSelected ? 'text-[#647C47]' : 'text-gray-500'}`} />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`font-semibold ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
-                      {t(option.labelKey)}
-                    </span>
-                    {isSelected && (
-                      <span className="px-2 py-0.5 bg-[#647C47]/10 text-[#647C47] text-xs rounded-full font-medium">
-                        {t('default')}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 ml-11">{t(option.descKey)}</p>
-              </button>
-            )
-          })}
-        </div>
-
-        {userPreferences.default_cost_mode === 'manual' && (
-          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-amber-600 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-amber-800">{t('manualModeSelected')}</p>
-                <p className="text-xs text-amber-700 mt-1">
-                  {t('manualModeHint')}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Default Tier Setting */}
