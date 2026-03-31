@@ -338,13 +338,18 @@ export function UnifiedConversationList({
         setSyncMessage(t('syncedMessages', { count: data.messages_created || 0 }))
         fetchConversations(false)
       } else {
-        setSyncMessage(data.error || t('syncFailed'))
+        // Handle Gmail not connected gracefully
+        if (res.status === 401 || /auth|credential|token|not connected/i.test(data.error || '')) {
+          setSyncMessage('Gmail not connected. Go to Settings > Email to connect your account.')
+        } else {
+          setSyncMessage(data.error || t('syncFailed'))
+        }
       }
     } catch (error: any) {
       setSyncMessage(error.message || t('syncFailed'))
     } finally {
       setSyncing(false)
-      setTimeout(() => setSyncMessage(null), 3000)
+      setTimeout(() => setSyncMessage(null), 5000)
     }
   }
 
