@@ -1,20 +1,41 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { PenSquare } from 'lucide-react'
 import { UnifiedConversationList, UnifiedMessageThread, ComposeEmailModal } from '@/components/unified'
 import { UnifiedConversation } from '@/types/unified'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { useEmailPolling } from '@/lib/use-email-polling'
+import { createClient } from '@/lib/supabase'
 
 export default function UnifiedCommunicationsPage() {
   const { user } = useAuth()
   const [selectedConversation, setSelectedConversation] = useState<UnifiedConversation | null>(null)
   const [showCompose, setShowCompose] = useState(false)
+  const [isGmailConnected, setIsGmailConnected] = useState(false)
 
-  // Auto-poll Gmail every 2 minutes to keep email_conversations table fresh
-  // (same mechanism the Email Inbox uses — without this, the unified inbox shows stale data)
-  useEmailPolling({ userId: user?.id || null })
+  // Check Gmail connection before enabling polling (matches Email Inbox pattern)
+  useEffect(() => {
+    if (!user?.id) return
+    const checkConnection = async () => {
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('gmail_tokens')
+          .select('id')
+          .eq('user_id', user.id)
+          .single()
+        setIsGmailConnected(!!data)
+      } catch {
+        setIsGmailConnected(false)
+      }
+    }
+    checkConnection()
+  }, [user?.id])
+
+  // Auto-poll Gmail every 2 minutes ONLY if connected
+  // (same mechanism the Email Inbox uses, gated by connection check)
+  useEmailPolling({ userId: user?.id || null, enabled: isGmailConnected && !!user })
 
   const handleSelectConversation = useCallback((conversation: UnifiedConversation) => {
     setSelectedConversation(conversation)
