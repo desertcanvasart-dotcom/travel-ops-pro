@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autoura — AI-Powered Travel Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #F5F3EF;
+    color: #111710;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Navbar ── */
+  .navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: rgba(245, 243, 239, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(214, 210, 202, 0.45);
+  }
+  .navbar-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: #3B5E2E;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .logo-icon svg { width: 20px; height: 20px; }
+  .logo-wordmark {
+    font-size: 19px;
+    font-weight: 700;
+    color: #111710;
+    letter-spacing: -0.3px;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    list-style: none;
+  }
+  .nav-links a {
+    font-size: 14px;
+    font-weight: 500;
+    color: #555;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: #111710; }
+  .btn-demo-nav {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: #3B5E2E;
+    border: none;
+    padding: 9px 20px;
+    border-radius: 9px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  .btn-demo-nav:hover {
+    background: #2F4C24;
+    box-shadow: 0 4px 16px rgba(59, 94, 46, 0.22);
+  }
+
+  /* ── Hero ── */
+  .hero {
+    padding-top: 160px;
+    padding-bottom: 80px;
+    text-align: center;
+    max-width: 860px;
+    margin: 0 auto;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  /* Badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    background: #fff;
+    border: 1px solid #D6D2CA;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #3B5E2E;
+    margin-bottom: 32px;
+  }
+  .badge-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4D7C3F;
+    flex-shrink: 0;
+  }
+
+  /* Headline */
+  .headline {
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -1.8px;
+    color: #111710;
+    margin-bottom: 28px;
+  }
+
+  /* Animated slot */
+  .slot-wrapper {
+    display: inline-block;
+    vertical-align: bottom;
+    position: relative;
+    height: 1.15em;
+    overflow: hidden;
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .slot-track {
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .slot-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 1.15em;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .slot-icon {
+    width: 0.72em;
+    height: 0.72em;
+    border-radius: 0.16em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    top: -0.01em;
+  }
+  .slot-icon svg {
+    width: 58%;
+    height: 58%;
+  }
+  .slot-text {
+    font-weight: 800;
+    color: #111710;
+  }
+
+  /* Subheadline */
+  .subheadline {
+    font-size: 18px;
+    line-height: 1.65;
+    color: #5A5A52;
+    max-width: 640px;
+    margin: 0 auto 40px;
+    font-weight: 400;
+  }
+
+  /* CTAs */
+  .ctas {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 28px;
+    background: #3B5E2E;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+  }
+  .btn-primary:hover {
+    background: #2F4C24;
+    box-shadow: 0 6px 24px rgba(59, 94, 46, 0.25);
+    transform: translateY(-1px);
+  }
+  .btn-primary .arrow {
+    transition: transform 0.2s;
+  }
+  .btn-primary:hover .arrow {
+    transform: translateX(3px);
+  }
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    background: #fff;
+    color: #111710;
+    font-size: 15px;
+    font-weight: 600;
+    border: 0.5px solid #D6D2CA;
+    border-radius: 9px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  }
+  .btn-secondary:hover {
+    border-color: #bbb;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    transform: translateY(-1px);
+  }
+  .play-icon {
+    color: #3B5E2E;
+    font-size: 14px;
+  }
+
+  /* Trust bar */
+  .trust-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .trust-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #6B6B63;
+  }
+  .trust-check {
+    color: #4D7C3F;
+    font-weight: 700;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .hero { padding-top: 120px; padding-bottom: 60px; }
+    .headline { font-size: 36px; letter-spacing: -1px; }
+    .subheadline { font-size: 16px; }
+    .ctas { flex-direction: column; }
+    .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+    .trust-bar { flex-direction: column; gap: 12px; }
+  }
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .headline { font-size: 46px; }
+    .nav-links { gap: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="logo-wordmark">Autoura</span>
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="/integrations">Integrations</a></li>
+      <li><a href="/docs">Docs</a></li>
+      <li><a href="/about">About</a></li>
+      <li><a href="https://calendly.com/autoura" class="btn-demo-nav" target="_blank" rel="noopener">Book a Free Demo</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="badge">
+    <span class="badge-dot"></span>
+    AI-Powered Travel Operations
+  </div>
+
+  <h1 class="headline">
+    Turn a message on<br>
+    <span class="slot-wrapper" aria-label="WhatsApp, LINE, WeChat, Messenger, Email"><span class="slot-track" id="slotTrack"><span class="slot-item"><span class="slot-icon" style="background:#25D366"><svg viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.553 4.12 1.52 5.856L0 24l6.335-1.652A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75c-1.875 0-3.63-.506-5.14-1.387l-.368-.22-3.821.997 1.02-3.715-.24-.382A9.712 9.712 0 012.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75z"/></svg></span><span class="slot-text">WhatsApp</span></span><span class="slot-item"><span class="slot-icon" style="background:#00B900"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 1C5.926 1 1 5.148 1 10.333c0 4.618 4.1 8.49 9.641 9.222.375.08.886.248 1.015.569.117.291.076.746.037 1.041l-.164.984c-.05.3-.232 1.178 1.032.642 1.264-.535 6.819-4.017 9.304-6.876C23.375 14.27 23 12.39 23 10.333 23 5.148 18.074 1 12 1zm-3.26 12.289H6.572a.545.545 0 01-.545-.545V8.572a.545.545 0 011.09 0v3.627h1.623a.545.545 0 010 1.09zm2.087-.545a.545.545 0 01-1.09 0V8.572a.545.545 0 011.09 0v4.172zm4.602 0a.545.545 0 01-.42.531.544.544 0 01-.538-.217L12.73 10.8v1.944a.545.545 0 01-1.09 0V8.572a.545.545 0 01.42-.531.544.544 0 01.538.217l1.741 2.258V8.572a.545.545 0 011.09 0v4.172zm3.325-3.082a.545.545 0 010 1.09h-1.623v1.09h1.623a.545.545 0 010 1.09H16.586a.545.545 0 01-.545-.545V8.572a.545.545 0 01.545-.545h2.168a.545.545 0 010 1.09h-1.623v1.09h1.623z"/></svg></span><span class="slot-text">LINE</span></span><span class="slot-item"><span class="slot-icon" style="background:#07C160"><svg viewBox="0 0 24 24" fill="#fff"><path d="M8.813 11.612a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zm4.374 0a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zM9.474 16.88a.77.77 0 11.002-1.54.77.77 0 01-.002 1.54zm3.553 0a.77.77 0 11.001-1.54.77.77 0 01-.001 1.54zM12 2C6.477 2 2 5.813 2 10.5c0 2.65 1.404 5.023 3.6 6.613l-.9 2.687 3.15-1.575c.7.175 1.4.275 2.15.275.35 0 .7-.025 1.05-.063a5.76 5.76 0 01-.15-1.312c0-3.487 3.15-6.325 7.025-6.325.35 0 .7.025 1.038.075C18.6 5.95 15.575 2 12 2zm6.925 9.8c-3.3 0-5.975 2.263-5.975 5.05s2.675 5.05 5.975 5.05c.625 0 1.225-.088 1.8-.238L22.8 22.8l-.675-2.025C23.35 19.587 24 17.988 24 16.85c0-2.787-2.275-5.05-5.075-5.05z"/></svg></span><span class="slot-text">WeChat</span></span><span class="slot-item"><span class="slot-icon" style="background:#0084FF"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2C6.36 2 1 6.265 1 12.228c0 3.207 1.58 5.965 4.05 7.852V24l3.723-2.04c.993.276 2.046.424 3.227.424 5.64 0 11-4.265 11-10.228C23 6.265 17.64 2 12 2zm1.1 13.777L10.267 12.8 5.2 15.777l5.533-5.88 2.9 2.978 4.997-2.978-5.53 5.88z"/></svg></span><span class="slot-text">Messenger</span></span><span class="slot-item"><span class="slot-icon" style="background:#EA4335"><svg viewBox="0 0 24 24" fill="#fff"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg></span><span class="slot-text">Email</span></span></span></span> into a fully-priced tour.
+  </h1>
+
+  <p class="subheadline">
+    However your customers reach you, Autoura captures the enquiry and outputs a complete itinerary, calculated pricing, and a ready-to-send PDF — in minutes, not hours.
+  </p>
+
+  <div class="ctas">
+    <a href="https://calendly.com/autoura" target="_blank" rel="noopener" class="btn-primary">
+      Book a Free Demo <span class="arrow">→</span>
+    </a>
+    <button class="btn-secondary" onclick="document.getElementById('video')?.scrollIntoView({behavior:'smooth'})">
+      <span class="play-icon">▷</span> See How It Works
+    </button>
+  </div>
+
+  <div class="trust-bar">
+    <div class="trust-item">
+      <span class="trust-check">✓</span>
+      Built by a tour operator with 30+ years in Egypt tourism
+    </div>
+    <div class="trust-item">
+      <span class="trust-check">✓</span>
+      Processing real bookings since 2025
+    </div>
+  </div>
+</section>
+
+<script>
+  const wrapper = document.querySelector('.slot-wrapper');
+  const track = document.getElementById('slotTrack');
+  const items = track.querySelectorAll('.slot-item');
+  const count = items.length;
+  let current = 0;
+
+  // Measure each item by cloning into a hidden off-screen measurer
+  const measurer = document.createElement('div');
+  measurer.style.cssText = 'position:absolute;top:-9999px;left:-9999px;visibility:hidden;white-space:nowrap;display:flex;align-items:center;gap:10px;font-size:' + getComputedStyle(document.querySelector('.headline')).fontSize + ';font-family:Inter,sans-serif;font-weight:800;';
+  document.body.appendChild(measurer);
+
+  const widths = [];
+  items.forEach(item => {
+    const clone = item.cloneNode(true);
+    measurer.innerHTML = '';
+    measurer.appendChild(clone);
+    widths.push(clone.getBoundingClientRect().width);
+  });
+  document.body.removeChild(measurer);
+
+  // Set initial width
+  wrapper.style.width = widths[0] + 'px';
+
+  setInterval(() => {
+    current = (current + 1) % count;
+    track.style.transform = `translateY(-${current * (100 / count)}%)`;
+    wrapper.style.width = widths[current] + 'px';
+  }, 1800);
+</script>
+
+</body>
+</html>
