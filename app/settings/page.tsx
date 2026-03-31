@@ -33,6 +33,7 @@ import {
   Info
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
+import { SignatureEditor } from '@/components/email/RichTextEditor'
 
 // ============================================
 // TYPES
@@ -679,11 +680,9 @@ function SettingsContent() {
       {/* Email Signature */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">{t('emailSignature')}</label>
-        <textarea
-          value={emailSettings?.signature || ''}
-          onChange={(e) => setEmailSettings(prev => prev ? { ...prev, signature: e.target.value } : null)}
-          rows={5}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+        <SignatureEditor
+          content={emailSettings?.signature || ''}
+          onChange={(html) => setEmailSettings(prev => prev ? { ...prev, signature: html } : null)}
           placeholder={t('signaturePlaceholder')}
         />
         <p className="text-xs text-gray-500 mt-1">{t('signatureHint')}</p>
