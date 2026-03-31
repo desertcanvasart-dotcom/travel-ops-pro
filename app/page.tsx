@@ -103,8 +103,8 @@ function AnimatedSection({
 const heroContent = {
   subheadline: "However your customers reach you, Autoura captures the enquiry and outputs a complete itinerary, calculated pricing, and a ready-to-send PDF — in minutes, not hours.",
   trustSignals: [
-    "Built by a tour operator with 30+ years in Egypt tourism",
-    "Processing real bookings since 2025"
+    "Built by a tour operator with 30+ years in tourism",
+    "Processing real bookings since 2024"
   ]
 }
 
