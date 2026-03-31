@@ -5,11 +5,16 @@ import { PenSquare } from 'lucide-react'
 import { UnifiedConversationList, UnifiedMessageThread, ComposeEmailModal } from '@/components/unified'
 import { UnifiedConversation } from '@/types/unified'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { useEmailPolling } from '@/lib/use-email-polling'
 
 export default function UnifiedCommunicationsPage() {
   const { user } = useAuth()
   const [selectedConversation, setSelectedConversation] = useState<UnifiedConversation | null>(null)
   const [showCompose, setShowCompose] = useState(false)
+
+  // Auto-poll Gmail every 2 minutes to keep email_conversations table fresh
+  // (same mechanism the Email Inbox uses — without this, the unified inbox shows stale data)
+  useEmailPolling({ userId: user?.id || null })
 
   const handleSelectConversation = useCallback((conversation: UnifiedConversation) => {
     setSelectedConversation(conversation)
