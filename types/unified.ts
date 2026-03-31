@@ -185,6 +185,7 @@ export interface UnifiedMessage {
 
   // Content
   content: string // message_body for WhatsApp, body_text/body_html for email
+  isHtml?: boolean // true when content is HTML (email body_html)
   snippet: string | null
 
   // Email-specific

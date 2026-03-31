@@ -281,7 +281,8 @@ export function UnifiedMessageThread({
           channel: conversation.channel,
           conversation_id: conversation.id,
           direction: msg.direction,
-          content: msg.message_body || msg.body_text || msg.body_html || msg.snippet || '',
+          content: msg.message_body || msg.body_html || msg.body_text || msg.snippet || '',
+          isHtml: !!(msg.body_html && !msg.message_body),
           snippet: msg.snippet || null,
           subject: msg.subject,
           from_address: msg.from_address,
@@ -1006,9 +1007,16 @@ export function UnifiedMessageThread({
                           )}
 
                           {/* Message content */}
-                          <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed break-words overflow-hidden [overflow-wrap:anywhere] [word-break:break-word]">
-                            {mainContent}
-                          </div>
+                          {msg.isHtml ? (
+                            <div
+                              className="text-[13px] text-gray-800 leading-relaxed break-words overflow-hidden [overflow-wrap:anywhere] [word-break:break-word] [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:w-full [&_td]:p-1"
+                              dangerouslySetInnerHTML={{ __html: mainContent }}
+                            />
+                          ) : (
+                            <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed break-words overflow-hidden [overflow-wrap:anywhere] [word-break:break-word]">
+                              {mainContent}
+                            </div>
+                          )}
 
                           {/* Quoted content (collapsible) */}
                           {quotedContent && (
