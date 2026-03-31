@@ -157,94 +157,125 @@ const platforms = [
   },
 ]
 
-// Cycling platform slot component
+// Single platform item renderer
+function PlatformItem({ platform }: { platform: typeof platforms[number] }) {
+  return (
+    <span className="flex items-center gap-[10px] whitespace-nowrap">
+      <span
+        className="inline-flex items-center justify-center shrink-0"
+        style={{
+          width: '0.72em',
+          height: '0.72em',
+          borderRadius: '0.16em',
+          background: platform.color,
+        }}
+      >
+        {platform.icon}
+      </span>
+      <span className="font-extrabold text-[#111710]">{platform.name}</span>
+    </span>
+  )
+}
+
+// Cycling platform slot — crossfade approach (no track shifting)
 function PlatformSlot() {
   const [current, setCurrent] = useState(0)
+  const [phase, setPhase] = useState<'visible' | 'exiting' | 'entering'>('visible')
   const [slotWidth, setSlotWidth] = useState<number | null>(null)
-  const trackRef = useRef<HTMLSpanElement>(null)
-  const measurerRef = useRef<HTMLDivElement>(null)
   const widthsRef = useRef<number[]>([])
+  const containerRef = useRef<HTMLSpanElement>(null)
+  const nextRef = useRef(0)
 
-  // Measure item widths on mount
+  // Measure each item's natural width using a hidden measurer
   useEffect(() => {
-    const measurer = document.createElement('div')
-    measurer.style.cssText = 'position:absolute;top:-9999px;left:-9999px;visibility:hidden;display:flex;align-items:center;gap:10px;white-space:nowrap;'
-    // Match headline font
     const headline = document.querySelector('.hero-headline')
-    if (headline) {
-      const cs = getComputedStyle(headline)
-      measurer.style.fontSize = cs.fontSize
-      measurer.style.fontFamily = cs.fontFamily
-      measurer.style.fontWeight = '800'
-      measurer.style.letterSpacing = cs.letterSpacing
-    }
+    if (!headline) return
+
+    const cs = getComputedStyle(headline)
+    const measurer = document.createElement('div')
+    measurer.style.cssText = `position:absolute;top:-9999px;left:-9999px;visibility:hidden;display:flex;align-items:center;gap:10px;white-space:nowrap;font-size:${cs.fontSize};font-family:${cs.fontFamily};font-weight:800;letter-spacing:${cs.letterSpacing};`
     document.body.appendChild(measurer)
 
     const widths: number[] = []
-    const items = trackRef.current?.querySelectorAll('.slot-item')
-    items?.forEach(item => {
-      const clone = item.cloneNode(true) as HTMLElement
+    platforms.forEach(p => {
       measurer.innerHTML = ''
-      measurer.appendChild(clone)
-      widths.push(clone.getBoundingClientRect().width)
+      // Create icon placeholder + text span
+      const icon = document.createElement('span')
+      icon.style.cssText = `display:inline-flex;align-items:center;justify-content:center;width:0.72em;height:0.72em;border-radius:0.16em;background:${p.color};flex-shrink:0;`
+      const text = document.createElement('span')
+      text.style.cssText = 'font-weight:800;'
+      text.textContent = p.name
+      measurer.appendChild(icon)
+      measurer.appendChild(text)
+      widths.push(measurer.getBoundingClientRect().width)
     })
+
     document.body.removeChild(measurer)
     widthsRef.current = widths
     if (widths.length > 0) setSlotWidth(widths[0])
   }, [])
 
-  // Cycle through platforms
+  // Cycle: visible → exiting → (swap index) → entering → visible
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrent(prev => {
-        const next = (prev + 1) % platforms.length
+      // Phase 1: start exit (fade out + slide up)
+      setPhase('exiting')
+
+      // Phase 2: after exit completes, swap to next and enter
+      setTimeout(() => {
+        const next = (nextRef.current + 1) % platforms.length
+        nextRef.current = next
+        setCurrent(next)
         if (widthsRef.current.length > 0) {
           setSlotWidth(widthsRef.current[next])
         }
-        return next
-      })
-    }, 1800)
+        setPhase('entering')
+
+        // Phase 3: settle into visible
+        setTimeout(() => {
+          setPhase('visible')
+        }, 30) // one frame to apply entering styles, then transition to visible
+      }, 350) // matches exit duration
+    }, 2200) // total dwell time (visible portion)
+
     return () => clearInterval(interval)
   }, [])
 
+  const itemStyle: React.CSSProperties =
+    phase === 'visible'
+      ? {
+          opacity: 1,
+          transform: 'translateY(0)',
+          transition: 'opacity 0.4s ease, transform 0.4s ease',
+        }
+      : phase === 'exiting'
+      ? {
+          opacity: 0,
+          transform: 'translateY(-40%)',
+          transition: 'opacity 0.35s ease, transform 0.35s ease',
+        }
+      : {
+          // 'entering' — start position (below, invisible), no transition yet
+          opacity: 0,
+          transform: 'translateY(40%)',
+          transition: 'none',
+        }
+
   return (
     <span
+      ref={containerRef}
       className="inline-block align-bottom relative overflow-hidden"
       style={{
         height: '1.15em',
         width: slotWidth ? `${slotWidth}px` : 'auto',
-        transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'width 0.45s cubic-bezier(0.25, 0.1, 0.25, 1)',
       }}
     >
       <span
-        ref={trackRef}
-        className="flex flex-col"
-        style={{
-          transform: `translateY(-${current * (100 / platforms.length)}%)`,
-          transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
+        className="absolute inset-0 flex items-center"
+        style={itemStyle}
       >
-        {platforms.map((platform, i) => (
-          <span
-            key={platform.name}
-            className="slot-item flex items-center gap-[10px] shrink-0 whitespace-nowrap"
-            style={{ height: '1.15em' }}
-          >
-            <span
-              className="inline-flex items-center justify-center shrink-0 relative"
-              style={{
-                width: '0.72em',
-                height: '0.72em',
-                borderRadius: '0.16em',
-                background: platform.color,
-                top: '-0.01em',
-              }}
-            >
-              {platform.icon}
-            </span>
-            <span className="font-extrabold text-[#111710]">{platform.name}</span>
-          </span>
-        ))}
+        <PlatformItem platform={platforms[current]} />
       </span>
     </span>
   )
