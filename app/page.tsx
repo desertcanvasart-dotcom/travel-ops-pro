@@ -260,6 +260,7 @@ const platformStages = [
     headline: 'Every Inquiry, One Inbox',
     description: 'WhatsApp messages, emails, and walk-in inquiries land in a single unified inbox. AI extracts client name, dates, group size, nationality, and preferences from the conversation. Client profiles are created automatically.',
     screenshotNote: 'Capture /whatsapp-inbox showing conversations with parsed metadata badges',
+    mockupImage: '/mockups/inbox.png',
     icon: Inbox,
   },
   {
@@ -267,6 +268,7 @@ const platformStages = [
     headline: 'Itineraries That Price Themselves',
     description: 'Build day-by-day itineraries with the visual tour builder or let AI generate a draft. Every service auto-priced from your rate database. Switch tiers, adjust group size, or change dates — pricing recalculates instantly across all 14 service slots.',
     screenshotNote: 'Capture /tour-builder with 3+ days and pricing sidebar showing totals',
+    mockupImage: '/mockups/tour-builder.png',
     icon: FileText,
   },
   {
@@ -274,6 +276,7 @@ const platformStages = [
     headline: 'Assign, Confirm, Track',
     description: 'Assign guides, vehicles, and hotels directly to each itinerary day. Send supplier vouchers via WhatsApp with one click. Track confirmations. Calendar view shows every active tour across your team.',
     screenshotNote: 'Capture /calendar showing multiple active tours with assigned resources',
+    mockupImage: '/mockups/calendar.png',
     icon: Calendar,
   },
   {
@@ -281,6 +284,7 @@ const platformStages = [
     headline: 'From Invoice to P&L in Real Time',
     description: 'Generate multi-currency invoices directly from itineraries. Track deposits, balances, and AR aging (30/60/90 days). See per-trip profit and loss before departure. Auto-calculated commissions for every agent.',
     screenshotNote: 'Capture /financial-reports showing P&L chart, cash flow, and AR aging',
+    mockupImage: '/mockups/financial-reports.png',
     icon: BarChart3,
   },
 ]
@@ -714,14 +718,7 @@ export default function AutouraHomepage() {
           {/* Screenshot Placeholder */}
           <AnimatedSection delay={100}>
             <div className="max-w-5xl mx-auto mb-10 sm:mb-12">
-              {/* SCREENSHOT TODO: Capture /pricing-grid with a 5-day Egypt tour. Set pax=4, passport=non_eu, tier=deluxe, margin=25%. */}
-              <div className="aspect-video bg-stone-100 rounded-2xl border-2 border-dashed border-stone-300 flex items-center justify-center shadow-lg">
-                <div className="text-center px-6">
-                  <BarChart3 className="w-12 h-12 text-stone-300 mx-auto mb-3" />
-                  <p className="text-stone-400 text-sm font-medium">Pricing Grid — 14-slot day-by-day calculator</p>
-                  <p className="text-stone-300 text-xs mt-1">Screenshot placeholder: Multi-day tour with transport, guides, entrance fees, accommodation, and meals</p>
-                </div>
-              </div>
+              <img src="/mockups/pricing-grid.png" alt="Autoura Pricing Grid — day-by-day calculator" className="w-full rounded-2xl shadow-lg border border-stone-200" />
             </div>
           </AnimatedSection>
 
@@ -770,13 +767,7 @@ export default function AutouraHomepage() {
                   </div>
                   {/* Screenshot Placeholder */}
                   <div className="flex-1 min-w-0 w-full">
-                    {/* SCREENSHOT TODO: {stage.screenshotNote} */}
-                    <div className="aspect-video bg-stone-100 rounded-xl border-2 border-dashed border-stone-300 flex items-center justify-center shadow-md">
-                      <div className="text-center px-4">
-                        <stage.icon className="w-8 h-8 text-stone-300 mx-auto mb-2" />
-                        <p className="text-stone-400 text-xs">{stage.screenshotNote}</p>
-                      </div>
-                    </div>
+                    <img src={stage.mockupImage} alt={stage.headline} className="w-full rounded-xl shadow-md border border-stone-200" />
                   </div>
                 </div>
               </AnimatedSection>
