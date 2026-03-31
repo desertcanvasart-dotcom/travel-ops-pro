@@ -101,12 +101,153 @@ function AnimatedSection({
 
 // Content data
 const heroContent = {
-  headline: "Stop Running Your Travel Business from WhatsApp and Excel",
-  subheadline: "Autoura is the operations platform built for tour operators who are tired of copying prices between spreadsheets, losing client requests in chat threads, and manually creating the same itinerary PDF for the hundredth time.",
+  subheadline: "However your customers reach you, Autoura captures the enquiry and outputs a complete itinerary, calculated pricing, and a ready-to-send PDF — in minutes, not hours.",
   trustSignals: [
     "Built by a tour operator with 30+ years in Egypt tourism",
     "Processing real bookings since 2025"
   ]
+}
+
+const platforms = [
+  {
+    name: 'WhatsApp',
+    color: '#25D366',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+        <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.553 4.12 1.52 5.856L0 24l6.335-1.652A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75c-1.875 0-3.63-.506-5.14-1.387l-.368-.22-3.821.997 1.02-3.715-.24-.382A9.712 9.712 0 012.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75z"/>
+      </svg>
+    ),
+  },
+  {
+    name: 'LINE',
+    color: '#00B900',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+        <path d="M12 1C5.926 1 1 5.148 1 10.333c0 4.618 4.1 8.49 9.641 9.222.375.08.886.248 1.015.569.117.291.076.746.037 1.041l-.164.984c-.05.3-.232 1.178 1.032.642 1.264-.535 6.819-4.017 9.304-6.876C23.375 14.27 23 12.39 23 10.333 23 5.148 18.074 1 12 1zm-3.26 12.289H6.572a.545.545 0 01-.545-.545V8.572a.545.545 0 011.09 0v3.627h1.623a.545.545 0 010 1.09zm2.087-.545a.545.545 0 01-1.09 0V8.572a.545.545 0 011.09 0v4.172zm4.602 0a.545.545 0 01-.42.531.544.544 0 01-.538-.217L12.73 10.8v1.944a.545.545 0 01-1.09 0V8.572a.545.545 0 01.42-.531.544.544 0 01.538.217l1.741 2.258V8.572a.545.545 0 011.09 0v4.172zm3.325-3.082a.545.545 0 010 1.09h-1.623v1.09h1.623a.545.545 0 010 1.09H16.586a.545.545 0 01-.545-.545V8.572a.545.545 0 01.545-.545h2.168a.545.545 0 010 1.09h-1.623v1.09h1.623z"/>
+      </svg>
+    ),
+  },
+  {
+    name: 'WeChat',
+    color: '#07C160',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+        <path d="M8.813 11.612a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zm4.374 0a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zM9.474 16.88a.77.77 0 11.002-1.54.77.77 0 01-.002 1.54zm3.553 0a.77.77 0 11.001-1.54.77.77 0 01-.001 1.54zM12 2C6.477 2 2 5.813 2 10.5c0 2.65 1.404 5.023 3.6 6.613l-.9 2.687 3.15-1.575c.7.175 1.4.275 2.15.275.35 0 .7-.025 1.05-.063a5.76 5.76 0 01-.15-1.312c0-3.487 3.15-6.325 7.025-6.325.35 0 .7.025 1.038.075C18.6 5.95 15.575 2 12 2zm6.925 9.8c-3.3 0-5.975 2.263-5.975 5.05s2.675 5.05 5.975 5.05c.625 0 1.225-.088 1.8-.238L22.8 22.8l-.675-2.025C23.35 19.587 24 17.988 24 16.85c0-2.787-2.275-5.05-5.075-5.05z"/>
+      </svg>
+    ),
+  },
+  {
+    name: 'Messenger',
+    color: '#0084FF',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+        <path d="M12 2C6.36 2 1 6.265 1 12.228c0 3.207 1.58 5.965 4.05 7.852V24l3.723-2.04c.993.276 2.046.424 3.227.424 5.64 0 11-4.265 11-10.228C23 6.265 17.64 2 12 2zm1.1 13.777L10.267 12.8 5.2 15.777l5.533-5.88 2.9 2.978 4.997-2.978-5.53 5.88z"/>
+      </svg>
+    ),
+  },
+  {
+    name: 'Email',
+    color: '#EA4335',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+        <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+      </svg>
+    ),
+  },
+]
+
+// Cycling platform slot component
+function PlatformSlot() {
+  const [current, setCurrent] = useState(0)
+  const [slotWidth, setSlotWidth] = useState<number | null>(null)
+  const trackRef = useRef<HTMLSpanElement>(null)
+  const measurerRef = useRef<HTMLDivElement>(null)
+  const widthsRef = useRef<number[]>([])
+
+  // Measure item widths on mount
+  useEffect(() => {
+    const measurer = document.createElement('div')
+    measurer.style.cssText = 'position:absolute;top:-9999px;left:-9999px;visibility:hidden;display:flex;align-items:center;gap:10px;white-space:nowrap;'
+    // Match headline font
+    const headline = document.querySelector('.hero-headline')
+    if (headline) {
+      const cs = getComputedStyle(headline)
+      measurer.style.fontSize = cs.fontSize
+      measurer.style.fontFamily = cs.fontFamily
+      measurer.style.fontWeight = '800'
+      measurer.style.letterSpacing = cs.letterSpacing
+    }
+    document.body.appendChild(measurer)
+
+    const widths: number[] = []
+    const items = trackRef.current?.querySelectorAll('.slot-item')
+    items?.forEach(item => {
+      const clone = item.cloneNode(true) as HTMLElement
+      measurer.innerHTML = ''
+      measurer.appendChild(clone)
+      widths.push(clone.getBoundingClientRect().width)
+    })
+    document.body.removeChild(measurer)
+    widthsRef.current = widths
+    if (widths.length > 0) setSlotWidth(widths[0])
+  }, [])
+
+  // Cycle through platforms
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrent(prev => {
+        const next = (prev + 1) % platforms.length
+        if (widthsRef.current.length > 0) {
+          setSlotWidth(widthsRef.current[next])
+        }
+        return next
+      })
+    }, 1800)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <span
+      className="inline-block align-bottom relative overflow-hidden"
+      style={{
+        height: '1.15em',
+        width: slotWidth ? `${slotWidth}px` : 'auto',
+        transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
+    >
+      <span
+        ref={trackRef}
+        className="flex flex-col"
+        style={{
+          transform: `translateY(-${current * (100 / platforms.length)}%)`,
+          transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
+        {platforms.map((platform, i) => (
+          <span
+            key={platform.name}
+            className="slot-item flex items-center gap-[10px] shrink-0 whitespace-nowrap"
+            style={{ height: '1.15em' }}
+          >
+            <span
+              className="inline-flex items-center justify-center shrink-0 relative"
+              style={{
+                width: '0.72em',
+                height: '0.72em',
+                borderRadius: '0.16em',
+                background: platform.color,
+                top: '-0.01em',
+              }}
+            >
+              {platform.icon}
+            </span>
+            <span className="font-extrabold text-[#111710]">{platform.name}</span>
+          </span>
+        ))}
+      </span>
+    </span>
+  )
 }
 
 const painPoints = [
@@ -674,155 +815,112 @@ export default function AutouraHomepage() {
   }, [videoModalOpen])
 
   return (
-    <div className="min-h-screen bg-stone-50 overflow-x-hidden">
-      {/* Decorative background elements */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-[#647C47]/5 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 -left-20 w-72 h-72 bg-amber-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-violet-500/5 rounded-full blur-3xl" />
-      </div>
+    <div className="min-h-screen bg-[#F5F3EF] overflow-x-hidden">
 
-      {/* Navigation - UPDATED: Removed Pricing & Sign In, Added About & Integrations */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-stone-200/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <img src="/autoura-logo.png" alt="Autoura" className="w-16 h-16 object-contain" />
-            </Link>
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#F5F3EF]/82 backdrop-blur-[14px] border-b border-[#D6D2CA]/45">
+        <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-[10px]">
+            <img src="/autoura-logo.png" alt="Autoura" className="w-12 h-12 object-contain" />
+            <span className="text-[19px] font-bold text-[#111710] tracking-[-0.3px]">Autoura</span>
+          </Link>
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Features</a>
-              <a href="#how-it-works" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">How It Works</a>
-              <Link href="/integrations" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Integrations</Link>
-              <Link href="/docs" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">Docs</Link>
-              <Link href="/about" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">About</Link>
-              <a 
-                href="https://calendly.com/autoura"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4a5c35] transition-all hover:shadow-lg hover:shadow-[#647C47]/20"
-              >
-                Book a Free Demo
-              </a>
-            </div>
-
-            {/* Mobile Menu Button */}
-            <button 
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-stone-600 hover:text-stone-900"
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-sm font-medium text-[#555] hover:text-[#111710] transition-colors">Features</a>
+            <a href="#how-it-works" className="text-sm font-medium text-[#555] hover:text-[#111710] transition-colors">How It Works</a>
+            <Link href="/integrations" className="text-sm font-medium text-[#555] hover:text-[#111710] transition-colors">Integrations</Link>
+            <Link href="/docs" className="text-sm font-medium text-[#555] hover:text-[#111710] transition-colors">Docs</Link>
+            <Link href="/about" className="text-sm font-medium text-[#555] hover:text-[#111710] transition-colors">About</Link>
+            <a
+              href="https://calendly.com/autoura"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-[9px] bg-[#3B5E2E] text-white text-sm font-semibold rounded-[9px] hover:bg-[#2F4C24] transition-all hover:shadow-[0_4px_16px_rgba(59,94,46,0.22)]"
             >
-              {mobileMenuOpen ? <XIcon className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
+              Book a Free Demo
+            </a>
           </div>
 
-          {/* Mobile Navigation - UPDATED */}
-          {mobileMenuOpen && (
-            <div className="md:hidden pt-4 pb-2 border-t border-stone-200 mt-4 space-y-3">
-              <a href="#features" className="block text-sm text-stone-600 hover:text-stone-900 py-2">Features</a>
-              <a href="#how-it-works" className="block text-sm text-stone-600 hover:text-stone-900 py-2">How It Works</a>
-              <Link href="/integrations" className="block text-sm text-stone-600 hover:text-stone-900 py-2">Integrations</Link>
-              <Link href="/docs" className="block text-sm text-stone-600 hover:text-stone-900 py-2">Docs</Link>
-              <Link href="/about" className="block text-sm text-stone-600 hover:text-stone-900 py-2">About</Link>
-              <a 
-                href="https://calendly.com/autoura"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full px-4 py-2 bg-[#647C47] text-white text-sm font-medium rounded-lg text-center hover:bg-[#4a5c35]"
-              >
-                Book a Free Demo
-              </a>
-            </div>
-          )}
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 text-stone-600 hover:text-stone-900"
+          >
+            {mobileMenuOpen ? <XIcon className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
         </div>
+
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <div className="md:hidden px-6 pt-4 pb-2 border-t border-[#D6D2CA] space-y-3">
+            <a href="#features" className="block text-sm text-[#555] hover:text-[#111710] py-2">Features</a>
+            <a href="#how-it-works" className="block text-sm text-[#555] hover:text-[#111710] py-2">How It Works</a>
+            <Link href="/integrations" className="block text-sm text-[#555] hover:text-[#111710] py-2">Integrations</Link>
+            <Link href="/docs" className="block text-sm text-[#555] hover:text-[#111710] py-2">Docs</Link>
+            <Link href="/about" className="block text-sm text-[#555] hover:text-[#111710] py-2">About</Link>
+            <a
+              href="https://calendly.com/autoura"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full px-4 py-2 bg-[#3B5E2E] text-white text-sm font-semibold rounded-[9px] text-center hover:bg-[#2F4C24]"
+            >
+              Book a Free Demo
+            </a>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-28 sm:pt-32 pb-16 sm:pb-20 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="max-w-4xl mx-auto text-center">
-            <div 
-              className={`transition-all duration-1000 ease-out ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-            >
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#647C47]/10 rounded-full mb-6 sm:mb-8">
-                <Sparkles className="w-4 h-4 text-[#647C47]" />
-                <span className="text-sm font-medium text-[#647C47]">AI-Powered Travel Operations</span>
-              </div>
-
-              <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-stone-900 leading-tight tracking-tight mb-4 sm:mb-6">
-                Stop Running Your Travel Business from{' '}
-                <span className="relative">
-                  <span className="relative z-10 text-[#647C47]">WhatsApp and Excel</span>
-                  <span className="absolute bottom-1 sm:bottom-2 left-0 right-0 h-2 sm:h-3 bg-[#647C47]/20 -z-0" />
-                </span>
-              </h1>
-
-              <p className="text-base sm:text-lg md:text-xl text-stone-600 max-w-3xl mx-auto mb-8 sm:mb-10 leading-relaxed px-2">
-                {heroContent.subheadline}
-              </p>
-
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-8 sm:mb-12">
-                <a 
-                  href="https://calendly.com/autoura"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-[#647C47] text-white font-semibold rounded-xl hover:bg-[#4a5c35] transition-all hover:shadow-xl hover:shadow-[#647C47]/30 flex items-center justify-center gap-2"
-                >
-                  Book a Free Demo
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </a>
-                <button
-                  onClick={() => setVideoModalOpen(true)}
-                  className="group w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-white text-stone-700 font-semibold rounded-xl border border-stone-200 hover:border-stone-300 hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                >
-                  <Play className="w-4 h-4 text-[#647C47]" />
-                  See How It Works
-                </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3 sm:gap-6 text-sm text-stone-500">
-                {heroContent.trustSignals.map((signal, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-[#647C47] flex-shrink-0" />
-                    <span>{signal}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+      <section className="pt-40 sm:pt-44 pb-16 sm:pb-20 px-6 text-center max-w-[860px] mx-auto">
+        <div
+          className={`transition-all duration-1000 ease-out ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-[7px] bg-white border border-[#D6D2CA] rounded-full mb-8">
+            <span className="w-[7px] h-[7px] rounded-full bg-[#4D7C3F]" />
+            <span className="text-[13px] font-medium text-[#3B5E2E]">AI-Powered Travel Operations</span>
           </div>
 
-          {/* Hero Image/Dashboard Preview */}
-          <div 
-            className={`mt-12 sm:mt-16 transition-all duration-1000 delay-300 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
-          >
-            <div className="relative max-w-6xl mx-auto">
-              <div className="absolute inset-0 bg-gradient-to-t from-stone-50 via-transparent to-transparent z-10 pointer-events-none" />
-              <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl shadow-stone-900/10 border border-stone-200/50 overflow-hidden">
-                <div className="bg-stone-100 px-4 py-3 flex items-center gap-2 border-b border-stone-200">
-                  <div className="w-3 h-3 rounded-full bg-red-400" />
-                  <div className="w-3 h-3 rounded-full bg-amber-400" />
-                  <div className="w-3 h-3 rounded-full bg-green-400" />
-                  <span className="ml-4 text-xs text-stone-400 hidden sm:inline">autoura.net/dashboard</span>
-                </div>
-                <div className="p-4 sm:p-8 bg-gradient-to-br from-stone-50 to-white min-h-[300px] sm:min-h-[400px] flex items-center justify-center">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 w-full max-w-4xl">
-                    {pillars.map((pillar, i) => (
-                      <div 
-                        key={i}
-                        className="bg-white rounded-xl p-4 sm:p-6 shadow-lg border border-stone-100 hover:shadow-xl transition-shadow"
-                        style={{ animationDelay: `${i * 100}ms` }}
-                      >
-                        <div className={`w-10 sm:w-12 h-10 sm:h-12 rounded-xl bg-gradient-to-br ${pillar.color} flex items-center justify-center mb-3 sm:mb-4`}>
-                          <pillar.icon className="w-5 sm:w-6 h-5 sm:h-6 text-white" />
-                        </div>
-                        <h3 className="font-semibold text-stone-900 mb-2">{pillar.title}</h3>
-                        <p className="text-sm text-stone-500">{pillar.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+          {/* Headline with cycling platform */}
+          <h1 className="hero-headline text-[36px] sm:text-[46px] md:text-[56px] font-extrabold text-[#111710] leading-[1.12] tracking-[-1.8px] mb-7">
+            Turn a message on<br />
+            <PlatformSlot /> into a fully-priced tour.
+          </h1>
+
+          {/* Subheadline */}
+          <p className="text-[18px] leading-[1.65] text-[#5A5A52] max-w-[640px] mx-auto mb-10">
+            {heroContent.subheadline}
+          </p>
+
+          {/* CTAs */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-[14px] mb-10">
+            <a
+              href="https://calendly.com/autoura"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group w-full sm:w-auto inline-flex items-center justify-center gap-[6px] px-7 py-[14px] bg-[#3B5E2E] text-white text-[15px] font-semibold rounded-[9px] hover:bg-[#2F4C24] transition-all hover:shadow-[0_6px_24px_rgba(59,94,46,0.25)] hover:-translate-y-px"
+            >
+              Book a Free Demo
+              <span className="group-hover:translate-x-[3px] transition-transform">→</span>
+            </a>
+            <button
+              onClick={() => setVideoModalOpen(true)}
+              className="group w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-[14px] bg-white text-[#111710] text-[15px] font-semibold rounded-[9px] border border-[#D6D2CA] hover:border-[#bbb] transition-all hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:-translate-y-px"
+            >
+              <span className="text-[#3B5E2E] text-sm">▷</span>
+              See How It Works
+            </button>
+          </div>
+
+          {/* Trust bar */}
+          <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3 sm:gap-8 text-sm text-[#6B6B63]">
+            {heroContent.trustSignals.map((signal, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-[#4D7C3F] font-bold text-[15px]">✓</span>
+                <span>{signal}</span>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
