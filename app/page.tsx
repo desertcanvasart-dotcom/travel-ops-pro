@@ -113,7 +113,7 @@ const platforms = [
     name: 'WhatsApp',
     color: '#25D366',
     icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
         <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
         <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.553 4.12 1.52 5.856L0 24l6.335-1.652A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75c-1.875 0-3.63-.506-5.14-1.387l-.368-.22-3.821.997 1.02-3.715-.24-.382A9.712 9.712 0 012.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75z"/>
       </svg>
@@ -123,7 +123,7 @@ const platforms = [
     name: 'LINE',
     color: '#00B900',
     icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
         <path d="M12 1C5.926 1 1 5.148 1 10.333c0 4.618 4.1 8.49 9.641 9.222.375.08.886.248 1.015.569.117.291.076.746.037 1.041l-.164.984c-.05.3-.232 1.178 1.032.642 1.264-.535 6.819-4.017 9.304-6.876C23.375 14.27 23 12.39 23 10.333 23 5.148 18.074 1 12 1zm-3.26 12.289H6.572a.545.545 0 01-.545-.545V8.572a.545.545 0 011.09 0v3.627h1.623a.545.545 0 010 1.09zm2.087-.545a.545.545 0 01-1.09 0V8.572a.545.545 0 011.09 0v4.172zm4.602 0a.545.545 0 01-.42.531.544.544 0 01-.538-.217L12.73 10.8v1.944a.545.545 0 01-1.09 0V8.572a.545.545 0 01.42-.531.544.544 0 01.538.217l1.741 2.258V8.572a.545.545 0 011.09 0v4.172zm3.325-3.082a.545.545 0 010 1.09h-1.623v1.09h1.623a.545.545 0 010 1.09H16.586a.545.545 0 01-.545-.545V8.572a.545.545 0 01.545-.545h2.168a.545.545 0 010 1.09h-1.623v1.09h1.623z"/>
       </svg>
     ),
@@ -132,7 +132,7 @@ const platforms = [
     name: 'WeChat',
     color: '#07C160',
     icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
         <path d="M8.813 11.612a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zm4.374 0a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zM9.474 16.88a.77.77 0 11.002-1.54.77.77 0 01-.002 1.54zm3.553 0a.77.77 0 11.001-1.54.77.77 0 01-.001 1.54zM12 2C6.477 2 2 5.813 2 10.5c0 2.65 1.404 5.023 3.6 6.613l-.9 2.687 3.15-1.575c.7.175 1.4.275 2.15.275.35 0 .7-.025 1.05-.063a5.76 5.76 0 01-.15-1.312c0-3.487 3.15-6.325 7.025-6.325.35 0 .7.025 1.038.075C18.6 5.95 15.575 2 12 2zm6.925 9.8c-3.3 0-5.975 2.263-5.975 5.05s2.675 5.05 5.975 5.05c.625 0 1.225-.088 1.8-.238L22.8 22.8l-.675-2.025C23.35 19.587 24 17.988 24 16.85c0-2.787-2.275-5.05-5.075-5.05z"/>
       </svg>
     ),
@@ -141,7 +141,7 @@ const platforms = [
     name: 'Messenger',
     color: '#0084FF',
     icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
         <path d="M12 2C6.36 2 1 6.265 1 12.228c0 3.207 1.58 5.965 4.05 7.852V24l3.723-2.04c.993.276 2.046.424 3.227.424 5.64 0 11-4.265 11-10.228C23 6.265 17.64 2 12 2zm1.1 13.777L10.267 12.8 5.2 15.777l5.533-5.88 2.9 2.978 4.997-2.978-5.53 5.88z"/>
       </svg>
     ),
@@ -150,132 +150,71 @@ const platforms = [
     name: 'Email',
     color: '#EA4335',
     icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[58%] h-[58%]">
+      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
         <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
       </svg>
     ),
   },
 ]
 
-// Single platform item renderer
-function PlatformItem({ platform }: { platform: typeof platforms[number] }) {
-  return (
-    <span className="flex items-center gap-[10px] whitespace-nowrap">
-      <span
-        className="inline-flex items-center justify-center shrink-0"
-        style={{
-          width: '0.72em',
-          height: '0.72em',
-          borderRadius: '0.16em',
-          background: platform.color,
-        }}
-      >
-        {platform.icon}
-      </span>
-      <span className="font-extrabold text-[#111710]">{platform.name}</span>
-    </span>
-  )
-}
-
-// Cycling platform slot — crossfade approach (no track shifting)
+// Cycling icon-only platform slot — fixed size, no reflow
 function PlatformSlot() {
-  const [current, setCurrent] = useState(0)
-  const [phase, setPhase] = useState<'visible' | 'exiting' | 'entering'>('visible')
-  const [slotWidth, setSlotWidth] = useState<number | null>(null)
-  const widthsRef = useRef<number[]>([])
-  const containerRef = useRef<HTMLSpanElement>(null)
-  const nextRef = useRef(0)
+  const [displayIndex, setDisplayIndex] = useState(0)
+  const [nextIndex, setNextIndex] = useState<number | null>(null)
+  const [animState, setAnimState] = useState<'idle' | 'fadeOut' | 'fadeIn'>('idle')
+  const counterRef = useRef(0)
 
-  // Measure each item's natural width using a hidden measurer
-  useEffect(() => {
-    const headline = document.querySelector('.hero-headline')
-    if (!headline) return
-
-    const cs = getComputedStyle(headline)
-    const measurer = document.createElement('div')
-    measurer.style.cssText = `position:absolute;top:-9999px;left:-9999px;visibility:hidden;display:flex;align-items:center;gap:10px;white-space:nowrap;font-size:${cs.fontSize};font-family:${cs.fontFamily};font-weight:800;letter-spacing:${cs.letterSpacing};`
-    document.body.appendChild(measurer)
-
-    const widths: number[] = []
-    platforms.forEach(p => {
-      measurer.innerHTML = ''
-      // Create icon placeholder + text span
-      const icon = document.createElement('span')
-      icon.style.cssText = `display:inline-flex;align-items:center;justify-content:center;width:0.72em;height:0.72em;border-radius:0.16em;background:${p.color};flex-shrink:0;`
-      const text = document.createElement('span')
-      text.style.cssText = 'font-weight:800;'
-      text.textContent = p.name
-      measurer.appendChild(icon)
-      measurer.appendChild(text)
-      widths.push(measurer.getBoundingClientRect().width)
-    })
-
-    document.body.removeChild(measurer)
-    widthsRef.current = widths
-    if (widths.length > 0) setSlotWidth(widths[0])
-  }, [])
-
-  // Cycle: visible → exiting → (swap index) → entering → visible
   useEffect(() => {
     const interval = setInterval(() => {
-      // Phase 1: start exit (fade out + slide up)
-      setPhase('exiting')
-
-      // Phase 2: after exit completes, swap to next and enter
-      setTimeout(() => {
-        const next = (nextRef.current + 1) % platforms.length
-        nextRef.current = next
-        setCurrent(next)
-        if (widthsRef.current.length > 0) {
-          setSlotWidth(widthsRef.current[next])
-        }
-        setPhase('entering')
-
-        // Phase 3: settle into visible
-        setTimeout(() => {
-          setPhase('visible')
-        }, 30) // one frame to apply entering styles, then transition to visible
-      }, 350) // matches exit duration
-    }, 2200) // total dwell time (visible portion)
+      const next = (counterRef.current + 1) % platforms.length
+      counterRef.current = next
+      setNextIndex(next)
+      setAnimState('fadeOut')
+    }, 2200)
 
     return () => clearInterval(interval)
   }, [])
 
-  const itemStyle: React.CSSProperties =
-    phase === 'visible'
-      ? {
-          opacity: 1,
-          transform: 'translateY(0)',
-          transition: 'opacity 0.4s ease, transform 0.4s ease',
-        }
-      : phase === 'exiting'
-      ? {
-          opacity: 0,
-          transform: 'translateY(-40%)',
-          transition: 'opacity 0.35s ease, transform 0.35s ease',
-        }
-      : {
-          // 'entering' — start position (below, invisible), no transition yet
-          opacity: 0,
-          transform: 'translateY(40%)',
-          transition: 'none',
-        }
+  // When fadeOut transition ends, swap to new icon and fade in
+  const handleTransitionEnd = useCallback(() => {
+    if (animState === 'fadeOut' && nextIndex !== null) {
+      setDisplayIndex(nextIndex)
+      setNextIndex(null)
+      setAnimState('fadeIn')
+      // After a frame, trigger fade-in transition
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setAnimState('idle')
+        })
+      })
+    }
+  }, [animState, nextIndex])
+
+  const iconStyle: React.CSSProperties =
+    animState === 'idle'
+      ? { opacity: 1, transform: 'translateY(0) scale(1)', transition: 'opacity 0.35s ease-out, transform 0.35s ease-out' }
+      : animState === 'fadeOut'
+      ? { opacity: 0, transform: 'translateY(-30%) scale(0.95)', transition: 'opacity 0.28s ease-in, transform 0.28s ease-in' }
+      : // fadeIn — start state, no transition (snap below), then idle triggers transition
+        { opacity: 0, transform: 'translateY(30%) scale(0.95)', transition: 'none' }
+
+  const platform = platforms[displayIndex]
 
   return (
     <span
-      ref={containerRef}
-      className="inline-block align-bottom relative overflow-hidden"
+      className="inline-flex items-center justify-center align-middle relative overflow-hidden"
       style={{
-        height: '1.15em',
-        width: slotWidth ? `${slotWidth}px` : 'auto',
-        transition: 'width 0.45s cubic-bezier(0.25, 0.1, 0.25, 1)',
+        width: '0.82em',
+        height: '0.82em',
+        borderRadius: '0.18em',
       }}
     >
       <span
-        className="absolute inset-0 flex items-center"
-        style={itemStyle}
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ ...iconStyle, background: platform.color, borderRadius: 'inherit' }}
+        onTransitionEnd={handleTransitionEnd}
       >
-        <PlatformItem platform={platforms[current]} />
+        {platform.icon}
       </span>
     </span>
   )
@@ -914,9 +853,8 @@ export default function AutouraHomepage() {
           </div>
 
           {/* Headline with cycling platform */}
-          <h1 className="hero-headline text-[36px] sm:text-[46px] md:text-[56px] font-extrabold text-[#111710] leading-[1.12] tracking-[-1.8px] mb-7">
-            Turn a message on<br />
-            <PlatformSlot /> into a fully-priced tour.
+          <h1 className="hero-headline text-[36px] sm:text-[46px] md:text-[56px] font-extrabold text-[#111710] leading-[1.18] tracking-[-1.8px] mb-7">
+            Turn a message on <PlatformSlot /> into a fully-priced tour.
           </h1>
 
           {/* Subheadline */}
