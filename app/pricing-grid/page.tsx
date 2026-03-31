@@ -201,28 +201,41 @@ function PricingGridContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rates])
 
-  // Fetch exchange rate when currency changes
+  // Pre-fetch all exchange rates once on mount, then currency switching is instant
+  const exchangeRatesCache = useRef<Record<string, number> | null>(null)
+  useEffect(() => {
+    const prefetch = async () => {
+      try {
+        const res = await fetch('/api/exchange-rates?base=EUR')
+        const data = await res.json()
+        if (data.success && data.data?.rates) {
+          exchangeRatesCache.current = data.data.rates
+          // Apply if currency is already non-EUR
+          if (config.currency !== 'EUR' && data.data.rates[config.currency]) {
+            setConfig(prev => ({ ...prev, exchangeRate: data.data.rates[prev.currency] }))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to prefetch exchange rates:', err)
+      }
+    }
+    prefetch()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Apply exchange rate instantly from cache when currency changes
   useEffect(() => {
     if (config.currency === 'EUR') {
-      // No conversion needed for EUR (base currency)
       if (config.exchangeRate !== null) {
         setConfig(prev => ({ ...prev, exchangeRate: null }))
       }
       return
     }
-    // Fetch rate from API
-    const fetchRate = async () => {
-      try {
-        const res = await fetch('/api/exchange-rates?base=EUR')
-        const data = await res.json()
-        if (data.success && data.data?.rates?.[config.currency]) {
-          setConfig(prev => ({ ...prev, exchangeRate: data.data.rates[prev.currency] }))
-        }
-      } catch (err) {
-        console.error('Failed to fetch exchange rate:', err)
-      }
+    // Use cached rates (instant) — no API call needed
+    const cached = exchangeRatesCache.current
+    if (cached && cached[config.currency]) {
+      setConfig(prev => ({ ...prev, exchangeRate: cached[prev.currency] }))
     }
-    fetchRate()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.currency])
 
