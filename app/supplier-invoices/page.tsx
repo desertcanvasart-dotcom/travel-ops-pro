@@ -20,7 +20,6 @@ import {
   Sparkles,
   FileImage,
   Trash2,
-  Building2,
 } from 'lucide-react'
 
 interface SupplierInvoice {
@@ -178,9 +177,32 @@ export default function SupplierInvoicesPage() {
     setShowSupplierDropdown(true)
   }
 
-  const filteredSuppliers = suppliers.filter(s =>
-    s.name.toLowerCase().includes(supplierSearch.toLowerCase())
-  )
+  // Map service categories to supplier types for filtering
+  const serviceToSupplierType: Record<string, string[]> = {
+    guide: ['guide'],
+    driver: ['driver', 'transport_company', 'transport'],
+    hotel: ['hotel'],
+    transportation: ['transport_company', 'transport', 'driver'],
+    entrance: ['attraction', 'government'],
+    meal: ['restaurant'],
+    airport_staff: ['airport_staff', 'ground_handler'],
+    hotel_staff: ['hotel_staff', 'hotel'],
+    ground_handler: ['ground_handler'],
+  }
+
+  // Get supplier types from selected service types in line items
+  const selectedServiceTypes = formData.line_items
+    .map(li => li.service_type)
+    .filter(Boolean)
+  const relevantSupplierTypes = selectedServiceTypes.length > 0
+    ? [...new Set(selectedServiceTypes.flatMap(st => serviceToSupplierType[st] || []))]
+    : []
+
+  const filteredSuppliers = suppliers.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+    const matchesType = relevantSupplierTypes.length === 0 || relevantSupplierTypes.includes(s.type)
+    return matchesSearch && matchesType
+  })
 
   const updateLineItem = (index: number, field: keyof LineItem, value: string | number) => {
     setFormData(prev => {
@@ -599,18 +621,15 @@ export default function SupplierInvoicesPage() {
                 </div>
                 <div className="relative">
                   <label className="block text-xs font-medium text-gray-700 mb-1">Supplier</label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      value={supplierSearch}
-                      onChange={e => handleSupplierInputChange(e.target.value)}
-                      onFocus={() => setShowSupplierDropdown(true)}
-                      onBlur={() => setTimeout(() => setShowSupplierDropdown(false), 200)}
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                      placeholder="Search or type supplier..."
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={supplierSearch}
+                    onChange={e => handleSupplierInputChange(e.target.value)}
+                    onFocus={() => setShowSupplierDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowSupplierDropdown(false), 200)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                    placeholder="Search or type supplier..."
+                  />
                   {showSupplierDropdown && filteredSuppliers.length > 0 && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
                       {filteredSuppliers.slice(0, 15).map(s => (
@@ -625,9 +644,11 @@ export default function SupplierInvoicesPage() {
                       ))}
                     </div>
                   )}
-                  {formData.supplier_id && (
+                  {formData.supplier_id ? (
                     <p className="text-xs text-green-600 mt-0.5">Linked to supplier record</p>
-                  )}
+                  ) : relevantSupplierTypes.length > 0 ? (
+                    <p className="text-xs text-gray-400 mt-0.5">Showing {relevantSupplierTypes.join(', ')} suppliers</p>
+                  ) : null}
                 </div>
               </div>
 
