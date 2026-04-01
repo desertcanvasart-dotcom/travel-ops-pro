@@ -76,7 +76,7 @@ export default function GettingStartedPage() {
             </tbody>
           </table>
         </div>
-        <ScreenshotPlaceholder caption="User profile page showing assigned role" />
+        <DocScreenshot src="/docs/getting-started/user-management.jpg" alt="User management page showing roles and permissions" />
       </section>
 
       {/* Next Page */}
