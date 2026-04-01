@@ -12,7 +12,9 @@ import {
   Clock,
   Zap,
   Menu,
-  X as XIcon
+  X as XIcon,
+  BookOpen,
+  Calculator,
 } from 'lucide-react'
 
 // Animation hook for scroll reveal
@@ -99,6 +101,38 @@ const activeIntegrations = [
       "Invoice delivery via email",
       "Automatic logging to client profile",
       "Custom email templates"
+    ]
+  },
+  {
+    name: "Xero",
+    description: "Push invoices, expenses, and payments from Autoura to Xero automatically. Your accountant works from Xero — now the data flows there without re-entry.",
+    icon: BookOpen,
+    color: "from-[#13B5EA] to-[#0D9ECB]",
+    bgColor: "bg-sky-50",
+    borderColor: "border-sky-200",
+    status: "Live",
+    features: [
+      "Push client invoices as AR invoices",
+      "Push supplier expenses as bills",
+      "Sync payment records automatically",
+      "Auto-create contacts in Xero",
+      "Retry failed syncs with error tracking"
+    ]
+  },
+  {
+    name: "QuickBooks",
+    description: "Sync your financial data to QuickBooks Online. Invoices, expenses, and payments are pushed automatically so your books stay up to date without manual exports.",
+    icon: Calculator,
+    color: "from-[#2CA01C] to-[#1E8A12]",
+    bgColor: "bg-emerald-50",
+    borderColor: "border-emerald-200",
+    status: "Live",
+    features: [
+      "Push client invoices to QuickBooks",
+      "Push supplier expenses as vendor bills",
+      "Sync invoice and bill payments",
+      "Auto-create customers and vendors",
+      "Batch sync with exponential retry"
     ]
   }
 ]
@@ -220,7 +254,7 @@ export default function IntegrationsPage() {
             </h1>
 
             <p className="text-base sm:text-lg md:text-xl text-stone-600 max-w-2xl mx-auto leading-relaxed">
-              Connect Autoura with the tools your clients already use. From WhatsApp conversations to Gmail communications — everything flows into one unified system.
+              Connect Autoura with the tools your team already uses. From WhatsApp conversations to Gmail communications to Xero and QuickBooks — everything flows into one unified system.
             </p>
           </div>
         </div>
