@@ -16,6 +16,9 @@ import {
   XCircle,
   Loader2,
   ArrowLeft,
+  Upload,
+  Sparkles,
+  FileImage,
 } from 'lucide-react'
 
 interface SupplierInvoice {
@@ -87,6 +90,55 @@ export default function SupplierInvoicesPage() {
     description: '',
   })
   const [creating, setCreating] = useState(false)
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [parsedConfidence, setParsedConfidence] = useState<Record<string, string> | null>(null)
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setParsing(true)
+    setParseError(null)
+    setParsedConfidence(null)
+
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+
+      const res = await fetch('/api/ai/parse-supplier-invoice', {
+        method: 'POST',
+        body: fd,
+      })
+
+      const result = await res.json()
+
+      if (!result.success) {
+        setParseError(result.error || 'Failed to parse document')
+        return
+      }
+
+      const d = result.data
+      setFormData({
+        supplier_invoice_number: d.supplier_invoice_number || '',
+        supplier_name: d.supplier_name || '',
+        invoice_date: d.invoice_date || new Date().toISOString().split('T')[0],
+        due_date: d.due_date || '',
+        amount: d.total_amount ? String(d.total_amount) : '',
+        currency: d.currency || 'EUR',
+        tax_amount: d.tax_amount ? String(d.tax_amount) : '',
+        description: d.description || '',
+      })
+      setParsedConfidence(d.confidence || null)
+    } catch (err) {
+      console.error('Parse error:', err)
+      setParseError('Failed to process document. Please try again.')
+    } finally {
+      setParsing(false)
+      // Reset file input
+      e.target.value = ''
+    }
+  }
 
   useEffect(() => {
     fetchInvoices()
@@ -308,9 +360,60 @@ export default function SupplierInvoicesPage() {
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowCreateModal(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => { setShowCreateModal(false); setParseError(null); setParsedConfidence(null) }} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">New Supplier Invoice</h3>
+
+            {/* Upload & Parse Zone */}
+            <div className="mb-5">
+              <label className={`flex flex-col items-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                parsing
+                  ? 'border-[#647C47] bg-[#647C47]/5'
+                  : 'border-gray-200 hover:border-[#647C47] hover:bg-gray-50'
+              }`}>
+                {parsing ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-5 h-5 text-[#647C47] animate-spin" />
+                      <Sparkles className="w-5 h-5 text-[#647C47]" />
+                    </div>
+                    <span className="text-sm font-medium text-[#647C47]">Reading invoice with AI...</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-gray-400">
+                      <Upload className="w-5 h-5" />
+                      <FileImage className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-600">Upload PDF or photo to auto-fill</span>
+                    <span className="text-xs text-gray-400">AI reads the invoice and fills the form below</span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.gif"
+                  onChange={handleFileUpload}
+                  disabled={parsing}
+                  className="hidden"
+                />
+              </label>
+
+              {parseError && (
+                <div className="mt-2 flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  <span className="text-xs text-red-600">{parseError}</span>
+                </div>
+              )}
+
+              {parsedConfidence && (
+                <div className="mt-2 flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                  <Sparkles className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <span className="text-xs text-green-700">
+                    AI extracted data (confidence: {parsedConfidence.overall || 'medium'}). Review and edit below before saving.
+                  </span>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
