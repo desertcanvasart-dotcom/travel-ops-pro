@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { syncExpense } from '@/lib/accounting'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,6 +120,11 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating expense:', error)
       return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 })
+    }
+
+    // Fire-and-forget accounting sync
+    if (data?.id) {
+      syncExpense(data.id).catch(err => console.error('Accounting sync failed:', err))
     }
 
     return NextResponse.json(data, { status: 201 })

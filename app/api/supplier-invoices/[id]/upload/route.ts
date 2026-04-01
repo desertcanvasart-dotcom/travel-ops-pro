@@ -1,0 +1,103 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+const BUCKET = 'supplier-invoices'
+const MAX_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const formData = await request.formData()
+    const file = formData.get('file') as File
+
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Allowed: PDF, JPG, PNG, WEBP' },
+        { status: 400 }
+      )
+    }
+
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json(
+        { error: 'File too large. Maximum size is 10MB.' },
+        { status: 400 }
+      )
+    }
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${id}-${Date.now()}.${fileExt}`
+    const filePath = `documents/${fileName}`
+
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    // Upload to Supabase Storage (auto-create bucket if needed)
+    let uploadResult = await supabase.storage
+      .from(BUCKET)
+      .upload(filePath, buffer, { contentType: file.type, upsert: true })
+
+    if (uploadResult.error?.message?.includes('Bucket not found')) {
+      const { error: bucketError } = await supabase.storage.createBucket(BUCKET, {
+        public: true,
+        fileSizeLimit: MAX_SIZE,
+      })
+
+      if (bucketError && !bucketError.message?.includes('already exists')) {
+        throw bucketError
+      }
+
+      uploadResult = await supabase.storage
+        .from(BUCKET)
+        .upload(filePath, buffer, { contentType: file.type, upsert: true })
+    }
+
+    if (uploadResult.error) throw uploadResult.error
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from(BUCKET)
+      .getPublicUrl(filePath)
+
+    // Update supplier invoice
+    const { error: updateError } = await supabase
+      .from('supplier_invoices')
+      .update({
+        document_url: urlData.publicUrl,
+        document_filename: file.name,
+        document_storage_path: filePath,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (updateError) {
+      console.error('Failed to update supplier invoice with document:', updateError)
+    }
+
+    return NextResponse.json({
+      success: true,
+      url: urlData.publicUrl,
+      filename: file.name,
+    })
+  } catch (error) {
+    console.error('Upload error:', error)
+    return NextResponse.json({ error: 'Failed to upload document' }, { status: 500 })
+  }
+}

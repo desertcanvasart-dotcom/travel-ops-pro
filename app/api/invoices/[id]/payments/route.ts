@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { syncInvoicePayment } from '@/lib/accounting'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,6 +91,11 @@ export async function POST(
 
     // Note: The trigger function will automatically update the invoice's
     // amount_paid, balance_due, and status
+
+    // Fire-and-forget accounting sync
+    if (data?.id) {
+      syncInvoicePayment(data.id).catch(err => console.error('Accounting sync failed:', err))
+    }
 
     return NextResponse.json(data, { status: 201 })
   } catch (error) {

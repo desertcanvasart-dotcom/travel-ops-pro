@@ -232,6 +232,7 @@
     "receipts": "領収書",
     "receivables": "売掛金",
     "payables": "買掛金",
+    "supplierInvoices": "仕入先請求書",
     "expenses": "経費",
     "commissions": "コミッション",
     "profitLoss": "損益",

@@ -1014,7 +1014,7 @@ export default function AutouraHomepage() {
 
             {/* YouTube embed */}
             <iframe
-              src="https://www.youtube.com/embed/a9yu2rMaAso?autoplay=1&rel=0&modestbranding=1"
+              src="https://www.youtube.com/embed/jUa1j1rvUeY?autoplay=1&rel=0&modestbranding=1"
               title="See How Autoura Works"
               className="w-full h-full"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

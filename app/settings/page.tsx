@@ -80,12 +80,13 @@ interface UserPreferences {
 // TAB CONFIGURATION
 // ============================================
 
-const TAB_IDS = ['profile', 'email', 'notifications', 'preferences'] as const
+const TAB_IDS = ['profile', 'email', 'notifications', 'preferences', 'integrations'] as const
 const TAB_ICONS = {
   profile: User,
   email: Mail,
   notifications: Bell,
   preferences: Settings,
+  integrations: LinkIcon,
 }
 
 const TIMEZONES = [
@@ -134,6 +135,11 @@ function SettingsContent() {
     default_margin_percent: 25,
     default_currency: 'USD'
   })
+  const [accountingStatus, setAccountingStatus] = useState<{
+    xero: { connected: boolean; company_name: string; last_updated: string } | null
+    quickbooks: { connected: boolean; company_name: string; last_updated: string } | null
+  }>({ xero: null, quickbooks: null })
+  const [connectingProvider, setConnectingProvider] = useState<string | null>(null)
 
   // Update URL when tab changes
   const handleTabChange = (tabId: string) => {
@@ -160,6 +166,9 @@ function SettingsContent() {
             break
           case 'preferences':
             await fetchPreferences()
+            break
+          case 'integrations':
+            await fetchAccountingStatus()
             break
         }
       } catch (err) {
@@ -215,6 +224,54 @@ function SettingsContent() {
       }
     } catch (error) {
       console.error('Error fetching preferences:', error)
+    }
+  }
+
+  const fetchAccountingStatus = async () => {
+    try {
+      if (!user) return
+      const response = await fetch(`/api/auth/accounting/status?userId=${user.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setAccountingStatus(data)
+      }
+    } catch (error) {
+      console.error('Error fetching accounting status:', error)
+    }
+  }
+
+  const connectAccounting = async (provider: 'xero' | 'quickbooks') => {
+    if (!user) return
+    setConnectingProvider(provider)
+    try {
+      const response = await fetch('/api/auth/accounting/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, provider }),
+      })
+      const data = await response.json()
+      if (data.authUrl) {
+        window.location.href = data.authUrl
+      }
+    } catch (error) {
+      console.error('Error connecting accounting:', error)
+      setError('Failed to initiate connection')
+    } finally {
+      setConnectingProvider(null)
+    }
+  }
+
+  const disconnectAccounting = async (provider: 'xero' | 'quickbooks') => {
+    if (!user || !confirm(`Disconnect ${provider === 'xero' ? 'Xero' : 'QuickBooks'}?`)) return
+    try {
+      await fetch('/api/auth/accounting/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, provider }),
+      })
+      setAccountingStatus(prev => ({ ...prev, [provider]: null }))
+    } catch (error) {
+      console.error('Error disconnecting:', error)
     }
   }
 
@@ -964,6 +1021,128 @@ function SettingsContent() {
     </div>
   )
 
+  const renderIntegrationsTab = () => {
+    const providers = [
+      {
+        key: 'xero' as const,
+        name: 'Xero',
+        description: 'Push invoices, expenses, and payments to Xero',
+        color: 'bg-[#13B5EA]',
+        letterColor: 'text-white',
+      },
+      {
+        key: 'quickbooks' as const,
+        name: 'QuickBooks',
+        description: 'Push invoices, expenses, and payments to QuickBooks',
+        color: 'bg-[#2CA01C]',
+        letterColor: 'text-white',
+      },
+    ]
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-lg font-medium text-gray-900">Accounting Integrations</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Connect your accounting software to automatically sync invoices, expenses, and payments.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {providers.map(p => {
+            const status = accountingStatus[p.key]
+            const isConnected = status?.connected
+
+            return (
+              <div key={p.key} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${p.color}`}>
+                      <span className={`text-sm font-bold ${p.letterColor}`}>{p.name[0]}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{p.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {isConnected
+                          ? `Connected to ${status.company_name || p.name}`
+                          : p.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isConnected ? (
+                      <>
+                        <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                          <CheckCircle className="w-3 h-3" />
+                          Connected
+                        </span>
+                        <button
+                          onClick={() => disconnectAccounting(p.key)}
+                          className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                        >
+                          Disconnect
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => connectAccounting(p.key)}
+                        disabled={connectingProvider === p.key}
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
+                      >
+                        {connectingProvider === p.key ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <LinkIcon className="w-4 h-4" />
+                        )}
+                        Connect {p.name}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* What Gets Synced */}
+        <div className="border border-gray-200 rounded-lg p-4">
+          <h4 className="text-sm font-medium text-gray-900 mb-3">What gets synced</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="flex items-start gap-2">
+              <FileText className="w-4 h-4 text-[#647C47] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Invoices</p>
+                <p className="text-xs text-gray-500">Client invoices pushed as AR invoices</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <CreditCard className="w-4 h-4 text-[#647C47] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Expenses</p>
+                <p className="text-xs text-gray-500">Supplier expenses pushed as bills</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Calculator className="w-4 h-4 text-[#647C47] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Payments</p>
+                <p className="text-xs text-gray-500">Payment records synced automatically</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-blue-700">
+            Sync is push-only: Autoura sends data to your accounting software. Changes made in Xero or QuickBooks are not pulled back.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   // ============================================
   // MAIN RENDER
   // ============================================
@@ -1040,6 +1219,7 @@ function SettingsContent() {
               {activeTab === 'email' && renderEmailTab()}
               {activeTab === 'notifications' && renderNotificationsTab()}
               {activeTab === 'preferences' && renderPreferencesTab()}
+              {activeTab === 'integrations' && renderIntegrationsTab()}
             </>
           )}
         </div>
