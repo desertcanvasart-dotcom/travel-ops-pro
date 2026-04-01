@@ -123,11 +123,17 @@ export default function SupplierInvoicesPage() {
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false)
   const [supplierRates, setSupplierRates] = useState<Record<string, unknown>[]>([])
 
+  // Itinerary and invoice lists for dropdowns
+  const [itineraries, setItineraries] = useState<Array<{ id: string; code: string; client_name: string }>>([])
+  const [clientInvoices, setClientInvoices] = useState<Array<{ id: string; invoice_number: string; client_name: string; total_amount: number }>>([])
+
   // Create form state
   const [formData, setFormData] = useState({
     supplier_invoice_number: '',
     supplier_name: '',
     supplier_id: '',
+    itinerary_id: '',
+    client_invoice_id: '',
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: '',
     currency: 'EUR',
@@ -140,16 +146,45 @@ export default function SupplierInvoicesPage() {
   const [parseError, setParseError] = useState<string | null>(null)
   const [parsedConfidence, setParsedConfidence] = useState<Record<string, string> | null>(null)
 
-  // Fetch suppliers when modal opens
+  // Fetch suppliers, itineraries, and invoices when modal opens
   useEffect(() => {
-    if (showCreateModal && suppliers.length === 0) {
-      fetch('/api/suppliers?status=active')
-        .then(r => r.json())
-        .then(res => {
-          const arr = Array.isArray(res) ? res : (res.data || [])
-          setSuppliers(arr.map((s: Record<string, unknown>) => ({ id: s.id as string, name: s.name as string, type: s.type as string })))
-        })
-        .catch(() => {})
+    if (showCreateModal) {
+      if (suppliers.length === 0) {
+        fetch('/api/suppliers?status=active')
+          .then(r => r.json())
+          .then(res => {
+            const arr = Array.isArray(res) ? res : (res.data || [])
+            setSuppliers(arr.map((s: Record<string, unknown>) => ({ id: s.id as string, name: s.name as string, type: s.type as string })))
+          })
+          .catch(() => {})
+      }
+      if (itineraries.length === 0) {
+        fetch('/api/itineraries')
+          .then(r => r.json())
+          .then(res => {
+            const arr = Array.isArray(res) ? res : (res.data || [])
+            setItineraries(arr.map((it: Record<string, unknown>) => ({
+              id: it.id as string,
+              code: (it.itinerary_code || it.trip_name || '') as string,
+              client_name: (it.client_name || '') as string,
+            })))
+          })
+          .catch(() => {})
+      }
+      if (clientInvoices.length === 0) {
+        fetch('/api/invoices')
+          .then(r => r.json())
+          .then(res => {
+            const arr = Array.isArray(res) ? res : (res.data || [])
+            setClientInvoices(arr.map((inv: Record<string, unknown>) => ({
+              id: inv.id as string,
+              invoice_number: (inv.invoice_number || '') as string,
+              client_name: (inv.client_name || '') as string,
+              total_amount: Number(inv.total_amount || 0),
+            })))
+          })
+          .catch(() => {})
+      }
     }
   }, [showCreateModal])
 
@@ -262,6 +297,8 @@ export default function SupplierInvoicesPage() {
       supplier_invoice_number: '',
       supplier_name: '',
       supplier_id: '',
+      itinerary_id: '',
+      client_invoice_id: '',
       invoice_date: new Date().toISOString().split('T')[0],
       due_date: '',
       currency: 'EUR',
@@ -369,6 +406,8 @@ export default function SupplierInvoicesPage() {
           supplier_invoice_number: formData.supplier_invoice_number,
           supplier_name: formData.supplier_name,
           supplier_id: formData.supplier_id || null,
+          itinerary_id: formData.itinerary_id || null,
+          client_invoice_id: formData.client_invoice_id || null,
           invoice_date: formData.invoice_date,
           due_date: formData.due_date || null,
           currency: formData.currency,
@@ -686,6 +725,40 @@ export default function SupplierInvoicesPage() {
                     <option value="USD">USD</option>
                     <option value="GBP">GBP</option>
                     <option value="EGP">EGP</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Itinerary and Client Invoice links */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Related Itinerary</label>
+                  <select
+                    value={formData.itinerary_id}
+                    onChange={e => setFormData(prev => ({ ...prev, itinerary_id: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                  >
+                    <option value="">None</option>
+                    {itineraries.map(it => (
+                      <option key={it.id} value={it.id}>
+                        {it.code}{it.client_name ? ` — ${it.client_name}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Customer Invoice</label>
+                  <select
+                    value={formData.client_invoice_id}
+                    onChange={e => setFormData(prev => ({ ...prev, client_invoice_id: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                  >
+                    <option value="">None</option>
+                    {clientInvoices.map(inv => (
+                      <option key={inv.id} value={inv.id}>
+                        {inv.invoice_number} — {inv.client_name} ({CURRENCIES[formData.currency]}{inv.total_amount.toLocaleString()})
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

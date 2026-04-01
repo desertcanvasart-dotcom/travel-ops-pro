@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
         line_items: body.line_items || null,
         notes: body.notes || null,
         itinerary_id: body.itinerary_id || null,
+        client_invoice_id: body.client_invoice_id || null,
         created_by: body.created_by || null,
       })
       .select()
