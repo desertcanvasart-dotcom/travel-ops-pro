@@ -145,7 +145,10 @@ export default function SupplierInvoicesPage() {
     if (showCreateModal && suppliers.length === 0) {
       fetch('/api/suppliers?status=active')
         .then(r => r.json())
-        .then(data => setSuppliers((data || []).map((s: Record<string, unknown>) => ({ id: s.id as string, name: s.name as string, type: s.type as string }))))
+        .then(res => {
+          const arr = Array.isArray(res) ? res : (res.data || [])
+          setSuppliers(arr.map((s: Record<string, unknown>) => ({ id: s.id as string, name: s.name as string, type: s.type as string })))
+        })
         .catch(() => {})
     }
   }, [showCreateModal])
