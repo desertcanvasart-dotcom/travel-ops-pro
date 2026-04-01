@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function ClientsPage() {
   return (
@@ -20,7 +20,7 @@ export default function ClientsPage() {
         <p className="text-gray-600 mb-3">
           Go to <strong>Clients</strong> in the sidebar. You will see a list of all your clients with their name, email, phone, nationality, total bookings, and total revenue.
         </p>
-        <ScreenshotPlaceholder caption="Client list page with search, filters, and client rows" />
+        <DocScreenshot src="/docs/clients/client-list.jpg" alt="Client list page with search, filters, and client rows" />
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Finding a Client</h3>
         <ul className="list-disc list-inside space-y-2 text-gray-700">

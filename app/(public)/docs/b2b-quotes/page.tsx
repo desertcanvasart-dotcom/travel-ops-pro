@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function B2BQuotesPage() {
   return (
@@ -52,7 +52,7 @@ export default function B2BQuotesPage() {
           <li><strong>Search</strong> &mdash; Filter by reference code, tour name, or partner name</li>
           <li><strong>Quick Actions</strong> &mdash; View, download PDF, or open in calculator</li>
         </ul>
-        <ScreenshotPlaceholder caption="B2B Quotes list page with quote cards and action buttons" />
+        <DocScreenshot src="/docs/b2b-quotes/quotes-list.jpg" alt="B2B Quotes list page with quote cards and action buttons" />
       </section>
 
       {/* Quote Details */}

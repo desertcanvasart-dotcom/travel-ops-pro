@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function WorkflowsPage() {
   return (
@@ -101,7 +101,7 @@ export default function WorkflowsPage() {
           <li><strong>Table View</strong> &mdash; Spreadsheet-style list with sorting</li>
           <li><strong>List View</strong> &mdash; Simple list with filters</li>
         </ul>
-        <ScreenshotPlaceholder caption="Task management page showing Kanban board with draggable task cards" />
+        <DocScreenshot src="/docs/workflows/tasks.jpg" alt="Task management page showing Kanban board with draggable task cards" />
         <Tip>
           Use <strong>Generate Tasks</strong> from an itinerary to let AI create operational tasks automatically. For example, it will create tasks like &ldquo;Confirm hotel reservation&rdquo; and &ldquo;Book airport transfer.&rdquo;
         </Tip>

@@ -64,6 +64,20 @@ export function ScreenshotPlaceholder({ caption }: { caption: string }) {
   )
 }
 
+export function DocScreenshot({ src, alt }: { src: string; alt: string }) {
+  return (
+    <div className="my-6">
+      <img
+        src={src}
+        alt={alt}
+        className="w-full border border-gray-200 rounded-lg shadow-sm"
+        loading="lazy"
+      />
+      <p className="text-xs text-gray-400 mt-2 text-center">{alt}</p>
+    </div>
+  )
+}
+
 export function Tip({ children }: { children: React.ReactNode }) {
   return (
     <div className="my-4 bg-green-50 border-l-4 border-green-500 rounded-r-lg p-4">

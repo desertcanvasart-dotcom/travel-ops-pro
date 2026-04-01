@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function ToursRatesPage() {
   return (
@@ -27,7 +27,7 @@ export default function ToursRatesPage() {
           <li>Browse available packages by destination, duration, or category</li>
           <li>Click a tour to see the full details</li>
         </ol>
-        <ScreenshotPlaceholder caption="Tours list page showing tour cards with destination, duration, and pricing" />
+        <DocScreenshot src="/docs/tours-rates/tours-list.jpg" alt="Tours list page showing tour cards with destination, duration, and pricing" />
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Tour Detail Page</h3>
         <p className="text-gray-600 mb-3">Each tour shows:</p>
@@ -92,7 +92,7 @@ export default function ToursRatesPage() {
             </tbody>
           </table>
         </div>
-        <ScreenshotPlaceholder caption="Rates hub showing rate category cards with counts and quick access links" />
+        <DocScreenshot src="/docs/tours-rates/rates-hub.jpg" alt="Rates hub showing rate category cards with counts and quick access links" />
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Adding or Editing a Rate</h3>
         <ol className="list-decimal list-inside space-y-2 text-gray-700">

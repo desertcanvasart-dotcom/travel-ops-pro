@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function BookingsPage() {
   return (
@@ -32,7 +32,7 @@ export default function BookingsPage() {
           <li><strong>Completed</strong> &mdash; Trip finished</li>
           <li><strong>Cancelled</strong></li>
         </ul>
-        <ScreenshotPlaceholder caption="Bookings list page with status cards and booking rows" />
+        <DocScreenshot src="/docs/bookings/bookings-list.jpg" alt="Bookings list page with status cards and booking rows" />
       </section>
 
       {/* Booking Detail */}

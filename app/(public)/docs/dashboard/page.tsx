@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function DashboardPage() {
   return (
@@ -17,7 +17,7 @@ export default function DashboardPage() {
         The dashboard is your home base. When you log in, you see everything at a glance.
       </p>
 
-      <ScreenshotPlaceholder caption="Full dashboard view with stats cards, quick actions, and recent activity" />
+      <DocScreenshot src="/docs/dashboard/full-dashboard.jpg" alt="Full dashboard view with stats cards, quick actions, and recent activity" />
 
       {/* Quick Stats */}
       <section className="mb-10">

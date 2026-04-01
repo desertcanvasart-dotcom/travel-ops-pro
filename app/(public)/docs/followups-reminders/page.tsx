@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function FollowupsRemindersPage() {
   return (
@@ -30,7 +30,7 @@ export default function FollowupsRemindersPage() {
           <li><strong>Add Notes</strong> &mdash; Record what needs to be discussed or actioned</li>
           <li><strong>Track Status</strong> &mdash; Mark as pending, completed, or overdue</li>
         </ul>
-        <ScreenshotPlaceholder caption="Follow-ups list with scheduled dates, client names, and status indicators" />
+        <DocScreenshot src="/docs/followups-reminders/followups.jpg" alt="Follow-ups list with scheduled dates, client names, and status indicators" />
       </section>
 
       {/* Creating a Follow-up */}

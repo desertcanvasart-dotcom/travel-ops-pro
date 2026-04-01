@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function TeamSettingsPage() {
   return (
@@ -25,7 +25,7 @@ export default function TeamSettingsPage() {
         <p className="text-gray-600 mb-3">
           See all team members with their roles and departments. You can see who is active and who is deactivated.
         </p>
-        <ScreenshotPlaceholder caption="Team members page showing member list with roles, departments, and status" />
+        <DocScreenshot src="/docs/team-settings/team-members.jpg" alt="Team members page showing member list with roles, departments, and status" />
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Inviting a New Team Member</h3>
         <ol className="list-decimal list-inside space-y-2 text-gray-700">
@@ -83,7 +83,7 @@ export default function TeamSettingsPage() {
           <li><strong>Default Margin</strong> &mdash; Set a default markup percentage</li>
           <li><strong>Language</strong> &mdash; Choose between English and Japanese for the interface</li>
         </ul>
-        <ScreenshotPlaceholder caption="Settings page showing preferences section with cost mode, currency, tier, and language options" />
+        <DocScreenshot src="/docs/team-settings/settings-preferences.jpg" alt="Settings page showing preferences section with cost mode, currency, tier, and language options" />
       </section>
 
       {/* Multilingual */}

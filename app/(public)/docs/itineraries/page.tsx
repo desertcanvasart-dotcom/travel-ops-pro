@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function ItinerariesPage() {
   return (
@@ -31,7 +31,7 @@ export default function ItinerariesPage() {
           <li><strong>Cancelled</strong> &mdash; Client declined</li>
         </ul>
         <p className="text-gray-600">Click any status card to filter the list. Use the search bar to find by client name, trip name, or itinerary code.</p>
-        <ScreenshotPlaceholder caption="Itineraries list page with status cards and search bar" />
+        <DocScreenshot src="/docs/itineraries/itinerary-list.jpg" alt="Itineraries list page with status cards and search bar" />
       </section>
 
       {/* Creating */}

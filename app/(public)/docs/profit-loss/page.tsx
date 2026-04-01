@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function ProfitLossPage() {
   return (
@@ -29,7 +29,7 @@ export default function ProfitLossPage() {
           <li><strong>Date Filters</strong> &mdash; Filter by month, quarter, year, or custom date range</li>
           <li><strong>Status Filters</strong> &mdash; View all trips or only confirmed/completed ones</li>
         </ul>
-        <ScreenshotPlaceholder caption="Profit & Loss overview with summary cards and trip list" />
+        <DocScreenshot src="/docs/profit-loss/pl-overview.jpg" alt="Profit & Loss overview with summary cards and trip list" />
       </section>
 
       {/* Per-Trip P&L */}

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function ExpensesCommissionsPage() {
   return (
@@ -36,7 +36,7 @@ export default function ExpensesCommissionsPage() {
           </li>
           <li>Click <strong>Save</strong></li>
         </ol>
-        <ScreenshotPlaceholder caption="Add expense form with category, amount, supplier, and itinerary link fields" />
+        <DocScreenshot src="/docs/expenses-commissions/expenses-list.jpg" alt="Add expense form with category, amount, supplier, and itinerary link fields" />
       </section>
 
       {/* Why Link */}
@@ -74,7 +74,7 @@ export default function ExpensesCommissionsPage() {
           <li>Link to a supplier or itinerary</li>
           <li>Set the status (Pending, Invoiced, Received/Paid, Cancelled, Disputed)</li>
         </ol>
-        <ScreenshotPlaceholder caption="Add commission form with type selection, base amount, rate, and calculated commission" />
+        <DocScreenshot src="/docs/expenses-commissions/commissions-list.jpg" alt="Add commission form with type selection, base amount, rate, and calculated commission" />
 
         <p className="mt-4 text-gray-600">
           The summary cards at the top show your total receivables, payables, and net commission position.

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function InvoicesPaymentsPage() {
   return (
@@ -23,7 +23,7 @@ export default function InvoicesPaymentsPage() {
         <p className="text-gray-600">
           Each invoice shows: invoice number, client name, type, issue date, due date, amount, amount paid, balance due, and status.
         </p>
-        <ScreenshotPlaceholder caption="Invoices list page with status filters and invoice table" />
+        <DocScreenshot src="/docs/invoices-payments/invoices-list.jpg" alt="Invoices list page with status filters and invoice table" />
       </section>
 
       {/* Creating */}

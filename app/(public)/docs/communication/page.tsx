@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function CommunicationPage() {
   return (
@@ -28,7 +28,7 @@ export default function CommunicationPage() {
           <li>Click a conversation to open the full chat on the right</li>
           <li>Type your reply at the bottom and press <strong>Send</strong></li>
         </ol>
-        <ScreenshotPlaceholder caption="WhatsApp inbox with conversation list on left and active chat on right" />
+        <DocScreenshot src="/docs/communication/whatsapp-inbox.jpg" alt="WhatsApp inbox with conversation list on left and active chat on right" />
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Features</h3>
         <ul className="list-disc list-inside space-y-2 text-gray-700">

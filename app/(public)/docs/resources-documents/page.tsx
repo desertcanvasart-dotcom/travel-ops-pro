@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function ResourcesDocumentsPage() {
   return (
@@ -33,7 +33,7 @@ export default function ResourcesDocumentsPage() {
           <li>Daily and hourly rates</li>
           <li>Availability</li>
         </ul>
-        <ScreenshotPlaceholder caption="Guides management page showing guide profiles with languages, rates, and availability" />
+        <DocScreenshot src="/docs/resources-documents/suppliers.jpg" alt="Guides management page showing guide profiles with languages, rates, and availability" />
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Transportation</h3>
         <p className="text-gray-600 mb-3">Manage transport suppliers:</p>
@@ -92,7 +92,7 @@ export default function ResourcesDocumentsPage() {
         <Tip>
           PDFs are generated in your browser &mdash; no waiting for server processing. You can also go to <strong>Documents</strong> in the sidebar to see all generated documents in one place.
         </Tip>
-        <ScreenshotPlaceholder caption="Documents page showing list of generated PDFs, contracts, and receipts with download buttons" />
+        <DocScreenshot src="/docs/resources-documents/documents.jpg" alt="Documents page showing list of generated PDFs, contracts, and receipts with download buttons" />
       </section>
 
       {/* Content Library */}

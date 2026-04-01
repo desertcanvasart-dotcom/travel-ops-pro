@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function MessageTemplatesPage() {
   return (
@@ -28,7 +28,7 @@ export default function MessageTemplatesPage() {
           <li>Filter by <strong>Category</strong> (Customer, Partner, Supplier, Internal)</li>
           <li>Filter by <strong>Channel</strong> (Email, WhatsApp, or Both)</li>
         </ul>
-        <ScreenshotPlaceholder caption="Message templates list page with search, category filter, and template cards" />
+        <DocScreenshot src="/docs/message-templates/templates-list.jpg" alt="Message templates list page with search, category filter, and template cards" />
       </section>
 
       {/* Creating a Template */}

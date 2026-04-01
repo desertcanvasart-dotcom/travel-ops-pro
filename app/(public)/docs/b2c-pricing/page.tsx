@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
 
 export default function B2CPricingPage() {
   return (
@@ -30,7 +30,7 @@ export default function B2CPricingPage() {
           <li>Applies your profit margin to get the client selling price</li>
           <li>Generates a full service breakdown with supplier costs and client prices</li>
         </ol>
-        <ScreenshotPlaceholder caption="Itinerary pricing calculation with service breakdown" />
+        <DocScreenshot src="/docs/b2c-pricing/pricing-grid.jpg" alt="Itinerary pricing calculation with service breakdown" />
       </section>
 
       {/* Rate Sources */}
