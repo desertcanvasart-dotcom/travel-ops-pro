@@ -29,7 +29,7 @@ export default function DashboardPage() {
           <li><strong>Client Quotes</strong> you have created</li>
           <li><strong>Upcoming Trips</strong> in the next 30 days</li>
         </ul>
-        <ScreenshotPlaceholder caption="Quick stats cards showing client count, follow-ups, quotes, and upcoming trips" />
+        <DocScreenshot src="/docs/dashboard/quick-stats.jpg" alt="Quick stats cards showing client count, follow-ups, quotes, and upcoming trips" />
       </section>
 
       {/* Quick Actions */}
