@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, DocScreenshot, Tip } from '../layout'
 
 export default function GettingStartedPage() {
   return (
@@ -25,7 +25,7 @@ export default function GettingStartedPage() {
         <p className="mt-3 text-gray-600">
           You can also sign in with your Google account by clicking the Google button.
         </p>
-        <ScreenshotPlaceholder caption="Login page with email, password fields, and Google sign-in button" />
+        <DocScreenshot src="/docs/getting-started/login-page.jpg" alt="Login page with email, password fields, and Google sign-in button" />
       </section>
 
       {/* First-Time Setup */}
