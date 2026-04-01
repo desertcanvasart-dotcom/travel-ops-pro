@@ -105,33 +105,6 @@ const platforms = [
     ),
   },
   {
-    name: 'LINE',
-    color: '#00B900',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
-        <path d="M12 1C5.926 1 1 5.148 1 10.333c0 4.618 4.1 8.49 9.641 9.222.375.08.886.248 1.015.569.117.291.076.746.037 1.041l-.164.984c-.05.3-.232 1.178 1.032.642 1.264-.535 6.819-4.017 9.304-6.876C23.375 14.27 23 12.39 23 10.333 23 5.148 18.074 1 12 1zm-3.26 12.289H6.572a.545.545 0 01-.545-.545V8.572a.545.545 0 011.09 0v3.627h1.623a.545.545 0 010 1.09zm2.087-.545a.545.545 0 01-1.09 0V8.572a.545.545 0 011.09 0v4.172zm4.602 0a.545.545 0 01-.42.531.544.544 0 01-.538-.217L12.73 10.8v1.944a.545.545 0 01-1.09 0V8.572a.545.545 0 01.42-.531.544.544 0 01.538.217l1.741 2.258V8.572a.545.545 0 011.09 0v4.172zm3.325-3.082a.545.545 0 010 1.09h-1.623v1.09h1.623a.545.545 0 010 1.09H16.586a.545.545 0 01-.545-.545V8.572a.545.545 0 01.545-.545h2.168a.545.545 0 010 1.09h-1.623v1.09h1.623z"/>
-      </svg>
-    ),
-  },
-  {
-    name: 'WeChat',
-    color: '#07C160',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
-        <path d="M8.813 11.612a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zm4.374 0a.92.92 0 11.002-1.842.92.92 0 01-.002 1.842zM9.474 16.88a.77.77 0 11.002-1.54.77.77 0 01-.002 1.54zm3.553 0a.77.77 0 11.001-1.54.77.77 0 01-.001 1.54zM12 2C6.477 2 2 5.813 2 10.5c0 2.65 1.404 5.023 3.6 6.613l-.9 2.687 3.15-1.575c.7.175 1.4.275 2.15.275.35 0 .7-.025 1.05-.063a5.76 5.76 0 01-.15-1.312c0-3.487 3.15-6.325 7.025-6.325.35 0 .7.025 1.038.075C18.6 5.95 15.575 2 12 2zm6.925 9.8c-3.3 0-5.975 2.263-5.975 5.05s2.675 5.05 5.975 5.05c.625 0 1.225-.088 1.8-.238L22.8 22.8l-.675-2.025C23.35 19.587 24 17.988 24 16.85c0-2.787-2.275-5.05-5.075-5.05z"/>
-      </svg>
-    ),
-  },
-  {
-    name: 'Messenger',
-    color: '#0084FF',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="#fff" className="w-[55%] h-[55%]">
-        <path d="M12 2C6.36 2 1 6.265 1 12.228c0 3.207 1.58 5.965 4.05 7.852V24l3.723-2.04c.993.276 2.046.424 3.227.424 5.64 0 11-4.265 11-10.228C23 6.265 17.64 2 12 2zm1.1 13.777L10.267 12.8 5.2 15.777l5.533-5.88 2.9 2.978 4.997-2.978-5.53 5.88z"/>
-      </svg>
-    ),
-  },
-  {
     name: 'Email',
     color: '#EA4335',
     icon: (
@@ -212,7 +185,7 @@ const socialProofStats = [
   { value: '53+', label: 'Operational Modules' },
   { value: '15', label: 'Rate Categories' },
   { value: '4', label: 'Service Tiers' },
-  { value: '5', label: 'Messaging Platforms' },
+  { value: '2', label: 'Messaging Platforms (more coming soon)' },
 ]
 
 const problemScenarios = [
@@ -250,7 +223,7 @@ const pricingPills = [
   { icon: Star, label: '4 Tiers (Budget → Luxury)' },
   { icon: Globe, label: 'Dual Passport Pricing' },
   { icon: Truck, label: 'Auto Vehicle Selection' },
-  { icon: RefreshCcw, label: 'Live Currency Conversion' },
+  { icon: RefreshCcw, label: 'Multi-Currency Support' },
   { icon: BarChart3, label: 'Per-Trip Margin' },
 ]
 
@@ -274,7 +247,7 @@ const platformStages = [
   {
     step: 3,
     headline: 'Assign, Confirm, Track',
-    description: 'Assign guides, vehicles, and hotels directly to each itinerary day. Send supplier vouchers via WhatsApp with one click. Track confirmations. Calendar view shows every active tour across your team.',
+    description: 'Assign guides, vehicles, and hotels to each itinerary. Send supplier vouchers via WhatsApp with one click. Calendar view shows every active tour across your team with drag-to-reschedule and conflict detection.',
     screenshotNote: 'Capture /calendar showing multiple active tours with assigned resources',
     mockupImage: '/mockups/calendar.png',
     icon: Calendar,
@@ -298,7 +271,7 @@ const capabilityClusters = [
       'WhatsApp parsing with 200+ Egyptian abbreviation recognition',
       'Auto-itinerary generation from unstructured conversations',
       'Confidence scoring on every extracted field',
-      'Multi-language document generation (EN, JP, FR, ES)',
+      'Multi-language document generation (EN, JP)',
     ],
     badge: '5 AI modules',
   },
@@ -319,10 +292,10 @@ const capabilityClusters = [
     iconBg: 'bg-blue-100 text-blue-700',
     title: 'Tour Building',
     bullets: [
-      'Visual drag-and-drop day planner',
-      'Pre-built templates with auto-pricing',
+      'Drag-and-drop day planner with auto-pricing',
+      'Pre-built templates by destination',
       'Content library with per-tier descriptions',
-      'Interactive map view of itinerary routes',
+      'Instant pricing recalculation on any change',
     ],
     badge: 'End-to-end builder',
   },
