@@ -61,7 +61,7 @@ export default function DashboardPage() {
         <p className="text-gray-600">
           Small indicators showing whether the AI Parser, B2B Packages, and Email Service are online and working.
         </p>
-        <ScreenshotPlaceholder caption="System status indicators showing online services" />
+        <DocScreenshot src="/docs/dashboard/system-status.jpg" alt="Quick Actions, Recent Activity, Today's Summary, and System Status indicators" />
       </section>
 
       {/* Navigation */}
