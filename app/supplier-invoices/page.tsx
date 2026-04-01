@@ -19,6 +19,8 @@ import {
   Upload,
   Sparkles,
   FileImage,
+  Trash2,
+  Building2,
 } from 'lucide-react'
 
 interface SupplierInvoice {
@@ -67,6 +69,44 @@ const MATCH_STYLES: Record<string, { bg: string; text: string }> = {
 
 const CURRENCIES: Record<string, string> = { EUR: '\u20AC', USD: '$', GBP: '\u00A3', EGP: 'E\u00A3' }
 
+const SERVICE_CATEGORIES = [
+  { value: 'guide', label: 'Tour Guide' },
+  { value: 'driver', label: 'Driver' },
+  { value: 'hotel', label: 'Hotel/Accommodation' },
+  { value: 'transportation', label: 'Transportation' },
+  { value: 'entrance', label: 'Entrance Fees' },
+  { value: 'meal', label: 'Meals' },
+  { value: 'airport_staff', label: 'Airport Staff' },
+  { value: 'hotel_staff', label: 'Hotel Staff' },
+  { value: 'ground_handler', label: 'Ground Handler' },
+  { value: 'tipping', label: 'Tipping' },
+  { value: 'permits', label: 'Permits' },
+  { value: 'fuel', label: 'Fuel' },
+  { value: 'other', label: 'Other' },
+]
+
+interface LineItem {
+  service_type: string
+  description: string
+  quantity: number
+  unit_price: number
+  amount: number
+}
+
+interface Supplier {
+  id: string
+  name: string
+  type: string
+}
+
+const emptyLineItem = (): LineItem => ({
+  service_type: '',
+  description: '',
+  quantity: 1,
+  unit_price: 0,
+  amount: 0,
+})
+
 export default function SupplierInvoicesPage() {
   const router = useRouter()
   const t = useTranslations('common')
@@ -78,21 +118,136 @@ export default function SupplierInvoicesPage() {
   const [matchFilter, setMatchFilter] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
 
+  // Supplier list for dropdown
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [supplierSearch, setSupplierSearch] = useState('')
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false)
+  const [supplierRates, setSupplierRates] = useState<Record<string, unknown>[]>([])
+
   // Create form state
   const [formData, setFormData] = useState({
     supplier_invoice_number: '',
     supplier_name: '',
+    supplier_id: '',
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: '',
-    amount: '',
     currency: 'EUR',
     tax_amount: '',
     description: '',
+    line_items: [emptyLineItem()] as LineItem[],
   })
   const [creating, setCreating] = useState(false)
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   const [parsedConfidence, setParsedConfidence] = useState<Record<string, string> | null>(null)
+
+  // Fetch suppliers when modal opens
+  useEffect(() => {
+    if (showCreateModal && suppliers.length === 0) {
+      fetch('/api/suppliers?status=active')
+        .then(r => r.json())
+        .then(data => setSuppliers((data || []).map((s: Record<string, unknown>) => ({ id: s.id as string, name: s.name as string, type: s.type as string }))))
+        .catch(() => {})
+    }
+  }, [showCreateModal])
+
+  // Fetch supplier rates when supplier changes
+  useEffect(() => {
+    if (formData.supplier_id) {
+      fetch(`/api/supplier-rates?supplier_id=${formData.supplier_id}`)
+        .then(r => r.json())
+        .then(data => setSupplierRates(data.data || []))
+        .catch(() => setSupplierRates([]))
+    } else {
+      setSupplierRates([])
+    }
+  }, [formData.supplier_id])
+
+  const computedTotal = formData.line_items.reduce((sum, li) => sum + (li.amount || 0), 0)
+  const computedGrandTotal = computedTotal + (parseFloat(formData.tax_amount) || 0)
+
+  const handleSelectSupplier = (supplier: Supplier) => {
+    setFormData(prev => ({ ...prev, supplier_name: supplier.name, supplier_id: supplier.id }))
+    setSupplierSearch(supplier.name)
+    setShowSupplierDropdown(false)
+  }
+
+  const handleSupplierInputChange = (value: string) => {
+    setSupplierSearch(value)
+    setFormData(prev => ({ ...prev, supplier_name: value, supplier_id: '' }))
+    setShowSupplierDropdown(true)
+  }
+
+  const filteredSuppliers = suppliers.filter(s =>
+    s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+  )
+
+  const updateLineItem = (index: number, field: keyof LineItem, value: string | number) => {
+    setFormData(prev => {
+      const items = [...prev.line_items]
+      const item = { ...items[index], [field]: value }
+      // Recalculate amount
+      if (field === 'quantity' || field === 'unit_price') {
+        item.amount = Number(item.quantity) * Number(item.unit_price)
+      }
+      items[index] = item
+      return { ...prev, line_items: items }
+    })
+  }
+
+  const addLineItem = () => {
+    setFormData(prev => ({ ...prev, line_items: [...prev.line_items, emptyLineItem()] }))
+  }
+
+  const removeLineItem = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      line_items: prev.line_items.length > 1 ? prev.line_items.filter((_, i) => i !== index) : prev.line_items,
+    }))
+  }
+
+  const handleServiceTypeChange = (index: number, serviceType: string) => {
+    updateLineItem(index, 'service_type', serviceType)
+    // Auto-fill description from category label
+    const cat = SERVICE_CATEGORIES.find(c => c.value === serviceType)
+    if (cat) updateLineItem(index, 'description', cat.label)
+
+    // Try to find a matching rate
+    if (supplierRates.length > 0 && serviceType) {
+      const matchingRate = supplierRates.find((r: Record<string, unknown>) => {
+        const rateType = String(r._rate_type || '')
+        if (serviceType === 'hotel' && rateType.includes('accommodation')) return true
+        if (serviceType === 'transportation' && rateType.includes('transport')) return true
+        if (serviceType === 'guide' && rateType.includes('guide')) return true
+        if (serviceType === 'meal' && rateType.includes('meal')) return true
+        if (serviceType === 'entrance' && rateType.includes('entrance')) return true
+        return false
+      })
+      if (matchingRate) {
+        const price = Number(matchingRate.base_rate_eur || matchingRate.rate_eur || matchingRate.base_rate || 0)
+        if (price > 0) {
+          updateLineItem(index, 'unit_price', price)
+        }
+      }
+    }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      supplier_invoice_number: '',
+      supplier_name: '',
+      supplier_id: '',
+      invoice_date: new Date().toISOString().split('T')[0],
+      due_date: '',
+      currency: 'EUR',
+      tax_amount: '',
+      description: '',
+      line_items: [emptyLineItem()],
+    })
+    setSupplierSearch('')
+    setParsedConfidence(null)
+    setParseError(null)
+  }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -119,23 +274,39 @@ export default function SupplierInvoicesPage() {
       }
 
       const d = result.data
+
+      // Map parsed line items
+      const parsedLineItems: LineItem[] = (d.line_items || []).map((li: Record<string, unknown>) => ({
+        service_type: '',
+        description: String(li.description || ''),
+        quantity: Number(li.quantity || 1),
+        unit_price: Number(li.unit_price || li.amount || 0),
+        amount: Number(li.amount || 0),
+      }))
+
+      // Try to match parsed supplier name to existing supplier
+      const matchedSupplier = d.supplier_name
+        ? suppliers.find(s => s.name.toLowerCase().includes(String(d.supplier_name).toLowerCase()))
+        : undefined
+
       setFormData({
         supplier_invoice_number: d.supplier_invoice_number || '',
-        supplier_name: d.supplier_name || '',
+        supplier_name: matchedSupplier?.name || d.supplier_name || '',
+        supplier_id: matchedSupplier?.id || '',
         invoice_date: d.invoice_date || new Date().toISOString().split('T')[0],
         due_date: d.due_date || '',
-        amount: d.total_amount ? String(d.total_amount) : '',
         currency: d.currency || 'EUR',
         tax_amount: d.tax_amount ? String(d.tax_amount) : '',
         description: d.description || '',
+        line_items: parsedLineItems.length > 0 ? parsedLineItems : [emptyLineItem()],
       })
+      setSupplierSearch(matchedSupplier?.name || d.supplier_name || '')
       setParsedConfidence(d.confidence || null)
     } catch (err) {
       console.error('Parse error:', err)
       setParseError('Failed to process document. Please try again.')
     } finally {
       setParsing(false)
-      // Reset file input
       e.target.value = ''
     }
   }
@@ -163,30 +334,28 @@ export default function SupplierInvoicesPage() {
   }
 
   const handleCreate = async () => {
-    if (!formData.supplier_invoice_number || !formData.supplier_name || !formData.amount) return
+    if (!formData.supplier_invoice_number || !formData.supplier_name || computedTotal <= 0) return
     setCreating(true)
     try {
       const res = await fetch('/api/supplier-invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData,
-          amount: parseFloat(formData.amount),
-          tax_amount: formData.tax_amount ? parseFloat(formData.tax_amount) : 0,
+          supplier_invoice_number: formData.supplier_invoice_number,
+          supplier_name: formData.supplier_name,
+          supplier_id: formData.supplier_id || null,
+          invoice_date: formData.invoice_date,
+          due_date: formData.due_date || null,
+          currency: formData.currency,
+          amount: computedGrandTotal,
+          tax_amount: parseFloat(formData.tax_amount) || 0,
+          description: formData.description,
+          line_items: formData.line_items.filter(li => li.amount > 0),
         }),
       })
       if (res.ok) {
         setShowCreateModal(false)
-        setFormData({
-          supplier_invoice_number: '',
-          supplier_name: '',
-          invoice_date: new Date().toISOString().split('T')[0],
-          due_date: '',
-          amount: '',
-          currency: 'EUR',
-          tax_amount: '',
-          description: '',
-        })
+        resetForm()
         fetchInvoices()
       }
     } catch (error) {
@@ -361,7 +530,7 @@ export default function SupplierInvoicesPage() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => { setShowCreateModal(false); setParseError(null); setParsedConfidence(null) }} />
-          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">New Supplier Invoice</h3>
 
             {/* Upload & Parse Zone */}
@@ -416,6 +585,7 @@ export default function SupplierInvoicesPage() {
             </div>
 
             <div className="space-y-4">
+              {/* Row 1: Invoice # + Supplier dropdown */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Supplier Invoice #</label>
@@ -427,19 +597,42 @@ export default function SupplierInvoicesPage() {
                     placeholder="e.g. INV-001"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Supplier Name</label>
-                  <input
-                    type="text"
-                    value={formData.supplier_name}
-                    onChange={e => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                    placeholder="Supplier name"
-                  />
+                <div className="relative">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Supplier</label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={supplierSearch}
+                      onChange={e => handleSupplierInputChange(e.target.value)}
+                      onFocus={() => setShowSupplierDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowSupplierDropdown(false), 200)}
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                      placeholder="Search or type supplier..."
+                    />
+                  </div>
+                  {showSupplierDropdown && filteredSuppliers.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                      {filteredSuppliers.slice(0, 15).map(s => (
+                        <button
+                          key={s.id}
+                          onMouseDown={() => handleSelectSupplier(s)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <span className="font-medium text-gray-900">{s.name}</span>
+                          <span className="text-xs text-gray-400">{s.type}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {formData.supplier_id && (
+                    <p className="text-xs text-green-600 mt-0.5">Linked to supplier record</p>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Row 2: Dates + Currency */}
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Invoice Date</label>
                   <input
@@ -458,10 +651,7 @@ export default function SupplierInvoicesPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-1">
+                <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
                   <select
                     value={formData.currency}
@@ -474,30 +664,119 @@ export default function SupplierInvoicesPage() {
                     <option value="EGP">EGP</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={e => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                    placeholder="0.00"
-                  />
+              </div>
+
+              {/* Line Items */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-gray-700">Line Items</label>
+                  <button
+                    type="button"
+                    onClick={addLineItem}
+                    className="text-xs font-medium text-[#647C47] hover:text-[#4f6238]"
+                  >
+                    + Add Line
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Tax</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.tax_amount}
-                    onChange={e => setFormData(prev => ({ ...prev, tax_amount: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                    placeholder="0.00"
-                  />
+
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="grid grid-cols-12 gap-1 px-2 py-1.5 bg-gray-50 text-[10px] font-medium text-gray-500 uppercase">
+                    <div className="col-span-3">Service</div>
+                    <div className="col-span-4">Description</div>
+                    <div className="col-span-1 text-center">Qty</div>
+                    <div className="col-span-2 text-right">Price</div>
+                    <div className="col-span-1 text-right">Total</div>
+                    <div className="col-span-1"></div>
+                  </div>
+
+                  {/* Rows */}
+                  {formData.line_items.map((item, idx) => (
+                    <div key={idx} className="grid grid-cols-12 gap-1 px-2 py-1.5 border-t border-gray-100 items-center">
+                      <div className="col-span-3">
+                        <select
+                          value={item.service_type}
+                          onChange={e => handleServiceTypeChange(idx, e.target.value)}
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                        >
+                          <option value="">Select...</option>
+                          {SERVICE_CATEGORIES.map(c => (
+                            <option key={c.value} value={c.value}>{c.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-4">
+                        <input
+                          type="text"
+                          value={item.description}
+                          onChange={e => updateLineItem(idx, 'description', e.target.value)}
+                          className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                          placeholder="Description"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={e => updateLineItem(idx, 'quantity', parseInt(e.target.value) || 1)}
+                          className="w-full px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.unit_price || ''}
+                          onChange={e => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
+                          className="w-full px-1.5 py-1 text-xs text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="col-span-1 text-right">
+                        <span className="text-xs font-medium text-gray-700">
+                          {item.amount > 0 ? item.amount.toFixed(2) : '-'}
+                        </span>
+                      </div>
+                      <div className="col-span-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removeLineItem(idx)}
+                          className="p-0.5 text-gray-300 hover:text-red-500"
+                          disabled={formData.line_items.length === 1}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Totals */}
+                  <div className="border-t border-gray-200 bg-gray-50 px-2 py-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">Subtotal</span>
+                      <span className="font-medium">{CURRENCIES[formData.currency]}{computedTotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-1">
+                      <span className="text-gray-500">Tax</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.tax_amount}
+                        onChange={e => setFormData(prev => ({ ...prev, tax_amount: e.target.value }))}
+                        className="w-20 px-1.5 py-0.5 text-xs text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="flex justify-between text-sm font-semibold mt-2 pt-2 border-t border-gray-200">
+                      <span>Total</span>
+                      <span className="text-[#647C47]">{CURRENCIES[formData.currency]}{computedGrandTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
+              {/* Description */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
                 <textarea
@@ -512,14 +791,14 @@ export default function SupplierInvoicesPage() {
 
             <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => { setShowCreateModal(false); resetForm() }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreate}
-                disabled={creating || !formData.supplier_invoice_number || !formData.supplier_name || !formData.amount}
+                disabled={creating || !formData.supplier_invoice_number || !formData.supplier_name || computedTotal <= 0}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
               >
                 {creating && <Loader2 className="w-4 h-4 animate-spin" />}
