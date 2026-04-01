@@ -218,70 +218,70 @@ export default function ProfitLossPage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">🎯</span>
               <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.totalTrips')}</p>
-            <p className="text-2xl font-semibold text-gray-900">{summary.total_trips}</p>
+            <p className="text-xl font-semibold text-gray-900 truncate">{summary.total_trips}</p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">💰</span>
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.totalRevenue')}</p>
-            <p className="text-2xl font-semibold text-blue-600">€{summary.total_revenue.toLocaleString()}</p>
+            <p className="text-lg font-semibold text-blue-600 truncate" title={`€${summary.total_revenue.toLocaleString()}`}>€{summary.total_revenue.toLocaleString()}</p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">💸</span>
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.totalExpenses')}</p>
-            <p className="text-2xl font-semibold text-red-600">€{summary.total_expenses.toLocaleString()}</p>
+            <p className="text-lg font-semibold text-red-600 truncate" title={`€${summary.total_expenses.toLocaleString()}`}>€{summary.total_expenses.toLocaleString()}</p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">📈</span>
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.grossProfit')}</p>
-            <p className={`text-2xl font-semibold ${getProfitColor(summary.total_profit)}`}>
+            <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_profit)}`} title={`€${summary.total_profit.toLocaleString()}`}>
               €{summary.total_profit.toLocaleString()}
             </p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">📊</span>
               <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.avgMargin')}</p>
-            <p className="text-2xl font-semibold text-purple-600">{summary.average_margin.toFixed(1)}%</p>
+            <p className="text-xl font-semibold text-purple-600 truncate">{summary.average_margin.toFixed(1)}%</p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">✅</span>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.profitable')}</p>
-            <p className="text-2xl font-semibold text-emerald-600">{summary.profitable_trips}</p>
+            <p className="text-xl font-semibold text-emerald-600 truncate">{summary.profitable_trips}</p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">⚠️</span>
               <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.lossMaking')}</p>
-            <p className="text-2xl font-semibold text-orange-600">{summary.loss_trips}</p>
+            <p className="text-xl font-semibold text-orange-600 truncate">{summary.loss_trips}</p>
           </div>
         </div>
       )}
