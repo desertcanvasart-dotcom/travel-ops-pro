@@ -9,6 +9,8 @@ const supabase = createClient(
 // GET - Fetch email settings
 export async function GET(request: NextRequest) {
   try {
+    const userId = request.nextUrl.searchParams.get('userId')
+
     // Fetch saved email settings
     const { data: settingsData } = await supabase
       .from('user_settings')
@@ -18,14 +20,31 @@ export async function GET(request: NextRequest) {
     const emailSettings = settingsData?.email_settings || {}
 
     // Check actual Gmail connection from gmail_tokens table
-    const { data: tokenData } = await supabase
-      .from('gmail_tokens')
-      .select('email_address, token_expiry')
-      .limit(1)
-      .single()
+    // Try user-specific token first, then fall back to any token
+    let tokenData = null
 
-    const gmailConnected = !!tokenData?.email_address
-    const gmailEmail = tokenData?.email_address || ''
+    if (userId) {
+      const { data } = await supabase
+        .from('gmail_tokens')
+        .select('email_address, token_expiry, email')
+        .eq('user_id', userId)
+        .single()
+      tokenData = data
+    }
+
+    // Fallback: check for any connected Gmail account
+    if (!tokenData) {
+      const { data } = await supabase
+        .from('gmail_tokens')
+        .select('email_address, token_expiry, email')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single()
+      tokenData = data
+    }
+
+    const gmailEmail = tokenData?.email_address || tokenData?.email || ''
+    const gmailConnected = !!gmailEmail
 
     return NextResponse.json({
       gmail_connected: gmailConnected,

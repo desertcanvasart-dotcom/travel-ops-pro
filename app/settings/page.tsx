@@ -321,7 +321,7 @@ function SettingsContent() {
 
   const fetchEmailSettings = async () => {
     try {
-      const response = await fetch('/api/settings/email')
+      const response = await fetch(`/api/settings/email${user?.id ? `?userId=${user.id}` : ''}`)
       if (response.ok) {
         const data = await response.json()
         setEmailSettings(data)
