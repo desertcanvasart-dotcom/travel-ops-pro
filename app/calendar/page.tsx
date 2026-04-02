@@ -103,6 +103,19 @@ interface Stats {
   conflictCount: number
 }
 
+interface ConflictDetail {
+  bookingA: string
+  bookingB: string
+  bookingACode: string
+  bookingBCode: string
+  clientA: string
+  clientB: string
+  resourceType: 'guide' | 'vehicle' | 'date_overlap'
+  resourceName: string
+  overlapStart: string
+  overlapEnd: string
+}
+
 export default function CalendarPage() {
   const t = useTranslations('calendar')
   const dialog = useConfirmDialog()
@@ -114,6 +127,8 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   const [conflicts, setConflicts] = useState<string[]>([])
+  const [conflictDetails, setConflictDetails] = useState<ConflictDetail[]>([])
+  const [showConflictPanel, setShowConflictPanel] = useState(false)
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [pendingMove, setPendingMove] = useState<{ bookingId: string, newDate: Date } | null>(null)
@@ -192,30 +207,69 @@ export default function CalendarPage() {
 
   const detectConflicts = () => {
     const conflictIds: string[] = []
-    
+    const details: ConflictDetail[] = []
+
     for (let i = 0; i < bookings.length; i++) {
       for (let j = i + 1; j < bookings.length; j++) {
-        const booking1 = bookings[i]
-        const booking2 = bookings[j]
-        
-        const start1 = parseISO(booking1.start_date)
-        const end1 = parseISO(booking1.end_date)
-        const start2 = parseISO(booking2.start_date)
-        const end2 = parseISO(booking2.end_date)
-        
-        const overlaps = (
-          (start1 <= end2 && end1 >= start2) ||
-          (start2 <= end1 && end2 >= start1)
-        )
-        
+        const b1 = bookings[i]
+        const b2 = bookings[j]
+
+        const start1 = parseISO(b1.start_date)
+        const end1 = parseISO(b1.end_date)
+        const start2 = parseISO(b2.start_date)
+        const end2 = parseISO(b2.end_date)
+
+        const overlaps = (start1 <= end2 && end1 >= start2)
+
         if (overlaps) {
-          if (!conflictIds.includes(booking1.id)) conflictIds.push(booking1.id)
-          if (!conflictIds.includes(booking2.id)) conflictIds.push(booking2.id)
+          if (!conflictIds.includes(b1.id)) conflictIds.push(b1.id)
+          if (!conflictIds.includes(b2.id)) conflictIds.push(b2.id)
+
+          const overlapStart = format(start1 > start2 ? start1 : start2, 'MMM d')
+          const overlapEnd = format(end1 < end2 ? end1 : end2, 'MMM d, yyyy')
+
+          // Check for shared guide
+          if (b1.assigned_guide_id && b2.assigned_guide_id && b1.assigned_guide_id === b2.assigned_guide_id) {
+            details.push({
+              bookingA: b1.id, bookingB: b2.id,
+              bookingACode: b1.itinerary_code, bookingBCode: b2.itinerary_code,
+              clientA: b1.client_name, clientB: b2.client_name,
+              resourceType: 'guide',
+              resourceName: b1.guide_name || 'Unknown Guide',
+              overlapStart, overlapEnd,
+            })
+          }
+          // Check for shared vehicle
+          if (b1.assigned_vehicle_id && b2.assigned_vehicle_id && b1.assigned_vehicle_id === b2.assigned_vehicle_id) {
+            details.push({
+              bookingA: b1.id, bookingB: b2.id,
+              bookingACode: b1.itinerary_code, bookingBCode: b2.itinerary_code,
+              clientA: b1.client_name, clientB: b2.client_name,
+              resourceType: 'vehicle',
+              resourceName: b1.vehicle_name || 'Unknown Vehicle',
+              overlapStart, overlapEnd,
+            })
+          }
+          // If no shared resource, it's a date overlap
+          if (
+            !(b1.assigned_guide_id && b2.assigned_guide_id && b1.assigned_guide_id === b2.assigned_guide_id) &&
+            !(b1.assigned_vehicle_id && b2.assigned_vehicle_id && b1.assigned_vehicle_id === b2.assigned_vehicle_id)
+          ) {
+            details.push({
+              bookingA: b1.id, bookingB: b2.id,
+              bookingACode: b1.itinerary_code, bookingBCode: b2.itinerary_code,
+              clientA: b1.client_name, clientB: b2.client_name,
+              resourceType: 'date_overlap',
+              resourceName: '',
+              overlapStart, overlapEnd,
+            })
+          }
         }
       }
     }
-    
+
     setConflicts(conflictIds)
+    setConflictDetails(details)
   }
 
   const applyFilters = () => {
@@ -356,6 +410,18 @@ export default function CalendarPage() {
       const end = endOfDay(parseISO(booking.end_date))
       return isWithinInterval(date, { start, end })
     })
+  }
+
+  const getConflictTooltip = (bookingId: string): string => {
+    const related = conflictDetails.filter(c => c.bookingA === bookingId || c.bookingB === bookingId)
+    if (related.length === 0) return ''
+    return related.map(c => {
+      const otherCode = c.bookingA === bookingId ? c.bookingBCode : c.bookingACode
+      const otherClient = c.bookingA === bookingId ? c.clientB : c.clientA
+      if (c.resourceType === 'guide') return `Guide conflict (${c.resourceName}) with ${otherCode} (${otherClient})`
+      if (c.resourceType === 'vehicle') return `Vehicle conflict (${c.resourceName}) with ${otherCode} (${otherClient})`
+      return `Date overlap with ${otherCode} (${otherClient})`
+    }).join('\n')
   }
 
   const getStatusColor = (status: string) => {
@@ -557,6 +623,10 @@ export default function CalendarPage() {
               value={stats.upcomingBookings}
               color="orange"
               badge={stats.conflictCount > 0 ? `${stats.conflictCount} ${t('stats.conflicts')}` : undefined}
+              onBadgeClick={() => {
+                setShowConflictPanel(!showConflictPanel)
+                setFilters(prev => ({ ...prev, showConflictsOnly: !showConflictPanel }))
+              }}
             />
           </div>
         )}
@@ -577,6 +647,105 @@ export default function CalendarPage() {
                   <div className="text-xs font-medium text-gray-900">{getStatusLabel(status)}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Conflict Detail Panel */}
+        {showConflictPanel && conflictDetails.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-orange-100 border-b border-orange-200">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-orange-600" />
+                <h3 className="text-sm font-bold text-orange-900">
+                  {conflictDetails.length} Conflict{conflictDetails.length !== 1 ? 's' : ''} Detected
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowConflictPanel(false)
+                  setFilters(prev => ({ ...prev, showConflictsOnly: false }))
+                }}
+                className="text-orange-600 hover:text-orange-800 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="divide-y divide-orange-200 max-h-[300px] overflow-y-auto">
+              {/* Guide conflicts */}
+              {conflictDetails.filter(c => c.resourceType === 'guide').length > 0 && (
+                <div className="px-4 py-3">
+                  <p className="text-xs font-semibold text-orange-800 uppercase tracking-wide mb-2">Guide Conflicts</p>
+                  <div className="space-y-2">
+                    {conflictDetails.filter(c => c.resourceType === 'guide').map((c, i) => (
+                      <div key={`guide-${i}`} className="flex items-start gap-3 bg-white rounded-lg p-2.5 border border-orange-200">
+                        <User className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900">{c.resourceName}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            <Link href={`/itineraries/${c.bookingA}`} className="text-orange-700 hover:underline font-medium">{c.bookingACode}</Link>
+                            <span className="text-gray-400"> ({c.clientA}) </span>
+                            <span className="text-gray-400 mx-1">↔</span>
+                            <Link href={`/itineraries/${c.bookingB}`} className="text-orange-700 hover:underline font-medium">{c.bookingBCode}</Link>
+                            <span className="text-gray-400"> ({c.clientB})</span>
+                          </p>
+                          <p className="text-xs text-orange-600 mt-0.5">Overlap: {c.overlapStart} – {c.overlapEnd}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Vehicle conflicts */}
+              {conflictDetails.filter(c => c.resourceType === 'vehicle').length > 0 && (
+                <div className="px-4 py-3">
+                  <p className="text-xs font-semibold text-orange-800 uppercase tracking-wide mb-2">Vehicle Conflicts</p>
+                  <div className="space-y-2">
+                    {conflictDetails.filter(c => c.resourceType === 'vehicle').map((c, i) => (
+                      <div key={`vehicle-${i}`} className="flex items-start gap-3 bg-white rounded-lg p-2.5 border border-orange-200">
+                        <Car className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900">{c.resourceName}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            <Link href={`/itineraries/${c.bookingA}`} className="text-orange-700 hover:underline font-medium">{c.bookingACode}</Link>
+                            <span className="text-gray-400"> ({c.clientA}) </span>
+                            <span className="text-gray-400 mx-1">↔</span>
+                            <Link href={`/itineraries/${c.bookingB}`} className="text-orange-700 hover:underline font-medium">{c.bookingBCode}</Link>
+                            <span className="text-gray-400"> ({c.clientB})</span>
+                          </p>
+                          <p className="text-xs text-orange-600 mt-0.5">Overlap: {c.overlapStart} – {c.overlapEnd}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Date overlaps (no shared resource) */}
+              {conflictDetails.filter(c => c.resourceType === 'date_overlap').length > 0 && (
+                <div className="px-4 py-3">
+                  <p className="text-xs font-semibold text-orange-800 uppercase tracking-wide mb-2">Date Overlaps</p>
+                  <div className="space-y-2">
+                    {conflictDetails.filter(c => c.resourceType === 'date_overlap').map((c, i) => (
+                      <div key={`overlap-${i}`} className="flex items-start gap-3 bg-white rounded-lg p-2.5 border border-orange-100">
+                        <CalendarIcon className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs text-gray-600">
+                            <Link href={`/itineraries/${c.bookingA}`} className="text-orange-700 hover:underline font-medium">{c.bookingACode}</Link>
+                            <span className="text-gray-400"> ({c.clientA}) </span>
+                            <span className="text-gray-400 mx-1">↔</span>
+                            <Link href={`/itineraries/${c.bookingB}`} className="text-orange-700 hover:underline font-medium">{c.bookingBCode}</Link>
+                            <span className="text-gray-400"> ({c.clientB})</span>
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">Overlap: {c.overlapStart} – {c.overlapEnd}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -842,9 +1011,9 @@ export default function CalendarPage() {
         </div>
 
         {/* Calendar Views */}
-        {viewMode === 'month' && <MonthView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} t={t} />}
-        {viewMode === 'week' && <WeekView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} t={t} />}
-        {viewMode === 'timeline' && <TimelineView bookings={filteredBookings} conflicts={conflicts} getStatusColor={getStatusColor} t={t} />}
+        {viewMode === 'month' && <MonthView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} getConflictTooltip={getConflictTooltip} t={t} />}
+        {viewMode === 'week' && <WeekView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} getConflictTooltip={getConflictTooltip} t={t} />}
+        {viewMode === 'timeline' && <TimelineView bookings={filteredBookings} conflicts={conflicts} getStatusColor={getStatusColor} getConflictTooltip={getConflictTooltip} t={t} />}
 
         {/* Drag Overlay */}
         <DragOverlay>
@@ -878,7 +1047,7 @@ export default function CalendarPage() {
 }
 
 // Stat Card Component
-function StatCard({ icon, label, value, color, badge }: any) {
+function StatCard({ icon, label, value, color, badge, onBadgeClick }: any) {
   const dotColors: any = {
     blue: 'bg-blue-600',
     green: 'bg-green-600',
@@ -894,9 +1063,12 @@ function StatCard({ icon, label, value, color, badge }: any) {
           <div className={`w-1.5 h-1.5 rounded-full ${dotColors[color]}`} />
         </div>
         {badge && (
-          <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+          <button
+            onClick={onBadgeClick}
+            className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full hover:bg-orange-200 transition-colors cursor-pointer"
+          >
             {badge}
-          </span>
+          </button>
         )}
       </div>
       <div>
@@ -1011,6 +1183,7 @@ function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflic
             booking={booking}
             getStatusColor={getStatusColor}
             conflicts={conflicts}
+            getConflictTooltip={getConflictTooltip}
           />
         ))}
         {bookings.length > 3 && (
@@ -1023,7 +1196,7 @@ function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflic
   )
 }
 
-function DraggableBooking({ booking, getStatusColor, conflicts }: any) {
+function DraggableBooking({ booking, getStatusColor, conflicts, getConflictTooltip }: any) {
   const { useDraggable } = require('@dnd-kit/core')
   
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -1043,6 +1216,7 @@ function DraggableBooking({ booking, getStatusColor, conflicts }: any) {
       className={`text-xs p-1 rounded ${getStatusColor(booking.payment_status)} text-white hover:opacity-80 transition-opacity cursor-grab active:cursor-grabbing ${
         conflicts.includes(booking.id) ? 'ring-2 ring-orange-700' : ''
       } ${isDragging ? 'opacity-50' : ''}`}
+      title={conflicts.includes(booking.id) && getConflictTooltip ? getConflictTooltip(booking.id) : undefined}
     >
       <div className="font-medium truncate flex items-center justify-between gap-1">
         <span className="truncate">{booking.client_name}</span>
@@ -1099,6 +1273,7 @@ function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getSta
                       className={`block p-2 rounded-lg ${getStatusColor(booking.payment_status)} text-white hover:opacity-80 transition-opacity ${
                         conflicts.includes(booking.id) ? 'ring-2 ring-orange-700' : ''
                       }`}
+                      title={conflicts.includes(booking.id) && getConflictTooltip ? getConflictTooltip(booking.id) : undefined}
                     >
                       <div className="font-semibold text-xs mb-1">
                         {booking.client_name}
