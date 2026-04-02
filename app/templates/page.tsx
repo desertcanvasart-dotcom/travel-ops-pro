@@ -997,6 +997,25 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
       return
     }
 
+    // Check for unfilled placeholders in the preview
+    const unfilledPattern = /\{\{[A-Za-z_]+\}\}/g
+    const unfilledInPreview = preview.match(unfilledPattern) || []
+    const subjectText = template.subject ? Object.entries(filledValues).reduce(
+      (s, [k, v]) => s.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v),
+      template.subject
+    ) : ''
+    const unfilledInSubject = subjectText.match(unfilledPattern) || []
+    const allUnfilled = [...new Set([...unfilledInPreview, ...unfilledInSubject])]
+
+    if (allUnfilled.length > 0) {
+      const proceed = await dialog.confirm(
+        'Unfilled Placeholders',
+        `This message has ${allUnfilled.length} unfilled placeholder(s): ${allUnfilled.join(', ')}.\n\nLink an itinerary to auto-fill them, or edit the values above.\n\nSend anyway?`,
+        'warning'
+      )
+      if (!proceed) return
+    }
+
     setSending(true)
     try {
       const response = await fetch('/api/templates/send', {

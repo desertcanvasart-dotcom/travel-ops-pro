@@ -1846,6 +1846,19 @@ function ComposeModal({
       return
     }
 
+    // Check for unfilled template placeholders
+    const placeholderPattern = /\{\{[A-Za-z_]+\}\}/g
+    const subjectPlaceholders = subject.match(placeholderPattern) || []
+    const bodyPlaceholders = body.match(placeholderPattern) || []
+    const allPlaceholders = [...new Set([...subjectPlaceholders, ...bodyPlaceholders])]
+
+    if (allPlaceholders.length > 0) {
+      const proceed = window.confirm(
+        `This email contains ${allPlaceholders.length} unfilled placeholder(s):\n\n${allPlaceholders.join(', ')}\n\nThese will appear as raw text to the recipient. Link an itinerary to auto-fill them, or edit manually.\n\nSend anyway?`
+      )
+      if (!proceed) return
+    }
+
     setSending(true)
     setError(null)
 
