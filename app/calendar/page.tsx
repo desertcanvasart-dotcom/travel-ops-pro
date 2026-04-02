@@ -1119,6 +1119,7 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
           isPast={isPast}
           conflicts={conflicts}
           getStatusColor={getStatusColor}
+          getConflictTooltip={getConflictTooltip}
           t={t}
         />
       )
@@ -1146,7 +1147,7 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
   )
 }
 
-function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflicts, getStatusColor, t }: any) {
+function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflicts, getStatusColor, getConflictTooltip, t }: any) {
   const { useDroppable } = require('@dnd-kit/core')
 
   const { setNodeRef, isOver } = useDroppable({
