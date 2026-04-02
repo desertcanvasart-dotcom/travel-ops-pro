@@ -5,7 +5,7 @@
 -- PRE-BOOKING (Lead Nurturing)
 -- ============================================
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Welcome / Inquiry Response',
@@ -32,11 +32,12 @@ Best regards,
 {{CompanyName}}
 {{CompanyPhone}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Welcome / Inquiry Response (WhatsApp)',
@@ -60,11 +61,12 @@ Feel free to send any additional preferences!
 Best regards,
 {{AgentName}} — {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Quotation Email',
@@ -99,11 +101,12 @@ Best regards,
 {{CompanyName}}
 {{CompanyPhone}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Follow-Up After Quote',
@@ -125,11 +128,12 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Quote Expiry Reminder',
@@ -156,6 +160,7 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
@@ -164,7 +169,7 @@ Best regards,
 -- BOOKING CONFIRMED
 -- ============================================
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Booking Confirmation',
@@ -202,11 +207,12 @@ Best regards,
 {{CompanyName}}
 {{CompanyPhone}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Deposit Received',
@@ -232,11 +238,12 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Final Payment Reminder',
@@ -263,11 +270,12 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Full Payment Received',
@@ -294,6 +302,7 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
@@ -302,7 +311,7 @@ Best regards,
 -- PRE-TRIP
 -- ============================================
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Pre-Trip Information Pack',
@@ -352,11 +361,12 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Travel Documents Sent',
@@ -383,11 +393,12 @@ Best regards,
 {{CompanyName}}
 {{CompanyPhone}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Guide Introduction',
@@ -414,6 +425,7 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
@@ -422,7 +434,7 @@ Best regards,
 -- POST-TRIP
 -- ============================================
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Thank You / Review Request',
@@ -449,11 +461,12 @@ Warm regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Thank You (WhatsApp)',
@@ -475,11 +488,12 @@ Thank you for choosing {{CompanyName}} — we hope to see you again! 🙏
 Best regards,
 {{AgentName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Referral Request',
@@ -501,6 +515,7 @@ Warm regards,
 {{AgentName}}
 {{CompanyName}}',
   true,
+  true,
   NOW(),
   NOW()
 );
@@ -509,7 +524,7 @@ Warm regards,
 -- OPERATIONAL
 -- ============================================
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Itinerary Change Notification',
@@ -538,11 +553,12 @@ Best regards,
 {{CompanyName}}
 {{CompanyPhone}}',
   true,
+  true,
   NOW(),
   NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Weather / Safety Advisory',
@@ -568,6 +584,7 @@ Best regards,
 {{AgentName}}
 {{CompanyName}}
 {{CompanyPhone}}',
+  true,
   true,
   NOW(),
   NOW()
