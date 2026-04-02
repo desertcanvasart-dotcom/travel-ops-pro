@@ -129,6 +129,7 @@ export default function CalendarPage() {
   const [conflicts, setConflicts] = useState<string[]>([])
   const [conflictDetails, setConflictDetails] = useState<ConflictDetail[]>([])
   const [showConflictPanel, setShowConflictPanel] = useState(false)
+  const [dayDetail, setDayDetail] = useState<{ date: Date; bookings: Booking[] } | null>(null)
   const [activeBooking, setActiveBooking] = useState<Booking | null>(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [pendingMove, setPendingMove] = useState<{ bookingId: string, newDate: Date } | null>(null)
@@ -1011,7 +1012,7 @@ export default function CalendarPage() {
         </div>
 
         {/* Calendar Views */}
-        {viewMode === 'month' && <MonthView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} getConflictTooltip={getConflictTooltip} t={t} />}
+        {viewMode === 'month' && <MonthView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} getConflictTooltip={getConflictTooltip} onShowDayDetail={(date: Date, bks: Booking[]) => setDayDetail({ date, bookings: bks })} t={t} />}
         {viewMode === 'week' && <WeekView currentDate={currentDate} bookings={filteredBookings} conflicts={conflicts} getBookingsForDate={getBookingsForDate} getStatusColor={getStatusColor} getConflictTooltip={getConflictTooltip} t={t} />}
         {viewMode === 'timeline' && <TimelineView bookings={filteredBookings} conflicts={conflicts} getStatusColor={getStatusColor} getConflictTooltip={getConflictTooltip} t={t} />}
 
@@ -1042,6 +1043,64 @@ export default function CalendarPage() {
           />
         )}
       </div>
+
+      {/* Day Detail Modal */}
+      {dayDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setDayDetail(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-900">
+                {format(dayDetail.date, 'EEEE, MMMM d, yyyy')}
+              </h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full font-medium">
+                  {dayDetail.bookings.length} {dayDetail.bookings.length === 1 ? 'booking' : 'bookings'}
+                </span>
+                <button onClick={() => setDayDetail(null)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {dayDetail.bookings.map((booking: Booking) => (
+                <Link
+                  key={booking.id}
+                  href={`/itineraries/${booking.id}`}
+                  className={`block p-3 rounded-lg ${getStatusColor(booking.payment_status)} text-white hover:opacity-90 transition-opacity ${
+                    conflicts.includes(booking.id) ? 'ring-2 ring-orange-700' : ''
+                  }`}
+                  title={conflicts.includes(booking.id) ? getConflictTooltip(booking.id) : undefined}
+                  onClick={() => setDayDetail(null)}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-sm">{booking.client_name}</span>
+                    <div className="flex items-center gap-1">
+                      {booking.assigned_guide_id && <User className="w-3.5 h-3.5" />}
+                      {booking.assigned_vehicle_id && <Car className="w-3.5 h-3.5" />}
+                    </div>
+                  </div>
+                  <div className="text-xs opacity-90">{booking.itinerary_code}</div>
+                  <div className="flex items-center justify-between mt-1.5 text-xs opacity-75">
+                    <span>{booking.num_travelers} pax</span>
+                    <span>{booking.destinations}</span>
+                  </div>
+                  {conflicts.includes(booking.id) && (
+                    <div className="flex items-center gap-1 mt-1.5 text-xs bg-white/20 rounded px-1.5 py-0.5">
+                      <AlertCircle className="w-3 h-3" />
+                      <span>Conflict</span>
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </DndContext>
   )
 }
@@ -1079,7 +1138,7 @@ function StatCard({ icon, label, value, color, badge, onBadgeClick }: any) {
   )
 }
 
-function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, getConflictTooltip, t }: any) {
+function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, getConflictTooltip, onShowDayDetail, t }: any) {
   const { useDroppable } = require('@dnd-kit/core')
 
   const monthStart = startOfMonth(currentDate)
@@ -1120,6 +1179,7 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
           conflicts={conflicts}
           getStatusColor={getStatusColor}
           getConflictTooltip={getConflictTooltip}
+          onShowDayDetail={onShowDayDetail}
           t={t}
         />
       )
@@ -1147,7 +1207,7 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
   )
 }
 
-function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflicts, getStatusColor, getConflictTooltip, t }: any) {
+function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflicts, getStatusColor, getConflictTooltip, onShowDayDetail, t }: any) {
   const { useDroppable } = require('@dnd-kit/core')
 
   const { setNodeRef, isOver } = useDroppable({
@@ -1188,9 +1248,12 @@ function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflic
           />
         ))}
         {bookings.length > 3 && (
-          <div className="text-xs text-gray-500 text-center">
-            {t('more', { count: bookings.length - 3 })}
-          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onShowDayDetail?.(date, bookings) }}
+            className="text-xs text-primary-600 hover:text-primary-800 font-medium text-center w-full hover:bg-primary-50 rounded py-0.5 transition-colors"
+          >
+            +{bookings.length - 3} more
+          </button>
         )}
       </div>
     </div>
