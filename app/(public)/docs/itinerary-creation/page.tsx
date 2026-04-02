@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder, DocScreenshot, Tip } from '../layout'
 
 export default function ItineraryCreationPage() {
   return (
@@ -64,7 +64,7 @@ export default function ItineraryCreationPage() {
         <Tip>
           <strong>Pro Tip:</strong> Always review the overnight city for each day. For day trips (e.g., Cairo to Alexandria and back), ensure the overnight city is the base city they return to, not the city they visited.
         </Tip>
-        <ScreenshotPlaceholder caption="Extracted data form with editable client info, trip details, and day-by-day plan" />
+        <DocScreenshot src="/docs/itinerary-creation/parser-review.jpg" alt="Pricing grid with trip settings, live quote calculation, and paste/upload input options" />
       </section>
 
       {/* Step 3: Generate Itinerary */}
