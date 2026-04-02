@@ -9,22 +9,30 @@ const supabase = createClient(
 // GET - Fetch email settings
 export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
+    // Fetch saved email settings
+    const { data: settingsData } = await supabase
       .from('user_settings')
       .select('email_settings')
       .single()
 
-    if (data?.email_settings) {
-      return NextResponse.json(data.email_settings)
-    }
+    const emailSettings = settingsData?.email_settings || {}
 
-    // Return defaults if no settings exist
+    // Check actual Gmail connection from gmail_tokens table
+    const { data: tokenData } = await supabase
+      .from('gmail_tokens')
+      .select('email_address, token_expiry')
+      .limit(1)
+      .single()
+
+    const gmailConnected = !!tokenData?.email_address
+    const gmailEmail = tokenData?.email_address || ''
+
     return NextResponse.json({
-      gmail_connected: false,
-      gmail_email: '',
-      signature: '',
-      auto_reply_enabled: false,
-      auto_reply_message: ''
+      gmail_connected: gmailConnected,
+      gmail_email: gmailEmail,
+      signature: emailSettings.signature || '',
+      auto_reply_enabled: emailSettings.auto_reply_enabled || false,
+      auto_reply_message: emailSettings.auto_reply_message || ''
     })
   } catch (error) {
     console.error('Error fetching email settings:', error)
