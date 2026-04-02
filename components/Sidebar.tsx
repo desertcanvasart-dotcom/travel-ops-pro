@@ -121,7 +121,7 @@ const navigationConfig: NavConfig[] = [
     ]
   },
   {
-    titleKey: 'communication',
+    titleKey: 'communicationPricing',
     key: 'communication',
     roles: ['admin', 'manager', 'agent'],
     items: [
@@ -129,6 +129,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'emailInbox', href: '/inbox', icon: Mail },
       { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: Wand2 },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
+      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
     ]
   },
   {
@@ -138,7 +139,6 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'suppliers', href: '/suppliers', icon: Building },
       { labelKey: 'itineraries', href: '/itineraries', icon: Route },
-      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase },
       { labelKey: 'documents', href: '/documents', icon: FileText },
       { labelKey: 'teamMembers', href: '/team-members', icon: Users },
@@ -158,7 +158,7 @@ const navigationConfig: NavConfig[] = [
     ]
   },
   {
-    titleKey: 'ratesPricing',
+    titleKey: 'rates',
     key: 'rates',
     roles: ['admin', 'manager'],
     items: [
