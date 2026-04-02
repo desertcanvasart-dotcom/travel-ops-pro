@@ -1079,7 +1079,7 @@ function StatCard({ icon, label, value, color, badge, onBadgeClick }: any) {
   )
 }
 
-function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, t }: any) {
+function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, getConflictTooltip, t }: any) {
   const { useDroppable } = require('@dnd-kit/core')
 
   const monthStart = startOfMonth(currentDate)
@@ -1230,7 +1230,7 @@ function DraggableBooking({ booking, getStatusColor, conflicts, getConflictToolt
   )
 }
 
-function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, t }: any) {
+function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, getConflictTooltip, t }: any) {
   const weekStart = startOfWeek(currentDate)
   const weekDays = []
 
@@ -1314,7 +1314,7 @@ function WeekView({ currentDate, bookings, conflicts, getBookingsForDate, getSta
   )
 }
 
-function TimelineView({ bookings, conflicts, getStatusColor, t }: any) {
+function TimelineView({ bookings, conflicts, getStatusColor, getConflictTooltip, t }: any) {
   const sortedBookings = [...bookings].sort((a, b) =>
     new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
   )
