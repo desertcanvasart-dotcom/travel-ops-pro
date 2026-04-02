@@ -140,6 +140,12 @@ function SettingsContent() {
     quickbooks: { connected: boolean; company_name: string; last_updated: string } | null
   }>({ xero: null, quickbooks: null })
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null)
+  const [whatsappStatus, setWhatsappStatus] = useState<{
+    configured: boolean; whatsapp_number: string; business_name: string; features: { auto_send: boolean; status_updates: boolean }
+  } | null>(null)
+  const [testingWhatsapp, setTestingWhatsapp] = useState(false)
+  const [testPhone, setTestPhone] = useState('')
+  const [showTestDialog, setShowTestDialog] = useState(false)
 
   // Update URL when tab changes
   const handleTabChange = (tabId: string) => {
@@ -169,6 +175,7 @@ function SettingsContent() {
             break
           case 'integrations':
             await fetchAccountingStatus()
+            await fetchWhatsappStatus()
             break
         }
       } catch (err) {
@@ -272,6 +279,43 @@ function SettingsContent() {
       setAccountingStatus(prev => ({ ...prev, [provider]: null }))
     } catch (error) {
       console.error('Error disconnecting:', error)
+    }
+  }
+
+  const fetchWhatsappStatus = async () => {
+    try {
+      const response = await fetch('/api/whatsapp/status')
+      if (response.ok) {
+        const data = await response.json()
+        setWhatsappStatus(data)
+      }
+    } catch (error) {
+      console.error('Error fetching WhatsApp status:', error)
+    }
+  }
+
+  const handleTestWhatsapp = async () => {
+    if (!testPhone) return
+    setTestingWhatsapp(true)
+    try {
+      const res = await fetch('/api/whatsapp/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: testPhone }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSaveSuccess(true)
+        setTimeout(() => setSaveSuccess(false), 3000)
+        setShowTestDialog(false)
+        setTestPhone('')
+      } else {
+        setError(data.error || 'Failed to send test message')
+      }
+    } catch {
+      setError('Failed to send test message')
+    } finally {
+      setTestingWhatsapp(false)
     }
   }
 
@@ -1139,6 +1183,127 @@ function SettingsContent() {
             Sync is push-only: Autoura sends data to your accounting software. Changes made in Xero or QuickBooks are not pulled back.
           </p>
         </div>
+
+        {/* WhatsApp Integration */}
+        <div className="mt-8">
+          <h3 className="text-lg font-medium text-gray-900">Messaging</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Connect WhatsApp Business to send quotes, invoices, and updates to clients and suppliers.
+          </p>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-[#25D366]">
+                <span className="text-sm font-bold text-white">W</span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">WhatsApp Business</p>
+                <p className="text-xs text-gray-500">
+                  {whatsappStatus?.configured
+                    ? `Connected: ${whatsappStatus.whatsapp_number}`
+                    : 'Send quotes, confirmations, and reminders via WhatsApp'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {whatsappStatus?.configured ? (
+                <>
+                  <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                    <CheckCircle className="w-3 h-3" />
+                    Connected
+                  </span>
+                  <button
+                    onClick={() => setShowTestDialog(true)}
+                    className="px-3 py-1.5 text-xs font-medium text-[#647C47] bg-[#647C47]/10 rounded-lg hover:bg-[#647C47]/20 transition-colors"
+                  >
+                    Test Connection
+                  </button>
+                  <a
+                    href="/settings/whatsapp"
+                    className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Configure
+                  </a>
+                </>
+              ) : (
+                <a
+                  href="/settings/whatsapp"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors"
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  Set Up WhatsApp
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* What Gets Sent via WhatsApp */}
+        {whatsappStatus?.configured && (
+          <div className="border border-gray-200 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-gray-900 mb-3">What gets sent via WhatsApp</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="flex items-start gap-2">
+                <FileText className="w-4 h-4 text-[#25D366] mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Quotes & Itineraries</p>
+                  <p className="text-xs text-gray-500">Send priced itineraries as PDF to clients</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <Mail className="w-4 h-4 text-[#25D366] mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Invoices & Receipts</p>
+                  <p className="text-xs text-gray-500">Deliver invoices and payment receipts</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <Bell className="w-4 h-4 text-[#25D366] mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Reminders & Updates</p>
+                  <p className="text-xs text-gray-500">Payment reminders and booking status updates</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Test WhatsApp Dialog */}
+        {showTestDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setShowTestDialog(false)} />
+            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Test WhatsApp Connection</h3>
+              <p className="text-sm text-gray-500 mb-4">Enter a phone number to send a test message.</p>
+              <input
+                type="tel"
+                value={testPhone}
+                onChange={e => setTestPhone(e.target.value)}
+                placeholder="+1234567890"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#25D366] mb-4"
+              />
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowTestDialog(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTestWhatsapp}
+                  disabled={testingWhatsapp || !testPhone}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#25D366] rounded-lg hover:bg-[#1da851] disabled:opacity-50"
+                >
+                  {testingWhatsapp && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Send Test
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

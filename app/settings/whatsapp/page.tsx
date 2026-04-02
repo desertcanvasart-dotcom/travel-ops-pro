@@ -31,7 +31,7 @@ export default function WhatsAppSettingsPage() {
   const loadConfig = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/whatsapp/test')
+      const response = await fetch('/api/whatsapp/status')
       const data = await response.json()
       setConfig(data)
     } catch (error) {
