@@ -2313,7 +2313,7 @@ function ComposeModal({
                         <select
                           value={selectedPartnerId}
                           onChange={(e) => handlePartnerChange(e.target.value)}
-                          className="w-full h-9 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
+                          className="w-full h-11 px-3 text-sm border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"
                         >
                           <option value="">-- Select partner --</option>
                           {partners.map((partner: any) => (
