@@ -4,7 +4,7 @@
 -- CUSTOMER WHATSAPP VARIANTS
 -- ============================================
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Quotation (WhatsApp)',
@@ -29,10 +29,10 @@ This quote is valid for 7 days. To confirm, a deposit of {{DepositAmount}} is ne
 Let me know if you''d like any changes — happy to adjust! 😊
 
 {{AgentName}} — {{CompanyName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Follow-Up After Quote (WhatsApp)',
@@ -47,10 +47,10 @@ Just checking in about your {{TourName}} itinerary. Did you have a chance to rev
 Happy to answer any questions or make changes — no pressure at all!
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Booking Confirmation (WhatsApp)',
@@ -75,10 +75,10 @@ Great news — your trip is *confirmed*!
 If you have any special requests, let me know now! 🙏
 
 {{AgentName}} — {{CompanyName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Payment Reminder (WhatsApp)',
@@ -98,10 +98,10 @@ Once received, we''ll send your complete travel documents with itinerary, vouche
 Let me know if you need anything! 😊
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Pre-Trip Info (WhatsApp)',
@@ -130,10 +130,10 @@ See you soon! 🇪🇬
 
 {{AgentName}} — {{CompanyName}}
 📞 {{CompanyPhone}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Guide Introduction (WhatsApp)',
@@ -156,10 +156,10 @@ Feel free to contact them directly if you need anything upon arrival.
 Have an amazing trip! 🎉
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Itinerary Change (WhatsApp)',
@@ -179,14 +179,14 @@ Everything else stays the same. Updated itinerary sent to your email.
 Let me know if you have any questions! 🙏
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
 -- ============================================
 -- INTERNAL TEMPLATES
 -- ============================================
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Trip Handover Note',
@@ -219,10 +219,10 @@ Please review the itinerary and reach out to the client to introduce yourself.
 
 Thanks,
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Daily Operations Brief',
@@ -254,10 +254,10 @@ NOTES / ALERTS
 
 Have a great day!
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Supplier Issue Alert',
@@ -287,10 +287,10 @@ ALTERNATIVES AVAILABLE
 Please respond ASAP.
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Supplier Issue Alert (WhatsApp)',
@@ -312,10 +312,10 @@ Booking: {{BookingRef}} — {{GuestName}}
 Please respond ASAP!
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'New Booking Notification',
@@ -343,10 +343,10 @@ NEXT STEPS
 Assigned to: {{AgentName}}
 
 Let''s make this a great trip!',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'New Booking (WhatsApp)',
@@ -366,10 +366,10 @@ VALUES (
 Next: Confirm suppliers + assign guide
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Weekly Performance Summary',
@@ -405,10 +405,10 @@ AREAS TO WATCH
 
 Great work, team!
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
 
-INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_system, is_active, created_at, updated_at)
+INSERT INTO message_templates (id, name, description, category, channel, subject, body, is_active, created_at, updated_at)
 VALUES (
   gen_random_uuid(),
   'Client Complaint Escalation',
@@ -440,5 +440,5 @@ FINANCIAL IMPACT
 This requires management review. Please advise on next steps.
 
 {{AgentName}}',
-  true, true, NOW(), NOW()
+  true, NOW(), NOW()
 );
