@@ -108,10 +108,10 @@ export default function ExpensesCommissionsPage() {
           Invoices &amp; Payments
         </Link>
         <Link
-          href="/docs/tours-rates"
+          href="/docs/profit-loss"
           className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
         >
-          Next: Tours &amp; Rates
+          Next: Profit &amp; Loss
           <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
