@@ -21,29 +21,30 @@ export async function GET(request: NextRequest) {
 
     // Check actual Gmail connection from gmail_tokens table
     // Try user-specific token first, then fall back to any token
-    let tokenData = null
+    let tokenData: Record<string, unknown> | null = null
 
     if (userId) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('gmail_tokens')
-        .select('email_address, token_expiry, email')
+        .select('*')
         .eq('user_id', userId)
         .single()
-      tokenData = data
+      if (!error && data) tokenData = data
     }
 
     // Fallback: check for any connected Gmail account
     if (!tokenData) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('gmail_tokens')
-        .select('email_address, token_expiry, email')
+        .select('*')
         .order('updated_at', { ascending: false })
         .limit(1)
         .single()
-      tokenData = data
+      if (!error && data) tokenData = data
     }
 
-    const gmailEmail = tokenData?.email_address || tokenData?.email || ''
+    // The column might be 'email', 'email_address', or 'email_address' — check all
+    const gmailEmail = String(tokenData?.email || tokenData?.email_address || '')
     const gmailConnected = !!gmailEmail
 
     return NextResponse.json({
