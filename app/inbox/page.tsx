@@ -1608,17 +1608,39 @@ function ComposeModal({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [sigRes, tempRes] = await Promise.all([
+        const [sigRes, tempRes, msgTempRes] = await Promise.all([
           fetch(`/api/email/signatures?userId=${userId}`),
-          fetch(`/api/email/templates?userId=${userId}`)
+          fetch(`/api/email/templates?userId=${userId}`),
+          fetch('/api/templates')
         ])
-        
+
         const sigData = await sigRes.json()
         const tempData = await tempRes.json()
-        
+        const msgTempData = await msgTempRes.json()
+
         if (sigData.signatures) setSignatures(sigData.signatures)
-        if (tempData.templates) setTemplates(tempData.templates)
-        
+
+        // Merge email_templates + message_templates (email/both only)
+        const emailTemplates: EmailTemplate[] = (tempData.templates || [])
+        const msgTemplates: EmailTemplate[] = (Array.isArray(msgTempData) ? msgTempData : (msgTempData.data || []))
+          .filter((t: any) => t.channel === 'email' || t.channel === 'both')
+          .map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            subject: t.subject || '',
+            content: t.body || '',
+            category: t.category || 'customer',
+            channel: t.channel,
+          }))
+
+        // Deduplicate by name (prefer message_templates if same name exists)
+        const existingNames = new Set(emailTemplates.map(t => t.name))
+        const merged = [
+          ...emailTemplates,
+          ...msgTemplates.filter(t => !existingNames.has(t.name))
+        ]
+        setTemplates(merged)
+
         const defaultSig = sigData.signatures?.find((s: EmailSignature) => s.is_default)
         if (defaultSig) {
           setBody(`<p></p><br/>${defaultSig.content}`)
@@ -1966,40 +1988,30 @@ function ComposeModal({
     </button>
     {showTemplateDropdown && (
       <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 max-h-96 overflow-y-auto">
-        {['customer', 'partner', 'internal'].map(category => {
-          const categoryTemplates = templates.filter(t => t.category === category)
+        {['customer', 'supplier', 'partner', 'internal'].map(category => {
+          const categoryTemplates = templates.filter(t =>
+            t.category === (category === 'partner' ? 'b2b' : category) || t.category === category
+          ).filter(t => t.channel !== 'whatsapp')
           if (categoryTemplates.length === 0) return null
-          
+
           return (
             <div key={category}>
               <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100 sticky top-0">
                 <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                  {category === 'customer' && '👤 Customer Templates'}
-                  {category === 'partner' && '🏨 Partner Templates'}
-                  {category === 'internal' && '📋 Internal Templates'}
+                  {category === 'customer' && '👤 Customer'}
+                  {category === 'supplier' && '🏢 Supplier'}
+                  {category === 'partner' && '🤝 Partner / B2B'}
+                  {category === 'internal' && '📋 Internal'}
                 </span>
               </div>
               {categoryTemplates.map((template) => (
-                <button 
-                  key={template.id} 
-                  onClick={() => template.channel !== 'whatsapp' && useTemplate(template)} 
-                  className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b border-gray-50 ${
-                    template.channel === 'whatsapp' ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                  title={template.channel === 'whatsapp' ? 'WhatsApp only - cannot use in email' : ''}
+                <button
+                  key={template.id}
+                  onClick={() => useTemplate(template)}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b border-gray-50"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-gray-900">{template.name}</span>
-                    {template.channel === 'whatsapp' && (
-                      <span className="text-[9px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
-                        WA only
-                      </span>
-                    )}
-                    {template.channel === 'both' && (
-                      <span className="text-[9px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">
-                        +WA
-                      </span>
-                    )}
                   </div>
                   {template.subject && (
                     <span className="block text-gray-500 truncate mt-0.5">
