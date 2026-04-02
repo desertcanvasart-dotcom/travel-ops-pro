@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 import Link from 'next/link'
 import { 
   Search,
@@ -130,6 +131,7 @@ const STATUS_ORDER = { todo: 0, in_progress: 1, done: 2 }
 
 export default function TasksPage() {
   const t = useTranslations('tasks')
+  const dialog = useConfirmDialog()
   const [tasks, setTasks] = useState<Task[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -415,7 +417,8 @@ export default function TasksPage() {
   }
 
   const handleDelete = async (task: Task) => {
-    if (!confirm(t('confirmDelete', { title: task.title }))) return
+    const confirmed = await dialog.confirmDelete(task.title)
+    if (!confirmed) return
 
     try {
       const response = await fetch(`/api/tasks/${task.id}`, {
