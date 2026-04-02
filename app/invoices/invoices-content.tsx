@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 
 interface Invoice {
   id: string
@@ -561,13 +562,61 @@ export default function InvoicesContent() {
             <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          {t('newInvoice')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'invoice_number', label: 'Invoice #' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'invoice_type', label: 'Type' },
+                { key: 'issue_date', label: 'Issue Date' },
+                { key: 'due_date', label: 'Due Date' },
+                { key: 'total_amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'amount_paid', label: 'Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'balance_due', label: 'Balance', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinanceCSV(filteredInvoices as unknown as Record<string, unknown>[], cols, 'invoices')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'invoice_number', label: 'Invoice #' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'invoice_type', label: 'Type' },
+                { key: 'issue_date', label: 'Issue Date' },
+                { key: 'due_date', label: 'Due Date' },
+                { key: 'total_amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'amount_paid', label: 'Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'balance_due', label: 'Balance', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinancePDF({
+                title: 'Invoices Report',
+                data: filteredInvoices as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'invoices',
+                orientation: 'landscape',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            {t('newInvoice')}
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

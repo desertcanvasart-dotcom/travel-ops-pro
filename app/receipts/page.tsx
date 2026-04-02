@@ -18,6 +18,7 @@ import {
   MapPin
 } from 'lucide-react'
 import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
@@ -298,6 +299,63 @@ export default function ReceiptsPage() {
             <p className="text-sm text-gray-600 mt-1">
               Download and send receipts for all payments
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const cols = [
+                  { key: 'receipt_number', label: 'Receipt #' },
+                  { key: 'source_reference', label: 'Invoice #' },
+                  { key: 'client_name', label: 'Client' },
+                  { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'payment_date', label: 'Date' },
+                  { key: 'payment_method', label: 'Method' },
+                ]
+                const data = filteredPayments.map(p => ({
+                  receipt_number: p.transaction_reference || `RCP-${p.id.slice(0, 8).toUpperCase()}`,
+                  source_reference: p.source_reference,
+                  client_name: p.client_name,
+                  amount: p.amount,
+                  payment_date: p.payment_date,
+                  payment_method: p.payment_method,
+                }))
+                exportFinanceCSV(data as Record<string, unknown>[], cols, 'receipts')
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+            <button
+              onClick={() => {
+                const cols = [
+                  { key: 'receipt_number', label: 'Receipt #' },
+                  { key: 'source_reference', label: 'Invoice #' },
+                  { key: 'client_name', label: 'Client' },
+                  { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'payment_date', label: 'Date' },
+                  { key: 'payment_method', label: 'Method' },
+                ]
+                const data = filteredPayments.map(p => ({
+                  receipt_number: p.transaction_reference || `RCP-${p.id.slice(0, 8).toUpperCase()}`,
+                  source_reference: p.source_reference,
+                  client_name: p.client_name,
+                  amount: p.amount,
+                  payment_date: p.payment_date,
+                  payment_method: p.payment_method,
+                }))
+                exportFinancePDF({
+                  title: 'Receipts Report',
+                  data: data as Record<string, unknown>[],
+                  columns: cols,
+                  filename: 'receipts',
+                })
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              PDF
+            </button>
           </div>
         </div>
 

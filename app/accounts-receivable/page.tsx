@@ -20,9 +20,11 @@ import {
   Phone,
   ExternalLink,
   TrendingUp,
-  CheckCircle
+  CheckCircle,
+  Download
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 
 interface AgingBucket {
   current: number
@@ -208,6 +210,52 @@ export default function AccountsReceivablePage() {
             <h1 className="text-xl font-semibold text-gray-900">Accounts Receivable</h1>
             <p className="text-sm text-gray-500">Track outstanding client payments</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'client_name', label: 'Client' },
+                { key: 'total_invoiced', label: 'Total Invoiced', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'invoice_count', label: 'Invoice Count', align: 'right' as const },
+                { key: 'oldest_invoice_date', label: 'Oldest Invoice' },
+              ]
+              exportFinanceCSV(filteredClients as unknown as Record<string, unknown>[], cols, 'accounts-receivable')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'client_name', label: 'Client' },
+                { key: 'total_invoiced', label: 'Total Invoiced', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'invoice_count', label: 'Invoice Count', align: 'right' as const },
+                { key: 'oldest_invoice_date', label: 'Oldest Invoice' },
+              ]
+              exportFinancePDF({
+                title: 'Accounts Receivable Report',
+                summary: summary ? [
+                  { label: 'Total Outstanding', value: `€${summary.total_outstanding.toLocaleString()}` },
+                  { label: 'Client Count', value: String(summary.client_count) },
+                  { label: 'Overdue Amount', value: `€${summary.overdue_amount.toLocaleString()}` },
+                ] : [],
+                data: filteredClients as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'accounts-receivable',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
         </div>
       </div>
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { 
+import {
   TrendingUp,
   TrendingDown,
   DollarSign,
@@ -20,6 +20,7 @@ import {
   Building,
   Percent
 } from 'lucide-react'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 
 interface MonthlyData {
   month: string
@@ -238,6 +239,55 @@ export default function FinancialReportsPage() {
               <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
             )}
           </select>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const cols = [
+                  { key: 'month', label: 'Month' },
+                  { key: 'revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'net_profit', label: 'Net Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                ]
+                const data = monthly.map(m => ({ month: m.month, revenue: m.revenue, expenses: m.expenses, net_profit: m.net_profit, margin: m.revenue > 0 ? (m.net_profit / m.revenue) * 100 : 0 }))
+                exportFinanceCSV(data as Record<string, unknown>[], cols, `financial-report-${selectedYear}`)
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+            <button
+              onClick={() => {
+                const cols = [
+                  { key: 'month', label: 'Month' },
+                  { key: 'revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'net_profit', label: 'Net Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                ]
+                const data = monthly.map(m => ({ month: m.month, revenue: m.revenue, expenses: m.expenses, net_profit: m.net_profit, margin: m.revenue > 0 ? (m.net_profit / m.revenue) * 100 : 0 }))
+                const avgMargin = data.length > 0 ? data.reduce((s, d) => s + (d.margin as number), 0) / data.length : 0
+                exportFinancePDF({
+                  title: `Financial Report ${selectedYear}`,
+                  subtitle: `Annual financial overview for ${selectedYear}`,
+                  summary: [
+                    { label: 'Total Revenue', value: `€${summary?.total_revenue?.toLocaleString() ?? '0'}` },
+                    { label: 'Total Expenses', value: `€${summary?.total_expenses?.toLocaleString() ?? '0'}` },
+                    { label: 'Gross Profit', value: `€${summary?.gross_profit?.toLocaleString() ?? '0'}` },
+                    { label: 'Avg Margin', value: `${avgMargin.toFixed(1)}%` },
+                  ],
+                  data: data as Record<string, unknown>[],
+                  columns: cols,
+                  filename: `financial-report-${selectedYear}`,
+                })
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              PDF
+            </button>
+          </div>
         </div>
       </div>
 

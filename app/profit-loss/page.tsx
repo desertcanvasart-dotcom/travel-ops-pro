@@ -18,8 +18,11 @@ import {
   Eye,
   BarChart3,
   PieChart,
-  Calendar
+  Calendar,
+  Download,
+  FileText
 } from 'lucide-react'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 
 interface TripPnL {
   itinerary_id: string
@@ -213,6 +216,59 @@ export default function ProfitLossPage() {
             <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
             <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'itinerary_code', label: 'Trip' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'start_date', label: 'Date' },
+                { key: 'total_revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'gross_profit', label: 'Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'profit_margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinanceCSV(filteredData as unknown as Record<string, unknown>[], cols, 'profit-and-loss')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'itinerary_code', label: 'Trip' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'start_date', label: 'Date' },
+                { key: 'total_revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'gross_profit', label: 'Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'profit_margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinancePDF({
+                title: 'Profit & Loss Report',
+                summary: summary ? [
+                  { label: 'Total Trips', value: String(summary.total_trips) },
+                  { label: 'Total Revenue', value: `€${summary.total_revenue.toLocaleString()}` },
+                  { label: 'Total Expenses', value: `€${summary.total_expenses.toLocaleString()}` },
+                  { label: 'Gross Profit', value: `€${summary.total_profit.toLocaleString()}` },
+                  { label: 'Avg Margin', value: `${summary.average_margin.toFixed(1)}%` },
+                ] : [],
+                data: filteredData as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'profit-and-loss',
+                orientation: 'landscape',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
         </div>
       </div>
 

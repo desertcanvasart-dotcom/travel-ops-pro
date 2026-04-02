@@ -24,9 +24,11 @@ import {
   List,
   Grid3X3,
   Calendar,
-  Filter
+  Filter,
+  FileText
 } from 'lucide-react'
 import Link from 'next/link'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface Expense {
@@ -427,11 +429,45 @@ export default function ExpensesPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={exportToCSV}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            onClick={() => {
+              const cols = [
+                { key: 'expense_number', label: 'Expense #' },
+                { key: 'supplier_name', label: 'Supplier' },
+                { key: 'category', label: 'Category' },
+                { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'currency', label: 'Currency' },
+                { key: 'expense_date', label: 'Date' },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinanceCSV(filteredExpenses as unknown as Record<string, unknown>[], cols, 'expenses')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            <Download className="h-4 w-4" />
-            {t('exportCSV')}
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'expense_number', label: 'Expense #' },
+                { key: 'supplier_name', label: 'Supplier' },
+                { key: 'category', label: 'Category' },
+                { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'currency', label: 'Currency' },
+                { key: 'expense_date', label: 'Date' },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinancePDF({
+                title: 'Expenses Report',
+                data: filteredExpenses as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'expenses',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
           </button>
           <button
             onClick={openAddModal}

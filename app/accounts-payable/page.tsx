@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { 
+import {
   Search,
   DollarSign,
   Clock,
@@ -18,8 +18,11 @@ import {
   CheckCircle,
   CreditCard,
   TrendingDown,
-  Users
+  Users,
+  Download,
+  FileText
 } from 'lucide-react'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 
 interface AgingBucket {
   current: number
@@ -277,13 +280,57 @@ export default function AccountsPayablePage() {
             <p className="text-sm text-gray-500">Track outstanding supplier payments</p>
           </div>
         </div>
-        <Link
-          href="/expenses"
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
-        >
-          <Receipt className="h-4 w-4" />
-          View All Expenses
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'supplier_name', label: 'Supplier' },
+                { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'expense_count', label: 'Expense Count', align: 'right' as const },
+              ]
+              exportFinanceCSV(filteredSuppliers as unknown as Record<string, unknown>[], cols, 'accounts-payable')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'supplier_name', label: 'Supplier' },
+                { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'expense_count', label: 'Expense Count', align: 'right' as const },
+              ]
+              exportFinancePDF({
+                title: 'Accounts Payable Report',
+                summary: summary ? [
+                  { label: 'Total Outstanding', value: `€${summary.total_outstanding.toLocaleString()}` },
+                  { label: 'Supplier Count', value: String(summary.supplier_count) },
+                  { label: 'Overdue Amount', value: `€${summary.overdue_amount.toLocaleString()}` },
+                ] : [],
+                data: filteredSuppliers as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'accounts-payable',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
+          <Link
+            href="/expenses"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
+          >
+            <Receipt className="h-4 w-4" />
+            View All Expenses
+          </Link>
+        </div>
       </div>
 
       {/* Summary Cards */}

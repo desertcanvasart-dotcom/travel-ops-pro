@@ -29,9 +29,11 @@ import {
   MapPin,
   Sparkles,
   Ticket,
-  Heart
+  Heart,
+  FileText
 } from 'lucide-react'
 import Link from 'next/link'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -345,14 +347,57 @@ export default function CommissionsPage() {
             <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          {t('addCommission')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'commission_type', label: 'Type' },
+                { key: 'category', label: 'Category' },
+                { key: 'source_name', label: 'Source' },
+                { key: 'base_amount', label: 'Base Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'commission_rate', label: 'Rate %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'commission_amount', label: 'Commission', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinanceCSV(filteredCommissions as unknown as Record<string, unknown>[], cols, 'commissions')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'commission_type', label: 'Type' },
+                { key: 'category', label: 'Category' },
+                { key: 'source_name', label: 'Source' },
+                { key: 'base_amount', label: 'Base Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'commission_rate', label: 'Rate %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'commission_amount', label: 'Commission', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'status', label: 'Status' },
+              ]
+              exportFinancePDF({
+                title: 'Commissions Report',
+                data: filteredCommissions as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'commissions',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            {t('addCommission')}
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}

@@ -12,9 +12,11 @@ import {
   FileText,
   ExternalLink,
   Plus,
-  MapPin
+  MapPin,
+  Download
 } from 'lucide-react'
 import Link from 'next/link'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 
 interface UnifiedPayment {
   id: string
@@ -255,6 +257,53 @@ export default function PaymentsPage() {
           <p className="text-sm text-gray-600 mt-1">{t('allPaymentsDescription')}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'payment_date', label: 'Date' },
+                { key: 'source', label: 'Source' },
+                { key: 'source_reference', label: 'Reference' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'payment_method', label: 'Method' },
+                { key: 'transaction_reference', label: 'Txn Ref' },
+              ]
+              exportFinanceCSV(filteredPayments as unknown as Record<string, unknown>[], cols, 'payments')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'payment_date', label: 'Date' },
+                { key: 'source', label: 'Source' },
+                { key: 'source_reference', label: 'Reference' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'payment_method', label: 'Method' },
+                { key: 'transaction_reference', label: 'Txn Ref' },
+              ]
+              exportFinancePDF({
+                title: 'Payments Report',
+                summary: [
+                  { label: 'Total Received', value: `€${stats.totalReceived.toLocaleString()}` },
+                  { label: 'Pending', value: `€${stats.pendingPayments.toLocaleString()}` },
+                  { label: 'Overdue', value: `€${stats.overduePayments.toLocaleString()}` },
+                  { label: 'This Month', value: `€${stats.thisMonthRevenue.toLocaleString()}` },
+                ],
+                data: filteredPayments as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'payments',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
           <Link
             href="/payments/new"
             className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 flex items-center gap-2 font-medium"
