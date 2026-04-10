@@ -55,7 +55,8 @@ import {
   Mail,
   Droplets,
   Upload,
-  Calculator
+  Calculator,
+  Sparkles
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -130,6 +131,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: Wand2 },
       { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
+      { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
     ]
   },
   {

@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 
 // Use service role key to bypass RLS — webhooks have no user session
 const supabase = createClient(
@@ -159,7 +160,33 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================
-    // STEP 4: Auto-respond to common queries
+    // STEP 4: Create copilot inbox entry for AI draft generation
+    // ============================================
+    if (conversationId && body) {
+      try {
+        await createCopilotInboxEntry(
+          {
+            channel: 'whatsapp',
+            whatsappConversationId: conversationId,
+            sourceMessageId: messageSid,
+            senderName: clientName,
+            senderContact: phoneNumber,
+            messageBody: body,
+            receivedAt: new Date().toISOString(),
+            clientId: clientId,
+            clientName: clientName,
+          },
+          supabase
+        )
+        console.log('✅ Copilot inbox entry created for WhatsApp message')
+      } catch (copilotError) {
+        // Copilot failures must never break the webhook
+        console.error('⚠️ Copilot intake failed (non-blocking):', copilotError)
+      }
+    }
+
+    // ============================================
+    // STEP 5: Auto-respond to common queries
     // ============================================
     const lowerBody = body?.toLowerCase() || ''
     

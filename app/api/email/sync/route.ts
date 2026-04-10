@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
+import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -346,6 +347,46 @@ export async function POST(request: NextRequest) {
               })
 
             result.messages_created++
+
+            // Create copilot inbox entry for inbound emails
+            if (msgDirection === 'inbound' && message.id) {
+              try {
+                // Try to find client by email
+                const senderEmail = extractEmailAddress(msgFrom)
+                const { data: matchedClient } = await supabase
+                  .from('clients')
+                  .select('id, first_name, last_name')
+                  .eq('email', senderEmail)
+                  .single()
+
+                const senderDisplayName = msgFrom.match(/^([^<]+)<?/)
+                  ? msgFrom.match(/^([^<]+)<?/)![1].trim()
+                  : senderEmail
+
+                await createCopilotInboxEntry(
+                  {
+                    channel: 'email',
+                    emailConversationId: conversationId,
+                    sourceMessageId: message.id,
+                    senderName: matchedClient
+                      ? `${matchedClient.first_name || ''} ${matchedClient.last_name || ''}`.trim()
+                      : senderDisplayName,
+                    senderContact: senderEmail,
+                    messageBody: bodyText || message.snippet || '',
+                    subject: msgSubject || null,
+                    receivedAt: msgDate,
+                    clientId: matchedClient?.id || null,
+                    clientName: matchedClient
+                      ? `${matchedClient.first_name || ''} ${matchedClient.last_name || ''}`.trim()
+                      : null,
+                  },
+                  supabase
+                )
+              } catch (copilotError) {
+                // Copilot failures must never break email sync
+                console.error('[Email Sync] Copilot intake failed (non-blocking):', copilotError)
+              }
+            }
           }
         }
       } catch (threadError) {
