@@ -43,6 +43,17 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
 }
 
 export async function middleware(request: NextRequest) {
+  // ============================================
+  // MACHINE-TO-MACHINE WEBHOOK ALLOWLIST
+  // ============================================
+  // Inbound webhooks (e.g. the AI Concierge brief webhook) carry no user
+  // session and authenticate themselves via HMAC signature. Skip the
+  // Supabase session lookup entirely so we don't waste a round-trip or
+  // touch auth cookies on every delivery.
+  if (request.nextUrl.pathname.startsWith('/api/webhooks/')) {
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
