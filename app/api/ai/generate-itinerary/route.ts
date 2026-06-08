@@ -661,8 +661,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update duration from AI result
-    if (itineraryData.total_days) {
+    // Update duration from AI result. The actual day objects are the source of
+    // truth — the AI's claimed total_days can disagree (it sometimes emits fewer
+    // or more day objects than total_days), which would desync end_date/total_days
+    // from the days that actually exist and the per-day last-day logic.
+    if (itineraryData.days && itineraryData.days.length > 0) {
+      duration_days = itineraryData.days.length
+      if (itineraryData.total_days && itineraryData.total_days !== duration_days) {
+        console.warn(`⚠️ AI total_days (${itineraryData.total_days}) ≠ actual days (${duration_days}); using actual day count`)
+      }
+    } else if (itineraryData.total_days) {
       duration_days = itineraryData.total_days
     }
 

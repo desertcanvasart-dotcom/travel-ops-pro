@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,12 +13,15 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
     const historyId = searchParams.get('historyId')
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+    // Derive the user from the session — never trust a client-supplied userId,
+    // otherwise any authenticated user could poll another user's mailbox.
+    const { user, error: authError } = await getAuthenticatedUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
+    const userId = user.id
 
     // Get authenticated Gmail client (handles token fetch + refresh)
     let auth
@@ -294,14 +298,14 @@ export async function GET(request: NextRequest) {
 
 // POST /api/gmail/poll
 // Get unread count
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const body = await request.json()
-    const { userId } = body
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+    // Derive the user from the session — never trust a client-supplied userId.
+    const { user, error: authError } = await getAuthenticatedUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
+    const userId = user.id
 
     // Get authenticated Gmail client (handles token fetch + refresh)
     let gmail

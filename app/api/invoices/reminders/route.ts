@@ -32,7 +32,7 @@ async function sendReminderEmail(params: {
     // Option 3: If using your existing /api/send-email endpoint
     const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/send-email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
       body: JSON.stringify({
         to: params.to,
         subject: params.subject,

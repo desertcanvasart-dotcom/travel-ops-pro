@@ -469,15 +469,29 @@ export async function POST(request: Request) {
 
     // Parse JSON from response
     let extracted: any = {}
+    let parseFailed = false
     try {
       // Find JSON in the response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         extracted = JSON.parse(jsonMatch[0])
+      } else {
+        parseFailed = true
+        console.error('No JSON object found in Claude response')
       }
     } catch (e) {
+      parseFailed = true
       console.error('Failed to parse Claude response:', e)
       console.log('Raw response:', responseText.substring(0, 500))
+    }
+
+    // Don't return success with empty/garbage data — surface the failure so the
+    // caller doesn't silently build a 1-day "Egypt Tour" with no real details.
+    if (parseFailed) {
+      return NextResponse.json(
+        { success: false, error: 'Could not extract structured details from the message. Please review and enter them manually.' },
+        { status: 422 }
+      )
     }
 
     // Helper to validate date

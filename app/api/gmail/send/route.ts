@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,7 +16,13 @@ interface Attachment {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, to, subject, body, threadId, attachments } = await request.json()
+    const { userId: bodyUserId, to, subject, body, threadId, attachments } = await request.json()
+
+    // Prefer the session user (browser compose) so a logged-in user cannot send
+    // as someone else; fall back to an explicit userId only for trusted internal
+    // server-to-server calls (no session — gated by x-internal-secret).
+    const { user } = await getAuthenticatedUser()
+    const userId = user?.id || bodyUserId
 
     if (!userId || !to || !subject || !body) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })

@@ -168,7 +168,7 @@ export async function POST(
     // Send email via your email service
     const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/send-email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
       body: JSON.stringify({
         to: invoice.client_email,
         subject,

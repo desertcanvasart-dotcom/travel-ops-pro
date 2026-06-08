@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
@@ -272,14 +272,27 @@ export default function ItineraryEditorPage() {
     setActiveLanguage(currentLocale)
   }, [currentLocale])
 
+  // Itinerary content is language-specific — reload when the itinerary or language
+  // changes. A request token (set inside loadItinerary) guards against a slow
+  // previous-language load resolving late and overwriting newer data.
   useEffect(() => {
     loadItinerary()
-    loadAttractions()
-    loadSuppliers()
   }, [itineraryId, activeLanguage])
 
+  // Suppliers and attractions are language-independent — load once per itinerary
+  // instead of refetching on every language switch.
+  useEffect(() => {
+    loadAttractions()
+    loadSuppliers()
+  }, [itineraryId])
+
+  const loadReqRef = useRef(0)
   const loadItinerary = async () => {
     if (!itineraryId) return
+
+    // Stale-response guard: only the most recent load may apply its results
+    const reqId = ++loadReqRef.current
+    const isStale = () => reqId !== loadReqRef.current
 
     try {
       // Load itinerary
@@ -290,6 +303,7 @@ export default function ItineraryEditorPage() {
         .single()
 
       if (itinError) throw itinError
+      if (isStale()) return
       setItinerary(itin)
 
       // Load days
@@ -300,6 +314,7 @@ export default function ItineraryEditorPage() {
         .order('day_number')
 
       if (daysError) throw daysError
+      if (isStale()) return
 
       const transformedDays: ItineraryDay[] = (daysData || []).map(day => ({
         id: day.id,
@@ -380,6 +395,7 @@ export default function ItineraryEditorPage() {
             }
           }
 
+          if (isStale()) return
           setServices(servicesWithDayNumber)
         }
       }
@@ -387,7 +403,7 @@ export default function ItineraryEditorPage() {
     } catch (error) {
       console.error('Error loading itinerary:', error)
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }
 

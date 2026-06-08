@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { validateTwilioRequest, formDataToParams } from '@/lib/twilio-signature'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +12,13 @@ const supabaseAdmin = createClient(
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    
+
+    // Verify the request was actually signed by Twilio
+    if (!validateTwilioRequest(request, formDataToParams(formData))) {
+      console.warn('⛔ Rejected status callback with invalid Twilio signature')
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 403 })
+    }
+
     // Extract status callback data
     const messageSid = formData.get('MessageSid') as string
     const messageStatus = formData.get('MessageStatus') as string

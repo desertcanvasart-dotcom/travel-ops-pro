@@ -59,6 +59,14 @@ export function useEmailPolling({
   const consecutiveErrorsRef = useRef(0)
   const maxConsecutiveErrors = 3
 
+  // Keep the latest callbacks and historyId in refs so `poll` stays referentially
+  // stable. The consumer passes inline callbacks that change identity every render;
+  // if `poll` depended on them (or on historyId state) it would be recreated each
+  // render and continuously tear down / recreate the polling interval.
+  const callbacksRef = useRef({ onNewEmails, onDeletedEmails, onLabelChanges, onNeedRefresh })
+  callbacksRef.current = { onNewEmails, onDeletedEmails, onLabelChanges, onNeedRefresh }
+  const historyIdRef = useRef<string | null>(null)
+
   // Poll for new emails
   const poll = useCallback(async () => {
     if (!userId || isPollingRef.current) return
@@ -75,8 +83,8 @@ export function useEmailPolling({
 
     try {
       const params = new URLSearchParams({ userId })
-      if (historyId) {
-        params.append('historyId', historyId)
+      if (historyIdRef.current) {
+        params.append('historyId', historyIdRef.current)
       }
 
       const response = await fetch(`/api/gmail/poll?${params}`)
@@ -94,31 +102,32 @@ export function useEmailPolling({
 
       const result: PollResult = await response.json()
 
-      // Update history ID
+      // Update history ID (ref first so the next poll sees it immediately)
       if (result.historyId) {
+        historyIdRef.current = result.historyId
         setHistoryId(result.historyId)
       }
 
       // Handle full refresh needed
       if (result.needsFullRefresh) {
-        onNeedRefresh?.()
+        callbacksRef.current.onNeedRefresh?.()
         return
       }
 
       // Handle new emails
       if (result.newMessages && result.newMessages.length > 0) {
         setNewEmailCount(prev => prev + result.newMessages.length)
-        onNewEmails?.(result.newMessages)
+        callbacksRef.current.onNewEmails?.(result.newMessages)
       }
 
       // Handle deleted emails
       if (result.deletedMessages && result.deletedMessages.length > 0) {
-        onDeletedEmails?.(result.deletedMessages)
+        callbacksRef.current.onDeletedEmails?.(result.deletedMessages)
       }
 
       // Handle label changes
       if (result.labelChanges && result.labelChanges.length > 0) {
-        onLabelChanges?.(result.labelChanges)
+        callbacksRef.current.onLabelChanges?.(result.labelChanges)
       }
 
       setLastPollTime(new Date())
@@ -132,7 +141,7 @@ export function useEmailPolling({
       isPollingRef.current = false
       setIsPolling(false)
     }
-  }, [userId, historyId, onNewEmails, onDeletedEmails, onLabelChanges, onNeedRefresh])
+  }, [userId])
 
   // Fetch unread count
   const fetchUnreadCount = useCallback(async () => {

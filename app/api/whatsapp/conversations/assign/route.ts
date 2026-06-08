@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'
             await fetch(`${baseUrl}/api/notifications`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
               body: JSON.stringify({
                 team_member_id: teamMember.id,
                 type: 'whatsapp_assigned',

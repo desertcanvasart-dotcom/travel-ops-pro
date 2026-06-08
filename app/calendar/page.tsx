@@ -167,12 +167,21 @@ export default function CalendarPage() {
     fetchData()
   }, [])
 
+  // Conflict detection is O(n²) over all bookings and only depends on bookings —
+  // keep it off the filter path so it doesn't re-run on every filter keystroke.
   useEffect(() => {
     if (bookings.length > 0) {
       detectConflicts()
+    }
+  }, [bookings])
+
+  // Re-apply filters when bookings, the filters, or the computed conflicts change
+  // (the latter so "show conflicts only" reflects freshly-detected conflicts).
+  useEffect(() => {
+    if (bookings.length > 0) {
       applyFilters()
     }
-  }, [bookings, filters])
+  }, [bookings, filters, conflicts])
 
   useEffect(() => {
     calculateStats()

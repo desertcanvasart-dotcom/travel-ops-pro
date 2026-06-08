@@ -28,6 +28,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
+import { detectCruiseSeason, getCruiseSeasonRates } from '@/lib/ai/cruise-pricing'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -900,11 +901,19 @@ function inferAccommodationType(day: any, allDays: any[]): AccommodationType {
 // ============================================
 
 /**
- * Get cruise rates for a tier
+ * Get cruise rates for a tier.
+ *
+ * Uses the seasonal, passport-aware rate schema (rate_{season}_{cabin}_{eur|non_eur})
+ * via the shared cruise-pricing engine so this B2B path matches the AI itinerary
+ * path. Returns per-person-per-night double-occupancy rate (ppdNight) and the
+ * single-occupancy supplement per night. Falls back to the legacy
+ * rate_double_eur / rate_single_eur columns, then to tier defaults.
  */
 export async function getCruiseRates(
   tier: ServiceTier,
-  embarkCity?: string
+  embarkCity?: string,
+  isEurPassport: boolean = true,
+  travelDate?: string
 ): Promise<{
   shipName: string
   ppdNight: number
@@ -922,7 +931,9 @@ export async function getCruiseRates(
       query = query.ilike('embark_city', `%${embarkCity}%`)
     }
 
-    const { data: cruises, error } = await query.limit(1)
+    const { data: cruises, error } = await query
+      .order('is_preferred', { ascending: false })
+      .limit(1)
 
     if (error || !cruises || cruises.length === 0) {
       console.log(`⚠️ No cruise found for tier ${tier}, using defaults`)
@@ -935,19 +946,37 @@ export async function getCruiseRates(
     }
 
     const cruise = cruises[0]
-    // rate_double_eur is already per-person (double occupancy)
-    const ppdTrip = cruise.rate_double_eur
-    const ppdNight = ppdTrip / cruise.duration_nights
-    const singleSuppTrip = cruise.rate_single_eur - cruise.rate_double_eur
-    const singleSuppNight = singleSuppTrip / cruise.duration_nights
+    const nights = Number(cruise.duration_nights) || 4
 
-    console.log(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
+    // Seasonal + passport-aware per-person-per-night rates
+    const season = detectCruiseSeason(cruise, travelDate || new Date().toISOString())
+    const seasonRates = getCruiseSeasonRates(cruise, season, isEurPassport)
+
+    // ppdNight = per-person double-occupancy rate for the night
+    let ppdNight = seasonRates.double
+    let singleSuppNight = Math.max(0, seasonRates.single - seasonRates.double)
+
+    // Legacy fallback: older records only have the flat per-trip rate_*_eur columns
+    if (ppdNight <= 0) {
+      const legacyDoubleTrip = Number(cruise.rate_double_eur) || 0
+      const legacySingleTrip = Number(cruise.rate_single_eur) || 0
+      if (legacyDoubleTrip > 0) {
+        ppdNight = legacyDoubleTrip / nights
+        singleSuppNight = Math.max(0, (legacySingleTrip - legacyDoubleTrip) / nights)
+      } else {
+        // No usable rate at all → tier default (never silently price at €0)
+        ppdNight = DEFAULT_RATES[tier].cruisePPDNight
+        singleSuppNight = DEFAULT_RATES[tier].cruiseSingleSuppNight
+      }
+    }
+
+    console.log(`✅ Cruise: ${cruise.ship_name} | Season: ${season} | ${isEurPassport ? 'EUR' : 'non-EUR'} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
 
     return {
       shipName: cruise.ship_name,
       ppdNight,
       singleSuppNight,
-      durationNights: cruise.duration_nights
+      durationNights: nights
     }
   } catch (err) {
     console.error('Error fetching cruise rates:', err)
@@ -1220,6 +1249,9 @@ export async function getMealRates(
       }
     }
 
+    // Meal-specific tier multipliers. INTENTIONALLY distinct from the general
+    // TIER_MULTIPLIERS in lib/rate-lookup-service.ts (deluxe/luxury meals scale
+    // more steeply here: 1.3/1.6 vs 1.2/1.5). Do not unify without a pricing review.
     const multipliers: Record<ServiceTier, number> = {
       budget: 0.8,
       standard: 1.0,
@@ -1666,6 +1698,7 @@ export async function calculateDayBasedPricing(
     tier,
     isEurPassport,
     language = 'English',
+    travelDate,
     marginPercent = 25
   } = params
 
@@ -1761,7 +1794,7 @@ export async function calculateDayBasedPricing(
   let cruiseRates: Awaited<ReturnType<typeof getCruiseRates>> = null
   if (cruiseNights > 0) {
     const firstCruiseDay = cruiseDays[0]
-    cruiseRates = await getCruiseRates(tier, firstCruiseDay?.city)
+    cruiseRates = await getCruiseRates(tier, firstCruiseDay?.city, isEurPassport, travelDate)
   }
 
   const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
@@ -2588,6 +2621,7 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     numPax,
     isEurPassport,
     language = 'English',
+    travelDate,
     marginPercent = 25,
     tourLeaderIncluded = false
   } = params
@@ -2601,6 +2635,7 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     tier,
     isEurPassport,
     language,
+    travelDate,
     marginPercent
   })
 
@@ -2907,6 +2942,7 @@ export async function calculatePricingWithPassengerBreakdown(
     passengers,
     isEurPassport,
     language = 'English',
+    travelDate,
     marginPercent = 25,
     tourLeaderIncluded = false,
     flightCostPerPerson = 0
@@ -2926,6 +2962,7 @@ export async function calculatePricingWithPassengerBreakdown(
     tier,
     isEurPassport,
     language,
+    travelDate,
     marginPercent
   })
 

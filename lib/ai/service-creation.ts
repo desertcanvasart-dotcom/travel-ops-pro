@@ -730,6 +730,13 @@ export async function createLandItineraryServices(
   const warnings: string[] = []
   let previousDayData: any = null // Track previous day for intercity detection
 
+  // If conversion to a non-EUR currency was required but no rate was available,
+  // amounts silently remain in EUR while the record currency says otherwise —
+  // surface that so the operator verifies the quote before sending.
+  if (needsConversion && (!exchangeRates || !eurToTargetRate)) {
+    warnings.push(`Currency conversion to ${currency} was unavailable — amounts are shown in EUR. Please verify before sending.`)
+  }
+
   // ============================================
   // RATE VALIDATION — warn on missing GLOBAL rates only
   // City-specific rates (transport, hotel) are validated per-day below
@@ -756,11 +763,15 @@ export async function createLandItineraryServices(
   const allDays = itineraryData.days || []
   for (let dayIndex = 0; dayIndex < allDays.length; dayIndex++) {
     const dayData = allDays[dayIndex]
-    const dayNumber = dayData.day_number || 1
+    // Use the array position as the source of truth for sequencing. The AI-supplied
+    // day_number can be duplicated, gapped, or disagree with durationDays — any of
+    // which would drift the date and (critically) break the last-day check that
+    // gates accommodation, causing an extra hotel/cruise night to be charged.
+    const dayNumber = dayIndex + 1
     const dayDate = new Date(startDateObj)
-    dayDate.setDate(startDateObj.getDate() + dayNumber - 1)
+    dayDate.setDate(startDateObj.getDate() + dayIndex)
 
-    const isLastDay = dayNumber === durationDays
+    const isLastDay = dayIndex === allDays.length - 1
     const isTransferOnly = dayData.is_transfer_only || false
     const isSailingDay = dayData.is_sailing_day || false
     const isFreeDay = dayData.is_free_day || isSailingDay || false
@@ -998,8 +1009,8 @@ export async function createLandItineraryServices(
 
       // Insert all departure services (with multi-currency tracking)
       console.log(`📦 Day ${dayNumber} (departure): inserting ${departureServices.length} services for day_id=${day.id}`)
-      for (const svc of departureServices) {
-        const { error: depSvcError } = await supabase.from('itinerary_services').insert({
+      if (departureServices.length > 0) {
+        const departureRows = departureServices.map(svc => ({
           itinerary_day_id: day.id,
           ...svc,
           // Multi-currency: all rates are EUR-based; store original cost + exchange rate
@@ -1009,10 +1020,12 @@ export async function createLandItineraryServices(
           // Convert client-facing prices to target currency
           total_cost: toTargetCurrency(svc.total_cost),
           client_price: toTargetCurrency(svc.client_price),
-        })
+        }))
+        // Single round-trip per day instead of one INSERT per service
+        const { error: depSvcError } = await supabase.from('itinerary_services').insert(departureRows)
         if (depSvcError) {
-          console.error(`❌ Day ${dayNumber} (departure): Failed to insert "${svc.service_name}":`, depSvcError)
-          warnings.push(`Day ${dayNumber}: Failed to save service "${svc.service_name}" — ${depSvcError.message}`)
+          console.error(`❌ Day ${dayNumber} (departure): Failed to insert ${departureRows.length} services:`, depSvcError)
+          warnings.push(`Day ${dayNumber}: Failed to save ${departureRows.length} service(s) — ${depSvcError.message}`)
         }
       }
       continue
@@ -1818,8 +1831,10 @@ export async function createLandItineraryServices(
     // Cruise accommodation + bundled transport (for cruise days in cruise-land packages)
     if (isCruiseDay && !isLastDay) {
       // Count cruise nights for this itinerary
-      const cruiseNightsInPackage = (itineraryData.days || []).filter(
-        (d: any) => (d.is_cruise_day || d.accommodation_type === 'cruise') && d.day_number !== durationDays
+      // Count cruise nights, excluding the final (disembarkation) day — keyed on
+      // array position to stay consistent with the index-based isLastDay above.
+      const cruiseNightsInPackage = allDays.filter(
+        (d: any, idx: number) => (d.is_cruise_day || d.accommodation_type === 'cruise') && idx !== allDays.length - 1
       ).length
 
       const landCruiseRate = await getCruiseRate({
@@ -1855,8 +1870,9 @@ export async function createLandItineraryServices(
         totalSupplierCost += nightCost
         totalClientPrice += withMargin(nightCost)
 
-        // Store cabin allocation on itinerary (once)
-        if (dayNumber === (itineraryData.days || []).find((d: any) => d.is_cruise_day || d.accommodation_type === 'cruise')?.day_number) {
+        // Store cabin allocation on itinerary (once, on the first cruise day)
+        const firstCruiseIdx = allDays.findIndex((d: any) => d.is_cruise_day || d.accommodation_type === 'cruise')
+        if (dayIndex === firstCruiseIdx) {
           await supabase.from('itineraries').update({
             cabin_allocation: landCruiseRate.cabinAllocation
           }).eq('id', itineraryId)
@@ -1894,9 +1910,8 @@ export async function createLandItineraryServices(
 
     // Insert all services (with multi-currency tracking + currency conversion)
     console.log(`📦 Day ${dayNumber}: inserting ${services.length} services for day_id=${day.id}`)
-    let insertedCount = 0
-    for (const svc of services) {
-      const { error: svcError } = await supabase.from('itinerary_services').insert({
+    if (services.length > 0) {
+      const serviceRows = services.map(svc => ({
         itinerary_day_id: day.id,
         ...svc,
         // Multi-currency: all rates are EUR-based; store original cost + exchange rate
@@ -1906,15 +1921,16 @@ export async function createLandItineraryServices(
         // Convert client-facing prices to target currency; rate_eur/rate_non_eur stay in EUR
         total_cost: toTargetCurrency(svc.total_cost),
         client_price: toTargetCurrency(svc.client_price),
-      })
+      }))
+      // Single round-trip per day instead of one INSERT per service
+      const { error: svcError } = await supabase.from('itinerary_services').insert(serviceRows)
       if (svcError) {
-        console.error(`❌ Day ${dayNumber}: Failed to insert service "${svc.service_name}":`, svcError)
-        warnings.push(`Day ${dayNumber}: Failed to save service "${svc.service_name}" — ${svcError.message}`)
+        console.error(`❌ Day ${dayNumber}: Failed to insert ${serviceRows.length} services:`, svcError)
+        warnings.push(`Day ${dayNumber}: Failed to save ${serviceRows.length} service(s) — ${svcError.message}`)
       } else {
-        insertedCount++
+        console.log(`✅ Day ${dayNumber}: ${serviceRows.length} services inserted successfully`)
       }
     }
-    console.log(`✅ Day ${dayNumber}: ${insertedCount}/${services.length} services inserted successfully`)
 
     // Track for next iteration (intercity detection)
     previousDayData = dayData

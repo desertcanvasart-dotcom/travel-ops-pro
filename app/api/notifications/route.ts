@@ -219,7 +219,7 @@ async function sendEmailNotification(
   // Send via Gmail API
   const response = await fetch(`${baseUrl}/api/gmail/send`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
     body: JSON.stringify({
       to: toEmail,
       subject: `[Autoura] ${subject}`,

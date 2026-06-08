@@ -13,7 +13,7 @@ async function sendReminderEmail(params: {
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/send-email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
       body: JSON.stringify({
         to: params.to,
         subject: params.subject,
@@ -101,9 +101,9 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
 }
 
 export async function GET(request: NextRequest) {
-  // Verify authorization
+  // Verify authorization — fail closed: reject if the secret is unset or mismatched
   const authHeader = request.headers.get('authorization')
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

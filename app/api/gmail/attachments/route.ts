@@ -1,22 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/gmail/attachments?userId=xxx&messageId=xxx&attachmentId=xxx&filename=xxx
+// GET /api/gmail/attachments?messageId=xxx&attachmentId=xxx&filename=xxx
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
     const messageId = searchParams.get('messageId')
     const attachmentId = searchParams.get('attachmentId')
     const filename = searchParams.get('filename') || 'attachment'
 
-    if (!userId || !messageId || !attachmentId) {
+    // Derive the user from the session — never trust a client-supplied userId.
+    const { user, error: authError } = await getAuthenticatedUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+    const userId = user.id
+
+    if (!messageId || !attachmentId) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }

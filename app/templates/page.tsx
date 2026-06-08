@@ -1008,11 +1008,12 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     const allUnfilled = [...new Set([...unfilledInPreview, ...unfilledInSubject])]
 
     if (allUnfilled.length > 0) {
-      const proceed = await dialog.confirm(
-        'Unfilled Placeholders',
-        `This message has ${allUnfilled.length} unfilled placeholder(s): ${allUnfilled.join(', ')}.\n\nLink an itinerary to auto-fill them, or edit the values above.\n\nSend anyway?`,
-        'warning'
-      )
+      const proceed = await dialog.confirm({
+        title: 'Unfilled Placeholders',
+        message: `This message has ${allUnfilled.length} unfilled placeholder(s): ${allUnfilled.join(', ')}.\n\nLink an itinerary to auto-fill them, or edit the values above.\n\nSend anyway?`,
+        variant: 'warning',
+        confirmText: 'Send Anyway',
+      })
       if (!proceed) return
     }
 

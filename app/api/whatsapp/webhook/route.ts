@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
+import { validateTwilioRequest, formDataToParams } from '@/lib/twilio-signature'
 
 // Use service role key to bypass RLS — webhooks have no user session
 const supabase = createClient(
@@ -20,6 +21,13 @@ export async function POST(request: NextRequest) {
   try {
     // Parse Twilio webhook data (form-urlencoded)
     const formData = await request.formData()
+
+    // Verify the request was actually signed by Twilio (these webhooks run with
+    // no user session, so the signature is their only authentication)
+    if (!validateTwilioRequest(request, formDataToParams(formData))) {
+      console.warn('⛔ Rejected WhatsApp webhook with invalid Twilio signature')
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 403 })
+    }
 
     const from = formData.get('From') as string // e.g., "whatsapp:+201234567890"
     const to = formData.get('To') as string // Your WhatsApp number

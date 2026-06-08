@@ -1,6 +1,33 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// API routes that legitimately receive requests WITHOUT a Supabase session and
+// perform their own verification (Twilio signatures, OAuth `state`, cron bearer
+// secret, or a pre-signup invite token). These bypass the session requirement.
+const PUBLIC_API_ROUTES = [
+  '/api/whatsapp/webhook',          // Twilio inbound — verifies X-Twilio-Signature
+  '/api/whatsapp/status-callback',  // Twilio status — verifies X-Twilio-Signature
+  '/api/auth/google/callback',      // Google OAuth redirect — verifies state
+  '/api/auth/accounting/callback',  // QuickBooks OAuth redirect — verifies state
+  '/api/cron/send-reminders',       // Scheduler — verifies CRON_SECRET bearer
+  '/api/cron/task-reminders',       // Scheduler — verifies CRON_SECRET bearer
+  '/api/invitations/verify',        // Pre-signup invite check (no account yet)
+]
+
+// Internal server-to-server routes called by other route handlers without a
+// user cookie (e.g. cron -> send-email, notifications -> gmail/send). When
+// INTERNAL_API_SECRET is set they require a matching `x-internal-secret` header;
+// until it is set they stay reachable for backward compatibility.
+const INTERNAL_API_ROUTES = [
+  '/api/send-email',
+  '/api/gmail/send',
+  '/api/notifications',
+]
+
+function matchesPrefix(pathname: string, routes: string[]): boolean {
+  return routes.some(route => pathname === route || pathname.startsWith(route + '/'))
+}
+
 // Define route permissions - which roles can access which routes
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin only
@@ -99,33 +126,69 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  const pathname = request.nextUrl.pathname
+
+  // ============================================
+  // API AUTHENTICATION GATE
+  // API routes are NOT covered by the page redirect below, so they must be
+  // gated here. Everything under /api requires an authenticated user unless it
+  // is an explicitly public (self-verifying) endpoint or a trusted internal call.
+  // ============================================
+  if (pathname.startsWith('/api')) {
+    // Self-verifying public endpoints (webhooks, OAuth callbacks, cron, invite verify)
+    if (matchesPrefix(pathname, PUBLIC_API_ROUTES)) {
+      return response
+    }
+
+    // Invitation acceptance (PUT marks an invite accepted by its token) runs
+    // immediately after signup, before the session cookie is reliably readable.
+    if (pathname === '/api/invitations' && request.method === 'PUT') {
+      return response
+    }
+
+    // Normal case: an authenticated browser/session request
+    if (user) {
+      return response
+    }
+
+    // Trusted internal server-to-server calls
+    const internalSecret = process.env.INTERNAL_API_SECRET
+    if (internalSecret) {
+      if (request.headers.get('x-internal-secret') === internalSecret) {
+        return response
+      }
+    } else if (matchesPrefix(pathname, INTERNAL_API_ROUTES)) {
+      // Secret not configured yet -> keep internal routes working (back-compat)
+      return response
+    }
+
+    // Unauthenticated access to a protected API route
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   // Public routes that don't require authentication
   const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations']
-  const isPublicRoute = publicRoutes.some(route => 
-    request.nextUrl.pathname === route || 
-    (route !== '/' && request.nextUrl.pathname.startsWith(route))
+  const isPublicRoute = publicRoutes.some(route =>
+    pathname === route ||
+    (route !== '/' && pathname.startsWith(route))
   )
 
-  // Allow all API routes (they handle their own auth)
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
-
   // If user is not logged in and trying to access protected route
-  if (!user && !isPublicRoute && !isApiRoute) {
+  if (!user && !isPublicRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
   // If user is logged in and trying to access login/signup (but not homepage)
-  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/signup')) {
+  if (user && (pathname === '/login' || pathname === '/signup')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   // ============================================
   // ROLE-BASED ACCESS CONTROL
   // ============================================
-  
-  if (user && !isPublicRoute && !isApiRoute) {
-    const pathname = request.nextUrl.pathname
-    
+
+  if (user && !isPublicRoute) {
+
     // Check if this route has permission restrictions
     const matchedRoute = Object.keys(ROUTE_PERMISSIONS).find(route => {
       return pathname === route || pathname.startsWith(route + '/')

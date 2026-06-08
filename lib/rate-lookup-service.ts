@@ -15,7 +15,10 @@ export type PricingMode = 'b2b' | 'b2c'
 
 const VALID_TIERS: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
 
-// Tier-based rate multipliers for fallback calculations
+// Tier-based rate multipliers for fallback calculations. INTENTIONALLY distinct
+// from the meal-specific multipliers in lib/auto-pricing-service.ts (getMealRates),
+// which scale deluxe/luxury more steeply (1.3/1.6 vs 1.2/1.5 here). Keep them
+// separate unless a pricing review says otherwise.
 const TIER_MULTIPLIERS: Record<ServiceTier, number> = {
   'budget': 0.8,
   'standard': 1.0,

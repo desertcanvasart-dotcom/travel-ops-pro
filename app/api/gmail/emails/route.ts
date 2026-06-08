@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchEmails, getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
-  const userId = searchParams.get('userId')
   const query = searchParams.get('query') || ''
   const pageToken = searchParams.get('pageToken') || undefined
   const maxResults = parseInt(searchParams.get('maxResults') || '20')
 
-  if (!userId) {
-    return NextResponse.json({ error: 'User ID required' }, { status: 400 })
+  // Derive the user from the session — never trust a client-supplied userId.
+  const { user, error: authError } = await getAuthenticatedUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
+  const userId = user.id
 
   try {
     // Get authenticated Gmail client (handles token fetch + refresh)

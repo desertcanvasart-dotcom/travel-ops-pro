@@ -14,11 +14,11 @@ const supabase = createClient(
 // External: Use cron-job.org or similar service
 
 export async function GET(request: NextRequest) {
-  // Optional: Verify cron secret to prevent unauthorized calls
+  // Verify cron secret — fail closed: reject if the secret is unset or mismatched
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401 }
@@ -277,7 +277,7 @@ async function sendReminderEmail(
 
   const response = await fetch(`${baseUrl}/api/gmail/send`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
     body: JSON.stringify({
       to: toEmail,
       subject: `[Autoura] ${subject}`,

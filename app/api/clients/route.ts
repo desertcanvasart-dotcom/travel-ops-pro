@@ -83,9 +83,11 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (clientError) {
+      // Log the full DB error server-side, but don't leak internal details
+      // (column names, constraints, SQL) to the client.
       console.error('❌ Client insert error:', clientError)
       return NextResponse.json(
-        { success: false, error: clientError.message, details: clientError },
+        { success: false, error: 'Failed to create client' },
         { status: 500 }
       )
     }

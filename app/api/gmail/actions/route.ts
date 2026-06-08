@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { google } from 'googleapis'
 import { refreshAccessToken } from '@/lib/gmail'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,9 +17,15 @@ const oauth2Client = new google.auth.OAuth2(
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, messageIds, action, labelId } = await request.json()
+    const { messageIds, action, labelId } = await request.json()
 
-    if (!userId || !messageIds || !action) {
+    const { user, error: authError } = await getAuthenticatedUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+    const userId = user.id
+
+    if (!messageIds || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 

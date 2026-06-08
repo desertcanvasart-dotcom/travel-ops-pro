@@ -160,8 +160,13 @@ export function convertCurrency(
     return amountInBase * toRate
   }
 
-  // Return original amount if conversion not possible
-  console.warn(`Could not convert ${fromCurrency} to ${toCurrency}`)
+  // No rate path available. Returning the original amount keeps callers from
+  // crashing, but the value is now in the WRONG currency — log loudly so it is
+  // caught rather than silently mis-stating a total.
+  console.error(
+    `⚠️ Currency conversion failed: no rate for ${fromCurrency}→${toCurrency} ` +
+    `(base=${rates.base}). Returning ${amount} UNCONVERTED — value is in ${fromCurrency}, not ${toCurrency}.`
+  )
   return amount
 }
 

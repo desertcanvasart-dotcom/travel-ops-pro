@@ -165,7 +165,7 @@ export async function POST(
       try {
         await fetch(`${baseUrl}/api/notifications`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
           body: JSON.stringify({
             team_member_id: assigneeId,
             type: 'task_assigned',
