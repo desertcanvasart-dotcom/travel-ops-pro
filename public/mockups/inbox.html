@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#f9fafb;color:#111827;-webkit-font-smoothing:antialiased}
+.app{display:flex;height:100vh;max-width:1280px;margin:0 auto}
+.sidebar{width:220px;background:#fff;border-right:1px solid #e5e7eb;padding:16px 0;flex-shrink:0}
+.sidebar h3{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;padding:0 16px;margin-bottom:12px}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;color:#6b7280;cursor:pointer}
+.sidebar-item:hover{background:#f9fafb}
+.sidebar-item.active{background:#f0fdf4;color:#647C47;font-weight:600}
+.sidebar-item .count{margin-left:auto;font-size:11px;background:#e5e7eb;color:#6b7280;border-radius:10px;padding:1px 7px;font-weight:600}
+.sidebar-item.active .count{background:#647C47;color:#fff}
+.sidebar-icon{width:16px;height:16px;color:currentColor}
+.list{width:340px;border-right:1px solid #e5e7eb;background:#fff;overflow-y:auto;flex-shrink:0}
+.list-header{padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:8px}
+.search{flex:1;background:#f3f4f6;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;outline:none}
+.thread{padding:12px 16px;border-bottom:1px solid #f3f4f6;cursor:pointer;display:flex;gap:10px}
+.thread:hover{background:#fafafa}
+.thread.active{background:#f0fdf4;border-left:3px solid #647C47}
+.thread.unread .t-from,.thread.unread .t-subject{font-weight:700}
+.avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.t-content{flex:1;min-width:0}
+.t-row{display:flex;align-items:center;justify-content:space-between}
+.t-from{font-size:13px;font-weight:600;color:#111827}
+.t-time{font-size:11px;color:#9ca3af}
+.t-subject{font-size:12px;color:#374151;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t-preview{font-size:12px;color:#9ca3af;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unread-dot{width:8px;height:8px;border-radius:50%;background:#647C47;flex-shrink:0;margin-top:4px}
+.detail{flex:1;background:#fff;display:flex;flex-direction:column}
+.detail-header{padding:16px 20px;border-bottom:1px solid #e5e7eb}
+.detail-from{font-size:15px;font-weight:700;color:#111827}
+.detail-subject{font-size:13px;color:#6b7280;margin-top:2px}
+.detail-meta{display:flex;gap:8px;margin-top:8px}
+.meta-badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px}
+.badge-green{background:#f0fdf4;color:#647C47;border:1px solid #d1e7c4}
+.badge-blue{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
+.badge-amber{background:#fffbeb;color:#d97706;border:1px solid #fde68a}
+.badge-purple{background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff}
+.detail-body{flex:1;padding:20px;overflow-y:auto;font-size:14px;line-height:1.7;color:#374151}
+.detail-body p{margin-bottom:12px}
+.msg-bubble{background:#f3f4f6;border-radius:12px;padding:14px 18px;margin-bottom:12px;max-width:85%}
+.msg-bubble.wa{background:#dcf8c6;border-radius:12px 12px 12px 0}
+.msg-time{font-size:11px;color:#9ca3af;margin-top:4px}
+.channel-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px}
+.ch-wa{background:#25d366;color:#fff}
+.ch-email{background:#ea4335;color:#fff}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h3>Channels</h3>
+    <div class="sidebar-item active">
+      <span>All Messages</span>
+      <span class="count">24</span>
+    </div>
+    <div class="sidebar-item">
+      <span>WhatsApp</span>
+      <span class="count">18</span>
+    </div>
+    <div class="sidebar-item">
+      <span>Email</span>
+      <span class="count">6</span>
+    </div>
+    <div style="height:1px;background:#e5e7eb;margin:12px 16px"></div>
+    <h3>Status</h3>
+    <div class="sidebar-item"><span>Unread</span><span class="count">5</span></div>
+    <div class="sidebar-item"><span>Starred</span></div>
+    <div class="sidebar-item"><span>Archived</span></div>
+  </div>
+
+  <!-- Thread List -->
+  <div class="list">
+    <div class="list-header">
+      <input class="search" placeholder="Search conversations..." />
+    </div>
+    <div class="thread active unread">
+      <div class="unread-dot"></div>
+      <div class="avatar" style="background:#25d366">T</div>
+      <div class="t-content">
+        <div class="t-row"><span class="t-from">Tanaka Yuki</span><span class="t-time">2:47 AM</span></div>
+        <div class="t-subject">New inquiry — 3pax Japan, Cairo+Luxor</div>
+        <div class="t-preview">Hi, I need a quote for 3 pax, Japanese passport...</div>
+      </div>
+    </div>
+    <div class="thread unread">
+      <div class="unread-dot"></div>
+      <div class="avatar" style="background:#3b82f6">M</div>
+      <div class="t-content">
+        <div class="t-row"><span class="t-from">Marie Dupont</span><span class="t-time">Yesterday</span></div>
+        <div class="t-subject">Re: Nile Cruise Quote — 7 nights</div>
+        <div class="t-preview">Thank you! Can we upgrade to suite cabin?</div>
+      </div>
+    </div>
+    <div class="thread">
+      <div style="width:8px;flex-shrink:0"></div>
+      <div class="avatar" style="background:#8b5cf6">S</div>
+      <div class="t-content">
+        <div class="t-row"><span class="t-from">Smith Family</span><span class="t-time">Yesterday</span></div>
+        <div class="t-subject">Confirmed — 5-day Egypt Classic</div>
+        <div class="t-preview">We've transferred the deposit. Please confirm.</div>
+      </div>
+    </div>
+    <div class="thread">
+      <div style="width:8px;flex-shrink:0"></div>
+      <div class="avatar" style="background:#059669">A</div>
+      <div class="t-content">
+        <div class="t-row"><span class="t-from">Ahmed (Guide)</span><span class="t-time">Mar 28</span></div>
+        <div class="t-subject">Availability check — Apr 2-6</div>
+        <div class="t-preview">Yes, I am available for the Luxor tour...</div>
+      </div>
+    </div>
+    <div class="thread unread">
+      <div class="unread-dot"></div>
+      <div class="avatar" style="background:#d97706">K</div>
+      <div class="t-content">
+        <div class="t-row"><span class="t-from">Kim Soo-jin</span><span class="t-time">Mar 27</span></div>
+        <div class="t-subject">Budget request — 2 pax, 10 days</div>
+        <div class="t-preview">Hello, we want to visit Egypt for 10 days...</div>
+      </div>
+    </div>
+    <div class="thread">
+      <div style="width:8px;flex-shrink:0"></div>
+      <div class="avatar" style="background:#ef4444">R</div>
+      <div class="t-content">
+        <div class="t-row"><span class="t-from">Roberto Rossi</span><span class="t-time">Mar 26</span></div>
+        <div class="t-subject">Invoice request — ITN-2025-0042</div>
+        <div class="t-preview">Can you resend the final invoice?</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail View -->
+  <div class="detail">
+    <div class="detail-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="channel-badge ch-wa">WhatsApp</span>
+        <span class="detail-from">Tanaka Yuki</span>
+      </div>
+      <div class="detail-subject">New inquiry — 3pax Japan, Cairo+Luxor</div>
+      <div class="detail-meta">
+        <span class="meta-badge badge-green">3 Adults</span>
+        <span class="meta-badge badge-blue">Mar 15–19</span>
+        <span class="meta-badge badge-amber">Non-EU Passport</span>
+        <span class="meta-badge badge-purple">Deluxe Tier</span>
+      </div>
+    </div>
+    <div class="detail-body">
+      <div class="msg-bubble wa">
+        <p style="margin:0;font-size:14px">Hi, I need a quote for 3 pax, Japanese passports. CAI arrival Mar 15, want to see Pyramids, Sphinx, then fly LXR for VoK, Karnak, Hatshepsut Temple. 5* htl, 4NTS BB. Need guide EN/JP. Airport meet & greet both cities. Private transport throughout.</p>
+        <div class="msg-time">2:47 AM</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:16px 0;padding:10px 14px;background:#f0fdf4;border:1px solid #d1e7c4;border-radius:8px">
+        <span style="font-size:13px;color:#647C47;font-weight:600">AI Extracted:</span>
+        <span class="meta-badge badge-green">98% confidence</span>
+        <span style="font-size:12px;color:#647C47">Client profile created automatically</span>
+      </div>
+      <div class="msg-bubble" style="margin-left:auto;background:#647C47;color:#fff;border-radius:12px 12px 0 12px">
+        <p style="margin:0;font-size:14px">Good morning Tanaka-san! Thank you for your inquiry. I've prepared a 4-night Deluxe itinerary covering Cairo and Luxor for 3 travelers. The quote includes 5-star hotels, private transport, English/Japanese guide, and all entrance fees. Total: €2,060 per person.</p>
+        <p style="margin:8px 0 0;font-size:14px">I'm attaching the detailed PDF itinerary. Let me know if you'd like any adjustments!</p>
+        <div class="msg-time" style="color:rgba(255,255,255,0.7)">8:15 AM</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

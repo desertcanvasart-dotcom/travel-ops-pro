@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#f9fafb;color:#111827;-webkit-font-smoothing:antialiased}
+.app{max-width:1280px;margin:0 auto;padding:16px 20px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px}
+.stat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.stat-icon.green{background:#f0fdf4;color:#647C47}
+.stat-icon.blue{background:#eff6ff;color:#2563eb}
+.stat-icon.amber{background:#fffbeb;color:#d97706}
+.stat-icon.purple{background:#faf5ff;color:#7c3aed}
+.stat-val{font-size:20px;font-weight:700;color:#111827}
+.stat-label{font-size:12px;color:#6b7280}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.cal-header h2{font-size:18px;font-weight:700;display:flex;align-items:center;gap:8px}
+.nav-btn{width:32px;height:32px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:#6b7280}
+.view-tabs{display:flex;gap:2px;background:#f3f4f6;border-radius:8px;padding:2px}
+.view-tab{padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;border:none;cursor:pointer;font-family:inherit;background:transparent;color:#6b7280}
+.view-tab.active{background:#fff;color:#111827;box-shadow:0 1px 2px rgba(0,0,0,0.06)}
+.calendar{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);background:#fafafa;border-bottom:1px solid #e5e7eb}
+.cal-dow div{padding:8px;text-align:center;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-cell{min-height:90px;border-right:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;padding:4px;position:relative}
+.cal-cell:nth-child(7n){border-right:none}
+.cal-date{font-size:12px;font-weight:500;color:#374151;padding:2px 6px}
+.cal-date.other{color:#d1d5db}
+.cal-date.today{background:#647C47;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center}
+.booking{display:block;padding:2px 6px;margin:1px 2px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.booking.confirmed{background:#d1fae5;color:#065f46}
+.booking.pending{background:#fef3c7;color:#92400e}
+.booking.in-progress{background:#dbeafe;color:#1e40af}
+.booking.start{border-radius:4px 0 0 4px;margin-right:0}
+.booking.mid{border-radius:0;margin-left:0;margin-right:0}
+.booking.end{border-radius:0 4px 4px 0;margin-left:0}
+.legend{display:flex;gap:16px;margin-top:12px;justify-content:center}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card"><div class="stat-icon green">📊</div><div><div class="stat-val">18</div><div class="stat-label">Active Bookings</div></div></div>
+    <div class="stat-card"><div class="stat-icon blue">💰</div><div><div class="stat-val">€32,450</div><div class="stat-label">March Revenue</div></div></div>
+    <div class="stat-card"><div class="stat-icon amber">👥</div><div><div class="stat-val">47</div><div class="stat-label">Total Travelers</div></div></div>
+    <div class="stat-card"><div class="stat-icon purple">📅</div><div><div class="stat-val">6</div><div class="stat-label">Upcoming This Week</div></div></div>
+  </div>
+
+  <!-- Calendar Header -->
+  <div class="cal-header">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="nav-btn">‹</button>
+      <h2>March 2025</h2>
+      <button class="nav-btn">›</button>
+      <button style="margin-left:8px;padding:5px 12px;background:#f0fdf4;color:#647C47;border:1px solid #d1e7c4;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Today</button>
+    </div>
+    <div class="view-tabs">
+      <button class="view-tab active">Month</button>
+      <button class="view-tab">Week</button>
+      <button class="view-tab">Timeline</button>
+    </div>
+  </div>
+
+  <!-- Calendar Grid -->
+  <div class="calendar">
+    <div class="cal-dow">
+      <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+    </div>
+    <div class="cal-grid">
+      <!-- Week 1 (Feb 24 - Mar 2) -->
+      <div class="cal-cell"><span class="cal-date other">24</span></div>
+      <div class="cal-cell"><span class="cal-date other">25</span></div>
+      <div class="cal-cell"><span class="cal-date other">26</span></div>
+      <div class="cal-cell"><span class="cal-date other">27</span></div>
+      <div class="cal-cell"><span class="cal-date other">28</span></div>
+      <div class="cal-cell"><span class="cal-date">1</span></div>
+      <div class="cal-cell"><span class="cal-date">2</span></div>
+      <!-- Week 2 -->
+      <div class="cal-cell"><span class="cal-date">3</span><span class="booking confirmed start">Smith — Cairo</span></div>
+      <div class="cal-cell"><span class="cal-date">4</span><span class="booking confirmed mid">Smith — Cairo</span></div>
+      <div class="cal-cell"><span class="cal-date">5</span><span class="booking confirmed mid">Smith — Luxor</span></div>
+      <div class="cal-cell"><span class="cal-date">6</span><span class="booking confirmed mid">Smith — Luxor</span></div>
+      <div class="cal-cell"><span class="cal-date">7</span><span class="booking confirmed end">Smith — Aswan</span></div>
+      <div class="cal-cell"><span class="cal-date">8</span></div>
+      <div class="cal-cell"><span class="cal-date">9</span><span class="booking pending start">Kim — Cairo</span></div>
+      <!-- Week 3 -->
+      <div class="cal-cell"><span class="cal-date">10</span><span class="booking pending mid">Kim — Cairo</span></div>
+      <div class="cal-cell"><span class="cal-date">11</span><span class="booking pending mid">Kim — Luxor</span></div>
+      <div class="cal-cell"><span class="cal-date">12</span><span class="booking pending end">Kim — Luxor</span><span class="booking confirmed start" style="margin-top:2px">Dupont — Cruise</span></div>
+      <div class="cal-cell"><span class="cal-date">13</span><span class="booking confirmed mid">Dupont — Cruise</span></div>
+      <div class="cal-cell"><span class="cal-date">14</span><span class="booking confirmed mid">Dupont — Cruise</span></div>
+      <div class="cal-cell"><span class="cal-date">15</span><span class="booking confirmed mid">Dupont — Cruise</span><span class="booking in-progress start" style="margin-top:2px">Tanaka — Cairo</span></div>
+      <div class="cal-cell"><span class="cal-date">16</span><span class="booking confirmed mid">Dupont — Cruise</span><span class="booking in-progress mid">Tanaka — Cairo</span></div>
+      <!-- Week 4 -->
+      <div class="cal-cell"><span class="cal-date">17</span><span class="booking confirmed end">Dupont — Cruise</span><span class="booking in-progress mid">Tanaka — Luxor</span></div>
+      <div class="cal-cell"><span class="cal-date">18</span><span class="booking in-progress mid">Tanaka — Luxor</span></div>
+      <div class="cal-cell"><span class="cal-date">19</span><span class="booking in-progress end">Tanaka — Dep</span></div>
+      <div class="cal-cell"><span class="cal-date">20</span><span class="booking confirmed start">Rossi — Cairo</span></div>
+      <div class="cal-cell"><span class="cal-date">21</span><span class="booking confirmed mid">Rossi — Cairo</span></div>
+      <div class="cal-cell"><span class="cal-date">22</span><span class="booking confirmed mid">Rossi — Alex</span></div>
+      <div class="cal-cell"><span class="cal-date">23</span><span class="booking confirmed end">Rossi — Cairo</span></div>
+      <!-- Week 5 -->
+      <div class="cal-cell"><span class="cal-date">24</span></div>
+      <div class="cal-cell"><span class="cal-date">25</span><span class="booking pending start">Garcia — Cairo</span></div>
+      <div class="cal-cell"><span class="cal-date">26</span><span class="booking pending mid">Garcia — Luxor</span></div>
+      <div class="cal-cell"><span class="cal-date">27</span><span class="booking pending mid">Garcia — Luxor</span></div>
+      <div class="cal-cell"><span class="cal-date">28</span><span class="booking pending end">Garcia — Aswan</span></div>
+      <div class="cal-cell"><span class="cal-date">29</span></div>
+      <div class="cal-cell"><span class="cal-date">30</span></div>
+      <!-- Week 6 -->
+      <div class="cal-cell"><span class="cal-date">31</span></div>
+      <div class="cal-cell"><span class="cal-date other">1</span></div>
+      <div class="cal-cell"><span class="cal-date other">2</span></div>
+      <div class="cal-cell"><span class="cal-date other">3</span></div>
+      <div class="cal-cell"><span class="cal-date other">4</span></div>
+      <div class="cal-cell"><span class="cal-date other">5</span></div>
+      <div class="cal-cell"><span class="cal-date other">6</span></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#d1fae5"></div>Confirmed</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fef3c7"></div>Pending</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#dbeafe"></div>In Progress</div>
+  </div>
+</div>
+</body>
+</html>

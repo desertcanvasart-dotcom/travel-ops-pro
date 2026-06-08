@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#f9fafb;color:#111827;-webkit-font-smoothing:antialiased}
+.app{max-width:1280px;margin:0 auto;padding:16px 20px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.config-bar{display:flex;align-items:center;gap:16px;padding:14px 18px;flex-wrap:wrap}
+.config-group{display:flex;align-items:center;gap:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px}
+.config-label{font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.config-value{font-size:13px;color:#111827;font-weight:600;background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:4px 10px}
+.config-value.active{background:#647C47;color:#fff;border-color:#647C47}
+.config-value.passport-noneu{background:#f59e0b;color:#fff;border-color:#f59e0b}
+.config-value.b2c{background:#059669;color:#fff;border-color:#059669}
+.quote-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#f0fdf4;border-top:1px solid #e5e7eb;padding:0}
+.quote-cell{padding:10px 14px;text-align:center}
+.quote-cell .label{font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.quote-cell .val{font-size:18px;font-weight:700;color:#111827;margin-top:2px}
+.quote-cell .val.green{color:#647C47}
+.quote-cell .val.amber{color:#d97706}
+.divider{width:1px;background:#e5e7eb;align-self:stretch}
+.day-header{display:flex;align-items:center;gap:12px;padding:10px 18px;background:#fafafa;border-bottom:1px solid #f3f4f6;cursor:pointer}
+.day-num{width:28px;height:28px;border-radius:8px;background:#647C47;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.day-title{font-size:14px;font-weight:600;color:#111827}
+.day-city{font-size:12px;color:#6b7280;margin-left:4px}
+.day-date{font-size:12px;color:#9ca3af;margin-left:auto}
+.slots-badge{font-size:11px;color:#647C47;background:#f0fdf4;border:1px solid #d1e7c4;border-radius:12px;padding:2px 8px;font-weight:600}
+.slot-grid{display:grid;grid-template-columns:140px 1fr 70px 80px 80px;gap:0;border-bottom:1px solid #f3f4f6}
+.slot-grid.header{background:#f9fafb;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px}
+.slot-grid>div{padding:8px 14px;display:flex;align-items:center;font-size:13px;border-right:1px solid #f3f4f6}
+.slot-grid>div:last-child{border-right:none}
+.slot-type{color:#6b7280;font-size:12px;font-weight:500}
+.slot-name{color:#111827;font-weight:500}
+.slot-rate{text-align:right;justify-content:flex-end;color:#111827;font-weight:600;font-variant-numeric:tabular-nums}
+.slot-total{text-align:right;justify-content:flex-end;color:#647C47;font-weight:700;font-variant-numeric:tabular-nums}
+.summary-bar{display:grid;grid-template-columns:repeat(5,1fr);background:#1f2937;padding:0;border-radius:0 0 12px 12px}
+.summary-cell{padding:12px 14px;text-align:center}
+.summary-cell .label{font-size:10px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.summary-cell .val{font-size:16px;font-weight:700;color:#fff;margin-top:2px}
+.summary-cell .val.green{color:#86efac}
+.summary-cell .val.sell{color:#fbbf24}
+.type-dot{width:6px;height:6px;border-radius:50%;margin-right:6px;flex-shrink:0}
+.dot-accom{background:#3b82f6}.dot-transport{background:#8b5cf6}.dot-guide{background:#059669}.dot-entrance{background:#d97706}.dot-meals{background:#ef4444}.dot-tips{background:#6b7280}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="card" style="overflow:hidden">
+    <!-- Config Bar -->
+    <div class="config-bar">
+      <div class="config-group">
+        <span class="config-label">Pax</span>
+        <span class="config-value">4</span>
+      </div>
+      <div class="config-group">
+        <span class="config-label">Start</span>
+        <span class="config-value">Mar 15, 2025</span>
+      </div>
+      <div class="config-group">
+        <span class="config-label">Passport</span>
+        <span class="config-value passport-noneu">Non-EU</span>
+      </div>
+      <div class="config-group">
+        <span class="config-label">Tier</span>
+        <span class="config-value active">Deluxe</span>
+      </div>
+      <div class="config-group">
+        <span class="config-label">Mode</span>
+        <span class="config-value b2c">B2C</span>
+      </div>
+      <div class="config-group">
+        <span class="config-label">Currency</span>
+        <span class="config-value">EUR</span>
+      </div>
+      <div class="config-group">
+        <span class="config-label">Margin</span>
+        <span class="config-value">25%</span>
+      </div>
+    </div>
+
+    <!-- Live Quote Summary -->
+    <div class="quote-bar">
+      <div class="quote-cell"><div class="label">Cost / Person</div><div class="val">€412</div></div>
+      <div class="quote-cell"><div class="label">Total Cost</div><div class="val">€1,648</div></div>
+      <div class="quote-cell"><div class="label">Margin</div><div class="val amber">25%</div></div>
+      <div class="quote-cell"><div class="label">Sell / Person</div><div class="val green">€515</div></div>
+      <div class="quote-cell"><div class="label">Sell Total</div><div class="val green">€2,060</div></div>
+    </div>
+
+    <!-- Day 1 -->
+    <div class="day-header">
+      <div class="day-num">1</div>
+      <div class="day-title">Cairo — Pyramids & Sphinx</div>
+      <div class="day-city">Cairo</div>
+      <div class="day-date">Sat, Mar 15</div>
+      <div class="slots-badge">5/14 Slots</div>
+    </div>
+    <div class="slot-grid header">
+      <div>SERVICE</div><div>DESCRIPTION</div><div>QTY</div><div style="justify-content:flex-end">RATE</div><div style="justify-content:flex-end">TOTAL</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-accom"></span>Accommodation</div><div class="slot-name">Marriott Mena House — Deluxe Room</div><div>2 rooms</div><div class="slot-rate">€95</div><div class="slot-total">€190</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-transport"></span>Transport</div><div class="slot-name">Private Minivan — Full Day Cairo</div><div>1</div><div class="slot-rate">€85</div><div class="slot-total">€85</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-guide"></span>Guide</div><div class="slot-name">English-speaking Guide — Full Day</div><div>1</div><div class="slot-rate">€75</div><div class="slot-total">€75</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-entrance"></span>Entrance Fees</div><div class="slot-name">Pyramids + Sphinx + Solar Boat (Non-EU)</div><div>4 pax</div><div class="slot-rate">€22</div><div class="slot-total">€88</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-meals"></span>Meals</div><div class="slot-name">Lunch — Andrea Restaurant</div><div>4 pax</div><div class="slot-rate">€18</div><div class="slot-total">€72</div>
+    </div>
+
+    <!-- Day 2 -->
+    <div class="day-header" style="border-top:1px solid #e5e7eb">
+      <div class="day-num">2</div>
+      <div class="day-title">Cairo — Islamic Cairo & Khan el-Khalili</div>
+      <div class="day-city">Cairo</div>
+      <div class="day-date">Sun, Mar 16</div>
+      <div class="slots-badge">4/14 Slots</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-accom"></span>Accommodation</div><div class="slot-name">Marriott Mena House — Deluxe Room</div><div>2 rooms</div><div class="slot-rate">€95</div><div class="slot-total">€190</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-transport"></span>Transport</div><div class="slot-name">Private Minivan — Half Day Cairo</div><div>1</div><div class="slot-rate">€55</div><div class="slot-total">€55</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-guide"></span>Guide</div><div class="slot-name">English-speaking Guide — Half Day</div><div>1</div><div class="slot-rate">€50</div><div class="slot-total">€50</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-entrance"></span>Entrance Fees</div><div class="slot-name">Citadel + Mosque + Khan el-Khalili (Non-EU)</div><div>4 pax</div><div class="slot-rate">€14</div><div class="slot-total">€56</div>
+    </div>
+
+    <!-- Day 3 -->
+    <div class="day-header" style="border-top:1px solid #e5e7eb">
+      <div class="day-num">3</div>
+      <div class="day-title">Fly to Luxor — Valley of the Kings</div>
+      <div class="day-city">Luxor</div>
+      <div class="day-date">Mon, Mar 17</div>
+      <div class="slots-badge">6/14 Slots</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-accom"></span>Accommodation</div><div class="slot-name">Steigenberger Nile Palace — Nile View</div><div>2 rooms</div><div class="slot-rate">€110</div><div class="slot-total">€220</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-transport"></span>Transport</div><div class="slot-name">Airport Transfer + Full Day Luxor West</div><div>1</div><div class="slot-rate">€95</div><div class="slot-total">€95</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-guide"></span>Guide</div><div class="slot-name">English-speaking Guide — Full Day</div><div>1</div><div class="slot-rate">€70</div><div class="slot-total">€70</div>
+    </div>
+    <div class="slot-grid">
+      <div class="slot-type"><span class="type-dot dot-entrance"></span>Entrance Fees</div><div class="slot-name">VoK + Hatshepsut + Colossi (Non-EU)</div><div>4 pax</div><div class="slot-rate">€32</div><div class="slot-total">€128</div>
+    </div>
+
+    <!-- Grand Summary -->
+    <div class="summary-bar">
+      <div class="summary-cell"><div class="label">Cost / Person</div><div class="val">€412</div></div>
+      <div class="summary-cell"><div class="label">Total Cost</div><div class="val">€1,648</div></div>
+      <div class="summary-cell"><div class="label">Margin</div><div class="val green">25%</div></div>
+      <div class="summary-cell"><div class="label">Sell / Person</div><div class="val sell">€515</div></div>
+      <div class="summary-cell"><div class="label">Sell Total</div><div class="val sell">€2,060</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

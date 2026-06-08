@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#f9fafb;color:#111827;-webkit-font-smoothing:antialiased}
+.app{display:flex;max-width:1280px;margin:0 auto;min-height:100vh}
+.main{flex:1;padding:20px;overflow-y:auto}
+.sidebar-right{width:320px;background:#fff;border-left:1px solid #e5e7eb;padding:20px;flex-shrink:0}
+.top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.top-bar h1{font-size:18px;font-weight:700;color:#111827}
+.top-bar .code{font-size:13px;color:#647C47;font-weight:600;background:#f0fdf4;padding:4px 10px;border-radius:6px}
+.status-badge{font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;background:#fef3c7;color:#d97706}
+.day-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:12px;overflow:hidden}
+.day-top{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#fafafa;border-bottom:1px solid #f3f4f6}
+.day-badge{width:32px;height:32px;border-radius:10px;background:#647C47;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.day-info h3{font-size:14px;font-weight:600;color:#111827}
+.day-info p{font-size:12px;color:#6b7280}
+.day-date{margin-left:auto;font-size:12px;color:#9ca3af}
+.grip{color:#d1d5db;margin-right:4px;cursor:grab}
+.activities{padding:12px 16px}
+.activity{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f9fafb}
+.activity:last-child{border-bottom:none}
+.act-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.act-icon.site{background:#dbeafe;color:#2563eb}
+.act-icon.hotel{background:#fef3c7;color:#d97706}
+.act-icon.transport{background:#ede9fe;color:#7c3aed}
+.act-icon.meal{background:#fce7f3;color:#db2777}
+.act-icon.guide{background:#d1fae5;color:#059669}
+.act-name{font-size:13px;font-weight:500;color:#111827}
+.act-detail{font-size:11px;color:#9ca3af}
+.act-price{margin-left:auto;font-size:13px;font-weight:600;color:#647C47;font-variant-numeric:tabular-nums}
+.overnight{padding:8px 16px;background:#f8f7f5;border-top:1px solid #f3f4f6;font-size:12px;color:#6b7280;display:flex;align-items:center;gap:6px}
+/* Sidebar */
+.sb-title{font-size:14px;font-weight:700;color:#111827;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.sb-config{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.sb-tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;background:#f3f4f6;color:#374151}
+.sb-tag.green{background:#f0fdf4;color:#647C47;border:1px solid #d1e7c4}
+.sb-day{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f9fafb;font-size:13px}
+.sb-day .label{color:#6b7280}
+.sb-day .price{font-weight:600;color:#111827;font-variant-numeric:tabular-nums}
+.sb-total{display:flex;justify-content:space-between;padding:12px 0;font-size:15px;font-weight:700;color:#647C47;border-top:2px solid #647C47;margin-top:8px}
+.sb-margin{display:flex;justify-content:space-between;padding:8px 12px;background:#f0fdf4;border-radius:8px;margin-top:12px;font-size:13px}
+.sb-margin .label{color:#647C47;font-weight:500}
+.sb-margin .val{color:#647C47;font-weight:700}
+.btn-green{width:100%;padding:12px;background:#647C47;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:16px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="main">
+    <div class="top-bar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <h1>Egypt Classic — Deluxe</h1>
+        <span class="code">ITN-2025-0187</span>
+        <span class="status-badge">Draft</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button style="padding:8px 14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#374151">Download PDF</button>
+        <button style="padding:8px 14px;background:#647C47;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Send Quote</button>
+      </div>
+    </div>
+
+    <!-- Day 1 -->
+    <div class="day-card">
+      <div class="day-top">
+        <span class="grip">⋮⋮</span>
+        <div class="day-badge">1</div>
+        <div class="day-info"><h3>Cairo — Arrival & Pyramids</h3><p>Cairo, Egypt</p></div>
+        <div class="day-date">Sat, Mar 15</div>
+      </div>
+      <div class="activities">
+        <div class="activity"><div class="act-icon transport">🚐</div><div><div class="act-name">Airport Meet & Greet + Transfer</div><div class="act-detail">CAI Airport → Hotel</div></div><div class="act-price">€35</div></div>
+        <div class="activity"><div class="act-icon site">🏛️</div><div><div class="act-name">Great Pyramids of Giza</div><div class="act-detail">Entrance fee • Non-EU rate</div></div><div class="act-price">€14/pp</div></div>
+        <div class="activity"><div class="act-icon site">🗿</div><div><div class="act-name">Great Sphinx</div><div class="act-detail">Included with Pyramids ticket</div></div><div class="act-price">—</div></div>
+        <div class="activity"><div class="act-icon meal">🍽️</div><div><div class="act-name">Lunch — Andrea Restaurant</div><div class="act-detail">Grilled meats, local cuisine</div></div><div class="act-price">€18/pp</div></div>
+        <div class="activity"><div class="act-icon guide">👤</div><div><div class="act-name">English-speaking Guide</div><div class="act-detail">Full day, Egyptologist</div></div><div class="act-price">€75</div></div>
+      </div>
+      <div class="overnight">🏨 Overnight: Marriott Mena House — Deluxe Pyramids View</div>
+    </div>
+
+    <!-- Day 2 -->
+    <div class="day-card">
+      <div class="day-top">
+        <span class="grip">⋮⋮</span>
+        <div class="day-badge">2</div>
+        <div class="day-info"><h3>Cairo — Old Cairo & Islamic Quarter</h3><p>Cairo, Egypt</p></div>
+        <div class="day-date">Sun, Mar 16</div>
+      </div>
+      <div class="activities">
+        <div class="activity"><div class="act-icon site">🕌</div><div><div class="act-name">Saladin Citadel & Mohammed Ali Mosque</div><div class="act-detail">Entrance fee • Non-EU rate</div></div><div class="act-price">€8/pp</div></div>
+        <div class="activity"><div class="act-icon site">🛍️</div><div><div class="act-name">Khan el-Khalili Bazaar</div><div class="act-detail">Free entry, guided walking tour</div></div><div class="act-price">—</div></div>
+        <div class="activity"><div class="act-icon meal">☕</div><div><div class="act-name">Lunch — El Fishawi Café</div><div class="act-detail">Traditional Egyptian cuisine</div></div><div class="act-price">€14/pp</div></div>
+        <div class="activity"><div class="act-icon guide">👤</div><div><div class="act-name">English-speaking Guide</div><div class="act-detail">Half day</div></div><div class="act-price">€50</div></div>
+      </div>
+      <div class="overnight">🏨 Overnight: Marriott Mena House — Deluxe Pyramids View</div>
+    </div>
+
+    <!-- Day 3 -->
+    <div class="day-card">
+      <div class="day-top">
+        <span class="grip">⋮⋮</span>
+        <div class="day-badge">3</div>
+        <div class="day-info"><h3>Fly to Luxor — West Bank Temples</h3><p>Luxor, Egypt</p></div>
+        <div class="day-date">Mon, Mar 17</div>
+      </div>
+      <div class="activities">
+        <div class="activity"><div class="act-icon transport">✈️</div><div><div class="act-name">Domestic Flight CAI → LXR</div><div class="act-detail">EgyptAir, Morning</div></div><div class="act-price">€120/pp</div></div>
+        <div class="activity"><div class="act-icon site">👑</div><div><div class="act-name">Valley of the Kings</div><div class="act-detail">3 tombs included • Non-EU rate</div></div><div class="act-price">€18/pp</div></div>
+        <div class="activity"><div class="act-icon site">🏛️</div><div><div class="act-name">Hatshepsut Temple</div><div class="act-detail">Entrance fee • Non-EU rate</div></div><div class="act-price">€10/pp</div></div>
+        <div class="activity"><div class="act-icon site">🗿</div><div><div class="act-name">Colossi of Memnon</div><div class="act-detail">Free entry, photo stop</div></div><div class="act-price">—</div></div>
+      </div>
+      <div class="overnight">🏨 Overnight: Steigenberger Nile Palace — Nile View Room</div>
+    </div>
+  </div>
+
+  <!-- Pricing Sidebar -->
+  <div class="sidebar-right">
+    <div class="sb-title">Pricing Summary</div>
+    <div class="sb-config">
+      <span class="sb-tag green">Deluxe</span>
+      <span class="sb-tag">4 Pax</span>
+      <span class="sb-tag">Non-EU</span>
+      <span class="sb-tag">EUR</span>
+    </div>
+    <div class="sb-day"><span class="label">Day 1 — Cairo Pyramids</span><span class="price">€510</span></div>
+    <div class="sb-day"><span class="label">Day 2 — Islamic Cairo</span><span class="price">€351</span></div>
+    <div class="sb-day"><span class="label">Day 3 — Luxor West Bank</span><span class="price">€513</span></div>
+    <div class="sb-day"><span class="label">Day 4 — Luxor East Bank</span><span class="price">€445</span></div>
+    <div style="height:1px;background:#e5e7eb;margin:8px 0"></div>
+    <div class="sb-day"><span class="label" style="color:#374151;font-weight:500">Subtotal (Cost)</span><span class="price">€1,819</span></div>
+    <div class="sb-margin"><span class="label">Margin (25%)</span><span class="val">+€455</span></div>
+    <div class="sb-total"><span>Selling Total</span><span>€2,274</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7280;margin-top:4px">
+      <span>Per person</span><span style="font-weight:600;color:#647C47">€569</span>
+    </div>
+    <button class="btn-green">Generate PDF Quote</button>
+    <button class="btn-green" style="background:#fff;color:#647C47;border:1px solid #647C47;margin-top:8px">Send via WhatsApp</button>
+  </div>
+</div>
+</body>
+</html>
