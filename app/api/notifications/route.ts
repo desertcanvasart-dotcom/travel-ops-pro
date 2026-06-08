@@ -216,8 +216,10 @@ async function sendEmailNotification(
     </html>
   `
 
-  // Send via Gmail API
-  const response = await fetch(`${baseUrl}/api/gmail/send`, {
+  // Send via the system email endpoint, which resolves the business sender
+  // itself (accepts { to, subject, html }). The per-user /api/gmail/send compose
+  // path requires a userId we don't have here.
+  const response = await fetch(`${baseUrl}/api/send-email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' },
     body: JSON.stringify({
