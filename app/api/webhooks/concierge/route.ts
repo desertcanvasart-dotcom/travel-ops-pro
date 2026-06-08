@@ -54,6 +54,13 @@ const STATUS_LABEL: Record<IngestOutcome, string> = {
 }
 
 export async function POST(request: NextRequest) {
+  // ⚠️ RATE LIMITING: there is intentionally NONE at the application layer in
+  // v1. Do not assume it exists. The shared limiter in lib/rate-limit.ts is an
+  // in-memory, per-instance Map that does not hold across Vercel serverless
+  // instances, so wiring it here would give a false sense of protection.
+  // Inbound volume is bounded by a single trusted, HMAC-authenticated concierge
+  // source plus Vercel platform protection. If more sources are added, add a
+  // DISTRIBUTED limiter (e.g. Upstash/Redis) at this point — not the in-memory one.
   const requestId = request.headers.get(REQUEST_ID_HEADER) || null
 
   // 1. Raw body — MUST be read before JSON parsing; HMAC is over raw bytes.
