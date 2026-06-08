@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -188,7 +189,7 @@ export async function POST(
 
     if (insertError) {
       console.error('Error inserting supplier statuses:', insertError)
-      return NextResponse.json({ success: false, error: insertError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(insertError, 'Failed to sync suppliers') }, { status: 500 })
     }
 
     console.log(`✅ Synced ${inserted?.length || 0} suppliers to booking ${booking.booking_code}`)

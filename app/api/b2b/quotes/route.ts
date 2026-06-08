@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B QUOTES API
@@ -138,7 +139,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: quotesWithLanguages })
 
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('Error in GET /api/b2b/quotes:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load quotes') }, { status: 500 })
   }
 }
 
@@ -227,7 +229,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating quote:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to create quote') }, { status: 500 })
     }
 
     // Auto-create English version
@@ -257,7 +259,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error in POST /api/b2b/quotes:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to create quote') }, { status: 500 })
   }
 }
 
@@ -283,7 +285,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, data })
 
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('Error in PUT /api/b2b/quotes:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update quote') }, { status: 500 })
   }
 }
 
@@ -305,6 +308,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
 
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('Error in DELETE /api/b2b/quotes:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete quote') }, { status: 500 })
   }
 }

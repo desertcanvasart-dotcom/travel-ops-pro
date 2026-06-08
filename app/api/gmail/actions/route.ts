@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { google } from 'googleapis'
 import { refreshAccessToken } from '@/lib/gmail'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -180,6 +181,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('Email action error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Failed to perform email action') }, { status: 500 })
   }
 }

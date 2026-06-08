@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { EmailMessage, EmailMessageFormData } from '@/types/unified'
+import { clientMessage } from '@/lib/api-errors'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ messages, success: true })
   } catch (error: any) {
     console.error('Error fetching email messages:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to load messages'), success: false }, { status: 500 })
   }
 }
 
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: newMessage, created: true, success: true })
   } catch (error: any) {
     console.error('Error storing email message:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to store message'), success: false }, { status: 500 })
   }
 }
 
@@ -214,7 +215,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: data, success: true })
   } catch (error: any) {
     console.error('Error updating email message:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to update message'), success: false }, { status: 500 })
   }
 }
 
@@ -283,6 +284,6 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error batch storing email messages:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to store messages'), success: false }, { status: 500 })
   }
 }

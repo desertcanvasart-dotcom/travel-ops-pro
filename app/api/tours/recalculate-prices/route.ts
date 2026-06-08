@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error fetching templates:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to recalculate prices') },
         { status: 500 }
       )
     }
@@ -181,7 +182,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Recalculation error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to recalculate prices' },
+      { success: false, error: clientMessage(error, 'Failed to recalculate prices') },
       { status: 500 }
     )
   }
@@ -197,7 +198,8 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
 
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      console.error('Error fetching templates status:', error)
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to fetch price status') }, { status: 500 })
     }
 
     const withPrice = templates?.filter(t => t.cached_starting_price !== null) || []
@@ -223,8 +225,9 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error: any) {
+    console.error('❌ Price status error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to fetch price status') },
       { status: 500 }
     )
   }

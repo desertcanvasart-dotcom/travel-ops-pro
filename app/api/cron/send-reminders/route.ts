@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 // Verify cron secret for security
 const CRON_SECRET = process.env.CRON_SECRET
@@ -212,7 +213,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Cron error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to process reminders') },
       { status: 500 }
     )
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 import { RATE_TABLE_CONFIGS, validateImportData } from '@/lib/bulk-rate-service'
 import type { ImportResult } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('[bulk-import] Error:', error)
     return NextResponse.json(
-      { success: false, error: `Import failed: ${error?.message || 'Unknown error'}` },
+      { success: false, error: clientMessage(error, 'Import failed') },
       { status: 500 }
     )
   }

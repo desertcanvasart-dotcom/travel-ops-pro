@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // Document number prefixes
 const DOC_PREFIXES: Record<string, string> = {
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
   
   if (error) {
     console.error('Error fetching supplier documents:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to fetch supplier documents') }, { status: 500 })
   }
   
   // Calculate summary stats
@@ -169,7 +170,7 @@ export async function POST(request: NextRequest) {
     
     if (error) {
       console.error('Error creating supplier document:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to create supplier document') }, { status: 500 })
     }
     
     return NextResponse.json({

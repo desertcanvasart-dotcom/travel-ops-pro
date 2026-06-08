@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B PARTNERS API
@@ -34,13 +35,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching partners:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to load partners') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: data || [] })
   } catch (error: any) {
     console.error('Error in GET /api/b2b/partners:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to load partners') }, { status: 500 })
   }
 }
 
@@ -62,12 +63,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating partner:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to create partner') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error: any) {
     console.error('Error in POST /api/b2b/partners:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to create partner') }, { status: 500 })
   }
 }

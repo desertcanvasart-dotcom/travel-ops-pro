@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function PATCH(
   request: NextRequest,
@@ -38,6 +39,6 @@ export async function PATCH(
     })
   } catch (error: any) {
     console.error('Error toggling pause:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to toggle reminder pause') }, { status: 500 })
   }
 }

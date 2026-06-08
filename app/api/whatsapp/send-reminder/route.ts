@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function POST(request: NextRequest) {
   try {
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { success: false, error: result.error },
+        { success: false, error: clientMessage(result.error, 'Failed to send reminder') },
         { status: 500 }
       )
     }
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to send reminder') },
       { status: 500 }
     )
   }

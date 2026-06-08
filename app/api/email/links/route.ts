@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error fetching email link:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to fetch email link') }, { status: 500 })
   }
 }
 
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error creating email link:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to create email link') }, { status: 500 })
   }
 }
 
@@ -162,7 +163,7 @@ export async function DELETE(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error deleting email link:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to delete email link') }, { status: 500 })
   }
 }
 
@@ -253,6 +254,6 @@ export async function PUT(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error auto-linking emails:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to auto-link emails') }, { status: 500 })
   }
 }

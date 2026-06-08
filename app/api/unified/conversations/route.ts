@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
+import { clientMessage } from '@/lib/api-errors'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -190,6 +191,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error fetching unified conversations:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to fetch conversations'), success: false }, { status: 500 })
   }
 }

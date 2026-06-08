@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -259,6 +260,7 @@ export async function POST(
       }
     })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('POST /api/b2b/quotes/[id]/convert error:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to convert quote') }, { status: 500 })
   }
 }

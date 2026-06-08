@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching copilot settings:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to load settings') },
       { status: 500 }
     )
   }
@@ -87,7 +88,7 @@ export async function PUT(request: NextRequest) {
   } catch (error: any) {
     console.error('Error updating copilot settings:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to update settings') },
       { status: 500 }
     )
   }

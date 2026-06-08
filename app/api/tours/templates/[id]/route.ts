@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 // Admin client for all operations (bypasses RLS)
 const supabaseAdmin = createClient(
@@ -28,7 +29,7 @@ export async function GET(
     if (templateError) {
       console.error('Error fetching template:', templateError)
       return NextResponse.json(
-        { success: false, error: templateError.message },
+        { success: false, error: clientMessage(templateError, 'Failed to fetch template') },
         { status: 404 }
       )
     }
@@ -150,7 +151,7 @@ export async function PUT(
     if (error) {
       console.error('Error updating template:', error)
       return NextResponse.json(
-        { success: false, error: error.message || 'Failed to update template' },
+        { success: false, error: clientMessage(error, 'Failed to update template') },
         { status: 500 }
       )
     }
@@ -256,7 +257,7 @@ export async function DELETE(
     if (delVarErr) {
       console.error('Error deleting variations:', delVarErr)
       return NextResponse.json(
-        { success: false, error: `Failed to delete variations: ${delVarErr.message}` },
+        { success: false, error: clientMessage(delVarErr, 'Failed to delete variations') },
         { status: 500 }
       )
     }
@@ -277,7 +278,7 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting template:', error)
       return NextResponse.json(
-        { success: false, error: `Failed to delete template: ${error.message}` },
+        { success: false, error: clientMessage(error, 'Failed to delete template') },
         { status: 500 }
       )
     }

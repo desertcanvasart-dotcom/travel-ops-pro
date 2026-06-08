@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('GET /api/payments error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to load payments') },
       { status: 500 }
     )
   }
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('POST /api/payments error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to record payment') },
       { status: 500 }
     )
   }

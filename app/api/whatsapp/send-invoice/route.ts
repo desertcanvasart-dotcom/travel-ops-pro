@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createClient } from '@supabase/supabase-js'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { clientMessage } from '@/lib/api-errors'
 
 // Generate Invoice PDF
 async function generateInvoicePDF(invoice: any): Promise<Uint8Array> {
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
 
     if (invoiceError || !invoice) {
       return NextResponse.json(
-        { success: false, error: `Invoice not found: ${invoiceError?.message || 'No data'}` },
+        { success: false, error: clientMessage(invoiceError, 'Invoice not found') },
         { status: 404 }
       )
     }
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { success: false, error: result.error },
+        { success: false, error: clientMessage(result.error, 'Failed to send invoice') },
         { status: 500 }
       )
     }
@@ -326,7 +327,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to send invoice') },
       { status: 500 }
     )
   }

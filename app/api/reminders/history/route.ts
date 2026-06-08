@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function GET(request: NextRequest) {
   try {
@@ -62,6 +63,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error fetching reminder history:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to fetch reminder history') }, { status: 500 })
   }
 }

@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching bookings:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load bookings') }, { status: 500 })
     }
 
     // Get summary counts
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     if (createError) {
       console.error('Error creating booking:', createError)
-      return NextResponse.json({ success: false, error: createError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(createError, 'Failed to create booking') }, { status: 500 })
     }
 
     // Populate suppliers from itinerary services

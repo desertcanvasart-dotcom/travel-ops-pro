@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // POST /api/pricing-grid/save
@@ -251,7 +252,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Save pricing grid error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to save pricing grid') },
       { status: 500 }
     )
   }

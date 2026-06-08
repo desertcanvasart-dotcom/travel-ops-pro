@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import twilio from 'twilio'
+import { clientMessage } from '@/lib/api-errors'
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ messages })
   } catch (error: any) {
     console.error('Error fetching messages:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to fetch messages') }, { status: 500 })
   }
 }
 
@@ -135,6 +136,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error sending message:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to send message') }, { status: 500 })
   }
 }

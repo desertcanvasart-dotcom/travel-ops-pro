@@ -3,6 +3,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function PUT(
   request: Request,
@@ -55,7 +56,7 @@ export async function PUT(
     if (error) {
       console.error('Error updating service:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to update service') },
         { status: 400 }
       )
     }
@@ -87,7 +88,7 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting service:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to delete service') },
         { status: 400 }
       )
     }
@@ -131,7 +132,7 @@ export async function GET(
     if (error) {
       console.error('Error fetching service:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to load service') },
         { status: 400 }
       )
     }

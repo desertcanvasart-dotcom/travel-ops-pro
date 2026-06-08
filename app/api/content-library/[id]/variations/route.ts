@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { clientMessage } from '@/lib/api-errors'
 
 const VALID_TIERS = ['budget', 'standard', 'deluxe', 'luxury']
 
@@ -56,7 +57,7 @@ export async function GET(
 
     if (error) {
       console.error('Error fetching variations:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to load variations') }, { status: 500 })
     }
 
     // Sort by tier order
@@ -148,7 +149,7 @@ export async function POST(
         )
       }
       console.error('Error creating variation:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to create variation') }, { status: 500 })
     }
 
     return NextResponse.json(data, { status: 201 })
@@ -331,7 +332,7 @@ export async function PATCH(
         )
       }
       console.error('Error updating variation:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to update variation') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -382,7 +383,7 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting variation:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to delete variation') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

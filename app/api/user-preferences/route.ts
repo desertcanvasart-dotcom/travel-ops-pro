@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { clientMessage } from '@/lib/api-errors'
 
 async function createClient() {
   const cookieStore = await cookies()
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to fetch preferences') },
       { status: 500 }
     )
   }
@@ -111,7 +112,7 @@ export async function PUT(request: NextRequest) {
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to save preferences') },
       { status: 500 }
     )
   }

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { generateEmailTemplate } from '@/lib/communication-utils'
 import { google } from 'googleapis'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,7 +120,7 @@ export async function POST(request: Request) {
       {
         success: false,
         error: 'Failed to send email',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: clientMessage(error, 'Failed to send email')
       },
       { status: 500 }
     )

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
-// ENTRANCE FEES API  
+// ENTRANCE FEES API
 // File: app/api/rates/entrance-fees/route.ts
 // 
 // This endpoint powers the attractions dropdown
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('GET entrance_fees error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load entrance fees') }, { status: 500 })
     }
 
     // Merge language versions for non-English
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('GET entrance_fees catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load entrance fees') }, { status: 500 })
   }
 }
 
@@ -164,12 +165,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('POST entrance_fees error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save entrance fee') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST entrance_fees catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save entrance fee') }, { status: 500 })
   }
 }

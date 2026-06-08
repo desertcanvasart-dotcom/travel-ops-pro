@@ -16,6 +16,7 @@ import {
   ServiceTier 
 } from '@/lib/auto-pricing-service'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -182,10 +183,9 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('❌ Test pricing error:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message,
-      stack: error.stack 
+    return NextResponse.json({
+      success: false,
+      error: clientMessage(error, 'Test pricing failed')
     }, { status: 500 })
   }
 }

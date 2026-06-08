@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B QUOTES API - Single Quote Operations
@@ -107,7 +108,7 @@ export async function GET(
 
   } catch (error: any) {
     console.error('Error in GET /api/b2b/quotes/[id]:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load quote') }, { status: 500 })
   }
 }
 
@@ -133,14 +134,14 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating quote:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update quote') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
 
   } catch (error: any) {
     console.error('Error in PUT /api/b2b/quotes/[id]:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update quote') }, { status: 500 })
   }
 }
 
@@ -159,13 +160,13 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting quote:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete quote') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
 
   } catch (error: any) {
     console.error('Error in DELETE /api/b2b/quotes/[id]:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete quote') }, { status: 500 })
   }
 }

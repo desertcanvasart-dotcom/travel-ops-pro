@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
 import { calculatePricingFromRates, getFallbackRates } from '@/lib/rate-lookup-service'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // QUOTE BUILDER API
@@ -263,7 +264,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to build quote'
+        error: clientMessage(error, 'Failed to build quote')
       },
       { status: 500 }
     )

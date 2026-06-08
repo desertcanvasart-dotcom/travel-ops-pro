@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 // Server-side admin client — bypasses RLS for reliable reads/writes
 const supabase = createAdminClient(
@@ -62,7 +63,7 @@ export async function GET(
       {
         success: false,
         error: 'Failed to fetch itinerary',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: clientMessage(error, 'Failed to fetch itinerary')
       },
       { status: 500 }
     )
@@ -231,7 +232,7 @@ export async function PUT(
       { 
         success: false, 
         error: 'Failed to update itinerary',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: clientMessage(error, 'Failed to update itinerary')
       },
       { status: 500 }
     )
@@ -316,7 +317,7 @@ export async function DELETE(
       { 
         success: false, 
         error: 'Failed to delete itinerary',
-        message: error.message
+        message: clientMessage(error, 'Failed to delete itinerary')
       },
       { status: 500 }
     )

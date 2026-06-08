@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,13 +25,13 @@ export async function GET(
 
     if (error) {
       console.error('GET accommodation_rates by id error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load hotel rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('GET accommodation_rates by id catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load hotel rate') }, { status: 500 })
   }
 }
 
@@ -125,13 +126,13 @@ export async function PUT(
 
     if (error) {
       console.error('PUT accommodation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save hotel rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('PUT accommodation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save hotel rate') }, { status: 500 })
   }
 }
 
@@ -149,12 +150,12 @@ export async function DELETE(
 
     if (error) {
       console.error('DELETE accommodation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete hotel rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Hotel deleted successfully' })
   } catch (error: any) {
     console.error('DELETE accommodation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete hotel rate') }, { status: 500 })
   }
 }

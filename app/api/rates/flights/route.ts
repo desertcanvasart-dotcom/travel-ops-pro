@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // FLIGHT RATES API - Full CRUD
@@ -80,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('GET flight_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load flight rates') }, { status: 500 })
     }
 
     // Also return enum options for UI dropdowns
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('GET flight_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load flight rates') }, { status: 500 })
   }
 }
 
@@ -191,13 +192,13 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('POST flight_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save flight rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data, updated: !!existing?.length }, { status: existing?.length ? 200 : 201 })
   } catch (error: any) {
     console.error('POST flight_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save flight rate') }, { status: 500 })
   }
 }
 
@@ -264,13 +265,13 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       console.error('PUT flight_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save flight rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('PUT flight_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save flight rate') }, { status: 500 })
   }
 }
 
@@ -291,13 +292,13 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('DELETE flight_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete flight rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('DELETE flight_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete flight rate') }, { status: 500 })
   }
 }
 

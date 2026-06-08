@@ -14,6 +14,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -923,7 +924,7 @@ export async function POST(
   } catch (error: any) {
     console.error('[Pricing] Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Pricing calculation failed' },
+      { success: false, error: clientMessage(error, 'Pricing calculation failed') },
       { status: 500 }
     )
   }

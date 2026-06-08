@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,13 +22,13 @@ export async function GET(
 
     if (error) {
       console.error('GET meal_rate error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load meal rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('GET meal_rate catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load meal rate') }, { status: 500 })
   }
 }
 
@@ -123,7 +124,7 @@ export async function PUT(
 
         if (retry.error) {
           console.error('PUT meal_rate retry also failed:', retry.error)
-          return NextResponse.json({ success: false, error: retry.error.message }, { status: 500 })
+          return NextResponse.json({ success: false, error: clientMessage(retry.error, 'Failed to save meal rate') }, { status: 500 })
         }
 
         // Log the constraint issue so we can fix form values
@@ -132,18 +133,18 @@ export async function PUT(
       }
 
       console.error('PUT meal_rate check constraint failed and could not identify field:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save meal rate') }, { status: 500 })
     }
 
     if (error) {
       console.error('PUT meal_rate update failed:', error, 'updateData:', updateData)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save meal rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('PUT meal_rate catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save meal rate') }, { status: 500 })
   }
 }
 
@@ -170,12 +171,12 @@ export async function DELETE(
         }, { status: 409 }) // 409 Conflict
       }
       
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete meal rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('DELETE meal_rate catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete meal rate') }, { status: 500 })
   }
 }

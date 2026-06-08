@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error fetching clients:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to load clients') }, { status: 500 })
   }
 }
 
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create client' },
+      { success: false, error: clientMessage(error, 'Failed to create client') },
       { status: 500 }
     )
   }

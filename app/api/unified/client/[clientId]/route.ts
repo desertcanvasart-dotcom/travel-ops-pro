@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -144,6 +145,6 @@ export async function GET(
     })
   } catch (error: any) {
     console.error('Error fetching client conversations:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to fetch client conversations'), success: false }, { status: 500 })
   }
 }

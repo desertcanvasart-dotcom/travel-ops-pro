@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 // Generate unique itinerary code
 function generateItineraryCode(): string {
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to load itineraries') },
       { status: 500 }
     )
   }
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to create itinerary') },
       { status: 500 }
     )
   }

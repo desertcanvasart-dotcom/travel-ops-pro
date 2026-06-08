@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function POST(request: NextRequest) {
   try {
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!result.success) {
-      return NextResponse.json({ success: false, error: result.error }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(result.error, 'Failed to send receipt') }, { status: 500 })
     }
 
     console.log('✅ Receipt sent successfully via WhatsApp:', result.messageId)
@@ -92,6 +93,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('❌ Send receipt error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to send receipt') }, { status: 500 })
   }
 }

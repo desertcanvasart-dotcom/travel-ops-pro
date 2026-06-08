@@ -11,6 +11,7 @@ import {
   convertCurrency,
   SUPPORTED_CURRENCIES
 } from '@/lib/currency-service'
+import { clientMessage } from '@/lib/api-errors'
 
 // GET - Fetch current exchange rates
 export async function GET(request: NextRequest) {
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Exchange rates GET error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to fetch exchange rates') },
       { status: 500 }
     )
   }
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Exchange rates POST error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to convert currency') },
       { status: 500 }
     )
   }

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function GET(
   request: NextRequest,
@@ -89,7 +90,7 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating document:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update document') }, { status: 500 })
     }
 
     console.log('Document updated successfully:', data)
@@ -115,7 +116,7 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting document:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete document') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

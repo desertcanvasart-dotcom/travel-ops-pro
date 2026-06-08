@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { locales, type Locale } from '@/i18n/config'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function GET() {
   try {
@@ -65,7 +66,7 @@ export async function PATCH(request: Request) {
 
     if (error) {
       console.error('Error updating user preferences:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to update preferences') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, ...updateData })

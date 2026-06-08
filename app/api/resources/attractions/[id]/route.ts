@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +29,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching activity rate:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to fetch attraction rate') },
       { status: 500 }
     )
   }
@@ -61,7 +62,7 @@ export async function PUT(
   } catch (error: any) {
     console.error('Error updating activity rate:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to update attraction rate') },
       { status: 500 }
     )
   }
@@ -85,7 +86,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Error deleting activity rate:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to delete attraction rate') },
       { status: 500 }
     )
   }

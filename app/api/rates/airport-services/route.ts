@@ -1,6 +1,7 @@
 // app/api/rates/airport-services/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function GET() {
   try {
@@ -15,7 +16,8 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('GET airport_staff_rates error:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load airport service rates') }, { status: 500 })
   }
 }
 
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('POST airport_staff_rates error:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save airport service rate') }, { status: 500 })
   }
 }

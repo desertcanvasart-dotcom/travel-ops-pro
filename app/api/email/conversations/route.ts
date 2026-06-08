@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { EmailConversation } from '@/types/unified'
+import { clientMessage } from '@/lib/api-errors'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ conversations, success: true })
   } catch (error: any) {
     console.error('Error fetching email conversations:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to load conversations'), success: false }, { status: 500 })
   }
 }
 
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ conversation: newConversation, created: true, success: true })
   } catch (error: any) {
     console.error('Error creating/updating email conversation:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to save conversation'), success: false }, { status: 500 })
   }
 }
 
@@ -267,7 +268,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ conversation: data, success: true })
   } catch (error: any) {
     console.error('Error updating email conversation:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to update conversation'), success: false }, { status: 500 })
   }
 }
 
@@ -306,6 +307,6 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error hiding email conversation:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to hide conversation'), success: false }, { status: 500 })
   }
 }

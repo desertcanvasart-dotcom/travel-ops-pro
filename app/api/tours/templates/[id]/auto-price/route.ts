@@ -9,12 +9,13 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { 
-  calculateAutoPricing, 
+import {
+  calculateAutoPricing,
   calculateMultiTierPricing,
   getTemplatePriceRange,
-  ServiceTier 
+  ServiceTier
 } from '@/lib/auto-pricing-service'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function POST(
   request: NextRequest,
@@ -120,7 +121,7 @@ export async function POST(
   } catch (error: any) {
     console.error('❌ Auto-pricing error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to calculate pricing' },
+      { success: false, error: clientMessage(error, 'Failed to calculate pricing') },
       { status: 500 }
     )
   }
@@ -168,7 +169,7 @@ export async function GET(
   } catch (error: any) {
     console.error('❌ Auto-pricing GET error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to get pricing' },
+      { success: false, error: clientMessage(error, 'Failed to get pricing') },
       { status: 500 }
     )
   }

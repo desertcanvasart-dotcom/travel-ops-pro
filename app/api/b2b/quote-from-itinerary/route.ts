@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -556,7 +557,7 @@ export async function POST(request: NextRequest) {
     if (quoteError || !quote) {
       console.error('Failed to create B2B quote:', quoteError)
       return NextResponse.json(
-        { success: false, error: quoteError?.message || 'Failed to create quote' },
+        { success: false, error: clientMessage(quoteError, 'Failed to create quote') },
         { status: 500 }
       )
     }
@@ -607,7 +608,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Error creating B2B quote from itinerary:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to create quote from itinerary') },
       { status: 500 }
     )
   }

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { clientMessage } from '@/lib/api-errors'
 
 // Helper to create Supabase client
 async function createClient() {
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     if (contentError) {
       console.error('Error fetching content:', contentError)
-      return NextResponse.json({ error: contentError.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(contentError, 'Failed to load content') }, { status: 500 })
     }
 
     if (!contentItems || contentItems.length === 0) {
@@ -198,7 +199,7 @@ export async function POST(request: NextRequest) {
         )
       }
       console.error('Error creating content:', contentError)
-      return NextResponse.json({ error: contentError.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(contentError, 'Failed to create content') }, { status: 500 })
     }
 
     // Create variations if provided
@@ -285,7 +286,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       console.error('Error updating content:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to update content') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -327,7 +328,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting content:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to delete content') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

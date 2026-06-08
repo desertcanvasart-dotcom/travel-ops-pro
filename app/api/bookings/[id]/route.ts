@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -135,7 +136,7 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating booking:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update booking') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: booking })
@@ -180,7 +181,7 @@ export async function DELETE(
 
     if (deleteError) {
       console.error('Error deleting booking:', deleteError)
-      return NextResponse.json({ success: false, error: deleteError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(deleteError, 'Failed to delete booking') }, { status: 500 })
     }
 
     return NextResponse.json({

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // TOUR VARIATION SERVICES API - CRUD + BULK
@@ -144,7 +145,8 @@ export async function GET(
       .order('sequence_order')
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Error fetching variation services:', error)
+      return NextResponse.json({ error: clientMessage(error, 'Failed to fetch services') }, { status: 500 })
     }
 
     const enrichedServices = await Promise.all((data || []).map(async (service) => {
@@ -157,7 +159,8 @@ export async function GET(
 
     return NextResponse.json({ success: true, data: enrichedServices })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error in variation services GET:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to fetch services') }, { status: 500 })
   }
 }
 
@@ -200,12 +203,14 @@ export async function POST(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Error creating variation service:', error)
+      return NextResponse.json({ error: clientMessage(error, 'Failed to create service') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error in variation services POST:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to create service') }, { status: 500 })
   }
 }
 
@@ -266,7 +271,8 @@ export async function PUT(
         .eq('variation_id', id)
 
       if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 })
+        console.error('Error deleting variation services:', deleteError)
+        return NextResponse.json({ error: clientMessage(deleteError, 'Failed to save services') }, { status: 500 })
       }
 
       // Step 2: Insert all new services
@@ -292,7 +298,8 @@ export async function PUT(
           .insert(servicesWithVariation)
 
         if (insertError) {
-          return NextResponse.json({ error: insertError.message }, { status: 500 })
+          console.error('Error inserting variation services:', insertError)
+          return NextResponse.json({ error: clientMessage(insertError, 'Failed to save services') }, { status: 500 })
         }
       }
 
@@ -304,7 +311,8 @@ export async function PUT(
         .order('sequence_order')
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        console.error('Error fetching saved variation services:', error)
+        return NextResponse.json({ error: clientMessage(error, 'Failed to save services') }, { status: 500 })
       }
 
       return NextResponse.json({
@@ -314,7 +322,8 @@ export async function PUT(
       })
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error in variation services PUT:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to save services') }, { status: 500 })
   }
 }
 
@@ -338,11 +347,13 @@ export async function DELETE(
       .eq('variation_id', id)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Error deleting variation service:', error)
+      return NextResponse.json({ error: clientMessage(error, 'Failed to delete service') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Service deleted' })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error in variation services DELETE:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to delete service') }, { status: 500 })
   }
 }

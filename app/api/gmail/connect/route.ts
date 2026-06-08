@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthUrl } from '@/lib/gmail'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function POST() {
   try {
@@ -18,6 +19,6 @@ export async function POST() {
     return NextResponse.json({ authUrl })
   } catch (err: any) {
     console.error('Gmail connect error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Failed to connect Gmail') }, { status: 500 })
   }
 }

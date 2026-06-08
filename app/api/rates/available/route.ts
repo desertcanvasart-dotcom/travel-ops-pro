@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // AVAILABLE RATES API
@@ -219,6 +220,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: filteredRates, grouped, total: filteredRates.length })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[Available Rates API] Error:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to load available rates') }, { status: 500 })
   }
 }

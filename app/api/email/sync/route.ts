@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
+import { clientMessage } from '@/lib/api-errors'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error fetching sync state:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to fetch sync state'), success: false }, { status: 500 })
   }
 }
 
@@ -426,7 +427,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      error: error.message,
+      error: clientMessage(error, 'Failed to sync emails'),
       success: false
     }, { status: 500 })
   }

@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { getAuthenticatedGmail } from '@/lib/gmail'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -166,7 +167,8 @@ export async function POST(
           })
         }
       } catch (emailError: any) {
-        sendResult = { success: false, error: emailError.message }
+        console.error('Error sending email:', emailError)
+        sendResult = { success: false, error: clientMessage(emailError, 'Failed to send email') }
       }
     } else {
       return NextResponse.json(
@@ -218,7 +220,7 @@ export async function POST(
   } catch (error: any) {
     console.error('Error sending copilot draft:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to send draft') },
       { status: 500 }
     )
   }

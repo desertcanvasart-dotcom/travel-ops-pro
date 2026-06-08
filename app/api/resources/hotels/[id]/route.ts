@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +28,7 @@ export async function GET(
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('Error fetching accommodation rate:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to fetch hotel rate') }, { status: 500 })
   }
 }
 
@@ -111,7 +112,7 @@ export async function PUT(
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('Error updating accommodation rate:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update hotel rate') }, { status: 500 })
   }
 }
 
@@ -132,6 +133,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error deleting accommodation rate:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete hotel rate') }, { status: 500 })
   }
 }

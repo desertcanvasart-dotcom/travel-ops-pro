@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 // Email service - adjust based on your setup (Resend, SendGrid, etc.)
 // This example uses a generic sendEmail function - replace with your actual implementation
@@ -307,7 +308,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching reminders:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to load reminders') },
       { status: 500 }
     )
   }
@@ -448,7 +449,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error processing reminders:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to process reminders') },
       { status: 500 }
     )
   }

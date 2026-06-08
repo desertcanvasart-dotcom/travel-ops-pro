@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchEmails, getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -32,6 +33,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: err.message }, { status: 401 })
     }
     console.error('Fetch emails error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Failed to fetch emails') }, { status: 500 })
   }
 }

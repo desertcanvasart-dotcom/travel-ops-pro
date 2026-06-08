@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('Error fetching cruises:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load cruise rates') }, { status: 500 })
   }
 }
 
@@ -93,6 +94,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('Error creating cruise:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save cruise rate') }, { status: 500 })
   }
 }

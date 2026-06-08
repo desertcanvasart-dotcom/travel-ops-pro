@@ -1,6 +1,7 @@
 // app/api/rates/tipping/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase'
+import { clientMessage } from '@/lib/api-errors'
 
 export async function PUT(
   request: NextRequest,
@@ -22,7 +23,8 @@ export async function PUT(
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('PUT tipping_rates/[id] catch error:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save tipping rate') }, { status: 500 })
   }
 }
 
@@ -43,6 +45,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    console.error('DELETE tipping_rates/[id] catch error:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete tipping rate') }, { status: 500 })
   }
 }

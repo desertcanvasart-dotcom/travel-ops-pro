@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     if (tourError) {
       console.error('Error saving tour:', tourError)
       return NextResponse.json(
-        { success: false, error: tourError.message },
+        { success: false, error: clientMessage(tourError, 'Failed to save tour') },
         { status: 500 }
       )
     }
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         // Rollback: delete the tour
         await supabase.from('tours').delete().eq('id', savedTourId)
         return NextResponse.json(
-          { success: false, error: daysError.message },
+          { success: false, error: clientMessage(daysError, 'Failed to save tour days') },
           { status: 500 }
         )
       }
@@ -122,9 +123,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Save tour error:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to save tour' 
+      {
+        success: false,
+        error: clientMessage(error, 'Failed to save tour')
       },
       { status: 500 }
     )

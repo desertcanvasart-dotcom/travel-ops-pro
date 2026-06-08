@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Error fetching templates:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to fetch tours') },
         { status: 500 }
       )
     }
@@ -211,7 +212,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Browse error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch tours' },
+      { success: false, error: clientMessage(error, 'Failed to fetch tours') },
       { status: 500 }
     )
   }

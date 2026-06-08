@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient as createSSRClient } from '@supabase/ssr'
 import { createServerClient } from '@/lib/supabase-server'
 import { cookies } from 'next/headers'
+import { clientMessage } from '@/lib/api-errors'
 
 // Create authenticated client to get user preferences
 async function createAuthClient() {
@@ -413,7 +414,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to calculate pricing'
+        error: clientMessage(error, 'Failed to calculate pricing')
       },
       { status: 500 }
     )

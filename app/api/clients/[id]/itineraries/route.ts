@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,7 +23,7 @@ export async function GET(
 
     if (error) {
       console.error('Error fetching client itineraries:', error)
-      return NextResponse.json({ data: [], error: error.message }, { status: 500 })
+      return NextResponse.json({ data: [], error: clientMessage(error, 'Failed to load itineraries') }, { status: 500 })
     }
 
     return NextResponse.json({ data: data || [] })

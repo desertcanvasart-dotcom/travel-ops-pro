@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import type { ApproveDraftRequest } from '@/types/copilot'
 
 const supabase = createClient(
@@ -57,7 +58,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching draft:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to load draft') },
       { status: 500 }
     )
   }
@@ -124,7 +125,7 @@ export async function PUT(
   } catch (error: any) {
     console.error('Error reviewing draft:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to review draft') },
       { status: 500 }
     )
   }

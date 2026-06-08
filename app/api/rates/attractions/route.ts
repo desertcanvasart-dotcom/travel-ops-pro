@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('[Attractions API] Error fetching:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load attractions') }, { status: 500 })
     }
 
     // Check for language parameter to merge versions
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
     
   } catch (error: any) {
     console.error('[Attractions API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load attractions') }, { status: 500 })
   }
 }
 
@@ -206,7 +207,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[Attractions API] Error creating:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save attraction') }, { status: 500 })
     }
 
     // If creating/updating in non-English, also create a language version
@@ -241,6 +242,6 @@ export async function POST(request: NextRequest) {
     
   } catch (error: any) {
     console.error('[Attractions API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save attraction') }, { status: 500 })
   }
 }

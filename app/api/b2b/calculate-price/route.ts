@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT } from '@/lib/auto-pricing-service'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -916,7 +917,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: result })
   } catch (error: any) {
     console.error('❌ Error calculating tour price:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Failed to calculate tour price') }, { status: 500 })
   }
 }
 

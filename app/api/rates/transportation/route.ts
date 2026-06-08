@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('GET transportation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to fetch rates') }, { status: 500 })
     }
 
     // Also return enum options for UI dropdowns
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('GET transportation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to fetch rates') }, { status: 500 })
   }
 }
 
@@ -209,13 +210,13 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('POST transportation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data, updated: !!existing?.length }, { status: existing?.length ? 200 : 201 })
   } catch (error: any) {
     console.error('POST transportation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save rate') }, { status: 500 })
   }
 }
 
@@ -265,13 +266,13 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       console.error('PUT transportation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('PUT transportation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to update rate') }, { status: 500 })
   }
 }
 
@@ -292,13 +293,13 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('DELETE transportation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete rate') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('DELETE transportation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to delete rate') }, { status: 500 })
   }
 }
 

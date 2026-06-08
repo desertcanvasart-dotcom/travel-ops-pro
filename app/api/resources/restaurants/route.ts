@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: mappedData })
   } catch (error: any) {
     console.error('Error fetching meal rates:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to fetch restaurant rates') }, { status: 500 })
   }
 }
 
@@ -69,6 +70,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('Error creating meal rate:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to create restaurant rate') }, { status: 500 })
   }
 }

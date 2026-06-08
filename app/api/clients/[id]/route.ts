@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // Admin client that bypasses RLS
 const supabaseAdmin = createClient(
@@ -23,7 +24,7 @@ export async function GET(
 
     if (error) {
       console.error('Error fetching client:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to load client') }, { status: 500 })
     }
 
     if (!data) {
@@ -58,7 +59,7 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating client:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to update client') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -89,7 +90,7 @@ export async function PATCH(
 
     if (error) {
       console.error('Error updating client:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to update client') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -260,12 +261,12 @@ export async function DELETE(
         const detail = error.details || error.message
         console.error('FK constraint detail:', detail)
         return NextResponse.json(
-          { error: `Cannot delete client: a related record still exists. Detail: ${detail}` },
+          { error: `Cannot delete client: a related record still exists. Detail: ${clientMessage(error, 'a related record still exists')}` },
           { status: 400 }
         )
       }
 
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to delete client') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Client deleted successfully' })

@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,7 +82,7 @@ export async function GET(
     if (activitiesError) {
       console.error('Error fetching activities:', activitiesError)
       return NextResponse.json(
-        { success: false, error: activitiesError.message },
+        { success: false, error: clientMessage(activitiesError, 'Failed to fetch activities') },
         { status: 500 }
       )
     }
@@ -120,7 +121,7 @@ export async function GET(
   } catch (error: any) {
     console.error('❌ Error fetching days:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to fetch activities') },
       { status: 500 }
     )
   }
@@ -182,7 +183,7 @@ export async function POST(
       if (error) {
         console.error('Error batch inserting activities:', error)
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: clientMessage(error, 'Failed to add activities') },
           { status: 500 }
         )
       }
@@ -266,7 +267,7 @@ export async function POST(
     if (error) {
       console.error('Error inserting activity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to add activity') },
         { status: 500 }
       )
     }
@@ -285,7 +286,7 @@ export async function POST(
   } catch (error: any) {
     console.error('❌ Error adding activity:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to add activity') },
       { status: 500 }
     )
   }
@@ -358,7 +359,7 @@ export async function PATCH(
     if (error) {
       console.error('Error updating activity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to update activity') },
         { status: 500 }
       )
     }
@@ -371,7 +372,7 @@ export async function PATCH(
   } catch (error: any) {
     console.error('❌ Error updating activity:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to update activity') },
       { status: 500 }
     )
   }
@@ -401,8 +402,9 @@ export async function DELETE(
         .eq('template_id', templateId)
 
       if (error) {
+        console.error('Error clearing all activities:', error)
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: clientMessage(error, 'Failed to clear activities') },
           { status: 500 }
         )
       }
@@ -428,8 +430,9 @@ export async function DELETE(
         .eq('day_number', parseInt(dayNumber))
 
       if (error) {
+        console.error('Error clearing day activities:', error)
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: clientMessage(error, 'Failed to clear activities') },
           { status: 500 }
         )
       }
@@ -457,7 +460,7 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting activity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Failed to delete activity') },
         { status: 500 }
       )
     }
@@ -484,7 +487,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('❌ Error deleting activity:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to delete activity') },
       { status: 500 }
     )
   }

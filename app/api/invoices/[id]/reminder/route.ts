@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 
 // Reuse the email generation from the main route
 function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
@@ -231,7 +232,7 @@ export async function POST(
   } catch (error: any) {
     console.error('Error sending reminder:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to send reminder') },
       { status: 500 }
     )
   }
@@ -262,7 +263,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching reminders:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to load reminders') },
       { status: 500 }
     )
   }

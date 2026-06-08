@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clearFixedCostsCache } from '@/lib/fixed-costs'
+import { clientMessage } from '@/lib/api-errors'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,13 +17,13 @@ export async function GET() {
 
     if (error) {
       console.error('GET fixed_daily_costs error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load fixed costs') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: data || [] })
   } catch (error: any) {
     console.error('GET fixed_daily_costs catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load fixed costs') }, { status: 500 })
   }
 }
 
@@ -63,14 +64,14 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('POST fixed_daily_costs error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save fixed cost') }, { status: 500 })
     }
 
     clearFixedCostsCache()
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('POST fixed_daily_costs catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save fixed cost') }, { status: 500 })
   }
 }
 
@@ -109,13 +110,13 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       console.error('PUT fixed_daily_costs error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save fixed cost') }, { status: 500 })
     }
 
     clearFixedCostsCache()
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('PUT fixed_daily_costs catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save fixed cost') }, { status: 500 })
   }
 }

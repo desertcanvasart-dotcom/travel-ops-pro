@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { clientMessage } from '@/lib/api-errors'
 
 const VALID_CATEGORIES = ['tone', 'vocabulary', 'structure', 'formatting', 'brand']
 const VALID_RULE_TYPES = ['enforce', 'prefer', 'avoid']
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching writing rules:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to load writing rules') }, { status: 500 })
     }
 
     // If for_prompt, format for AI consumption
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating writing rule:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to create writing rule') }, { status: 500 })
     }
 
     return NextResponse.json(data, { status: 201 })
@@ -263,7 +264,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       console.error('Error updating writing rule:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to update writing rule') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -304,7 +305,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting writing rule:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to delete writing rule') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

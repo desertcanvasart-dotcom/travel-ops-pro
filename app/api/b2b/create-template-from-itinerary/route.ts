@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B: Create Tour Template + Variation from WhatsApp Itinerary
@@ -211,7 +212,7 @@ export async function POST(request: NextRequest) {
 
         if (templateError2 || !template2) {
           return NextResponse.json(
-            { success: false, error: templateError2?.message || 'Failed to create template' },
+            { success: false, error: clientMessage(templateError2, 'Failed to create template') },
             { status: 500 }
           )
         }
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { success: false, error: templateError.message },
+        { success: false, error: clientMessage(templateError, 'Failed to create template') },
         { status: 500 }
       )
     }
@@ -231,7 +232,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error creating template from itinerary:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Failed to create template from itinerary') },
       { status: 500 }
     )
   }
@@ -276,7 +277,7 @@ async function createVariationAndRespond(
   if (varError || !variation) {
     console.error('Failed to create variation:', varError)
     return NextResponse.json(
-      { success: false, error: varError?.message || 'Failed to create variation' },
+      { success: false, error: clientMessage(varError, 'Failed to create variation') },
       { status: 500 }
     )
   }

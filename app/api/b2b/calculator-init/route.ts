@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B: Calculator Init — Fetch template itinerary for editor
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error('[calculator-init] Error:', err)
     return NextResponse.json(
-      { success: false, error: err.message || 'Internal server error' },
+      { success: false, error: clientMessage(err, 'Failed to initialize calculator') },
       { status: 500 }
     )
   }

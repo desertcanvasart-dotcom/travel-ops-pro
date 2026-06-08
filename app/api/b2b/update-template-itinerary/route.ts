@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B: Update Template Itinerary JSONB
@@ -82,7 +83,7 @@ export async function PATCH(request: NextRequest) {
   } catch (err: any) {
     console.error('[update-template-itinerary] Error:', err)
     return NextResponse.json(
-      { success: false, error: err.message || 'Internal server error' },
+      { success: false, error: clientMessage(err, 'Failed to update template itinerary') },
       { status: 500 }
     )
   }

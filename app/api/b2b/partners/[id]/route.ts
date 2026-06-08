@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // ============================================
 // B2B PARTNERS INDIVIDUAL API
@@ -32,7 +33,7 @@ export async function GET(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to load partner') }, { status: 500 })
     }
 
     if (!data) {
@@ -41,7 +42,8 @@ export async function GET(
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('GET /api/b2b/partners/[id] error:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to load partner') }, { status: 500 })
   }
 }
 
@@ -62,12 +64,13 @@ export async function PUT(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to update partner') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('PUT /api/b2b/partners/[id] error:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to update partner') }, { status: 500 })
   }
 }
 
@@ -96,11 +99,12 @@ export async function DELETE(
     const { error } = await supabaseAdmin.from('b2b_partners').delete().eq('id', id)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Failed to delete partner') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Partner deleted' })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('DELETE /api/b2b/partners/[id] error:', error)
+    return NextResponse.json({ error: clientMessage(error, 'Failed to delete partner') }, { status: 500 })
   }
 }

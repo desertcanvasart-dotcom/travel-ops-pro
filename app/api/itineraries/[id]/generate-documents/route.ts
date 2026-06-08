@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 
 // Map service types to document types
 // null = skip (no document needed)
@@ -140,7 +141,7 @@ export async function POST(
     
     if (itinError) {
       console.error('❌ Itinerary fetch error:', itinError)
-      return NextResponse.json({ error: 'Itinerary not found', details: itinError.message }, { status: 404 })
+      return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
     }
     
     if (!itinerary) {
@@ -161,7 +162,7 @@ export async function POST(
     
     if (daysError) {
       console.error('❌ Days fetch error:', daysError)
-      return NextResponse.json({ error: daysError.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(daysError, 'Failed to load itinerary days') }, { status: 500 })
     }
     
     console.log(`✅ Found ${days?.length || 0} days`)
@@ -455,7 +456,7 @@ export async function POST(
       
       if (createError) {
         console.error('❌ Error creating documents:', createError)
-        return NextResponse.json({ error: createError.message }, { status: 500 })
+        return NextResponse.json({ error: clientMessage(createError, 'Failed to generate documents') }, { status: 500 })
       }
       
       console.log(`🎉 Successfully created ${createdDocs.length} documents`)
