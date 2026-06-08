@@ -1,0 +1,49 @@
+{
+  "session_id": "8f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+  "conversation_id": "b2e9a7c1-3d5f-4e6a-9b8c-1d2e3f4a5b6c",
+  "submitted_at": "2026-06-08T14:03:00Z",
+  "prompt_version": "v4.1",
+  "language": "en",
+  "brief_revision": 1,
+  "is_update": false,
+  "visitor": {
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "+15551234567",
+    "preferred_contact": "email",
+    "timezone": "America/New_York"
+  },
+  "trip": {
+    "travelers_count": 2,
+    "travelers_detail": "2 adults, honeymoon",
+    "dates_specific": null,
+    "dates_window": "Oct 2026, ~10 days",
+    "trip_length_days": 10,
+    "origin_city": "New York",
+    "nationality": "American",
+    "international_flights": true
+  },
+  "preferences": {
+    "destinations": ["Cairo", "Luxor", "Aswan"],
+    "comfort_level": "luxury",
+    "interests": ["history", "food"],
+    "must_see": ["Abu Simbel"],
+    "must_avoid": ["crowded markets"]
+  },
+  "constraints": {
+    "dietary": "vegetarian",
+    "mobility": null,
+    "religious": null,
+    "medical": null
+  },
+  "brief_summary": "Jane and her partner want a 10-day deluxe history-and-food honeymoon across Cairo, Luxor, and Aswan in October 2026, flying internationally from New York. Vegetarian. Keen on Abu Simbel; prefers to avoid crowded markets.",
+  "full_transcript": [
+    { "role": "assistant", "content": "Hi! I'd love to help plan your Egypt trip. Who's travelling?", "timestamp": "2026-06-08T13:50:00Z" },
+    { "role": "user", "content": "My partner and I, for our honeymoon.", "timestamp": "2026-06-08T13:51:00Z" }
+  ],
+  "follow_up_window": {
+    "committed_response_by": "2026-06-09T09:00:00Z",
+    "cairo_time_label": "9:00 AM Cairo",
+    "visitor_local_label": "2:00 AM EDT"
+  }
+}

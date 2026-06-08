@@ -1,0 +1,9 @@
+{
+  "description": "Fixed HMAC-SHA256 test vector. Sign `${timestamp}.${body}` with `secret`; you must reproduce `expected_signature_header`. This same vector is served live at GET /api/webhooks/concierge so you can confirm Autoura agrees.",
+  "secret": "whsec_test_concierge_autoura",
+  "timestamp": 1735732800,
+  "body": "{\"conversation_id\":\"test-conversation\",\"brief_revision\":1}",
+  "signed_content": "1735732800.{\"conversation_id\":\"test-conversation\",\"brief_revision\":1}",
+  "algorithm": "HMAC-SHA256, lowercase hex",
+  "expected_signature_header": "t=1735732800,v1=3cc2e7aba5b04ecf03020484f1befcdb128b1cb83f38030550591b159334db5a"
+}
