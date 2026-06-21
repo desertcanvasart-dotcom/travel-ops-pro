@@ -11,7 +11,8 @@
   },
   "include": [
     "lib/pricing-types.ts",
-    "lib/auto-pricing-service.ts"
+    "lib/auto-pricing-service.ts",
+    "lib/rate-lookup-service.ts"
   ],
   "exclude": ["node_modules", "**/__tests__/**", "**/*.test.ts"]
 }

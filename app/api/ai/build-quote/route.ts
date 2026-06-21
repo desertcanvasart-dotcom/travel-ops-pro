@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
-import { calculatePricingFromRates, getFallbackRates } from '@/lib/rate-lookup-service'
+import { calculatePricingFromRates } from '@/lib/rate-lookup-service'
 
 // ============================================
 // QUOTE BUILDER API
@@ -144,8 +144,9 @@ export async function POST(request: NextRequest) {
                    (templateData?.template?.cities_covered?.[0]) || 
                    'Cairo'
 
+      let calculated = null
       try {
-        const calculated = await calculatePricingFromRates(supabase, {
+        calculated = await calculatePricingFromRates(supabase, {
           city,
           pax: totalPax,
           language,
@@ -159,27 +160,25 @@ export async function POST(request: NextRequest) {
           hotel_standard: budget_level as 'budget' | 'standard' | 'luxury',
           attractions: attractions.length > 0 ? attractions : undefined
         })
-
-        if (calculated.success && calculated.total_cost > 0) {
-          pricingResult = {
-            ...calculated,
-            source: 'database_rates'
-          }
-        } else {
-          throw new Error('No rates found')
-        }
       } catch (e) {
-        // Fallback to hardcoded rates
-        const fallback = getFallbackRates({
-          pax: totalPax,
-          duration_days,
-          language,
-          is_euro_passport: isEuroPassport
+        calculated = null
+      }
+
+      if (!calculated || !calculated.success || !(calculated.total_cost > 0)) {
+        // No DB-backed price. Per the pricing correctness harness we do NOT
+        // fall back to invented rates — flag the quote for manual pricing so a
+        // human prices it (or the missing rates get added), never ship a guess.
+        return NextResponse.json({
+          success: false,
+          needs_manual_pricing: true,
+          reason: 'no_rates_available',
+          message: `No database rates available to price ${city} for ${duration_days} day(s). Add the missing rates in Rates, or price this quote manually — the system will not invent a price.`,
         })
-        pricingResult = {
-          ...fallback,
-          source: 'fallback_rates'
-        }
+      }
+
+      pricingResult = {
+        ...calculated,
+        source: 'database_rates'
       }
     }
 
