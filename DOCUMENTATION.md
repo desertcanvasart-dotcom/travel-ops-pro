@@ -580,7 +580,6 @@ Additional rate endpoints:
 | GET | `/api/rates` | Rate overview/summary |
 | GET | `/api/rates/available` | Available rate types |
 | GET | `/api/rates/entrance-fees` | Legacy entrance fees endpoint |
-| POST | `/api/pricing/calculate` | Calculate pricing for a configuration |
 
 ### Tour Endpoints
 | Method | Endpoint | Description |
