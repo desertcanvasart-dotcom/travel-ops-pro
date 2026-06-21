@@ -100,21 +100,31 @@ describe('calculateDayBasedPricing — invariants (full rates)', () => {
   })
 })
 
-describe('calculateDayBasedPricing — CHARACTERIZATION of current fabrication', () => {
+describe('calculateDayBasedPricing — flag the hole (Phase 1)', () => {
   beforeEach(() => setMockTables(missingHotelTables()))
 
-  // ⚠️ PINS TODAY'S BUG. With no Cairo hotel rate, the engine falls back to
-  // DEFAULT_RATES[tier].hotelPPD and STILL returns a confident, deliverable
-  // price. Phase 1 ("flag the hole, never fabricate") must FLIP this:
-  // success/complete → false, holes.length > 0, no fabricated hotel amount.
-  it('currently returns success:true + a positive price despite the missing hotel rate', async () => {
+  // Phase 1 flipped the old fabrication: with no Cairo hotel rate the engine
+  // now records a hole and marks the result incomplete instead of substituting
+  // DEFAULT_RATES. The single supplement no longer includes a guessed hotel.
+  it('marks the result incomplete and records a hotel hole — no fabricated amount', async () => {
     const r = await calculateDayBasedPricing(BASE_PARAMS)
-    const pax2 = r.paxPricing.find((p: any) => p.numPax === 2)
 
-    expect(r.success).toBe(true)
-    expect(pax2.withoutLeader.totalCost).toBeGreaterThan(0)
-    // No completeness signal exists yet — this is exactly the gap Phase 1 closes.
-    expect((r as any).complete).toBeUndefined()
-    expect((r as any).holes).toBeUndefined()
+    expect(r.complete).toBe(false)
+    expect(r.holes.length).toBeGreaterThan(0)
+    expect(r.holes.some((h) => h.kind === 'hotel')).toBe(true)
+    // No hotel rate → nothing fabricated into the single supplement.
+    expect(r.singleSupplement).toBe(0)
+
+    const hole = r.holes.find((h) => h.kind === 'hotel')!
+    expect(hole.reason).toBe('missing')
+    expect(hole.city).toBe('Cairo')
+    expect(hole.message).toMatch(/hotel rate/i)
+  })
+
+  it('full rates → complete with zero holes', async () => {
+    setMockTables(fullRateTables())
+    const r = await calculateDayBasedPricing(BASE_PARAMS)
+    expect(r.complete).toBe(true)
+    expect(r.holes).toEqual([])
   })
 })

@@ -28,6 +28,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
+import type { PricingHole } from '@/lib/pricing-types'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -168,6 +169,11 @@ export interface DayPricingResult {
   currency: string
   marginPercent: number
   warnings: string[]
+
+  // Correctness harness (Phase 1): a price is deliverable only when complete.
+  // A missing/uncertain rate is recorded as a hole — never fabricated.
+  complete: boolean
+  holes: PricingHole[]
 }
 
 // Transport rate from database
@@ -302,37 +308,10 @@ const SPECIAL_VEHICLE_CITIES: Record<string, VehicleType> = {
   'edfu': 'Horse Carriage'
 }
 
-// Default rates (all zeroed out — missing DB rates surface as €0 with console warnings)
-const DEFAULT_RATES: Record<ServiceTier, {
-  hotelPPD: number
-  hotelSingleSupp: number
-  cruisePPDNight: number
-  cruiseSingleSuppNight: number
-  guide: number
-  lunch: number
-  dinner: number
-  tips: number
-  airportService: number
-  hotelService: number
-  vehicle: number
-}> = {
-  budget: {
-    hotelPPD: 35, hotelSingleSupp: 20, cruisePPDNight: 60, cruiseSingleSuppNight: 30,
-    guide: 40, lunch: 15, dinner: 20, tips: 10, airportService: 25, hotelService: 15, vehicle: 30
-  },
-  standard: {
-    hotelPPD: 68, hotelSingleSupp: 35, cruisePPDNight: 110, cruiseSingleSuppNight: 55,
-    guide: 50, lunch: 30, dinner: 40, tips: 20, airportService: 30, hotelService: 20, vehicle: 39
-  },
-  deluxe: {
-    hotelPPD: 120, hotelSingleSupp: 60, cruisePPDNight: 180, cruiseSingleSuppNight: 90,
-    guide: 60, lunch: 40, dinner: 55, tips: 25, airportService: 35, hotelService: 25, vehicle: 55
-  },
-  luxury: {
-    hotelPPD: 250, hotelSingleSupp: 120, cruisePPDNight: 300, cruiseSingleSuppNight: 150,
-    guide: 80, lunch: 55, dinner: 75, tips: 30, airportService: 40, hotelService: 30, vehicle: 75
-  }
-}
+// NOTE: DEFAULT_RATES (hardcoded per-tier fallback prices) was REMOVED by the
+// pricing correctness harness (Phase 1). A missing DB rate is now recorded as a
+// PricingHole and the result is marked `complete: false` — the engine NEVER
+// fabricates or substitutes a guessed/default rate. See PRICING-HARNESS-PLAN.md.
 
 // ============================================
 // HELPER FUNCTIONS
@@ -925,13 +904,8 @@ export async function getCruiseRates(
     const { data: cruises, error } = await query.limit(1)
 
     if (error || !cruises || cruises.length === 0) {
-      console.log(`⚠️ No cruise found for tier ${tier}, using defaults`)
-      return {
-        shipName: 'Default Cruise',
-        ppdNight: DEFAULT_RATES[tier].cruisePPDNight,
-        singleSuppNight: DEFAULT_RATES[tier].cruiseSingleSuppNight,
-        durationNights: 4
-      }
+      console.log(`⚠️ No cruise rate for tier ${tier} — flagging hole (no fabrication)`)
+      return null
     }
 
     const cruise = cruises[0]
@@ -980,52 +954,10 @@ export async function getHotelRates(
       .limit(1)
 
     if (error || !hotels || hotels.length === 0) {
-      // Fallback: try adjacent tiers in order (never jump to a completely different tier)
-      // e.g., standard → deluxe → budget (never luxury), luxury → deluxe (never budget)
-      const TIER_FALLBACK_ORDER: Record<ServiceTier, ServiceTier[]> = {
-        budget:   ['standard'],
-        standard: ['deluxe', 'budget'],
-        deluxe:   ['standard', 'luxury'],
-        luxury:   ['deluxe']
-      }
-      const fallbackTiers = TIER_FALLBACK_ORDER[tier] || []
-
-      for (const fallbackTier of fallbackTiers) {
-        const { data: fbHotels } = await supabaseAdmin
-          .from('accommodation_rates')
-          .select('*')
-          .eq('tier', fallbackTier)
-          .eq('is_active', true)
-          .ilike('city', `%${city}%`)
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (fbHotels && fbHotels.length > 0) {
-          const hotel = fbHotels[0]
-          const ppd = isEurPassport
-            ? (hotel.pp_double_eur || 0)
-            : (hotel.pp_double_non_eur || 0)
-          const singleSupp = isEurPassport
-            ? (hotel.single_supp_eur || 0)
-            : (hotel.single_supp_non_eur || 0)
-
-          console.warn(`⚠️ No ${tier} hotel for ${city} — using ${fallbackTier} tier: ${hotel.property_name} | PPD: €${ppd} | SingleSupp/night: €${singleSupp}`)
-
-          return {
-            hotelName: hotel.property_name,
-            ppdNight: ppd,
-            singleSuppNight: Math.max(0, singleSupp)
-          }
-        }
-      }
-
-      // No hotel found in any adjacent tier — use defaults
-      console.log(`⚠️ No hotel found for ${city} (${tier} or adjacent tiers), using defaults`)
-      return {
-        hotelName: `${city} Hotel`,
-        ppdNight: DEFAULT_RATES[tier].hotelPPD,
-        singleSuppNight: DEFAULT_RATES[tier].hotelSingleSupp
-      }
+      // Per the harness policy we do NOT substitute an adjacent tier (fuzzy) or a
+      // hardcoded default — a missing exact city+tier rate is a hole the caller flags.
+      console.log(`⚠️ No ${tier} hotel rate for ${city} — flagging hole (no fabrication)`)
+      return null
     }
 
     const hotel = hotels[0]
@@ -1162,40 +1094,13 @@ export async function getGuideRate(
       }
     }
 
-    // 3. Try any active guide_rates entry regardless of language
-    const { data: anyRate } = await supabaseAdmin
-      .from('guide_rates')
-      .select('*')
-      .eq('is_active', true)
-      .limit(1)
-      .single()
-
-    if (anyRate) {
-      const anyDailyRate = anyRate.base_rate_eur || anyRate.rate_eur || 0
-      if (anyDailyRate > 0) {
-        console.log(`✅ Guide (guide_rates fallback): ${anyRate.guide_language} | €${anyDailyRate}/day`)
-        return {
-          id: anyRate.id,
-          name: `${anyRate.guide_language || language} Speaking Guide`,
-          dailyRate: anyDailyRate
-        }
-      }
-    }
-
-    // 4. Final fallback to default rates
-    console.warn(`⚠️ No guide rate found for ${language} — using default`)
-    return {
-      id: 'default',
-      name: 'Guide',
-      dailyRate: DEFAULT_RATES[tier].guide
-    }
+    // No language-matched DB rate. We do NOT fall back to an any-language guide
+    // (fuzzy) or a hardcoded default — flag the hole instead.
+    console.warn(`⚠️ No guide rate for ${language} (${tier}) — flagging hole (no fabrication)`)
+    return null
   } catch (err) {
     console.error('Error fetching guide rate:', err)
-    return {
-      id: 'default',
-      name: 'Guide',
-      dailyRate: DEFAULT_RATES[tier].guide
-    }
+    return null
   }
 }
 
@@ -1204,7 +1109,7 @@ export async function getGuideRate(
  */
 export async function getMealRates(
   tier: ServiceTier
-): Promise<{ lunch: number; dinner: number }> {
+): Promise<{ lunch: number; dinner: number } | null> {
   try {
     const { data: mealRate } = await supabaseAdmin
       .from('meal_rates')
@@ -1214,10 +1119,7 @@ export async function getMealRates(
       .single()
 
     if (!mealRate) {
-      return {
-        lunch: DEFAULT_RATES[tier].lunch,
-        dinner: DEFAULT_RATES[tier].dinner
-      }
+      return null
     }
 
     const multipliers: Record<ServiceTier, number> = {
@@ -1232,10 +1134,7 @@ export async function getMealRates(
       dinner: Math.round((mealRate.dinner_rate_eur || 0) * multipliers[tier])
     }
   } catch (err) {
-    return {
-      lunch: DEFAULT_RATES[tier].lunch,
-      dinner: DEFAULT_RATES[tier].dinner
-    }
+    return null
   }
 }
 
@@ -1246,7 +1145,7 @@ export async function getAirportServiceRate(
   airportCode: string,
   direction: 'arrival' | 'departure',
   tier: ServiceTier
-): Promise<number> {
+): Promise<number | null> {
   try {
     const { data: rates } = await supabaseAdmin
       .from('airport_staff_rates')
@@ -1257,12 +1156,13 @@ export async function getAirportServiceRate(
       .limit(1)
 
     if (!rates || rates.length === 0) {
-      return DEFAULT_RATES[tier].airportService
+      return null
     }
 
-    return rates[0].rate_eur || DEFAULT_RATES[tier].airportService
+    const rate = rates[0].rate_eur
+    return rate && rate > 0 ? rate : null
   } catch (err) {
-    return DEFAULT_RATES[tier].airportService
+    return null
   }
 }
 
@@ -1272,10 +1172,10 @@ export async function getAirportServiceRate(
 export async function getHotelServiceRate(
   serviceType: 'checkin_assist' | 'porter' | 'full_service',
   tier: ServiceTier
-): Promise<number> {
+): Promise<number | null> {
   try {
     const category = getTierCategory(tier)
-    
+
     const { data: rates } = await supabaseAdmin
       .from('hotel_staff_rates')
       .select('rate_eur')
@@ -1285,12 +1185,13 @@ export async function getHotelServiceRate(
       .limit(1)
 
     if (!rates || rates.length === 0) {
-      return DEFAULT_RATES[tier].hotelService
+      return null
     }
 
-    return rates[0].rate_eur || DEFAULT_RATES[tier].hotelService
+    const rate = rates[0].rate_eur
+    return rate && rate > 0 ? rate : null
   } catch (err) {
-    return DEFAULT_RATES[tier].hotelService
+    return null
   }
 }
 
@@ -1673,6 +1574,9 @@ export async function calculateDayBasedPricing(
 
   const warnings: string[] = []
   const services: PricedService[] = []
+  // Holes = rate gaps that make the price non-deliverable. Never auto-filled.
+  const holes: PricingHole[] = []
+  const addHole = (h: Omit<PricingHole, 'tier'>) => holes.push({ ...h, tier })
 
   // ============================================
   // STEP 1: Fetch template and parse itinerary
@@ -1711,7 +1615,9 @@ export async function calculateDayBasedPricing(
       paxPricing: [],
       currency: 'EUR',
       marginPercent,
-      warnings: ['Template not found']
+      warnings: ['Template not found'],
+      complete: false,
+      holes: []
     }
   }
 
@@ -1762,6 +1668,15 @@ export async function calculateDayBasedPricing(
   if (cruiseNights > 0) {
     const firstCruiseDay = cruiseDays[0]
     cruiseRates = await getCruiseRates(tier, firstCruiseDay?.city)
+    if (!cruiseRates) {
+      addHole({
+        kind: 'cruise',
+        reason: 'missing',
+        city: firstCruiseDay?.city,
+        lookupAttempted: `nile_cruises tier=${tier} embark~${firstCruiseDay?.city ?? 'any'}`,
+        message: `No ${tier} cruise rate found. Add it in Rates → Cruises.`,
+      })
+    }
   }
 
   const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
@@ -1776,6 +1691,26 @@ export async function calculateDayBasedPricing(
   const guideRate = await getGuideRate(language, tier)
   const mealRates = await getMealRates(tier)
   const tippingRates = await getItemizedTips(tier)
+
+  // Flag missing rates that the itinerary actually needs (no fabrication).
+  const needsGuide = itinerary.some(d => d.services.guide_required || d.attractions.length > 0)
+  if (needsGuide && !guideRate) {
+    addHole({
+      kind: 'guide',
+      reason: 'missing',
+      lookupAttempted: `guide_rates language~${language} tier=${tier}`,
+      message: `No ${language} guide rate (${tier}). Add it in Rates → Guides.`,
+    })
+  }
+  const needsMeals = itinerary.some(d => d.meals.lunch === 'external' || d.meals.dinner === 'external')
+  if (needsMeals && !mealRates) {
+    addHole({
+      kind: 'meal',
+      reason: 'missing',
+      lookupAttempted: 'meal_rates is_active=true',
+      message: 'No meal rates found. Add them in Rates → Meals.',
+    })
+  }
 
   // Fetch water cost from DB (fixed_daily_costs table) instead of hardcoding
   const { getFixedDailyCosts } = await import('@/lib/fixed-costs')
@@ -1792,9 +1727,8 @@ export async function calculateDayBasedPricing(
     const hotelRate = hotelRatesMap.get(day.overnight_city || day.city)
     if (hotelRate) {
       singleSupplement += hotelRate.singleSuppNight
-    } else {
-      singleSupplement += DEFAULT_RATES[tier].hotelSingleSupp
     }
+    // Missing hotel rate is flagged once, in the accommodation loop below (no fabrication here).
   }
 
   if (cruiseRates && cruiseNights > 0) {
@@ -1874,76 +1808,120 @@ export async function calculateDayBasedPricing(
     if (day.services.airport_arrival) {
       const airportCode = getAirportCode(day.city)
       const rate = await getAirportServiceRate(airportCode, 'arrival', tier)
-      fixedCosts += rate
-      services.push({
-        id: `day${day.day}-airport-arrival`,
-        dayNumber: day.day,
-        serviceType: 'airport_service',
-        serviceName: `Airport Meet & Greet (${airportCode})`,
-        quantity: 1,
-        quantityMode: 'fixed',
-        unitCost: rate,
-        lineTotal: rate,
-        rateSource: 'airport_staff_rates',
-        isPerPax: false,
-        isOptional: false
-      })
+      if (rate != null) {
+        fixedCosts += rate
+        services.push({
+          id: `day${day.day}-airport-arrival`,
+          dayNumber: day.day,
+          serviceType: 'airport_service',
+          serviceName: `Airport Meet & Greet (${airportCode})`,
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: rate,
+          lineTotal: rate,
+          rateSource: 'airport_staff_rates',
+          isPerPax: false,
+          isOptional: false
+        })
+      } else {
+        addHole({
+          kind: 'airport_service',
+          reason: 'missing',
+          dayNumber: day.day,
+          city: day.city,
+          lookupAttempted: `airport_staff_rates ${airportCode}/arrival`,
+          message: `No airport service rate for ${airportCode} (arrival). Add it in Rates → Airport Services.`,
+        })
+      }
     }
 
     if (day.services.airport_departure) {
       const airportCode = getAirportCode(day.city)
       const rate = await getAirportServiceRate(airportCode, 'departure', tier)
-      fixedCosts += rate
-      services.push({
-        id: `day${day.day}-airport-departure`,
-        dayNumber: day.day,
-        serviceType: 'airport_service',
-        serviceName: `Airport Departure Assist (${airportCode})`,
-        quantity: 1,
-        quantityMode: 'fixed',
-        unitCost: rate,
-        lineTotal: rate,
-        rateSource: 'airport_staff_rates',
-        isPerPax: false,
-        isOptional: false
-      })
+      if (rate != null) {
+        fixedCosts += rate
+        services.push({
+          id: `day${day.day}-airport-departure`,
+          dayNumber: day.day,
+          serviceType: 'airport_service',
+          serviceName: `Airport Departure Assist (${airportCode})`,
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: rate,
+          lineTotal: rate,
+          rateSource: 'airport_staff_rates',
+          isPerPax: false,
+          isOptional: false
+        })
+      } else {
+        addHole({
+          kind: 'airport_service',
+          reason: 'missing',
+          dayNumber: day.day,
+          city: day.city,
+          lookupAttempted: `airport_staff_rates ${airportCode}/departure`,
+          message: `No airport service rate for ${airportCode} (departure). Add it in Rates → Airport Services.`,
+        })
+      }
     }
 
     // ----- HOTEL SERVICES (fixed per service) -----
     if (day.services.hotel_checkin) {
       const rate = await getHotelServiceRate('checkin_assist', tier)
-      fixedCosts += rate
-      services.push({
-        id: `day${day.day}-hotel-checkin`,
-        dayNumber: day.day,
-        serviceType: 'hotel_service',
-        serviceName: 'Hotel Check-in Assistance',
-        quantity: 1,
-        quantityMode: 'fixed',
-        unitCost: rate,
-        lineTotal: rate,
-        rateSource: 'hotel_staff_rates',
-        isPerPax: false,
-        isOptional: false
-      })
+      if (rate != null) {
+        fixedCosts += rate
+        services.push({
+          id: `day${day.day}-hotel-checkin`,
+          dayNumber: day.day,
+          serviceType: 'hotel_service',
+          serviceName: 'Hotel Check-in Assistance',
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: rate,
+          lineTotal: rate,
+          rateSource: 'hotel_staff_rates',
+          isPerPax: false,
+          isOptional: false
+        })
+      } else {
+        addHole({
+          kind: 'hotel_service',
+          reason: 'missing',
+          dayNumber: day.day,
+          city: day.city,
+          lookupAttempted: `hotel_staff_rates checkin_assist tier=${tier}`,
+          message: `No hotel check-in service rate (${tier}). Add it in Rates → Hotel Services.`,
+        })
+      }
     }
 
     if (day.services.hotel_checkout) {
       const rate = await getHotelServiceRate('porter', tier)
-      fixedCosts += rate
-      services.push({
-        id: `day${day.day}-hotel-checkout`,
-        dayNumber: day.day,
-        serviceType: 'hotel_service',
-        serviceName: 'Hotel Check-out & Porter',
-        quantity: 1,
-        quantityMode: 'fixed',
-        unitCost: rate,
-        lineTotal: rate,
-        rateSource: 'hotel_staff_rates',
-        isPerPax: false,
-        isOptional: false
-      })
+      if (rate != null) {
+        fixedCosts += rate
+        services.push({
+          id: `day${day.day}-hotel-checkout`,
+          dayNumber: day.day,
+          serviceType: 'hotel_service',
+          serviceName: 'Hotel Check-out & Porter',
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: rate,
+          lineTotal: rate,
+          rateSource: 'hotel_staff_rates',
+          isPerPax: false,
+          isOptional: false
+        })
+      } else {
+        addHole({
+          kind: 'hotel_service',
+          reason: 'missing',
+          dayNumber: day.day,
+          city: day.city,
+          lookupAttempted: `hotel_staff_rates porter tier=${tier}`,
+          message: `No hotel check-out/porter service rate (${tier}). Add it in Rates → Hotel Services.`,
+        })
+      }
     }
   }
 
@@ -1974,7 +1952,14 @@ export async function calculateDayBasedPricing(
         notes: 'PPD (Per Person Double)'
       })
     } else {
-      accommodationPPD += DEFAULT_RATES[tier].hotelPPD
+      addHole({
+        kind: 'hotel',
+        reason: 'missing',
+        dayNumber: day.day,
+        city: hotelCity,
+        lookupAttempted: `accommodation_rates city~${hotelCity} tier=${tier}`,
+        message: `No ${tier} hotel rate for "${hotelCity}". Add it in Rates → Hotels.`,
+      })
     }
   }
 
@@ -2033,7 +2018,7 @@ export async function calculateDayBasedPricing(
   let externalMealsPerPax = 0
 
   for (const day of itinerary) {
-    if (day.meals.lunch === 'external') {
+    if (day.meals.lunch === 'external' && mealRates) {
       externalMealsPerPax += mealRates.lunch
       services.push({
         id: `day${day.day}-lunch`,
@@ -2050,7 +2035,7 @@ export async function calculateDayBasedPricing(
       })
     }
 
-    if (day.meals.dinner === 'external') {
+    if (day.meals.dinner === 'external' && mealRates) {
       externalMealsPerPax += mealRates.dinner
       services.push({
         id: `day${day.day}-dinner`,
@@ -2190,20 +2175,14 @@ export async function calculateDayBasedPricing(
         notes: `${needs.serviceType} | ${needs.duration}${needs.area ? ` | ${needs.area}` : ''}`
       })
     } else {
-      baseTransportCost += DEFAULT_RATES[tier].vehicle
-      services.push({
-        id: `day${info.day}-transport`,
+      // No matching transport rate — flag a hole, add nothing (no fabricated vehicle cost).
+      addHole({
+        kind: 'transport',
+        reason: 'missing',
         dayNumber: info.day,
-        serviceType: 'transportation',
-        serviceName: `${baseVehicleType} - ${info.city}`,
-        quantity: 1,
-        quantityMode: 'fixed',
-        unitCost: DEFAULT_RATES[tier].vehicle,
-        lineTotal: DEFAULT_RATES[tier].vehicle,
-        rateSource: 'default',
-        isPerPax: false,
-        isOptional: false,
-        notes: `Default rate (no match found)`
+        city: info.city,
+        lookupAttempted: `transportation_rates ${needs.serviceType}/${needs.duration}@${info.city}`,
+        message: `No transport rate in ${info.city} (${needs.serviceType}/${needs.duration}). Add it in Rates → Transportation.`,
       })
       warnings.push(`No transport rate in ${info.city} (${needs.serviceType}/${needs.duration})`)
     }
@@ -2231,6 +2210,12 @@ export async function calculateDayBasedPricing(
       })
       console.log(`🚢 Cruise package cost (2 pax): €${baseCruisePackageCost.toFixed(2)} (${cruisePackageInfo.packageName})`)
     } else {
+      addHole({
+        kind: 'transport',
+        reason: 'missing',
+        lookupAttempted: `b2b_pricing_rules cruise_transport (${cruisePackageDays.length}D)`,
+        message: `No cruise transport package for a ${cruisePackageDays.length}D cruise. Add it in Rates → Pricing Rules.`,
+      })
       warnings.push(`No cruise transport package found for ${cruisePackageDays.length}D cruise`)
     }
   }
@@ -2266,9 +2251,8 @@ export async function calculateDayBasedPricing(
 
       if (rate) {
         transportCost += rate.base_rate_eur
-      } else {
-        transportCost += DEFAULT_RATES[tier].vehicle
       }
+      // Missing rate flagged as a hole in the base loop above — add nothing here.
     }
 
     // ----- Cruise transport package cost (varies with pax count / vehicle) -----
@@ -2310,9 +2294,8 @@ export async function calculateDayBasedPricing(
 
       if (rate) {
         transportCostWithLeader += rate.base_rate_eur
-      } else {
-        transportCostWithLeader += DEFAULT_RATES[tier].vehicle
       }
+      // Missing rate flagged as a hole in the base loop above — add nothing here.
     }
 
     // ----- Cruise transport package cost for +1 (varies with pax count / vehicle) -----
@@ -2363,6 +2346,11 @@ export async function calculateDayBasedPricing(
   console.log(`   Sample (2 pax +0): €${paxPricing[1]?.withoutLeader.pricePerPerson}/person`)
   console.log(`   Sample (2 pax +1): €${paxPricing[1]?.withLeader.pricePerPerson}/person`)
 
+  const complete = holes.length === 0
+  if (!complete) {
+    console.warn(`⚠️ Pricing INCOMPLETE — ${holes.length} hole(s): ${holes.map(h => h.kind).join(', ')}`)
+  }
+
   return {
     success: true,
     templateId,
@@ -2376,7 +2364,9 @@ export async function calculateDayBasedPricing(
     paxPricing,
     currency: 'EUR',
     marginPercent,
-    warnings
+    warnings,
+    complete,
+    holes
   }
 }
 
