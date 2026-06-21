@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { enrichSlots } from '@/app/pricing-grid/lib/enrich-slots'
 
 // ============================================
 // RATE CATALOG BUILDER
@@ -1126,7 +1127,27 @@ export async function POST(request: NextRequest) {
       slots: enrichSlots(day.slots || {}, allRatesFlat)
     }))
 
-    return NextResponse.json({ success: true, days: enrichedDays, metadata: parsed.metadata || null, generationMode })
+    // AI FENCE (harness Layer 3): surface anything that must be reviewed before
+    // this draft can become a deliverable price — catch-all slots the AI guessed
+    // a number for (now zeroed + flagged) and fully AI-generated itineraries.
+    const needsHumanInputCount = enrichedDays.reduce((sum: number, d: any) =>
+      sum + Object.values(d.slots || {}).filter((s: any) => s?.needsHumanInput).length, 0)
+    const needsReview = generationMode === 'generated' || needsHumanInputCount > 0
+    const reviewReason = generationMode === 'generated'
+      ? 'AI-generated draft — review every line before sending.'
+      : needsHumanInputCount > 0
+        ? `${needsHumanInputCount} catch-all amount(s) need manual entry — the AI's numbers are not used.`
+        : null
+
+    return NextResponse.json({
+      success: true,
+      days: enrichedDays,
+      metadata: parsed.metadata || null,
+      generationMode,
+      needsReview,
+      needsHumanInputCount,
+      reviewReason,
+    })
   } catch (error) {
     console.error('Parse error:', error)
     const { message, status } = getUserFriendlyError(error)
@@ -1242,27 +1263,6 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   })
 
   return map
-}
-
-function enrichSlots(slots: Record<string, any>, rateMap: Map<string, any>): Record<string, any> {
-  const enriched: Record<string, any> = {}
-
-  for (const [slotId, value] of Object.entries(slots)) {
-    if (typeof value === 'number') {
-      // Custom amount slots (other_group, other_pp)
-      enriched[slotId] = { selectedItems: [], customAmount: value }
-      continue
-    }
-
-    const ids = Array.isArray(value) ? value : (value ? [value] : [])
-    const selectedItems = ids
-      .map((id: string) => rateMap.get(id))
-      .filter(Boolean)
-
-    enriched[slotId] = { selectedItems, customAmount: 0 }
-  }
-
-  return enriched
 }
 
 function toNum(v: any): number {

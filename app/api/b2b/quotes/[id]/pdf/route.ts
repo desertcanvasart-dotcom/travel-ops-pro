@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer'
+import { checkAmountDeliverable } from '@/lib/pricing-guards'
 
 // ============================================
 // B2B QUOTE PDF GENERATION
@@ -664,6 +665,16 @@ export async function GET(
         return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
       }
       finalQuote = { ...fallback.data, itineraries: null }
+    }
+
+    // Output gate (harness Layer 2): never render a customer PDF for a
+    // non-deliverable price.
+    const priceCheck = checkAmountDeliverable(finalQuote.selling_price, { currency: finalQuote.currency })
+    if (!priceCheck.ok) {
+      return NextResponse.json(
+        { error: 'Quote price is not deliverable', violations: priceCheck.violations },
+        { status: 422 }
+      )
     }
 
     // Generate HTML

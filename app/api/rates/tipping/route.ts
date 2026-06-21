@@ -1,5 +1,6 @@
 // app/api/rates/tipping/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { validateRatePayload } from '@/lib/rate-validation'
 import { createClient } from '@/lib/supabase'
 
 export async function GET() {
@@ -23,6 +24,11 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createClient()
     const body = await request.json()
+
+    const _rateCheck = validateRatePayload(body)
+    if (!_rateCheck.ok) {
+      return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
+    }
 
     // Check for existing rate with same natural key
     let existingQuery = supabase

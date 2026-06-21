@@ -74,9 +74,15 @@ export async function POST(
       other: 'other'
     }
 
-    // Generate commission records
+    // Generate commission records.
+    // Output gate (harness Layer 2): skip services with no real base amount —
+    // never create a €0 (or negative/NaN) commission off an unpriced service.
     const commissionsToCreate = eligibleServices
       .filter(s => s.supplier && (s.commission_rate || s.supplier.default_commission_rate))
+      .filter(s => {
+        const base = Number(s.selling_price || s.cost || 0)
+        return Number.isFinite(base) && base > 0
+      })
       .map(s => {
         const rate = s.commission_rate || s.supplier.default_commission_rate || 0
         const baseAmount = Number(s.selling_price || s.cost || 0)
