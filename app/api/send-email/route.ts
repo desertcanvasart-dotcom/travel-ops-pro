@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { generateEmailTemplate } from '@/lib/communication-utils'
 import { google } from 'googleapis'
+import { checkAmountDeliverable } from '@/lib/pricing-guards'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,7 +46,15 @@ export async function POST(request: Request) {
       emailSubject = customSubject
       emailBody = customHtml
     } else if (clientName && itineraryCode && tripName) {
-      // Itinerary email with PDF
+      // Itinerary email with PDF — output gate (harness Layer 2): never email a
+      // non-deliverable price. (Generic reminder/cron emails carry no price.)
+      const priceCheck = checkAmountDeliverable(totalCost, { currency })
+      if (!priceCheck.ok) {
+        return NextResponse.json(
+          { success: false, error: 'Itinerary price is not deliverable', violations: priceCheck.violations },
+          { status: 422 }
+        )
+      }
       emailSubject = `Your Egypt Tour Itinerary - ${tripName} (${itineraryCode})`
       emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency)
     } else {

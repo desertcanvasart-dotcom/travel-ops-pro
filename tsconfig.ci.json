@@ -11,6 +11,7 @@
   },
   "include": [
     "lib/pricing-types.ts",
+    "lib/pricing-guards.ts",
     "lib/auto-pricing-service.ts",
     "lib/rate-lookup-service.ts"
   ],

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createClient } from '@supabase/supabase-js'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { checkAmountDeliverable } from '@/lib/pricing-guards'
 
 // Generate Invoice PDF
 async function generateInvoicePDF(invoice: any): Promise<Uint8Array> {
@@ -198,6 +199,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: `Invoice not found: ${invoiceError?.message || 'No data'}` },
         { status: 404 }
+      )
+    }
+
+    // Output gate (harness Layer 2): never send an invoice with a non-deliverable total.
+    const priceCheck = checkAmountDeliverable(invoice.total_amount, { currency: invoice.currency })
+    if (!priceCheck.ok) {
+      return NextResponse.json(
+        { success: false, error: 'Invoice total is not deliverable', violations: priceCheck.violations },
+        { status: 422 }
       )
     }
 
