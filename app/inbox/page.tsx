@@ -535,7 +535,10 @@ ${bodyText}`
     }
     if (senderEmail) params.set('email', senderEmail)
 
-    window.location.href = `/pricing-grid?${params.toString()}`
+    // Conversations go to the parser → an UNPRICED draft the operator revises,
+    // then prices in the grid. (Ready-made itineraries are pasted/uploaded
+    // directly into the grid.)
+    window.location.href = `/whatsapp-parser?${params.toString()}`
   }
   useEffect(() => {
     if (isConnected) {

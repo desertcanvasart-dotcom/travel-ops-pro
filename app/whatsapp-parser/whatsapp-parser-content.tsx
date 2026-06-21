@@ -688,7 +688,7 @@ function GenerationModeSelector({
         {t('generationMode')}
       </h3>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <button
           type="button"
           onClick={() => onChange('edit')}
@@ -717,30 +717,6 @@ function GenerationModeSelector({
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">
             {t('editFirstDesc')}
-          </p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onChange('quick')}
-          className={`p-4 rounded-xl border-2 text-left transition-all ${
-            mode === 'quick'
-              ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-500 ring-offset-1'
-              : 'border-gray-200 hover:border-gray-300'
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-              mode === 'quick' ? 'bg-amber-100' : 'bg-gray-100'
-            }`}>
-              <Zap className={`w-4 h-4 ${mode === 'quick' ? 'text-amber-600' : 'text-gray-500'}`} />
-            </div>
-            <span className={`text-sm font-semibold ${mode === 'quick' ? 'text-amber-700' : 'text-gray-700'}`}>
-              {t('quickGenerate')}
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 leading-relaxed">
-            {t('quickGenerateDesc')}
           </p>
         </button>
       </div>

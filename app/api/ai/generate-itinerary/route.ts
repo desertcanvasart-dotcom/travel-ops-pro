@@ -92,7 +92,10 @@ export async function POST(request: NextRequest) {
       currency = userPrefs.default_currency,
       cost_mode = userPrefs.default_cost_mode,
       package_type: requested_package_type = 'land-package',
-      skip_pricing = false,
+      // Harness: pricing is OPT-IN and safe-by-default. Conversations from
+      // WhatsApp/email generate an UNPRICED draft for the user to revise, then
+      // price in the grid. The route only prices if a caller explicitly asks.
+      skip_pricing = true,
 
       // NEW: Structured input parameters from parser
       is_structured_input = false,
@@ -500,7 +503,8 @@ export async function POST(request: NextRequest) {
             cruise_ship: cruiseRate.shipName,
             generation_mode: 'creative',
             mode: 'draft',
-            redirect_to: `/itineraries/${itinerary.id}`,
+            // Unpriced draft → editor (revise first); priced → view.
+            redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
             currency: effectiveCurrency,
             total_days: duration_days,
             ...(skip_pricing ? {} : {
@@ -897,7 +901,8 @@ export async function POST(request: NextRequest) {
         is_cruise: cruiseDetection.isCruise,
         generation_mode: inputMode,
         mode: 'draft',
-        redirect_to: `/itineraries/${itinerary.id}`,
+        // Unpriced draft → editor (revise first); priced → view.
+        redirect_to: skip_pricing ? `/itineraries/${itinerary.id}/edit` : `/itineraries/${itinerary.id}`,
         currency: effectiveCurrency,
         total_days: duration_days,
         ...(skip_pricing ? {} : {
