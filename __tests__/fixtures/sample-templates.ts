@@ -186,7 +186,24 @@ export function fullRateTables(): MockTables {
   }
 }
 
-/** Same as full, but no hotel rate for Cairo → currently triggers DEFAULT_RATES fabrication. */
+/** Same as full, but no hotel rate for Cairo → a hotel hole (was DEFAULT_RATES fabrication). */
 export function missingHotelTables(): MockTables {
   return { ...fullRateTables(), accommodation_rates: [] }
+}
+
+/**
+ * Full dataset with a Cairo accommodation_rates row for EVERY tier, so the
+ * golden-basket drift guard can price budget/standard/deluxe/luxury cleanly.
+ * (accommodation_rates is the only tier-keyed table this itinerary reads.)
+ */
+export function multiTierRateTables(): MockTables {
+  return {
+    ...fullRateTables(),
+    accommodation_rates: [
+      { id: 'acc-cairo-budget', tier: 'budget', is_active: true, city: 'Cairo', property_name: 'Cairo Budget Hotel', pp_double_eur: 50, pp_double_non_eur: 60, single_supp_eur: 25, single_supp_non_eur: 30, created_at: '2024-01-01T00:00:00Z' },
+      { id: 'acc-cairo-standard', tier: 'standard', is_active: true, city: 'Cairo', property_name: 'Cairo Standard Hotel', pp_double_eur: 85, pp_double_non_eur: 95, single_supp_eur: 45, single_supp_non_eur: 50, created_at: '2024-01-01T00:00:00Z' },
+      { id: 'acc-cairo-deluxe', tier: 'deluxe', is_active: true, city: 'Cairo', property_name: 'Cairo Deluxe Hotel', pp_double_eur: 130, pp_double_non_eur: 145, single_supp_eur: 65, single_supp_non_eur: 70, created_at: '2024-01-01T00:00:00Z' },
+      { id: 'acc-cairo-luxury', tier: 'luxury', is_active: true, city: 'Cairo', property_name: 'Cairo Luxury Hotel', pp_double_eur: 200, pp_double_non_eur: 220, single_supp_eur: 100, single_supp_non_eur: 110, created_at: '2024-01-01T00:00:00Z' },
+    ],
+  }
 }
