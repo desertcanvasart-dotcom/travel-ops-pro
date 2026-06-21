@@ -930,39 +930,15 @@ export default function ItineraryEditorPage() {
         return
       }
 
-      console.log('📊 Calling calculate-pricing API...')
-
-      const response = await fetch(`/api/itineraries/${itineraryId}/calculate-pricing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tier: itinerary.tier,
-          package_type: itinerary.package_type,
-          days: days.map(d => ({
-            day_number: d.day_number,
-            city: d.city,
-            attractions: d.attractions,
-            services: d.services,
-            overnight_city: d.overnight_city
-          })),
-          num_adults: itinerary.num_adults,
-          num_children: itinerary.num_children,
-          nationality_type: 'non-eur'
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        console.error('❌ Pricing API error:', result)
-        throw new Error(result.error || t('pricingCalculationFailed'))
-      }
-
-      console.log('✅ Pricing calculated:', result)
-      router.push(`/itineraries/${itineraryId}`)
+      // Pricing is now done in the pricing grid — the single source of truth.
+      // The old calculate-pricing route (a parallel engine that read B2C tables
+      // and fabricated a €15 entrance fallback) has been retired. Open the grid
+      // loaded with this itinerary so the operator prices it against real rates.
+      console.log('📊 Opening pricing grid for this itinerary...')
+      router.push(`/pricing-grid?itinerary=${itineraryId}`)
 
     } catch (error: any) {
-      console.error('❌ Error calculating pricing:', error)
+      console.error('❌ Error opening grid pricing:', error)
       await dialog.alert(tCommon('error'), t('failedToCalculatePricing', { error: error.message || tCommon('unknownError') }), 'warning')
     } finally {
       setCalculating(false)

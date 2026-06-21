@@ -9,7 +9,7 @@ vi.mock('@supabase/supabase-js', async () => {
 })
 
 // Imported after the mock is registered.
-import { calculateDayBasedPricing } from '@/lib/auto-pricing-service'
+import { calculateDayBasedPricing, calculateAutoPricing } from '@/lib/auto-pricing-service'
 
 const BASE_PARAMS = {
   templateId: TEMPLATE_ID,
@@ -97,6 +97,32 @@ describe('calculateDayBasedPricing — invariants (full rates)', () => {
     setMockTables(fullRateTables())
     const b = await calculateDayBasedPricing(BASE_PARAMS)
     expect(JSON.stringify(b.paxPricing)).toBe(JSON.stringify(a.paxPricing))
+  })
+})
+
+describe('calculateAutoPricing — propagates complete/holes (consolidation Phase D)', () => {
+  const AUTO_PARAMS = {
+    templateId: TEMPLATE_ID,
+    tier: 'standard' as const,
+    numPax: 2,
+    isEurPassport: true,
+    language: 'English',
+    marginPercent: 25,
+    tourLeaderIncluded: false,
+  }
+
+  it('full rates → complete:true, no holes', async () => {
+    setMockTables(fullRateTables())
+    const r = await calculateAutoPricing(AUTO_PARAMS)
+    expect(r.complete).toBe(true)
+    expect(r.holes).toEqual([])
+  })
+
+  it('missing hotel rate → complete:false with a hotel hole (no fabrication)', async () => {
+    setMockTables(missingHotelTables())
+    const r = await calculateAutoPricing(AUTO_PARAMS)
+    expect(r.complete).toBe(false)
+    expect(r.holes.some((h: any) => h.kind === 'hotel')).toBe(true)
   })
 })
 

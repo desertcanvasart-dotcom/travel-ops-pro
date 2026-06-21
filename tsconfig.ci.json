@@ -15,7 +15,9 @@
     "lib/rate-validation.ts",
     "lib/auto-pricing-service.ts",
     "lib/rate-lookup-service.ts",
-    "app/pricing-grid/lib/enrich-slots.ts"
+    "lib/pricing/rate-resolution.ts",
+    "app/pricing-grid/lib/enrich-slots.ts",
+    "app/pricing-grid/lib/grid-completeness.ts"
   ],
   "exclude": ["node_modules", "**/__tests__/**", "**/*.test.ts"]
 }
