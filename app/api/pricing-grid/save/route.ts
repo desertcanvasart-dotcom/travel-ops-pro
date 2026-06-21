@@ -63,6 +63,31 @@ export async function POST(request: NextRequest) {
     const isUpdate = !!config.itineraryId
     const now = new Date().toISOString()
 
+    // Server-authoritative pricing total. Sum the exact services we're about to
+    // write (the source of truth) so total_cost is never persisted as 0 while the
+    // services hold real prices. Prefer the grid's exact client total when sent.
+    const paxN = config.pax || 1
+    const passport = config.passport || 'non_eu'
+    const supplierTotal = (days || []).reduce((sum: number, day: any) => {
+      return sum + (day.slots || []).reduce((dsum: number, slot: any) => {
+        const isGroup = GROUP_SLOTS.has(slot.slotId)
+        if (slot.customAmount > 0) {
+          return dsum + (isGroup ? slot.customAmount : slot.customAmount * paxN)
+        }
+        let line = 0
+        for (const item of (slot.selectedItems || [])) {
+          const rate = passport === 'eu' ? Number(item.rateEur) || 0 : Number(item.rateNonEur) || 0
+          line += isGroup ? rate : rate * paxN
+        }
+        return dsum + line
+      }, 0)
+    }, 0)
+    const marginPct = config.marginPercent || 25
+    const computedSellingTotal = Math.round(supplierTotal * (1 + marginPct / 100) * 100) / 100
+    const finalSellingTotal = (totals?.sellingPriceTotal && totals.sellingPriceTotal > 0)
+      ? totals.sellingPriceTotal
+      : computedSellingTotal
+
     // --- 1. Create or update itinerary ---
     const startDate = config.startDate || now.split('T')[0]
     const endDate = addDays(startDate, Math.max(days.length - 1, 0))
@@ -79,7 +104,7 @@ export async function POST(request: NextRequest) {
       num_children: 0,
       num_infants: 0,
       currency: config.currency || 'EUR',
-      total_cost: totals?.sellingPriceTotal || 0,
+      total_cost: finalSellingTotal,
       tier: config.tier || 'standard',
       status: 'draft',
       cost_mode: 'manual',
