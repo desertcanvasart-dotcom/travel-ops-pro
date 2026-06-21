@@ -84,6 +84,10 @@ interface PriceCalculationResult {
       note: string
     }[]
   }
+  // Completeness from the hardened core (consolidation Phase D): a rate sheet is
+  // deliverable only when complete; holes are surfaced, never fabricated away.
+  complete?: boolean
+  holes?: { kind: string; message: string }[]
 }
 
 function getSeason(date: Date): 'low' | 'high' | 'peak' {
@@ -580,7 +584,11 @@ export async function POST(request: NextRequest) {
           infants_subtotal: ageBasedPricingData.infantsSubtotal,
           child_discount_percent: CHILD_DISCOUNT_PERCENT,
           breakdown: ageBasedPricingData.breakdown
-        } : undefined
+        } : undefined,
+        // Propagate completeness from the hardened engine — never silently
+        // present an under-backed rate sheet as final.
+        complete: autoPriceResult.complete,
+        holes: autoPriceResult.holes?.map(h => ({ kind: h.kind, message: h.message })),
       }
 
       console.log('🎉 B2B Price calculated via auto-pricing:', {

@@ -2566,6 +2566,10 @@ export interface PricingResult {
   warnings: string[]
   paxPricingTable?: PaxPricingResult[]
   singleSupplement?: number
+  // Propagated from the hardened day engine (harness Layer 1 + consolidation D):
+  // a rate sheet is deliverable only when complete; holes are never fabricated.
+  complete: boolean
+  holes: PricingHole[]
 }
 
 /**
@@ -2616,7 +2620,9 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
       pricePerPerson: 0,
       currency: 'EUR',
       ratesUsed: {},
-      warnings: dayResult.warnings
+      warnings: dayResult.warnings,
+      complete: false,
+      holes: dayResult.holes
     }
   }
 
@@ -2704,7 +2710,9 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     ratesUsed,
     warnings: dayResult.warnings,
     paxPricingTable: dayResult.paxPricing,
-    singleSupplement: dayResult.singleSupplement
+    singleSupplement: dayResult.singleSupplement,
+    complete: dayResult.complete,
+    holes: dayResult.holes
   }
 }
 
@@ -2941,7 +2949,9 @@ export async function calculatePricingWithPassengerBreakdown(
       pricePerPerson: 0,
       currency: 'EUR',
       ratesUsed: {},
-      warnings: dayResult.warnings
+      warnings: dayResult.warnings,
+      complete: false,
+      holes: dayResult.holes
     }
   }
 
@@ -3030,6 +3040,8 @@ export async function calculatePricingWithPassengerBreakdown(
     warnings: dayResult.warnings,
     paxPricingTable: dayResult.paxPricing,
     singleSupplement: dayResult.singleSupplement,
-    ageBasedPricing
+    ageBasedPricing,
+    complete: dayResult.complete,
+    holes: dayResult.holes
   }
 }
