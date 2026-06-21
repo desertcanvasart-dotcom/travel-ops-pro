@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { gridCompleteness } from '@/app/pricing-grid/lib/grid-completeness'
 
 // ============================================
 // POST /api/pricing-grid/save
@@ -51,6 +52,13 @@ export async function POST(request: NextRequest) {
     if (!config || !days || !Array.isArray(days)) {
       return NextResponse.json({ success: false, error: 'Missing config or days' }, { status: 400 })
     }
+
+    // Completeness signal (harness consolidation Phase B). The grid saves a
+    // DRAFT, so this does NOT block the save (you build incrementally) — it is
+    // returned so the UI can surface "needs attention". The hard gate is the
+    // send/output path (Phase 2 pricing-guards), which blocks non-deliverable
+    // prices before they reach a customer.
+    const completeness = gridCompleteness(days, config)
 
     const isUpdate = !!config.itineraryId
     const now = new Date().toISOString()
@@ -247,6 +255,7 @@ export async function POST(request: NextRequest) {
       itineraryCode,
       daysCreated: days.length,
       servicesCreated: serviceInserts.length,
+      completeness,
     })
   } catch (error: any) {
     console.error('Save pricing grid error:', error)
