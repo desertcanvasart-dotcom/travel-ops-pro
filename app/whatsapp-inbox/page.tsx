@@ -799,7 +799,10 @@ export default function WhatsAppInboxPage() {
     })
     if (clientName) params.set('clientName', clientName)
     if (selectedConversation.clients?.email) params.set('email', selectedConversation.clients.email)
-    router.push(`/pricing-grid?${params.toString()}`)
+    // Conversations go to the parser → an UNPRICED draft the operator revises,
+    // then prices in the grid. (Ready-made itineraries are pasted/uploaded
+    // directly into the grid.)
+    router.push(`/whatsapp-parser?${params.toString()}`)
   }
 
   // Select conversation
