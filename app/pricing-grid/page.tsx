@@ -548,6 +548,21 @@ function PricingGridContent() {
     }
   }
 
+  // Auto-load an itinerary passed via ?itinerary=<id> (e.g. from the itinerary
+  // editor's "Price in Grid"). The grid is the single pricing surface, so the
+  // editor redirects here instead of calling the retired calculate-pricing route.
+  const hasLoadedItineraryParam = useRef(false)
+  useEffect(() => {
+    if (hasLoadedItineraryParam.current) return
+    const itineraryParam = searchParams?.get('itinerary')
+    if (!itineraryParam) return
+    hasLoadedItineraryParam.current = true
+    handleLoadItinerary(itineraryParam)
+    // Clean the URL so a reload doesn't reload-by-param.
+    window.history.replaceState({}, '', '/pricing-grid')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   // --- Save to Database ---
   const handleSave = async () => {
     if (days.length === 0) {
