@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateRatePayload } from '@/lib/rate-validation'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -44,6 +45,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+
+    const _rateCheck = validateRatePayload(body)
+    if (!_rateCheck.ok) {
+      return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
+    }
 
     const newHotel = {
       // Basic info

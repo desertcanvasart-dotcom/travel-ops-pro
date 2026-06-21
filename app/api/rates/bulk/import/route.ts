@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { RATE_TABLE_CONFIGS, validateImportData } from '@/lib/bulk-rate-service'
 import type { ImportResult } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
+import { validateRatePayload } from '@/lib/rate-validation'
 
 const supabase = createServerClient()
 
@@ -114,6 +115,20 @@ export async function POST(request: NextRequest) {
         }
       }
       rowsToUpsert.push(record)
+    }
+
+    // Rate-entry validation (harness Layer 4): reject the import if any row has
+    // a negative / absurd money value, so the engine never reads a bad rate.
+    const rateViolations: any[] = []
+    rowsToUpsert.forEach((record, idx) => {
+      const check = validateRatePayload(record)
+      if (!check.ok) rateViolations.push({ row: idx + 1, errors: check.errors })
+    })
+    if (rateViolations.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid rate values in import', violations: rateViolations.slice(0, 20) },
+        { status: 400 }
+      )
     }
 
     // Upsert in batches of 50

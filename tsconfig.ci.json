@@ -12,6 +12,7 @@
   "include": [
     "lib/pricing-types.ts",
     "lib/pricing-guards.ts",
+    "lib/rate-validation.ts",
     "lib/auto-pricing-service.ts",
     "lib/rate-lookup-service.ts",
     "app/pricing-grid/lib/enrich-slots.ts"
