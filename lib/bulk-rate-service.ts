@@ -497,11 +497,18 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
       return { parsed: null, error: `${colDef.label} must be true/false` }
     }
     case 'date': {
-      // Accept ISO dates or common formats
-      if (/^\d{4}-\d{2}-\d{2}/.test(raw) || /^\d{2}\/\d{2}\/\d{4}/.test(raw)) {
+      // ISO YYYY-MM-DD or ISO timestamp — pass through
+      if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
         return { parsed: raw, error: null }
       }
-      return { parsed: raw, error: null } // Be lenient with date formats
+      // DD/MM/YYYY (Excel/Numbers reformats ISO dates to the user's locale on
+      // save — this caused a real prod import failure where the DB rejected
+      // "23/06/2026" as an invalid date). Normalize to ISO for the DB.
+      const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+      if (dmy) {
+        return { parsed: `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`, error: null }
+      }
+      return { parsed: raw, error: null } // Be lenient with other date formats
     }
     case 'text':
     default: {
