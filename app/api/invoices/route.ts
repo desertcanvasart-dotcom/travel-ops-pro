@@ -115,23 +115,42 @@ export async function POST(request: NextRequest) {
         amount: totalAmount
       }]
     } else if (invoiceType === 'final') {
-      // Final invoice: remaining balance after deposit
-      const depositAmount = (fullTripCost * depositPercent) / 100
-      totalAmount = fullTripCost - depositAmount
+      // Final invoice: remaining balance after deposit.
+      //
+      // M17: when a parent_invoice_id is supplied, the actual deposit
+      // amount (and whatever was paid against it) is the authoritative
+      // figure. Recomputing the deposit as a percentage of fullTripCost
+      // silently ignores manual overrides, rounding, or a different
+      // deposit_percent on the parent, so the final could under- or
+      // over-charge by the rounding/override delta. Prefer the linked
+      // deposit invoice's actual total_amount.
+      let depositAmount = (fullTripCost * depositPercent) / 100
+      let depositSource: 'percent' | 'parent' = 'percent'
+      let depositReconciles = true
+      let reconcileNote = ''
+      if (body.parent_invoice_id) {
+        const { data: parent } = await supabaseAdmin
+          .from('invoices')
+          .select('total_amount, currency')
+          .eq('id', body.parent_invoice_id)
+          .single()
+        if (parent?.total_amount != null) {
+          depositAmount = Number(parent.total_amount)
+          depositSource = 'parent'
+          // Surface a mismatch between the recomputed percent and the
+          // actual parent amount; don't fail the request — the caller may
+          // intentionally have a manual deposit — but record the delta.
+          const expected = (fullTripCost * depositPercent) / 100
+          if (Math.abs(expected - depositAmount) > 0.01) {
+            depositReconciles = false
+            reconcileNote = ` (parent deposit ${parent.currency || ''}${depositAmount.toFixed(2)} differs from ${depositPercent}% of trip ${expected.toFixed(2)})`
+          }
+        }
+      }
+      totalAmount = Math.max(0, fullTripCost - depositAmount)
+      const headerPrefix = depositSource === 'parent' ? 'Final Balance (parent-deposit-based)' : 'Final Balance'
       lineItems = [{
-        description: `Balance Payment - ${body.line_items?.[0]?.description || 'Tour Package'}`,
-        quantity: 1,
-        unit_price: totalAmount,
-        amount: totalAmount
-      }, {
-        description: `Less: Deposit Paid (${depositPercent}%)`,
-        quantity: 1,
-        unit_price: -depositAmount,
-        amount: -depositAmount
-      }]
-      // Adjust total to just show the balance
-      lineItems = [{
-        description: `Final Balance - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${body.currency || 'EUR'} ${fullTripCost.toFixed(2)} minus ${depositPercent}% deposit)`,
+        description: `${headerPrefix} - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${body.currency || 'EUR'} ${fullTripCost.toFixed(2)} minus deposit ${body.currency || 'EUR'} ${depositAmount.toFixed(2)})${depositReconciles ? '' : reconcileNote}`,
         quantity: 1,
         unit_price: totalAmount,
         amount: totalAmount
