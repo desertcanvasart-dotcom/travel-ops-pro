@@ -1077,11 +1077,26 @@ export async function getCruiseRates(
     }
 
     const cruise = cruises[0]
-    // rate_double_eur is already per-person (double occupancy)
-    const ppdTrip = cruise.rate_double_eur
-    const ppdNight = ppdTrip / cruise.duration_nights
-    const singleSuppTrip = cruise.rate_single_eur - cruise.rate_double_eur
-    const singleSuppNight = singleSuppTrip / cruise.duration_nights
+    // rate_double_eur is already per-person (double occupancy).
+    // M23: guard against bad/missing data — duration_nights of 0 or null
+    // would otherwise propagate Infinity/NaN through the entire pricing
+    // tree. Same for missing per-trip rates.
+    const safeNights = cruise.duration_nights && cruise.duration_nights > 0
+      ? cruise.duration_nights
+      : null
+    if (!safeNights) {
+      console.warn(`⚠️ Cruise ${cruise.ship_name} has invalid duration_nights (${cruise.duration_nights}) — falling back to tier defaults`)
+      return {
+        shipName: cruise.ship_name,
+        ppdNight: DEFAULT_RATES[tier].cruisePPDNight,
+        singleSuppNight: DEFAULT_RATES[tier].cruiseSingleSuppNight,
+        durationNights: 4,
+      }
+    }
+    const ppdTrip = cruise.rate_double_eur ?? 0
+    const singleSuppTrip = (cruise.rate_single_eur ?? 0) - (cruise.rate_double_eur ?? 0)
+    const ppdNight = ppdTrip / safeNights
+    const singleSuppNight = singleSuppTrip / safeNights
 
     console.log(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
 
@@ -1089,7 +1104,7 @@ export async function getCruiseRates(
       shipName: cruise.ship_name,
       ppdNight,
       singleSuppNight,
-      durationNights: cruise.duration_nights
+      durationNights: safeNights,
     }
   } catch (err) {
     console.error('Error fetching cruise rates:', err)

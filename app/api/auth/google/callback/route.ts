@@ -18,10 +18,13 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state') // Contains user_id
   const error = searchParams.get('error')
 
-  // Determine the correct base URL for redirects
-  const baseUrl = BASE_URL || request.headers.get('x-forwarded-host')
-    ? `https://${request.headers.get('x-forwarded-host')}`
-    : request.url
+  // Determine the correct base URL for redirects (M10 fix).
+  // The previous expression `BASE_URL || header ? https://header : request.url`
+  // parsed as `(BASE_URL || header) ? https://header : request.url`, so even
+  // when BASE_URL was configured the ternary still used the (attacker-set)
+  // x-forwarded-host header. Parenthesize so BASE_URL really wins when set.
+  const fwdHost = request.headers.get('x-forwarded-host')
+  const baseUrl = BASE_URL || (fwdHost ? `https://${fwdHost}` : request.url)
 
   if (error) {
     return NextResponse.redirect(

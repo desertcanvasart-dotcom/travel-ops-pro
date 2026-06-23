@@ -481,15 +481,32 @@ export async function POST(request: Request) {
 
     // Parse JSON from response
     let extracted: any = {}
+    let extractionFailed = false
     try {
       // Find JSON in the response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         extracted = JSON.parse(jsonMatch[0])
+      } else {
+        extractionFailed = true
       }
     } catch (e) {
       console.error('Failed to parse Claude response:', e)
       console.log('Raw response:', responseText.substring(0, 500))
+      extractionFailed = true
+    }
+
+    // M7: fail loudly when the model returned no parseable JSON. Returning
+    // `success: true` with all-default data lets the caller proceed as if
+    // extraction succeeded — the resulting itinerary is silently empty.
+    if (extractionFailed || Object.keys(extracted).length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Could not extract structured data from the conversation. The text may be too short, ambiguous, or in an unsupported format.',
+        },
+        { status: 422 }
+      )
     }
 
     // Helper to validate date

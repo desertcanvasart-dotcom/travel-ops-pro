@@ -341,15 +341,18 @@ async function getEntranceFee(attractionName: string, isEuroPassport: boolean): 
     }
   }
 
-  // Fallback - unknown attractions are NOT add-ons
-  console.log(`[Pricing] ⚠️ No rate found for "${attractionName}", using fallback €15`)
+  // M24: return rate 0 (consistent with the other rate helpers in this
+  // file) and log a missing-rate warning instead of silently quoting a
+  // €15 fallback that nobody actually entered. The 0 line item makes the
+  // gap visible to whoever reviews the quote.
+  console.warn(`[Pricing] ⚠️ No rate found for "${attractionName}" — pricing as €0 so the gap is visible`)
   return {
-    rate: 15,
-    rateEur: 15,
-    rateNonEur: 15,
+    rate: 0,
+    rateEur: 0,
+    rateNonEur: 0,
     name: attractionName,
     code: `ENT-${attractionName.substring(0,5).toUpperCase().replace(/\s/g, '')}`,
-    isAddon: false
+    isAddon: false,
   }
 }
 
@@ -949,7 +952,11 @@ export async function POST(
       actual_margin_percent: actualMarginPercent,
       currency,
       services_count: allServices.length,
-      per_person: Math.round(totalClientPrice / totalPax * 100) / 100,
+      // M26: use the post-conversion client price so per_person is in the
+      // SAME currency as the surrounding total_cost / supplier_cost fields.
+      // The prior `totalClientPrice / totalPax` was in EUR while the response
+      // claimed `currency` (e.g. USD), silently mis-labeling the unit.
+      per_person: totalPax > 0 ? Math.round(convertedClientPrice / totalPax * 100) / 100 : 0,
       preferences_used: !!userPrefs,
       using_fallback_rates: needsConversion && isUsingFallbackRates(),
       // Report skipped add-ons

@@ -94,19 +94,29 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validate required fields
-    if (!body.commission_type || !body.category || !body.commission_amount) {
+    // Validate required fields. M13: commission_amount=0 is a legitimate
+    // zero-commission entry but the previous `!body.commission_amount`
+    // rejected it. Also allow rate-based input: either an explicit
+    // commission_amount (incl. 0), or (base_amount + commission_rate).
+    const hasExplicitAmount = body.commission_amount !== undefined
+      && body.commission_amount !== null
+      && body.commission_amount !== ''
+    const hasRateInputs = body.base_amount !== undefined
+      && body.base_amount !== null
+      && body.commission_rate !== undefined
+      && body.commission_rate !== null
+
+    if (!body.commission_type || !body.category || (!hasExplicitAmount && !hasRateInputs)) {
       return NextResponse.json(
-        { error: 'Commission type, category, and amount are required' },
+        { error: 'Commission type, category, and either commission_amount or (base_amount + commission_rate) are required' },
         { status: 400 }
       )
     }
 
-    // Calculate commission amount from rate if provided
-    let commissionAmount = Number(body.commission_amount)
-    if (body.base_amount && body.commission_rate && !body.commission_amount) {
-      commissionAmount = (Number(body.base_amount) * Number(body.commission_rate)) / 100
-    }
+    // Calculate commission amount from rate if explicit amount missing.
+    let commissionAmount = hasExplicitAmount
+      ? Number(body.commission_amount)
+      : (Number(body.base_amount) * Number(body.commission_rate)) / 100
 
     const newCommission = {
       itinerary_id: body.itinerary_id || null,
