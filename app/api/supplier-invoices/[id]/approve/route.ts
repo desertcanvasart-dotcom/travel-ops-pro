@@ -41,7 +41,14 @@ export async function POST(
       )
     }
 
-    const { data, error: updateError } = await supabaseAdmin
+    // M29: conditional UPDATE protects against the check-then-write race.
+    // Even if two requests both passed the pre-check, only ONE will
+    // satisfy this WHERE clause and produce a row.
+    //   - status must NOT already be 'paid' or 'cancelled'
+    //   - match_status must be 'matched' unless override=true
+    // The pre-checks above stay so well-formed bad-state requests still
+    // get specific 400 messages; the conditional update is the safety net.
+    let updateQuery = supabaseAdmin
       .from('supplier_invoices')
       .update({
         status: 'approved',
@@ -50,11 +57,24 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select()
-      .single()
+      .neq('status', 'paid')
+      .neq('status', 'cancelled')
+    if (!override) {
+      updateQuery = updateQuery.eq('match_status', 'matched')
+    }
+    const { data, error: updateError } = await updateQuery.select().maybeSingle()
 
     if (updateError) {
       return NextResponse.json({ error: 'Failed to approve' }, { status: 500 })
+    }
+    if (!data) {
+      // Pre-check passed but the UPDATE matched 0 rows — a concurrent
+      // request changed the invoice's status or match_status. Returning
+      // 409 lets the caller refresh rather than silently no-op.
+      return NextResponse.json(
+        { error: 'Invoice state changed since the request was issued (likely approved/paid by a concurrent request, or match_status flipped)' },
+        { status: 409 }
+      )
     }
 
     return NextResponse.json({ success: true, data })
