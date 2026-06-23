@@ -166,6 +166,13 @@ export async function createCruiseItineraryServices(
     warnings.push('No entrance fees found — entrance fees will be €0')
   }
 
+  // 4b. Activity rates — M5 fix: cruise-day attractions that exist only in
+  // activity_rates (felucca rides, Sound & Light shows, sea trips, …) were
+  // previously priced at €0 because this module skipped the activity_rates
+  // fallback that the land path uses. Mirror it here so cruise quotes don't
+  // systematically under-charge for activity-priced items.
+  const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('is_active', true)
+
   // 5. Water rate
   const fixedCosts = await getFixedDailyCosts()
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
@@ -371,8 +378,24 @@ export async function createCruiseItineraryServices(
           const feePerPerson = isEuroPassport ? toNumber(fee.eur_rate, 0) : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
           dayEntranceTotal += feePerPerson * totalPax
           matchedAttractions.push(fee.attraction_name)
+          continue
+        }
+
+        // M5 fallback: when entrance_fees has no match, check activity_rates
+        // (mirrors lib/ai/service-creation.ts:1653-1678).
+        const activityMatch = (activityRates || []).find((ar: any) =>
+          ar.activity_name?.toLowerCase() === resolvedName.toLowerCase()
+          || ar.activity_name?.toLowerCase().includes(resolvedName.toLowerCase())
+          || resolvedName.toLowerCase().includes(ar.activity_name?.toLowerCase() || '')
+        )
+        if (activityMatch) {
+          const activityRate = isEuroPassport
+            ? toNumber(activityMatch.base_rate_eur || activityMatch.eur_rate, 0)
+            : toNumber(activityMatch.base_rate_non_eur || activityMatch.non_eur_rate, activityMatch.base_rate_eur || activityMatch.eur_rate || 0)
+          dayEntranceTotal += activityRate * totalPax
+          matchedAttractions.push(activityMatch.activity_name || attractionName)
         } else {
-          warnings.push(`Day ${dayData.day_number}: No entrance fee found for "${attractionName}"`)
+          warnings.push(`Day ${dayData.day_number}: No entrance fee or activity rate found for "${attractionName}"`)
         }
       }
 
