@@ -130,32 +130,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // --- 2. Delete existing days + services (for upsert) ---
-    if (isUpdate) {
-      // Get existing day IDs
-      const { data: existingDays } = await supabase
-        .from('itinerary_days')
-        .select('id')
-        .eq('itinerary_id', itineraryId)
-
-      if (existingDays && existingDays.length > 0) {
-        const dayIds = existingDays.map((d: any) => d.id)
-        // Delete services first (FK constraint)
-        await supabase
-          .from('itinerary_services')
-          .delete()
-          .in('itinerary_day_id', dayIds)
-        // Delete days
-        await supabase
-          .from('itinerary_days')
-          .delete()
-          .eq('itinerary_id', itineraryId)
-      }
-    }
-
-    // --- 3. Insert days ---
-    const dayInserts = days.map((day: any, idx: number) => ({
-      itinerary_id: itineraryId,
+    // --- 2. Build day + service payloads ---
+    // The destructive replace (delete old days/services + insert new) runs in a
+    // single Postgres transaction via the save_pricing_grid_days RPC, so a
+    // partial failure can no longer leave an itinerary with its days deleted but
+    // not re-inserted. Services reference days by day_number; the RPC resolves
+    // each to the freshly-inserted day id.
+    const dayPayload = days.map((day: any, idx: number) => ({
       day_number: day.dayNumber || idx + 1,
       title: day.title || `Day ${idx + 1}`,
       description: day.description || '',
@@ -164,26 +145,10 @@ export async function POST(request: NextRequest) {
       date: addDays(startDate, idx),
     }))
 
-    const { data: insertedDays, error: daysError } = await supabase
-      .from('itinerary_days')
-      .insert(dayInserts)
-      .select('id, day_number')
-
-    if (daysError) throw new Error(`Failed to insert days: ${daysError.message}`)
-
-    // Create a map: dayNumber → dayDbId
-    const dayIdMap = new Map<number, string>()
-    for (const d of insertedDays || []) {
-      dayIdMap.set(d.day_number, d.id)
-    }
-
-    // --- 4. Insert services ---
-    const serviceInserts: any[] = []
-
-    for (const day of days) {
-      const dayDbId = dayIdMap.get(day.dayNumber)
-      if (!dayDbId) continue
-
+    const servicePayload: any[] = []
+    for (let di = 0; di < days.length; di++) {
+      const day = days[di]
+      const dayNumber = day.dayNumber || di + 1
       const slots = day.slots || []
       for (const slot of slots) {
         const serviceType = SLOT_TO_SERVICE[slot.slotId]
@@ -193,8 +158,8 @@ export async function POST(request: NextRequest) {
 
         // Custom amount slots
         if (slot.customAmount > 0) {
-          serviceInserts.push({
-            itinerary_day_id: dayDbId,
+          servicePayload.push({
+            day_number: dayNumber,
             service_type: serviceType,
             service_name: slot.slotId === 'other_group' ? 'Other (Group)' : 'Other (Per Person)',
             quantity: isGroup ? 1 : (config.pax || 1),
@@ -209,8 +174,8 @@ export async function POST(request: NextRequest) {
         // Selected items
         for (const item of (slot.selectedItems || [])) {
           const rate = passport === 'eu' ? item.rateEur : item.rateNonEur
-          serviceInserts.push({
-            itinerary_day_id: dayDbId,
+          servicePayload.push({
+            day_number: dayNumber,
             service_type: serviceType,
             service_name: item.name,
             quantity: isGroup ? 1 : (config.pax || 1),
@@ -224,27 +189,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Sanitize all service numeric values
-    for (const svc of serviceInserts) {
+    for (const svc of servicePayload) {
       svc.rate_eur = Math.round((svc.rate_eur || 0) * 100) / 100
       svc.rate_non_eur = Math.round((svc.rate_non_eur || 0) * 100) / 100
       svc.total_cost = Math.round((svc.total_cost || 0) * 100) / 100
       svc.quantity = Math.min(svc.quantity || 1, 999)
     }
 
-    if (serviceInserts.length > 0) {
-      const { error: svcError } = await supabase
-        .from('itinerary_services')
-        .insert(serviceInserts)
+    // --- 3. Atomically replace days + services (single transaction) ---
+    const { error: rpcError } = await supabase.rpc('save_pricing_grid_days', {
+      p_itinerary_id: itineraryId,
+      p_days: dayPayload,
+      p_services: servicePayload,
+    })
 
-      if (svcError) throw new Error(`Failed to insert services: ${svcError.message}`)
-    }
+    if (rpcError) throw new Error(`Failed to save days/services: ${rpcError.message}`)
 
     // Recompute the itinerary total server-side from the ACTUAL service costs
     // rather than trusting the client-supplied total. For B2B the selling price is
     // supplier cost × (1 + margin). For B2C the markup is applied client-side, but
     // we still floor the stored total at supplier cost so a tampered/buggy client
     // can never persist a quote priced below cost.
-    const supplierTotal = serviceInserts.reduce((s, svc) => s + (svc.total_cost || 0), 0)
+    const supplierTotal = servicePayload.reduce((s, svc) => s + (svc.total_cost || 0), 0)
     const marginPercent = Math.min(Math.max(Number(config.marginPercent) || 0, 0), 100)
     let authoritativeTotal = itineraryData.total_cost
     if (config.clientType === 'b2b') {
@@ -256,14 +222,14 @@ export async function POST(request: NextRequest) {
       await supabase.from('itineraries').update({ total_cost: authoritativeTotal }).eq('id', itineraryId)
     }
 
-    console.log(`Pricing grid saved: ${itineraryCode} — ${days.length} days, ${serviceInserts.length} services`)
+    console.log(`Pricing grid saved: ${itineraryCode} — ${days.length} days, ${servicePayload.length} services`)
 
     return NextResponse.json({
       success: true,
       itineraryId,
       itineraryCode,
       daysCreated: days.length,
-      servicesCreated: serviceInserts.length,
+      servicesCreated: servicePayload.length,
     })
   } catch (error: any) {
     console.error('Save pricing grid error:', error)
