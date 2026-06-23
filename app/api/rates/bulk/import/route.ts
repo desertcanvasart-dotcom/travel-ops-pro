@@ -73,48 +73,35 @@ export async function POST(request: NextRequest) {
     // Validate
     const preview = validateImportData(rows, config)
 
+    // L7: don't serialize the FULL parsed rows back to the caller in the
+    // dry-run response — only the sampleData (first 5) is part of the
+    // public preview contract.
     if (dryRun) {
+      const { parsedValidRows: _drop, ...publicPreview } = preview
       return NextResponse.json({
         success: true,
         dryRun: true,
-        ...preview,
+        ...publicPreview,
       })
     }
 
     // If validation failed, don't proceed
     if (preview.invalidRows > 0) {
+      const { parsedValidRows: _drop, ...publicPreview } = preview
       return NextResponse.json({
         success: false,
         error: `${preview.invalidRows} row(s) have validation errors. Fix errors or use dry run to see details.`,
-        ...preview,
+        ...publicPreview,
       })
     }
 
-    // Get importable columns (exclude export-only)
-    const importableColumns = config.columns.filter(c => !c.exportOnly)
-    const importableColNames = importableColumns.map(c => c.name)
-
-    // Parse all rows for import
-    const rowsToUpsert: Record<string, any>[] = []
-    for (const row of rows) {
-      const record: Record<string, any> = {}
-      for (const colDef of importableColumns) {
-        const raw = (row[colDef.name] ?? '').trim()
-        if (raw === '' || raw === 'null' || raw === 'NULL') continue
-
-        switch (colDef.type) {
-          case 'number':
-            record[colDef.name] = Number(raw)
-            break
-          case 'boolean':
-            record[colDef.name] = ['true', '1', 'yes', 'y'].includes(raw.toLowerCase())
-            break
-          default:
-            record[colDef.name] = raw
-        }
-      }
-      rowsToUpsert.push(record)
-    }
+    // L7: reuse the parsed rows from the validator instead of re-parsing
+    // the raw strings here. The prior re-parser silently disagreed with
+    // parseCell on edge cases (e.g. unrecognized boolean strings — parseCell
+    // rejected them at validation, this loop coerced them to false). The
+    // validator and the upsert now share ONE parser, so anything that passes
+    // validation lands as the exact same record at write time.
+    const rowsToUpsert: Record<string, any>[] = preview.parsedValidRows || []
 
     // Upsert in batches of 50
     const BATCH_SIZE = 50

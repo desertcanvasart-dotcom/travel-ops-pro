@@ -44,6 +44,12 @@ export interface ImportPreview {
   invalidRows: number
   errors: ValidationError[]
   sampleData: Record<string, any>[]  // first 5 rows
+  // L7: the FULL set of parsed valid rows. The import route reuses these
+  // for the actual upsert so validation and persistence share one parser,
+  // and a row that passes validation cannot land as a subtly-different
+  // record at write time. Not serialized in the dry-run response — only
+  // exposed to in-process callers.
+  parsedValidRows?: Record<string, any>[]
 }
 
 // ============================================
@@ -579,6 +585,7 @@ export function validateImportData(
     invalidRows: rows.length - validRows.length,
     errors: errors.slice(0, 100), // Cap at 100 errors
     sampleData: validRows.slice(0, 5),
+    parsedValidRows: validRows, // L7: single source of truth for the import path
   }
 }
 

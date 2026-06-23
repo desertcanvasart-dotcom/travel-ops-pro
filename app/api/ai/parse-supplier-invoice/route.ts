@@ -165,7 +165,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const extracted = JSON.parse(jsonMatch[0])
+    // L3: the regex is greedy (`/\{[\s\S]*\}/`) and can capture from the first
+    // '{' to the last '}' if the model returned any prose with braces around
+    // the actual JSON object. JSON.parse then throws and the request 500s
+    // instead of returning a friendly message. Match the no-match branch's
+    // 422 response on parse failure so the caller sees the same shape.
+    let extracted: any
+    try {
+      extracted = JSON.parse(jsonMatch[0])
+    } catch (parseErr) {
+      console.error('parse-supplier-invoice: JSON.parse failed on candidate string', parseErr)
+      return NextResponse.json(
+        { success: false, error: 'Could not extract structured data from this document. Please try a clearer image or PDF.' },
+        { status: 422 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
