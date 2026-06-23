@@ -19,7 +19,8 @@ export interface ColumnDef {
   label: string
   type: 'text' | 'number' | 'boolean' | 'date'
   required: boolean
-  exportOnly?: boolean     // e.g., id, created_at — included in export but not required for import
+  exportOnly?: boolean         // e.g., id, created_at — included in export but not required for import
+  allowedValues?: readonly string[]  // when set, the cell must match (case-insensitive)
 }
 
 export interface ValidationError {
@@ -52,6 +53,28 @@ export interface ImportPreview {
 function col(name: string, label: string, type: ColumnDef['type'], required: boolean, exportOnly = false): ColumnDef {
   return { name, label, type, required, exportOnly }
 }
+
+// Helper for an enum-constrained text column. Values are normalized to the
+// configured spelling on import, so a stray "Day_Tour" becomes "day_tour".
+function colEnum(name: string, label: string, allowedValues: readonly string[], required: boolean): ColumnDef {
+  return { name, label, type: 'text', required, allowedValues }
+}
+
+// Canonical transportation service_type taxonomy (locked-in 2026-06-23).
+// See ~/.claude/.../memory/transportation-types.md for the full spec.
+const TRANSPORTATION_SERVICE_TYPES = [
+  'airport_transfer',
+  'airport_with_sightseeing',
+  'city_transfer',
+  'city_tour',
+  'intercity',
+  'intercity_with_sightseeing',
+  'half_day',
+  'day_tour',
+  'extended_day_tour',
+  'sound_light',
+  'dinner_transfer',
+] as const
 
 function id(): ColumnDef { return col('id', 'ID', 'text', false, true) }
 function serviceCode(): ColumnDef { return col('service_code', 'Service Code', 'text', false) }
@@ -132,7 +155,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
     uniqueKey: ['service_code'],
     columns: [
       id(), serviceCode(),
-      col('service_type', 'Service Type', 'text', true),
+      colEnum('service_type', 'Service Type', TRANSPORTATION_SERVICE_TYPES, true),
       col('city', 'City', 'text', true),
       col('origin_city', 'Origin City', 'text', false),
       col('destination_city', 'Destination City', 'text', false),
@@ -481,8 +504,22 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
       return { parsed: raw, error: null } // Be lenient with date formats
     }
     case 'text':
-    default:
+    default: {
+      if (colDef.allowedValues && colDef.allowedValues.length > 0) {
+        // Case-insensitive match; on hit, normalize to the canonical spelling
+        // so downstream code never has to .toLowerCase() to look it up.
+        const lower = raw.toLowerCase()
+        const match = colDef.allowedValues.find(v => v.toLowerCase() === lower)
+        if (!match) {
+          return {
+            parsed: null,
+            error: `${colDef.label} must be one of: ${colDef.allowedValues.join(', ')} (got "${raw}")`,
+          }
+        }
+        return { parsed: match, error: null }
+      }
       return { parsed: raw, error: null }
+    }
   }
 }
 
