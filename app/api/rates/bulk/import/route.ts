@@ -125,8 +125,26 @@ export async function POST(request: NextRequest) {
     // Determine the unique key column for upsert
     const uniqueKeyColumn = config.uniqueKey[0] // e.g., 'service_code' or 'cruise_code' or 'cost_type'
 
-    for (let i = 0; i < rowsToUpsert.length; i += BATCH_SIZE) {
-      const batch = rowsToUpsert.slice(i, i + BATCH_SIZE)
+    // Reject rows whose unique key is blank — without a key every such row is
+    // inserted as a brand-new record, creating uncontrolled duplicates.
+    const keyedRows = rowsToUpsert.filter(r => {
+      const key = r[uniqueKeyColumn]
+      if (key === undefined || key === null || String(key).trim() === '') {
+        importErrors.push({ operation: 'validate', message: `Row missing required ${uniqueKeyColumn}; skipped` })
+        return false
+      }
+      return true
+    })
+
+    // De-duplicate within the import by unique key (keep the LAST occurrence), so a
+    // file containing the same key twice resolves deterministically instead of
+    // inserting one copy and then duplicating/failing the other in the same batch.
+    const dedupMap = new Map<string, Record<string, any>>()
+    for (const r of keyedRows) dedupMap.set(String(r[uniqueKeyColumn]), r)
+    const dedupedRows = Array.from(dedupMap.values())
+
+    for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
+      const batch = dedupedRows.slice(i, i + BATCH_SIZE)
 
       // Check which records already exist
       const keyValues = batch
@@ -198,8 +216,19 @@ export async function POST(request: NextRequest) {
       errors: importErrors,
     }
 
+    const success = importErrors.length === 0
+
     return NextResponse.json({
-      success: importErrors.length === 0,
+      success,
+      // Surface the real database error so the UI isn't left with a bare
+      // "Import failed". The detailed list stays in `errors`.
+      ...(success
+        ? {}
+        : {
+            error:
+              `Import failed: ${importErrors[0]?.message || 'database error'}` +
+              (importErrors.length > 1 ? ` (+${importErrors.length - 1} more)` : ''),
+          }),
       ...result,
     })
   } catch (error: any) {

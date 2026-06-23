@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,19 +9,26 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, provider } = await request.json()
+    const { provider } = await request.json()
 
-    if (!userId || !provider) {
+    if (!provider) {
       return NextResponse.json(
-        { error: 'userId and provider are required' },
+        { error: 'provider is required' },
         { status: 400 }
       )
+    }
+
+    // Derive the user from the authenticated session — NOT the request body —
+    // otherwise any logged-in user could disconnect another user's integration.
+    const { user } = await getAuthenticatedUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { error } = await supabase
       .from('accounting_tokens')
       .delete()
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .eq('provider', provider)
 
     if (error) {

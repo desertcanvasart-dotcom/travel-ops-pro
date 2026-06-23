@@ -12,12 +12,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const syncFn = {
+    const syncFns: Record<string, (id: string) => Promise<void>> = {
       invoice: syncInvoice,
       expense: syncExpense,
       invoice_payment: syncInvoicePayment,
       expense_payment: syncExpensePayment,
-    }[entityType]
+    }
+    const syncFn = syncFns[entityType]
 
     if (!syncFn) {
       return NextResponse.json(

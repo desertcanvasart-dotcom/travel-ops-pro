@@ -48,8 +48,14 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
-    // Remove fields that shouldn't be updated directly
-    const { id: _, created_at, internal_reference, matched_expenses, ...updateData } = body
+    // Remove immutable fields AND reconciliation/state fields — those are owned by
+    // the approve / pay / match / dispute routes, not this generic edit endpoint.
+    const {
+      id: _, created_at, internal_reference, matched_expenses,
+      status, match_status, matched_amount, discrepancy_amount, discrepancy_notes,
+      paid_at, payment_date, payment_method, payment_reference, approved_at, approved_by,
+      ...updateData
+    } = body
 
     const { data, error } = await supabaseAdmin
       .from('supplier_invoices')

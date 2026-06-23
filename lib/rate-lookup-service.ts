@@ -1282,11 +1282,14 @@ export async function calculatePricingFromRates(
       totalEntrancePerPerson += adultFee
     }
     
-    const entranceTotal = totalEntrancePerPerson * pax * duration_days
-    
+    // Entrance fees are charged once per attraction per person — NOT per day.
+    // The attraction list (rates.attractions) is already the flat set for the
+    // whole tour, so scaling by duration_days overcharged every multi-day quote.
+    const entranceTotal = totalEntrancePerPerson * pax
+
     result.breakdown.entrances = {
       total: entranceTotal,
-      per_person: totalEntrancePerPerson * duration_days,
+      per_person: totalEntrancePerPerson,
       count: rates.attractions.length,
       passport_type: params.is_euro_passport ? 'EUR' : 'non-EUR'
     }

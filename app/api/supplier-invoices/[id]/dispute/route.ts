@@ -14,6 +14,24 @@ export async function POST(
     const { id } = await params
     const { reason } = await request.json()
 
+    // Guard: the invoice must exist and be in a disputable state. Without this a
+    // PUT could flip an already-paid or already-disputed invoice to 'disputed'.
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('supplier_invoices')
+      .select('status')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !existing) {
+      return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
+    }
+    if (existing.status === 'paid' || existing.status === 'disputed') {
+      return NextResponse.json(
+        { error: `Cannot dispute an invoice with status '${existing.status}'` },
+        { status: 409 }
+      )
+    }
+
     const { data, error } = await supabaseAdmin
       .from('supplier_invoices')
       .update({

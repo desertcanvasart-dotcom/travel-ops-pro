@@ -117,10 +117,31 @@ export async function middleware(request: NextRequest) {
     (route !== '/' && request.nextUrl.pathname.startsWith(route))
   )
 
-  // Allow all API routes (they handle their own auth)
   const isApiRoute = request.nextUrl.pathname.startsWith('/api')
 
-  // If user is not logged in and trying to access protected route
+  // API routes that authenticate themselves (machine-to-machine, no user session):
+  //  - /api/cron/* and /api/tours/recalculate-prices verify CRON_SECRET
+  //  - Twilio posts WhatsApp inbound/status webhooks with no session cookie
+  //  - OAuth providers redirect the browser back to *callback routes
+  //  - /api/webhooks/* is HMAC-verified and already returned at the top of this fn
+  const apiSelfAuthPrefixes = [
+    '/api/cron/',
+    '/api/tours/recalculate-prices',
+    '/api/whatsapp/webhook',
+    '/api/whatsapp/status',
+    '/api/auth/google/callback',
+    '/api/auth/accounting/callback',
+  ]
+  const isSelfAuthApi = apiSelfAuthPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
+
+  // Gate every other /api/* route behind an authenticated session. Until now ALL
+  // /api/* was allowed through while the routes use the service-role key (which
+  // bypasses RLS), leaving them callable by anonymous internet clients.
+  if (isApiRoute && !isSelfAuthApi && !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // If user is not logged in and trying to access a protected page
   if (!user && !isPublicRoute && !isApiRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }

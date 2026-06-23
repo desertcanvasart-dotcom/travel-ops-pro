@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
+import { verifyState } from '@/lib/oauth-state'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,8 +33,11 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const [userId, providerName] = state.split(':')
-  if (!userId || !providerName) {
+  // Verify the signed state before trusting the embedded user id / provider —
+  // otherwise an attacker could attach their accounting tokens to any account.
+  const verified = verifyState(state)
+  const [userId, providerName] = (verified || '').split(':')
+  if (!verified || !userId || !providerName) {
     return NextResponse.redirect(
       new URL('/settings?tab=integrations&error=invalid_state', baseUrl)
     )

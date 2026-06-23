@@ -37,7 +37,7 @@ export async function POST(
     const dayIds = days.map(d => d.id)
 
     const { data: services, error: servicesError } = await supabaseAdmin
-      .from('itinerary_day_services')
+      .from('itinerary_services')
       .select(`
         *,
         supplier:suppliers(*)
@@ -126,7 +126,7 @@ export async function POST(
 
     if (serviceIds.length > 0) {
       await supabaseAdmin
-        .from('itinerary_day_services')
+        .from('itinerary_services')
         .update({ commission_status: 'generated' })
         .in('id', serviceIds)
     }

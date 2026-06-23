@@ -69,13 +69,23 @@ export async function POST(
       }, { status: 400 })
     }
 
+    // Amount must be a positive, finite number — a negative/NaN amount would
+    // corrupt the booking's running totals.
+    const amountNum = Number(amount)
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'amount must be a positive number'
+      }, { status: 400 })
+    }
+
     // Create payment record
     const { data: payment, error } = await supabaseAdmin
       .from('booking_payments')
       .insert({
         booking_id: id,
         payment_type,
-        amount,
+        amount: amountNum,
         currency: body.currency || 'EUR',
         payment_method: body.payment_method || null,
         payment_date,

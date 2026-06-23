@@ -347,6 +347,18 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       throw new AccountingSyncError(`Invoice payment ${paymentId} not found`)
     }
 
+    // Idempotency: if this payment was already created in the accounting system,
+    // do not create it again — retries must never double-create a payment.
+    const { data: existingPaymentSync } = await supabase
+      .from('accounting_sync_log')
+      .select('external_id')
+      .eq('provider', providerType)
+      .eq('entity_type', 'invoice_payment')
+      .eq('entity_id', paymentId)
+      .eq('sync_status', 'synced')
+      .single()
+    if (existingPaymentSync?.external_id) return
+
     // Find synced invoice external ID
     const { data: invoiceSync } = await supabase
       .from('accounting_sync_log')
@@ -357,10 +369,12 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       .eq('sync_status', 'synced')
       .single()
 
-    if (!invoiceSync?.external_id) {
+    let invoiceExternalId = invoiceSync?.external_id || ''
+
+    if (!invoiceExternalId) {
       // Invoice not synced yet, sync it first
       await syncInvoice(payment.invoice_id)
-      // Re-fetch
+      // Re-fetch the freshly-synced invoice's external id
       const { data: reSync } = await supabase
         .from('accounting_sync_log')
         .select('external_id')
@@ -373,9 +387,8 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       if (!reSync?.external_id) {
         throw new AccountingSyncError('Cannot sync payment: invoice sync failed')
       }
+      invoiceExternalId = reSync.external_id
     }
-
-    const invoiceExternalId = invoiceSync?.external_id || ''
     const payload = mapInvoicePaymentToPayload(payment, invoiceExternalId)
     const ref = await provider.createPayment(payload)
 
@@ -418,6 +431,17 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
 
     if (error || !expense || expense.status !== 'paid') return
 
+    // Idempotency: skip if this expense payment was already created.
+    const { data: existingExpensePaymentSync } = await supabase
+      .from('accounting_sync_log')
+      .select('external_id')
+      .eq('provider', providerType)
+      .eq('entity_type', 'expense_payment')
+      .eq('entity_id', expenseId)
+      .eq('sync_status', 'synced')
+      .single()
+    if (existingExpensePaymentSync?.external_id) return
+
     // Find synced bill external ID
     const { data: billSync } = await supabase
       .from('accounting_sync_log')
@@ -428,11 +452,24 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
       .eq('sync_status', 'synced')
       .single()
 
-    if (!billSync?.external_id) {
-      await syncExpense(expenseId)
-    }
+    let billExternalId = billSync?.external_id || ''
 
-    const billExternalId = billSync?.external_id || ''
+    if (!billExternalId) {
+      await syncExpense(expenseId)
+      // Re-fetch the freshly-synced bill's external id
+      const { data: reSync } = await supabase
+        .from('accounting_sync_log')
+        .select('external_id')
+        .eq('provider', providerType)
+        .eq('entity_type', 'expense')
+        .eq('entity_id', expenseId)
+        .eq('sync_status', 'synced')
+        .single()
+      if (!reSync?.external_id) {
+        throw new AccountingSyncError('Cannot sync expense payment: expense sync failed')
+      }
+      billExternalId = reSync.external_id
+    }
     const payload = mapExpensePaymentToPayload(expense, billExternalId)
     const ref = await provider.createPayment(payload)
 
@@ -464,7 +501,9 @@ export async function retrySyncErrors(): Promise<{ retried: number; succeeded: n
     .select('*')
     .eq('sync_status', 'failed')
     .lt('retry_count', 5)
-    .lte('next_retry_at', new Date().toISOString())
+    // Include rows whose next_retry_at is NULL (newly-failed entries) as well as
+    // those whose backoff window has elapsed — otherwise new failures never retry.
+    .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
     .order('created_at', { ascending: true })
     .limit(50)
 
