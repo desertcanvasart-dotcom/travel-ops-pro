@@ -178,46 +178,33 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Split into inserts and updates
+      // Split into inserts and updates — purely for counting; the upsert
+      // call below handles both in one round-trip.
       const toInsert = batch.filter(r => !r[uniqueKeyColumn] || !existingKeys.has(r[uniqueKeyColumn]))
       const toUpdate = batch.filter(r => r[uniqueKeyColumn] && existingKeys.has(r[uniqueKeyColumn]))
 
-      // Insert new records
-      if (toInsert.length > 0) {
-        const { error: insertError } = await supabase
+      // M11: collapse N+1 sequential round-trips into 1.
+      // The previous code did one INSERT for new rows, then issued an
+      // awaited UPDATE per existing row inside a serial for-loop. A re-import
+      // of an existing rate table (e.g. 125 transportation_rates rows) made
+      // ~125 round-trips and could time out the serverless invocation.
+      // A single upsert with onConflict on the unique key column handles
+      // inserts AND updates in one PostgREST call: PostgreSQL turns it into
+      // INSERT ... ON CONFLICT (key) DO UPDATE SET ...
+      if (batch.length > 0) {
+        const { error: upsertError } = await supabase
           .from(table)
-          .insert(toInsert)
+          .upsert(batch, { onConflict: uniqueKeyColumn })
 
-        if (insertError) {
+        if (upsertError) {
           importErrors.push({
             batch: Math.floor(i / BATCH_SIZE) + 1,
-            operation: 'insert',
-            message: insertError.message,
+            operation: 'upsert',
+            message: upsertError.message,
           })
         } else {
           inserted += toInsert.length
-        }
-      }
-
-      // Update existing records one by one (using unique key)
-      for (const record of toUpdate) {
-        const keyVal = record[uniqueKeyColumn]
-        const updateData = { ...record }
-        delete updateData[uniqueKeyColumn] // Don't update the key itself
-
-        const { error: updateError } = await supabase
-          .from(table)
-          .update(updateData)
-          .eq(uniqueKeyColumn, keyVal)
-
-        if (updateError) {
-          importErrors.push({
-            row: uniqueKeyColumn + '=' + keyVal,
-            operation: 'update',
-            message: updateError.message,
-          })
-        } else {
-          updated++
+          updated += toUpdate.length
         }
       }
     }
