@@ -37,7 +37,8 @@ import {
   Eye,
   Send,
   UserCheck,
-  UserX
+  UserX,
+  Ship,
 } from 'lucide-react'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ServiceRatePicker from '@/components/ServiceRatePicker'
@@ -71,6 +72,10 @@ interface DayService {
   tips: boolean
 }
 
+// Transport service_types that can be added as additive evening transfers
+// (e.g. evening Sound & Light at Karnak alongside the day_tour).
+type TransportExtra = 'sound_light' | 'dinner_transfer' | 'city_transfer'
+
 interface ItineraryDay {
   id: string
   day_number: number
@@ -81,6 +86,14 @@ interface ItineraryDay {
   attractions: string[]
   services: DayService
   flight_from?: string
+
+  // Per-day transport rule flags (B3). All optional; the engine applies sane
+  // defaults when omitted. Persisted by the 20260623_itinerary_days_transport_meta
+  // migration and surfaced in the "Transport details" panel of each day card.
+  is_cruise_day?: boolean
+  transport_type?: 'flight' | 'ground' | null
+  skip_arrival_checkin?: boolean
+  extras?: TransportExtra[]
 }
 
 interface CabinAllocationItem {
@@ -235,6 +248,8 @@ export default function ItineraryEditorPage() {
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<ItineraryDay[]>([])
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
+  // Day IDs whose Transport details panel is expanded (B3 rule flags).
+  const [expandedTransportPanels, setExpandedTransportPanels] = useState<Set<string>>(new Set())
   const [showAdvancedPackages, setShowAdvancedPackages] = useState(false)
   const [draggedDay, setDraggedDay] = useState<string | null>(null)
   
@@ -317,7 +332,13 @@ export default function ItineraryEditorPage() {
           water: true,
           tips: true
         },
-        flight_from: day.flight_from
+        flight_from: day.flight_from,
+        // B3 transport-rule flags — read with safe defaults so the page works
+        // before/after the 20260623_itinerary_days_transport_meta migration runs.
+        is_cruise_day: day.is_cruise_day ?? false,
+        transport_type: day.transport_type ?? null,
+        skip_arrival_checkin: day.skip_arrival_checkin ?? false,
+        extras: Array.isArray(day.extras) ? day.extras : [],
       }))
 
       setDays(transformedDays)
@@ -730,7 +751,13 @@ export default function ItineraryEditorPage() {
           guide_required: day.services?.guide ?? true,
           lunch_included: day.services?.lunch ?? true,
           dinner_included: day.services?.dinner ?? false,
-          hotel_included: day.services?.hotel ?? false
+          hotel_included: day.services?.hotel ?? false,
+          // B3 transport-rule flags (persisted by the
+          // 20260623_itinerary_days_transport_meta migration).
+          is_cruise_day: day.is_cruise_day ?? false,
+          transport_type: day.transport_type ?? null,
+          skip_arrival_checkin: day.skip_arrival_checkin ?? false,
+          extras: day.extras ?? [],
         }
 
         const isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(day.id)
@@ -943,7 +970,13 @@ export default function ItineraryEditorPage() {
             city: d.city,
             attractions: d.attractions,
             services: d.services,
-            overnight_city: d.overnight_city
+            overnight_city: d.overnight_city,
+            // B3 per-day transport rule flags — read by toItineraryDay() in
+            // the route and passed to determineTransportNeeds.
+            is_cruise_day: d.is_cruise_day,
+            transport_type: d.transport_type,
+            skip_arrival_checkin: d.skip_arrival_checkin,
+            extras: d.extras,
           })),
           num_adults: itinerary.num_adults,
           num_children: itinerary.num_children,
@@ -1471,6 +1504,116 @@ export default function ItineraryEditorPage() {
                       <input type="checkbox" checked disabled className="w-4 h-4" />
                       <Banknote size={14} /> {t('tips')}
                     </label>
+                  </div>
+
+                  {/* Transport details (B3 per-day rule flags). Collapsed by */}
+                  {/* default; opt in per day when a custom rule applies. */}
+                  <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedTransportPanels(prev => {
+                          const next = new Set(prev)
+                          next.has(day.id) ? next.delete(day.id) : next.add(day.id)
+                          return next
+                        })
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-sm text-gray-700"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Car size={14} />
+                        <span className="font-medium">Transport details</span>
+                        {/* Quick summary of the flags that aren't default. */}
+                        {(day.is_cruise_day || day.transport_type === 'flight' || day.skip_arrival_checkin || (day.extras && day.extras.length > 0)) && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-xs text-[#647C47]">
+                            {day.is_cruise_day && <Ship size={12} />}
+                            {day.transport_type === 'flight' && <Plane size={12} />}
+                            {day.skip_arrival_checkin && <span className="text-[10px]">no-checkin</span>}
+                            {day.extras && day.extras.length > 0 && <span className="text-[10px]">+{day.extras.length}</span>}
+                          </span>
+                        )}
+                      </span>
+                      <ChevronDown size={14} className={`transition-transform ${expandedTransportPanels.has(day.id) ? 'rotate-180' : ''}`} />
+                    </button>
+                    {expandedTransportPanels.has(day.id) && (
+                      <div className="p-3 space-y-3 text-sm">
+                        {/* Cruise day */}
+                        <label className="flex items-center gap-2 text-gray-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!day.is_cruise_day}
+                            onChange={e => updateDay(day.id, { is_cruise_day: e.target.checked })}
+                            className="w-4 h-4 accent-[#647C47]"
+                          />
+                          <Ship size={14} />
+                          <span>Cruise day (cruise package covers ground transport)</span>
+                        </label>
+                        {/* Travel method — only relevant when the day involves a city change. */}
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">City change travel method</div>
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`transport-type-${day.id}`}
+                                checked={!day.transport_type || day.transport_type === 'ground'}
+                                onChange={() => updateDay(day.id, { transport_type: 'ground' })}
+                                className="w-3.5 h-3.5 accent-[#647C47]"
+                              />
+                              <Car size={12} /> Ground
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`transport-type-${day.id}`}
+                                checked={day.transport_type === 'flight'}
+                                onChange={() => updateDay(day.id, { transport_type: 'flight' })}
+                                className="w-3.5 h-3.5 accent-[#647C47]"
+                              />
+                              <Plane size={12} /> Flight (= two airport transfers)
+                            </label>
+                          </div>
+                        </div>
+                        {/* Skip arrival check-in — only meaningful on the arrival day. */}
+                        {day.day_number === 1 && (
+                          <label className="flex items-center gap-2 text-gray-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!day.skip_arrival_checkin}
+                              onChange={e => updateDay(day.id, { skip_arrival_checkin: e.target.checked })}
+                              className="w-4 h-4 accent-[#647C47]"
+                            />
+                            <span>Skip hotel check-in (airport → tour → hotel as one bundled line)</span>
+                          </label>
+                        )}
+                        {/* Extras — additive evening transfers. */}
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">Evening extras</div>
+                          <div className="flex flex-wrap gap-3">
+                            {(['sound_light', 'dinner_transfer', 'city_transfer'] as TransportExtra[]).map(extraType => {
+                              const checked = !!day.extras?.includes(extraType)
+                              return (
+                                <label key={extraType} className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={e => {
+                                      const current = day.extras || []
+                                      const next = e.target.checked
+                                        ? [...current, extraType]
+                                        : current.filter(x => x !== extraType)
+                                      updateDay(day.id, { extras: next })
+                                    }}
+                                    className="w-3.5 h-3.5 accent-[#647C47]"
+                                  />
+                                  <span className="text-xs">{extraType.replace(/_/g, ' ')}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {days.length > 1 && (

@@ -49,6 +49,12 @@ interface DayInput {
   attractions: string[]
   services: DayService
   overnight_city: string | null
+  // B3 per-day transport rule flags (all optional). When omitted the engine
+  // applies sane defaults (no cruise, ground transport, no extras).
+  is_cruise_day?: boolean
+  transport_type?: 'flight' | 'ground' | null
+  skip_arrival_checkin?: boolean
+  extras?: string[]
 }
 
 interface PricingRequest {
@@ -174,12 +180,20 @@ async function getCurrentUserId(): Promise<string | null> {
  * can opt into the multi-leg flight day, cruise package, and extras rules.
  */
 function toItineraryDay(d: DayInput, isFirstDay: boolean, isLastDay: boolean): ItineraryDay {
+  // Cruise day overrides accommodation_type so the engine's existing cruise
+  // detection (which keys off accommodation_type === 'cruise') aligns with
+  // the explicit per-day flag.
+  const accommodationType = d.is_cruise_day ? 'cruise' : 'hotel'
+  // Cast extras to TransportServiceType[]. Unknown values would be silently
+  // ignored by the rate-cache lookup downstream, so a loose cast is safe and
+  // avoids importing the type in the route just for this.
+  const extras = (d.extras || []) as unknown as ItineraryDay['extras']
   return {
     day: d.day_number,
     title: '',
     city: d.city,
     overnight_city: d.overnight_city || undefined,
-    accommodation_type: 'hotel',
+    accommodation_type: accommodationType,
     meals: { breakfast: 'none', lunch: 'none', dinner: 'none' },
     attractions: d.attractions || [],
     services: {
@@ -189,6 +203,12 @@ function toItineraryDay(d: DayInput, isFirstDay: boolean, isLastDay: boolean): I
       hotel_checkout: isLastDay,
       guide_required: d.services?.guide || false,
     },
+    // B3 per-day transport rule flags — forwarded as-is so the rule engine
+    // can apply skip_arrival_checkin / transport_type='flight' / extras.
+    is_cruise_day: d.is_cruise_day ?? false,
+    transport_type: d.transport_type || undefined,
+    skip_arrival_checkin: d.skip_arrival_checkin ?? false,
+    extras,
   }
 }
 
