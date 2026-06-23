@@ -172,6 +172,11 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
           ...prev,
           step: 'error',
           error: data.error || 'Import failed',
+          result: {
+            inserted: data.inserted || 0,
+            updated: data.updated || 0,
+            errors: data.errors || [],
+          },
         }))
       }
     } catch (err: any) {
@@ -360,6 +365,17 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                       {importState.preview.errors.slice(0, 20).map((err, i) => (
                         <div key={i} className="text-xs text-red-600">
                           Row {err.row}, {err.column}: {err.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Database errors raised during the actual import (e.g. constraint
+                      violations). Without this they were never shown to the user. */}
+                  {importState.result && importState.result.errors.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto space-y-1 p-3 bg-gray-50 rounded-lg">
+                      {importState.result.errors.slice(0, 20).map((err, i) => (
+                        <div key={i} className="text-xs text-red-600">
+                          {err.operation ? `${err.operation}: ` : ''}{err.message}
                         </div>
                       ))}
                     </div>

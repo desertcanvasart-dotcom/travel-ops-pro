@@ -46,17 +46,21 @@ export async function DELETE(
 
     const { data: invoice } = await supabaseAdmin
       .from('invoices')
-      .select('total_amount')
+      .select('total_amount, status')
       .eq('id', id)
       .single()
 
     if (invoice) {
       const balanceDue = Number(invoice.total_amount) - totalPaid
-      let status = 'sent'
-      if (totalPaid >= Number(invoice.total_amount)) {
+      // Only payment-derived statuses should change here. Never clobber a
+      // 'draft' / 'cancelled' / 'overdue' invoice back to 'sent'.
+      let status = invoice.status
+      if (totalPaid > 0 && totalPaid >= Number(invoice.total_amount)) {
         status = 'paid'
       } else if (totalPaid > 0) {
         status = 'partial'
+      } else if (invoice.status === 'paid' || invoice.status === 'partial') {
+        status = 'sent'
       }
 
       await supabaseAdmin

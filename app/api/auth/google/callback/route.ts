@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getTokensFromCode, getUserEmail } from '@/lib/gmail'
+import { verifyState } from '@/lib/oauth-state'
 
 // Create admin client for server-side operations
 const supabase = createClient(
@@ -34,6 +35,15 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  // Verify the signed state and recover the user id — never trust a raw user id
+  // from the URL (an attacker could otherwise write tokens to any account).
+  const userId = verifyState(state)
+  if (!userId) {
+    return NextResponse.redirect(
+      new URL('/settings/email?error=invalid_state', baseUrl)
+    )
+  }
+
   try {
     // Exchange code for tokens
     const tokens = await getTokensFromCode(code)
@@ -56,7 +66,7 @@ export async function GET(request: NextRequest) {
     const { error: dbError } = await supabase
       .from('gmail_tokens')
       .upsert({
-        user_id: state,
+        user_id: userId,
         email,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,

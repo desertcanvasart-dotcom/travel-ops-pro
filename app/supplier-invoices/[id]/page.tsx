@@ -228,7 +228,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     )
   }
 
-  const curr = CURRENCIES[invoice.currency as string] || invoice.currency
+  const curr = CURRENCIES[invoice.currency as string] || (invoice.currency as string) || ''
   const statusStyle = STATUS_STYLES[invoice.status as string] || STATUS_STYLES.received
   const matchStyle = MATCH_STYLES[invoice.match_status as string] || MATCH_STYLES.unmatched
 
@@ -340,7 +340,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
                 <p className="font-medium">{curr}{Number(invoice.tax_amount || 0).toFixed(2)}</p>
               </div>
             </div>
-            {invoice.description && (
+            {!!invoice.description && (
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <p className="text-gray-500 text-sm">Description</p>
                 <p className="text-sm mt-1">{invoice.description as string}</p>
@@ -458,7 +458,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
           )}
 
           {/* Notes */}
-          {invoice.notes && (
+          {!!invoice.notes && (
             <div className="bg-white border border-gray-200 rounded-lg p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-2">Notes</h3>
               <p className="text-sm text-gray-600">{invoice.notes as string}</p>
@@ -543,7 +543,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
                             </p>
                           </div>
                           <span className="text-sm font-medium whitespace-nowrap">
-                            {CURRENCIES[exp.currency as string] || exp.currency}{Number(exp.amount).toFixed(2)}
+                            {CURRENCIES[exp.currency as string] || (exp.currency as string)}{Number(exp.amount).toFixed(2)}
                           </span>
                         </label>
                       )

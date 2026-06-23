@@ -49,9 +49,17 @@ export async function PUT(
       body.paid_date = new Date().toISOString().split('T')[0]
     }
 
+    // Strip computed/immutable fields — the commission amount, rate, base value
+    // and entity links are derived at generation time and must not be editable here.
+    const {
+      id: _, created_at, itinerary_id, supplier_id, service_id,
+      base_amount, commission_rate, commission_amount,
+      ...updateData
+    } = body
+
     const { data, error } = await supabaseAdmin
       .from('commissions')
-      .update(body)
+      .update(updateData)
       .eq('id', id)
       .select(`
         *,

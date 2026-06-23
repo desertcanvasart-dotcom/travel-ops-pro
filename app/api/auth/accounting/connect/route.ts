@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
+import { signState } from '@/lib/oauth-state'
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, provider } = await request.json()
+    const { provider } = await request.json()
 
-    if (!userId || !provider) {
+    if (!provider) {
       return NextResponse.json(
-        { error: 'userId and provider are required' },
+        { error: 'provider is required' },
         { status: 400 }
       )
     }
@@ -19,8 +21,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Derive the user from the session and sign the state so the callback can't
+    // be tricked into attaching tokens to another user's account.
+    const { user } = await getAuthenticatedUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const accountingProvider = getAccountingProvider(provider as AccountingProviderType)
-    const state = `${userId}:${provider}`
+    const state = signState(`${user.id}:${provider}`)
     const authUrl = accountingProvider.getAuthUrl(state)
 
     return NextResponse.json({ authUrl })

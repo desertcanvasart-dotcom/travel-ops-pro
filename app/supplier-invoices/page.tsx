@@ -351,17 +351,18 @@ export default function SupplierInvoicesPage() {
         ? suppliers.find(s => s.name.toLowerCase().includes(String(d.supplier_name).toLowerCase()))
         : undefined
 
-      setFormData({
-        supplier_invoice_number: d.supplier_invoice_number || '',
-        supplier_name: matchedSupplier?.name || d.supplier_name || '',
+      setFormData(prev => ({
+        ...prev,
+        supplier_invoice_number: String(d.supplier_invoice_number || ''),
+        supplier_name: String(matchedSupplier?.name || d.supplier_name || ''),
         supplier_id: matchedSupplier?.id || '',
-        invoice_date: d.invoice_date || new Date().toISOString().split('T')[0],
-        due_date: d.due_date || '',
-        currency: d.currency || 'EUR',
+        invoice_date: String(d.invoice_date || new Date().toISOString().split('T')[0]),
+        due_date: String(d.due_date || ''),
+        currency: String(d.currency || 'EUR'),
         tax_amount: d.tax_amount ? String(d.tax_amount) : '',
-        description: d.description || '',
+        description: String(d.description || ''),
         line_items: parsedLineItems.length > 0 ? parsedLineItems : [emptyLineItem()],
-      })
+      }))
       setSupplierSearch(matchedSupplier?.name || d.supplier_name || '')
       setParsedConfidence(d.confidence || null)
     } catch (err) {

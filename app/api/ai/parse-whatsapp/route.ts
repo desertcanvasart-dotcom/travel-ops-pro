@@ -429,6 +429,18 @@ export async function POST(request: Request) {
       )
     }
 
+    // Cap input size to bound Claude token cost / abuse — a thread far past this
+    // is almost certainly junk or an abuse attempt.
+    const conversationSize = typeof conversation === 'string'
+      ? conversation.length
+      : JSON.stringify(conversation).length
+    if (conversationSize > 50000) {
+      return NextResponse.json(
+        { success: false, error: 'Conversation too long (max 50000 characters)' },
+        { status: 413 }
+      )
+    }
+
     // Pre-detect if this is a structured itinerary
     const structureDetection = detectStructuredItinerary(conversation)
     
