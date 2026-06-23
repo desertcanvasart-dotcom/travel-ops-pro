@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,37 +65,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate internal reference
-    const { data: seqData, error: seqError } = await supabaseAdmin
-      .rpc('nextval', { seq_name: 'supplier_invoice_number_seq' })
-
-    let internalReference = `SI-${new Date().getFullYear()}-001`
-    if (!seqError && seqData) {
-      const seqNum = String(seqData).padStart(3, '0')
-      internalReference = `SI-${new Date().getFullYear()}-${seqNum}`
+    // M31: internal_reference generation now uses nextDocumentNumber
+    // (year-scoped, accepts 0, falls back to MAX rather than the previous
+    // guaranteed-collision '-001'). The insert is wrapped in a retry loop
+    // against the UNIQUE constraint introduced in
+    // 20260624_unique_document_numbers.sql, so concurrent creates can't
+    // silently emit duplicate references.
+    const baseSupplierInvoice = {
+      supplier_invoice_number: body.supplier_invoice_number,
+      supplier_name: body.supplier_name,
+      supplier_id: body.supplier_id || null,
+      invoice_date: body.invoice_date,
+      due_date: body.due_date || null,
+      amount: body.amount,
+      currency: body.currency || 'EUR',
+      tax_amount: body.tax_amount || 0,
+      description: body.description || null,
+      line_items: body.line_items || null,
+      notes: body.notes || null,
+      itinerary_id: body.itinerary_id || null,
+      client_invoice_id: body.client_invoice_id || null,
+      created_by: body.created_by || null,
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('supplier_invoices')
-      .insert({
-        supplier_invoice_number: body.supplier_invoice_number,
-        internal_reference: internalReference,
-        supplier_name: body.supplier_name,
-        supplier_id: body.supplier_id || null,
-        invoice_date: body.invoice_date,
-        due_date: body.due_date || null,
-        amount: body.amount,
-        currency: body.currency || 'EUR',
-        tax_amount: body.tax_amount || 0,
-        description: body.description || null,
-        line_items: body.line_items || null,
-        notes: body.notes || null,
-        itinerary_id: body.itinerary_id || null,
-        client_invoice_id: body.client_invoice_id || null,
-        created_by: body.created_by || null,
-      })
-      .select()
-      .single()
+    const { data, error } = await insertWithUniqueRetry({
+      generateRow: async () => ({
+        ...baseSupplierInvoice,
+        internal_reference: await nextDocumentNumber({
+          supabase: supabaseAdmin,
+          prefix: 'SI',
+          sequenceName: 'supplier_invoice_number_seq',
+          table: 'supplier_invoices',
+          column: 'internal_reference',
+        }),
+      }),
+      insert: async (row) => await supabaseAdmin.from('supplier_invoices').insert(row).select().single(),
+    })
 
     if (error) {
       console.error('Error creating supplier invoice:', error)

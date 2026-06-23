@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncExpense } from '@/lib/accounting'
+import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -72,25 +73,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate expense number
-    const { data: seqData, error: seqError } = await supabaseAdmin
-      .rpc('nextval', { seq_name: 'expense_number_seq' })
-
-    let expenseNumber = `EXP-${new Date().getFullYear()}-001`
-    
-    if (!seqError && seqData) {
-      expenseNumber = `EXP-${new Date().getFullYear()}-${String(seqData).padStart(3, '0')}`
-    } else {
-      // Fallback: get count and increment
-      const { count } = await supabaseAdmin
-        .from('expenses')
-        .select('*', { count: 'exact', head: true })
-      
-      expenseNumber = `EXP-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(3, '0')}`
-    }
-
-    const newExpense = {
-      expense_number: expenseNumber,
+    // M15: year-scoped, sequence-first generator with a year-scoped MAX
+    // fallback (instead of the racy COUNT(*) + 1). Paired with the UNIQUE
+    // constraint added by 20260624_unique_document_numbers.sql, the insert
+    // below is wrapped in a retry loop so concurrent writers never silently
+    // produce duplicate expense_number values.
+    const baseExpense = {
       itinerary_id: body.itinerary_id || null,
       supplier_id: body.supplier_id || null,
       category: body.category,
@@ -111,11 +99,19 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString()
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('expenses')
-      .insert([newExpense])
-      .select()
-      .single()
+    const { data, error } = await insertWithUniqueRetry({
+      generateRow: async () => ({
+        ...baseExpense,
+        expense_number: await nextDocumentNumber({
+          supabase: supabaseAdmin,
+          prefix: 'EXP',
+          sequenceName: 'expense_number_seq',
+          table: 'expenses',
+          column: 'expense_number',
+        }),
+      }),
+      insert: async (row) => await supabaseAdmin.from('expenses').insert([row]).select().single(),
+    })
 
     if (error) {
       console.error('Error creating expense:', error)
