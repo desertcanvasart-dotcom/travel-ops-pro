@@ -14,6 +14,16 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, type ExchangeRates } from '@/lib/currency-service'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
+// B4: shared margin formula (one source of truth across the grid calculator
+// and this route) + smart per-day transport rate selection from auto-pricing-service.
+import { applyMargin } from '@/lib/pricing-math'
+import {
+  buildTransportCache,
+  determineTransportNeeds,
+  findTransportRate,
+  type ItineraryDay,
+  type TransportNeed,
+} from '@/lib/auto-pricing-service'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -140,70 +150,45 @@ async function getCurrentUserId(): Promise<string | null> {
 }
 
 // ============================================
-// MARKUP FUNCTION
-// ============================================
-
-function applyMarkup(cost: number, marginPercent: number): number {
-  return cost * (1 + marginPercent / 100)
-}
-
-// ============================================
 // RATE FETCHING
 // ============================================
+//
+// Transportation rate selection moved to lib/auto-pricing-service (B4):
+// determineTransportNeeds + findTransportRate. That engine knows the new
+// canonical service_type taxonomy (B3) — a day correctly emits one OR many
+// transport line items (e.g. flight day = two airport transfers), and a
+// cruise day's ground excursion is bundled in the cruise package.
+//
+// The local applyMarkup wrapper has been replaced with applyMargin from
+// lib/pricing-math — the single canonical cost → margin → selling formula.
 
-async function getTransportationRate(city: string, tier: string, pax: number) {
-  // Try transportation_rates table first (restructured: one row per service with all vehicle tiers)
-  const { data: rate } = await supabaseAdmin
-    .from('transportation_rates')
-    .select('*')
-    .eq('is_active', true)
-    .ilike('city', `%${city}%`)
-    .limit(1)
-    .single()
-
-  if (rate) {
-    const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
-    const tierResult = getTransportRateForPax(rate, pax)
-
-    if (tierResult) {
-      return {
-        rate: tierResult.rateEur || 0,
-        supplier_id: rate.supplier_id || null,
-        supplier_name: rate.supplier_name || null,
-        name: `${tierResult.vehicleType} - ${city}`,
-        code: rate.service_code || `TRANS-${city.substring(0,3).toUpperCase()}`
-      }
-    }
-  }
-
-  // Try vehicles table
-  const { data: vehicle } = await supabaseAdmin
-    .from('vehicles')
-    .select('*')
-    .eq('is_active', true)
-    .gte('capacity_max', pax)
-    .order('capacity_min', { ascending: true })
-    .limit(1)
-    .single()
-
-  if (vehicle) {
-    return {
-      rate: vehicle.daily_rate || 0,
-      supplier_id: vehicle.id,
-      supplier_name: vehicle.company_name || null,
-      name: `${vehicle.vehicle_type} - ${city}`,
-      code: vehicle.id || `TRANS-${city.substring(0,3).toUpperCase()}`
-    }
-  }
-
-  // No DB rate found — return 0 so the gap is visible
-  console.warn(`⚠️ [Pricing] No vehicle rate found for ${city} (pax: ${pax}) — returning €0`)
+/**
+ * Convert a request-body DayInput to the ItineraryDay shape the
+ * transport-rules engine expects. The edit-page UI doesn't currently expose
+ * arrival/departure/cruise/flight flags, so we infer airport_arrival from
+ * "first day" and airport_departure from "last day" — matching the
+ * convention parseItinerary uses for AI-generated itineraries.
+ *
+ * Future work (B5+ scope): extend the edit-page UI to expose
+ * skip_arrival_checkin / transport_type / extras / is_cruise_day so users
+ * can opt into the multi-leg flight day, cruise package, and extras rules.
+ */
+function toItineraryDay(d: DayInput, isFirstDay: boolean, isLastDay: boolean): ItineraryDay {
   return {
-    rate: 0,
-    supplier_id: null,
-    supplier_name: null,
-    name: `Vehicle - ${city}`,
-    code: `TRANS-${city.substring(0,3).toUpperCase()}`
+    day: d.day_number,
+    title: '',
+    city: d.city,
+    overnight_city: d.overnight_city || undefined,
+    accommodation_type: 'hotel',
+    meals: { breakfast: 'none', lunch: 'none', dinner: 'none' },
+    attractions: d.attractions || [],
+    services: {
+      airport_arrival: isFirstDay,
+      airport_departure: isLastDay,
+      hotel_checkin: isFirstDay,
+      hotel_checkout: isLastDay,
+      guide_required: d.services?.guide || false,
+    },
   }
 }
 
@@ -633,35 +618,76 @@ export async function POST(
       includeAccommodation = false
     }
 
-    for (const day of days) {
+    // B4: build the transport rate cache ONCE before the day loop. Each
+    // per-day call to determineTransportNeeds + findTransportRate then runs
+    // entirely against in-memory keys instead of a per-day DB round-trip.
+    const transportCache = await buildTransportCache()
+
+    for (let dayIndex = 0; dayIndex < days.length; dayIndex++) {
+      const day = days[dayIndex]
       const dayId = dayIdMap.get(day.day_number)
       if (!dayId) continue
 
       const { city, attractions, services, overnight_city } = day
 
-      // TRANSPORTATION
-      const transport = await getTransportationRate(city, tier, totalPax)
-      const transportClient = applyMarkup(transport.rate, marginPercent)
-      allServices.push({
-        itinerary_day_id: dayId,
-        service_type: 'transportation',
-        service_code: transport.code,
-        service_name: transport.name,
-        supplier_name: transport.supplier_name,
-        quantity: 1,
-        rate_eur: transport.rate,
-        rate_non_eur: transport.rate,
-        total_cost: transport.rate,
-        client_price: transportClient,
-        notes: `Full day - ${city}`
-      })
-      totalSupplierCost += transport.rate
-      totalClientPrice += transportClient
+      // TRANSPORTATION (B4)
+      // The smart per-day rule engine returns ZERO, ONE, or MANY transport
+      // line items per day. A flight day correctly produces two (one airport
+      // transfer in each city); a cruise day with no extras produces zero;
+      // a same-city sightseeing day with an evening sound-and-light produces
+      // two (the day_tour + the sound_light). Each becomes its own row in
+      // itinerary_services so totals match the displayed line items.
+      const lastIndex = days.length - 1
+      const itineraryDay = toItineraryDay(day, dayIndex === 0, dayIndex === lastIndex)
+      const prevItDay = dayIndex > 0 ? toItineraryDay(days[dayIndex - 1], dayIndex - 1 === 0, dayIndex - 1 === lastIndex) : null
+      const nextItDay = dayIndex < lastIndex ? toItineraryDay(days[dayIndex + 1], dayIndex + 1 === 0, dayIndex + 1 === lastIndex) : null
+      const transportNeeds: TransportNeed[] = determineTransportNeeds(itineraryDay, prevItDay, nextItDay)
+
+      for (let legIndex = 0; legIndex < transportNeeds.length; legIndex++) {
+        const need = transportNeeds[legIndex]
+        const legCity = need.city || city
+        const rate = findTransportRate(transportCache, {
+          serviceType: need.serviceType,
+          city: legCity,
+          duration: need.duration,
+          area: need.area,
+          pax: totalPax,
+          vehicleType: need.useSpecialVehicle ? need.specialVehicleType : undefined,
+          originCity: need.originCity || (dayIndex > 0 ? days[dayIndex - 1].city : undefined),
+          destinationCity: need.destinationCity || city,
+        })
+
+        const cost = rate?.base_rate_eur || 0
+        const transportClient = applyMargin(cost, marginPercent)
+        const idSuffix = legIndex > 0 ? `-${legIndex + 1}` : ''
+        const serviceCode = rate?.service_code || `TRANS-${need.serviceType.toUpperCase().replace(/_/g, '-').slice(0, 12)}-${legCity.substring(0, 3).toUpperCase()}`
+        const vehicleLabel = rate?.vehicle_type || 'Vehicle'
+
+        allServices.push({
+          itinerary_day_id: dayId,
+          service_type: 'transportation',
+          service_code: `${serviceCode}${idSuffix}`,
+          service_name: rate?.route_name || `${vehicleLabel} - ${legCity}`,
+          supplier_name: null,
+          quantity: 1,
+          rate_eur: cost,
+          rate_non_eur: cost,
+          total_cost: cost,
+          client_price: transportClient,
+          notes: `${need.serviceType} | ${need.duration}${transportNeeds.length > 1 ? ` (leg ${legIndex + 1}/${transportNeeds.length})` : ''}`,
+        })
+        totalSupplierCost += cost
+        totalClientPrice += transportClient
+
+        if (!rate) {
+          console.warn(`⚠️ [Pricing] No rate matched for ${need.serviceType} in ${legCity} (pax ${totalPax}) — €0 line persisted`)
+        }
+      }
 
       // GUIDE
       if (services.guide) {
         const guide = await getGuideRate(city, tier)
-        const guideClient = applyMarkup(guide.rate, marginPercent)
+        const guideClient = applyMargin(guide.rate, marginPercent)
         allServices.push({
           itinerary_day_id: dayId,
           service_type: 'guide',
@@ -722,7 +748,7 @@ export async function POST(
       if (services.lunch) {
         const meal = await getMealRate(city, 'lunch', tier)
         const mealTotal = calculatePerPaxCost(meal.rate)
-        const mealClient = applyMarkup(mealTotal, marginPercent)
+        const mealClient = applyMargin(mealTotal, marginPercent)
         allServices.push({
           itinerary_day_id: dayId,
           service_type: 'meal',
@@ -744,7 +770,7 @@ export async function POST(
       if (services.dinner) {
         const meal = await getMealRate(city, 'dinner', tier)
         const mealTotal = calculatePerPaxCost(meal.rate)
-        const mealClient = applyMarkup(mealTotal, marginPercent)
+        const mealClient = applyMargin(mealTotal, marginPercent)
         allServices.push({
           itinerary_day_id: dayId,
           service_type: 'meal',
@@ -798,7 +824,7 @@ export async function POST(
         const tipRate = tippingRates.getRate(tipRole.role, tipRole.context)
         if (tipRate > 0) {
           const totalTipCost = tipRate * tipRole.quantity
-          const tipClient = applyMarkup(totalTipCost, marginPercent)
+          const tipClient = applyMargin(totalTipCost, marginPercent)
           allServices.push({
             itinerary_day_id: dayId,
             service_type: 'tips',
@@ -820,7 +846,7 @@ export async function POST(
       if (services.hotel && overnight_city && includeAccommodation && !isLastDay) {
         const hotel = await getHotelRate(overnight_city, tier)
         const hotelTotal = hotel.rate * totalPax
-        const hotelClient = applyMarkup(hotelTotal, marginPercent)
+        const hotelClient = applyMargin(hotelTotal, marginPercent)
         allServices.push({
           itinerary_day_id: dayId,
           service_type: 'accommodation',

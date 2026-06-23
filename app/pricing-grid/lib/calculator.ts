@@ -4,6 +4,7 @@
 // ============================================
 
 import type { GridDay, GridConfig, SlotValue, DayCalc, GridTotals, SLOT_DEFINITIONS } from '../types'
+import { applyMargin, round2 } from '@/lib/pricing-math'
 
 // --- Helpers ---
 
@@ -92,10 +93,10 @@ export function calculateGrandTotals(days: GridDay[], config: GridConfig): GridT
   }
 
   const totalCost = costPerPerson * pax
-  // Clamp margin to reasonable range (0-200%)
+  // Clamp margin to a sane range, then defer to the canonical formula in
+  // lib/pricing-math (the single source of truth).
   const safeMargin = Math.max(0, Math.min(isNaN(marginPercent) ? 0 : marginPercent, 200))
-  const marginMultiplier = 1 + safeMargin / 100
-  const sellingPricePerPerson = round2(costPerPerson * marginMultiplier)
+  const sellingPricePerPerson = round2(applyMargin(costPerPerson, safeMargin))
   const sellingPriceTotal = round2(sellingPricePerPerson * pax)
   const marginAmount = round2(sellingPriceTotal - totalCost)
 
@@ -113,12 +114,6 @@ export function calculateGrandTotals(days: GridDay[], config: GridConfig): GridT
 export function convertAmount(eurAmount: number, exchangeRate: number | null): number {
   if (!exchangeRate) return eurAmount
   return round2(eurAmount * exchangeRate)
-}
-
-// --- Utility ---
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }
 
 // --- Create empty slot values for a new day ---
