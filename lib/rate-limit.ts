@@ -9,18 +9,33 @@ interface RateLimitRecord {
   resetTime: number
 }
 
-// In-memory store (use Redis in production for multi-instance)
+// In-memory store. L6: this is BEST-EFFORT, SINGLE-INSTANCE only — on
+// Vercel/serverless deployments each cold-started Lambda holds its own Map,
+// so a 5-attempts/5-min auth limit is NOT shared across instances. To get
+// real multi-instance protection, back this with Upstash/Redis. Treat the
+// current implementation as a coarse hot-reload guard, not a security
+// boundary on its own.
 const rateLimitStore = new Map<string, RateLimitRecord>()
 
-// Cleanup old records every 5 minutes
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, record] of rateLimitStore.entries()) {
-    if (now > record.resetTime) {
-      rateLimitStore.delete(key)
+// L6: only register the cleanup timer on Node.js runtimes (edge runtime
+// reclaims memory differently and doesn't always expose setInterval). Call
+// .unref() so the handle doesn't keep a serverless process alive past its
+// real work.
+declare const EdgeRuntime: unknown
+const isEdge = typeof EdgeRuntime !== 'undefined'
+if (!isEdge && typeof setInterval === 'function') {
+  const cleanupHandle = setInterval(() => {
+    const now = Date.now()
+    for (const [key, record] of rateLimitStore.entries()) {
+      if (now > record.resetTime) {
+        rateLimitStore.delete(key)
+      }
     }
+  }, 5 * 60 * 1000)
+  if (typeof (cleanupHandle as any).unref === 'function') {
+    (cleanupHandle as any).unref()
   }
-}, 5 * 60 * 1000)
+}
 
 // ============================================
 // RATE LIMIT CONFIGURATIONS

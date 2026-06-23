@@ -27,8 +27,20 @@ export async function GET(request: NextRequest) {
   const baseUrl = BASE_URL || (fwdHost ? `https://${fwdHost}` : request.url)
 
   if (error) {
+    // L5: encode + validate. Without these, `?error=` from Google was
+    // concatenated raw into the URL — a crafted `error=foo&id=1` would
+    // smuggle an extra query parameter past the redirect. The reflected
+    // value is also constrained to Google's documented OAuth error code
+    // set; anything else falls back to a generic 'oauth_error'.
+    const KNOWN_OAUTH_ERRORS = new Set([
+      'access_denied', 'admin_policy_enforced', 'disallowed_useragent',
+      'invalid_client', 'invalid_grant', 'invalid_request', 'invalid_scope',
+      'org_internal', 'redirect_uri_mismatch', 'unauthorized_client',
+      'unsupported_response_type', 'server_error', 'temporarily_unavailable',
+    ])
+    const safeError = KNOWN_OAUTH_ERRORS.has(error) ? error : 'oauth_error'
     return NextResponse.redirect(
-      new URL(`/settings/email?error=${error}`, baseUrl)
+      new URL(`/settings/email?error=${encodeURIComponent(safeError)}`, baseUrl)
     )
   }
 

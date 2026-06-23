@@ -699,7 +699,11 @@ export async function POST(request: NextRequest) {
         const dayTourVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
         const paxNum = pax || 2
-        const tier = pickTierForPax(paxNum)
+        // L10: was named `tier` and shadowed the function-parameter `tier`
+        // (the rate tier like 'standard'). Renamed to `vehicleTier` so the
+        // two ideas — rate tier vs vehicle-size key — are no longer
+        // conflated in the same scope.
+        const vehicleTier = pickTierForPax(paxNum)
         const cityLower = day.city?.toLowerCase()?.trim()
         const prevDay = idx > 0 ? parsed.days[idx - 1] : null
         const prevCity = prevDay?.city?.toLowerCase()?.trim() || ''
@@ -744,7 +748,7 @@ export async function POST(request: NextRequest) {
 
         // Helper: push tiered route ID (avoid duplicates)
         const pushRoute = (service: any, label: string) => {
-          const tieredId = `${service.id}__${tier}`
+          const tieredId = `${service.id}__${vehicleTier}`
           if (!routeIds.includes(tieredId)) {
             routeIds.push(tieredId)
             console.log(`Day ${day.dayNumber}: Route added: ${label} → ${service.service_type} ${service.origin_city}→${service.destination_city} (${tieredId})`)
@@ -814,7 +818,7 @@ export async function POST(request: NextRequest) {
             const arrTransfer = routes.find((r: any) =>
               r.service_type === 'airport_transfer' &&
               matchAnyCity(r, cityLower) &&
-              !routeIds.includes(`${r.id}__${tier}`) // avoid duplicate if same city
+              !routeIds.includes(`${r.id}__${vehicleTier}`) // avoid duplicate if same city
             )
             if (arrTransfer) {
               pushRoute(arrTransfer, 'flight arrival airport transfer')
