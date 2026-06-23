@@ -152,17 +152,24 @@ const initialFormData: FormData = {
   bus_rate_non_eur: '',
 }
 
+// Canonical service_type taxonomy (B3, locked-in 2026-06-23).
+// `needsDestination: true` = the form should ask for origin_city + destination_city
+// (matches the route's isIntercityType branch — only the intercity variants).
+// All others are identified by city alone. `multi_day` was previously listed here
+// by mistake — that value is a tour_type, not a transport service_type, and the DB
+// CHECK constraint would reject it.
 const SERVICE_TYPES = [
   { value: 'airport_transfer', labelKey: 'airportTransfer', needsDestination: false },
-  { value: 'day_tour', labelKey: 'dayTour', needsDestination: false },
-  { value: 'multi_day', labelKey: 'multiDay', needsDestination: false },
-  { value: 'city_transfer', labelKey: 'cityTransfer', needsDestination: true },
+  { value: 'airport_with_sightseeing', labelKey: 'airportWithSightseeing', needsDestination: false },
+  { value: 'city_transfer', labelKey: 'cityTransfer', needsDestination: false },
+  { value: 'city_tour', labelKey: 'cityTour', needsDestination: false },
   { value: 'intercity', labelKey: 'intercity', needsDestination: true },
-  { value: 'intercity_transfer', labelKey: 'intercityTransfer', needsDestination: true },
+  { value: 'intercity_with_sightseeing', labelKey: 'intercityWithSightseeing', needsDestination: true },
   { value: 'half_day', labelKey: 'halfDay', needsDestination: false },
-  { value: 'sound_light', labelKey: 'soundLightTransfer', needsDestination: false },
+  { value: 'day_tour', labelKey: 'dayTour', needsDestination: false },
+  { value: 'extended_day_tour', labelKey: 'extendedDayTour', needsDestination: false },
+  { value: 'sound_light', labelKey: 'soundLight', needsDestination: false },
   { value: 'dinner_transfer', labelKey: 'dinnerTransfer', needsDestination: false },
-  { value: 'sound_light_transfer', labelKey: 'soundLightTransfer', needsDestination: false },
 ]
 
 // Using centralized EGYPT_CITIES from lib/constants/egypt-cities.ts
