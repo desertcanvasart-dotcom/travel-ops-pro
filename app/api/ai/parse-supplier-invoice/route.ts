@@ -12,6 +12,22 @@ const ACCEPTED_TYPES: Record<string, 'pdf' | 'image'> = {
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 
+/**
+ * Strict money parser (L2): handles values that come back from the model as
+ * "€1,234.50", "1.234,50", "EGP 950", "950.00" — strips anything that isn't
+ * a digit, '.', or '-', then parses. Returns null when the value can't be
+ * sensibly coerced, so callers can fall back to a default explicitly rather
+ * than silently storing NaN.
+ */
+function toMoney(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  const cleaned = String(value).replace(/[^0-9.\-]/g, '')
+  if (cleaned === '' || cleaned === '-' || cleaned === '.') return null
+  const n = Number(cleaned)
+  return Number.isFinite(n) ? n : null
+}
+
 const EXTRACTION_PROMPT = `You are an expert at reading supplier invoices for a travel/tour operations company.
 
 Analyze the uploaded document (PDF or image) and extract all invoice information into a structured JSON format.
@@ -159,11 +175,22 @@ export async function POST(request: NextRequest) {
         invoice_date: extracted.invoice_date || '',
         due_date: extracted.due_date || '',
         currency: extracted.currency || 'EUR',
-        subtotal: extracted.subtotal,
-        tax_amount: extracted.tax_amount || 0,
-        total_amount: extracted.total_amount || extracted.subtotal || 0,
+        // L2: coerce money fields with a strict numeric parser that strips
+        // currency symbols / thousands separators / whitespace. Previously
+        // strings like "€1,234.50" or "1.234,50 EUR" would land in the DB
+        // as NaN or the literal string and corrupt downstream totals.
+        subtotal: toMoney(extracted.subtotal),
+        tax_amount: toMoney(extracted.tax_amount) ?? 0,
+        total_amount: toMoney(extracted.total_amount) ?? toMoney(extracted.subtotal) ?? 0,
         description: extracted.description || '',
-        line_items: extracted.line_items || [],
+        line_items: Array.isArray(extracted.line_items)
+          ? extracted.line_items.map((li: any) => ({
+              ...li,
+              quantity: toMoney(li.quantity) ?? 1,
+              unit_price: toMoney(li.unit_price) ?? toMoney(li.amount) ?? 0,
+              amount: toMoney(li.amount) ?? 0,
+            }))
+          : [],
         confidence: extracted.confidence || {},
         notes: extracted.notes || '',
       },

@@ -79,8 +79,10 @@ export async function POST(
       matchStatus = 'discrepancy'
     }
 
-    // Update supplier invoice
-    const newStatus = matchStatus === 'matched' || matchStatus === 'partial' ? 'matched' : 'received'
+    // Update supplier invoice. M28: 'partial' must NOT promote the invoice
+    // to status='matched' — partials still need follow-up before approve/pay.
+    // Only an exact match should flip the high-level status.
+    const newStatus = matchStatus === 'matched' ? 'matched' : 'received'
     await supabaseAdmin
       .from('supplier_invoices')
       .update({

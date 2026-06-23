@@ -68,8 +68,28 @@ export async function POST(request: NextRequest) {
     // Fetch rates with USD as base (most commonly used)
     const rates = await fetchExchangeRates('USD')
 
+    // M1: validate the requested currencies exist in the rate table — without
+    // this an unknown code (e.g. "EURO" instead of "EUR") silently propagates
+    // NaN through every downstream caller.
+    if (from !== 'USD' && rates.rates[from] === undefined) {
+      return NextResponse.json(
+        { success: false, error: `Unsupported source currency: ${from}` },
+        { status: 400 }
+      )
+    }
+    if (to !== 'USD' && rates.rates[to] === undefined) {
+      return NextResponse.json(
+        { success: false, error: `Unsupported target currency: ${to}` },
+        { status: 400 }
+      )
+    }
+
     // Perform conversion
     const convertedAmount = convertCurrency(amount, from, to, rates)
+
+    // L1: compute the rate independently of `amount` so amount=0 doesn't
+    // produce NaN. The reported rate is always 1 unit of `from` in `to`.
+    const rate = convertCurrency(1, from, to, rates)
 
     return NextResponse.json({
       success: true,
@@ -78,7 +98,7 @@ export async function POST(request: NextRequest) {
         originalCurrency: from,
         convertedAmount: Math.round(convertedAmount * 100) / 100,
         targetCurrency: to,
-        rate: convertedAmount / amount,
+        rate,
         rateDate: rates.date
       }
     })
