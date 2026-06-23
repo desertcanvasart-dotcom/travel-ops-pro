@@ -29,20 +29,33 @@ export async function GET(
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    // Calculate totals
-    const totalPaid = payments?.reduce((sum, p) => {
-      if (p.payment_type === 'refund') {
-        return sum - p.amount
-      }
-      return sum + p.amount
-    }, 0) || 0
+    // M21: aggregate per-currency. Summing 1000 USD + 1000 EUR into 2000
+    // and comparing against an EUR booking is wrong; the response now
+    // returns both a per-currency breakdown AND a flat totalPaid for the
+    // PRIMARY currency (= the booking's currency when known, else EUR).
+    const { data: bookingRow } = await supabaseAdmin
+      .from('bookings')
+      .select('currency')
+      .eq('id', id)
+      .single()
+    const bookingCurrency = bookingRow?.currency || 'EUR'
+
+    const totalsByCurrency: Record<string, number> = {}
+    for (const p of payments || []) {
+      const c = p.currency || 'EUR'
+      const signed = p.payment_type === 'refund' ? -p.amount : p.amount
+      totalsByCurrency[c] = (totalsByCurrency[c] || 0) + signed
+    }
+    const totalPaid = totalsByCurrency[bookingCurrency] || 0
 
     return NextResponse.json({
       success: true,
       data: payments,
       summary: {
         total_paid: totalPaid,
-        payment_count: payments?.length || 0
+        currency: bookingCurrency,
+        totals_by_currency: totalsByCurrency,
+        payment_count: payments?.length || 0,
       }
     })
   } catch (error: unknown) {
@@ -79,6 +92,24 @@ export async function POST(
       }, { status: 400 })
     }
 
+    // M21: a booking has a single currency (matching its total_cost /
+    // deposit_amount). Reject payments in any other currency — the running
+    // totals downstream sum amounts as scalars, so mixed currencies would
+    // produce wrong balance_due and could prematurely flip 'paid'.
+    const { data: bookingCurrencyRow } = await supabaseAdmin
+      .from('bookings')
+      .select('currency')
+      .eq('id', id)
+      .single()
+    const bookingCurrency = bookingCurrencyRow?.currency || 'EUR'
+    const paymentCurrency = body.currency || bookingCurrency
+    if (paymentCurrency !== bookingCurrency) {
+      return NextResponse.json({
+        success: false,
+        error: `Payment currency (${paymentCurrency}) must match booking currency (${bookingCurrency})`,
+      }, { status: 400 })
+    }
+
     // Create payment record
     const { data: payment, error } = await supabaseAdmin
       .from('booking_payments')
@@ -86,7 +117,7 @@ export async function POST(
         booking_id: id,
         payment_type,
         amount: amountNum,
-        currency: body.currency || 'EUR',
+        currency: paymentCurrency,
         payment_method: body.payment_method || null,
         payment_date,
         transaction_reference: body.transaction_reference || null,
@@ -115,22 +146,32 @@ async function updateBookingPaymentStatus(bookingId: string) {
   // Get booking details
   const { data: booking } = await supabaseAdmin
     .from('bookings')
-    .select('total_cost, deposit_amount')
+    .select('total_cost, deposit_amount, currency')
     .eq('id', bookingId)
     .single()
 
   if (!booking) return
 
   // Get all payments
+  // M21: only aggregate payments in the booking's own currency. POST now
+  // rejects mismatches, but legacy rows may have stored mixed-currency
+  // payments — quietly excluding them prevents the running total from
+  // double-counting a 1000 USD line as 1000 EUR.
+  const bookingCurrency = booking.currency || 'EUR'
   const { data: payments } = await supabaseAdmin
     .from('booking_payments')
-    .select('payment_type, amount')
+    .select('payment_type, amount, currency')
     .eq('booking_id', bookingId)
 
   if (!payments) return
 
+  const sameCurrencyPayments = payments.filter(p => (p.currency || 'EUR') === bookingCurrency)
+  if (sameCurrencyPayments.length !== payments.length) {
+    console.warn(`[booking-payments] booking ${bookingId}: ${payments.length - sameCurrencyPayments.length} payments in non-${bookingCurrency} currency excluded from totals`)
+  }
+
   // Calculate total paid
-  const totalPaid = payments.reduce((sum, p) => {
+  const totalPaid = sameCurrencyPayments.reduce((sum, p) => {
     if (p.payment_type === 'refund') {
       return sum - p.amount
     }
