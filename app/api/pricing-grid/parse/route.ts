@@ -243,7 +243,7 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 
 ### Touring Day (ANY day with sightseeing, visits, temples, museums, pyramids, bazaar, old city, etc.)
 - vehicle: day-tour vehicle matching pax and city (from the VEHICLE catalog)
-- route: EMPTY [] unless transferring between cities (then use intercity_transfer from ROUTE catalog)
+- route: EMPTY [] unless transferring between cities (then use intercity or intercity_with_sightseeing from ROUTE catalog)
 - guide: ALWAYS add a guide for touring days — pick the guide matching the requested language
 - entrance_fees: match EVERY attraction/site mentioned by name
 - meals: ALWAYS add lunch AND dinner for the day's city. Pick restaurant meals matching city.
@@ -887,8 +887,11 @@ export async function POST(request: NextRequest) {
               const transferKey = `${fromCity}->${toCity}`
               if (addedTransfers.has(transferKey)) continue
 
+              // Canonical intercity service_types (legacy 'intercity_transfer'
+              // retained as defensive fallback in case any orphan row escaped
+              // the migration).
               const transfer = routes.find((r: any) =>
-                ['intercity_transfer', 'intercity', 'city_transfer'].includes(r.service_type) &&
+                ['intercity', 'intercity_with_sightseeing', 'city_transfer', 'intercity_transfer'].includes(r.service_type) &&
                 matchOrigin(r, fromCity) &&
                 matchDest(r, toCity)
               )

@@ -1211,13 +1211,16 @@ export async function createLandItineraryServices(
         ? dayData.overnight_city
         : currentCity
 
-      // Try to fetch route-specific intercity rate from transportation_rates
+      // Try to fetch route-specific intercity rate from transportation_rates.
+      // Uses the canonical 'intercity' service_type (one-way drop-off). The DB
+      // migration normalized the old 'intercity_transfer' rows to 'intercity',
+      // so this is the only value that returns rows here.
       const { getTransportRateForPax: getIntercityRate } = await import('@/lib/transport-rate-utils')
       const { data: intercityRates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('is_active', true)
-        .eq('service_type', 'intercity_transfer')
+        .eq('service_type', 'intercity')
         .ilike('origin_city', originCity)
         .ilike('destination_city', destCity)
         .limit(1)
@@ -1338,15 +1341,21 @@ export async function createLandItineraryServices(
     const isDayTrip = !!dayTripCity && !isIntercityTransfer && !isCruiseDay
 
     if (isDayTrip) {
-      // Fetch round-trip intercity rate for the day trip (e.g., Cairo→Alexandria round trip)
+      // Fetch the same-day round-trip intercity rate for the day trip
+      // (e.g., Cairo→Alexandria → back same day, with sightseeing). The
+      // canonical service_type for this pattern is intercity_with_sightseeing
+      // (priced higher than the plain one-way intercity, see the rate sheet's
+      // -OVER-DAY rows). Falls back to plain intercity when no sightseeing
+      // variant exists for the route.
       const { getTransportRateForPax: getDayTripRate } = await import('@/lib/transport-rate-utils')
       const { data: dayTripRates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('is_active', true)
-        .eq('service_type', 'intercity_transfer')
+        .in('service_type', ['intercity_with_sightseeing', 'intercity'])
         .ilike('origin_city', overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1))
         .ilike('destination_city', dayTripCity)
+        .order('service_type', { ascending: true }) // 'intercity_with_sightseeing' < 'intercity' lexicographically — sightseeing variant preferred
         .limit(1)
 
       let dayTripRate = 0
