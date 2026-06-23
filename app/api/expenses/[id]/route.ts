@@ -39,15 +39,43 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
-    const updateData = {
-      ...body,
-      updated_at: new Date().toISOString()
+    // M14: explicit whitelist + validation. Previously this spread the entire
+    // body, so callers could set arbitrary status values, write garbage
+    // amounts, overwrite immutable fields, or send unknown keys that 500'd
+    // the request on hitting unknown columns.
+    const ALLOWED_FIELDS = [
+      'itinerary_id', 'supplier_id', 'category', 'description', 'amount',
+      'currency', 'expense_date', 'supplier_name', 'supplier_type',
+      'receipt_url', 'receipt_filename', 'status', 'payment_method',
+      'payment_date', 'payment_reference', 'notes',
+    ] as const
+    const ALLOWED_STATUSES = ['pending', 'approved', 'paid', 'rejected', 'cancelled'] as const
+
+    const updateData: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    }
+    for (const field of ALLOWED_FIELDS) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field]
+      }
     }
 
-    // Remove fields that shouldn't be updated
-    delete updateData.id
-    delete updateData.expense_number
-    delete updateData.created_at
+    if (updateData.amount !== undefined) {
+      const amt = Number(updateData.amount)
+      if (!Number.isFinite(amt) || amt < 0) {
+        return NextResponse.json(
+          { error: 'amount must be a non-negative number' },
+          { status: 400 }
+        )
+      }
+      updateData.amount = amt
+    }
+    if (updateData.status !== undefined && !ALLOWED_STATUSES.includes(updateData.status)) {
+      return NextResponse.json(
+        { error: `status must be one of: ${ALLOWED_STATUSES.join(', ')}` },
+        { status: 400 }
+      )
+    }
 
     const { data, error } = await supabaseAdmin
       .from('expenses')
