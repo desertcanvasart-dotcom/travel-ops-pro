@@ -29,6 +29,7 @@ do $$
 declare
   v_default_org_id uuid;
   v_table text;
+  v_user record;
   v_tables text[] := array[
     'invoices',
     'expenses',
@@ -40,8 +41,13 @@ declare
     'accounting_sync_log'
   ];
 begin
-  -- Resolve the Default Organization created by Phase 1. Hard-fail if it
-  -- isn't there — running Phase 2A without Phase 1 would orphan every row.
+  -- Resolve the Default Organization. If Phase 1 ran but its IF-block was
+  -- skipped (the original Phase 1 migration only created Default Org when
+  -- at least one accounting_tokens row existed — DBs where QB/Xero hadn't
+  -- been connected yet end up with the org tables but no Default Org row),
+  -- create the Default Org here and seed every user_profiles row as an
+  -- owner so this migration is self-sufficient. Idempotent: re-running on
+  -- a Phase-1-clean DB is a no-op.
   select id into v_default_org_id
     from public.organizations
     where name = 'Default Organization'
@@ -49,7 +55,26 @@ begin
     limit 1;
 
   if v_default_org_id is null then
-    raise exception 'No Default Organization found — apply 20260624_organizations_phase1.sql first';
+    -- Phase 1 tables must exist — this is the one hard prerequisite.
+    if not exists (
+      select 1 from information_schema.tables
+      where table_schema = 'public' and table_name = 'organizations'
+    ) then
+      raise exception 'organizations table missing — apply 20260624_organizations_phase1.sql first';
+    end if;
+
+    insert into public.organizations (name)
+    values ('Default Organization')
+    returning id into v_default_org_id;
+
+    -- Seed memberships for every existing user_profiles row as 'owner'.
+    -- Without this step, getCurrentOrgId() would return null for every
+    -- session and every refactored route would 403.
+    for v_user in select id from public.user_profiles loop
+      insert into public.organization_members (org_id, user_id, role)
+      values (v_default_org_id, v_user.id, 'owner')
+      on conflict (org_id, user_id) do nothing;
+    end loop;
   end if;
 
   -- For each table: ADD column nullable, backfill, set NOT NULL, index.
