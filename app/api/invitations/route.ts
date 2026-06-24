@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - List all invitations (admin/manager only)
+// GET - List all invitations for the current org (admin/manager only)
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // pending, accepted, expired, all
 
@@ -19,6 +23,7 @@ export async function GET(request: NextRequest) {
         *,
         inviter:user_profiles!invited_by(id, full_name, email)
       `)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
 
     if (status === 'pending') {
@@ -49,6 +54,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new invitation (admin/manager only)
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const { email, role = 'agent', invited_by } = body
 
@@ -83,11 +91,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if there's already a pending invitation
+    // Check if there's already a pending invitation FOR THIS ORG. A pending
+    // invite for the same email in a different org is OK — that user may
+    // legitimately be invited to multiple agencies and the org_id scope
+    // keeps them separate.
     const { data: existingInvitation } = await supabase
       .from('user_invitations')
       .select('id')
       .eq('email', email.toLowerCase())
+      .eq('org_id', orgId)
       .is('accepted_at', null)
       .gt('expires_at', new Date().toISOString())
       .single()
@@ -106,13 +118,15 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 7)
 
-    // Create invitation
+    // Create invitation scoped to the inviter's org so PUT below can route
+    // the accepted user into the right organization.
     const { data: invitation, error } = await supabase
       .from('user_invitations')
       .insert({
         email: email.toLowerCase(),
         role,
         invited_by,
+        org_id: orgId,
         token,
         expires_at: expiresAt.toISOString()
       })
@@ -146,9 +160,115 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT - Mark an invitation as accepted after the signup completes, and add
+// the freshly-created user to the inviter's org with the invitation's role.
+// Called from app/invite/accept/page.tsx after supabase.auth.signUp succeeds.
+//
+// Prior to this handler existing the frontend's PUT silently returned 405,
+// so invites stayed in 'pending' forever and new users were never bound to
+// any org. With Phase 2A's getCurrentOrgId() now reading membership rows,
+// that left every new accepted user with `getCurrentOrgId() === null` and
+// every financial route 403'ing for them.
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { token } = body
+
+    if (!token || typeof token !== 'string') {
+      return NextResponse.json(
+        { success: false, error: 'Token is required' },
+        { status: 400 }
+      )
+    }
+
+    // Look up the invitation by token (service-role bypasses RLS, which is
+    // necessary here because the freshly-signed-up user isn't a member of
+    // the inviter's org yet — getCurrentOrgId() would return null).
+    const { data: invitation, error: lookupErr } = await supabase
+      .from('user_invitations')
+      .select('id, email, role, org_id, accepted_at, expires_at')
+      .eq('token', token)
+      .maybeSingle()
+
+    if (lookupErr || !invitation) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid invitation token' },
+        { status: 404 }
+      )
+    }
+
+    if (invitation.accepted_at) {
+      return NextResponse.json(
+        { success: false, error: 'This invitation has already been used' },
+        { status: 400 }
+      )
+    }
+
+    if (new Date(invitation.expires_at) < new Date()) {
+      return NextResponse.json(
+        { success: false, error: 'This invitation has expired' },
+        { status: 400 }
+      )
+    }
+
+    // Find the user_profiles row for this email — created by the signup
+    // trigger immediately after supabase.auth.signUp().
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('email', invitation.email.toLowerCase())
+      .maybeSingle()
+
+    if (!profile?.id) {
+      return NextResponse.json(
+        { success: false, error: 'Signup must complete before accepting invitation' },
+        { status: 400 }
+      )
+    }
+
+    // Add the new user as a member of the inviter's org. The role from the
+    // invitation maps to organization_members.role so Phase 2C's owner-only
+    // policies (rename org, manage members) know who can do what.
+    const { error: memberErr } = await supabase
+      .from('organization_members')
+      .insert({
+        org_id: invitation.org_id,
+        user_id: profile.id,
+        role: invitation.role === 'admin' ? 'owner' : 'member',
+      })
+
+    // Conflict (already a member) is fine — the invite-accept flow may be
+    // retried after a transient failure on the second leg.
+    if (memberErr && (memberErr as { code?: string }).code !== '23505') {
+      throw memberErr
+    }
+
+    // Mark invitation as accepted last — if the membership insert above
+    // failed for any non-23505 reason, the invitation stays pending so the
+    // user can retry instead of being stuck in limbo.
+    const { error: acceptErr } = await supabase
+      .from('user_invitations')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', invitation.id)
+
+    if (acceptErr) throw acceptErr
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error accepting invitation:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to accept invitation' },
+      { status: 500 }
+    )
+  }
+}
+
 // DELETE - Cancel/delete invitation
 export async function DELETE(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -163,6 +283,7 @@ export async function DELETE(request: NextRequest) {
       .from('user_invitations')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) throw error
 
