@@ -1,7 +1,7 @@
 // In-memory Supabase mock for hermetic pricing-engine tests.
 //
 // Reproduces just enough of the supabase-js query builder for
-// lib/auto-pricing-service.ts + lib/rate-lookup-service.ts:
+// lib/auto-pricing-service.ts (canonical rate-resolution core):
 // from/select/eq/ilike/contains/or/in/order/limit plus the terminal forms
 // (.single(), .maybeSingle(), and awaiting the builder directly -> { data, error }).
 //
