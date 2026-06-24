@@ -537,6 +537,18 @@ function PricingGridContent() {
             description: dayData.description || '',
             isExpanded: false,
             slots,
+            // Consolidation Phase B: restore the day-type preset + component
+            // overrides so the rich gridCompleteness gate has its inputs.
+            // Columns may be undefined for pre-migration rows — that's fine,
+            // resolveComponents() falls back to DAY_TYPE_DEFAULTS[DEFAULT_DAY_TYPE].
+            dayType: dayData.day_type ?? undefined,
+            overnight: dayData.overnight ?? undefined,
+            hasSightseeing: dayData.has_sightseeing ?? undefined,
+            airportArrival: dayData.airport_arrival ?? undefined,
+            airportDeparture: dayData.airport_departure ?? undefined,
+            hotelCheckIn: dayData.hotel_check_in ?? undefined,
+            hotelCheckOut: dayData.hotel_check_out ?? undefined,
+            intercity: dayData.intercity ?? undefined,
           }
         })
         setDays(loadedDays)
