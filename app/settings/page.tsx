@@ -30,7 +30,8 @@ import {
   Send,
   Crown,
   Calculator,
-  Info
+  Info,
+  Building2
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 import { SignatureEditor } from '@/components/email/RichTextEditor'
@@ -80,13 +81,14 @@ interface UserPreferences {
 // TAB CONFIGURATION
 // ============================================
 
-const TAB_IDS = ['profile', 'email', 'notifications', 'preferences', 'integrations'] as const
+const TAB_IDS = ['profile', 'email', 'notifications', 'preferences', 'integrations', 'organization'] as const
 const TAB_ICONS = {
   profile: User,
   email: Mail,
   notifications: Bell,
   preferences: Settings,
   integrations: LinkIcon,
+  organization: Building2,
 }
 
 const TIMEZONES = [
@@ -1385,6 +1387,28 @@ function SettingsContent() {
               {activeTab === 'notifications' && renderNotificationsTab()}
               {activeTab === 'preferences' && renderPreferencesTab()}
               {activeTab === 'integrations' && renderIntegrationsTab()}
+              {activeTab === 'organization' && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-[#647C47]/10 flex items-center justify-center flex-shrink-0">
+                      <Building2 className="w-6 h-6 text-[#647C47]" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Organization</h3>
+                      <p className="text-sm text-gray-600 mb-4">
+                        Manage your organization name, members, roles, and pending invitations.
+                      </p>
+                      <a
+                        href="/settings/organization"
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors"
+                      >
+                        <Building2 className="w-4 h-4" />
+                        Open organization settings
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
