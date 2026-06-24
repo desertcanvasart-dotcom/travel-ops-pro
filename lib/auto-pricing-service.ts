@@ -1257,7 +1257,19 @@ export async function getGuideRate(
 }
 
 /**
- * Get meal rates
+ * Get meal rates for the requested tier.
+ *
+ * Prior implementation looked up ANY active meal_rates row regardless of tier
+ * and multiplied it by a hardcoded TIER_MULTIPLIERS table (0.8 budget /
+ * 1.0 standard / 1.3 deluxe / 1.6 luxury), synthesising tier-adjusted rates
+ * that no actual supplier rate row backed. Same bug class as the
+ * TIER_MULTIPLIERS in rate-lookup-service.ts that PR #14 deleted — the
+ * audit's no-fabrication promise covered the rate-card path but missed
+ * this one in the canonical core.
+ *
+ * Now: filter by tier, return the actual stored row, return null if no
+ * matching row — the caller flags a hole instead of pricing against a
+ * synthesised rate.
  */
 export async function getMealRates(
   tier: ServiceTier
@@ -1267,6 +1279,7 @@ export async function getMealRates(
       .from('meal_rates')
       .select('lunch_rate_eur, dinner_rate_eur')
       .eq('is_active', true)
+      .eq('tier', tier)
       .limit(1)
       .single()
 
@@ -1274,16 +1287,9 @@ export async function getMealRates(
       return null
     }
 
-    const multipliers: Record<ServiceTier, number> = {
-      budget: 0.8,
-      standard: 1.0,
-      deluxe: 1.3,
-      luxury: 1.6
-    }
-
     return {
-      lunch: Math.round((mealRate.lunch_rate_eur || 0) * multipliers[tier]),
-      dinner: Math.round((mealRate.dinner_rate_eur || 0) * multipliers[tier])
+      lunch: mealRate.lunch_rate_eur || 0,
+      dinner: mealRate.dinner_rate_eur || 0,
     }
   } catch (err) {
     return null
