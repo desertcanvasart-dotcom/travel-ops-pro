@@ -32,6 +32,60 @@ export interface GridConfig {
   partnerName: string
 }
 
+// --- Day Type Preset + Component Model (consolidation Phase B / rich gate) ---
+//
+// Each day in the grid carries a `dayType` preset that fills the component
+// flags via DAY_TYPE_DEFAULTS. Per-day boolean overrides on GridDay take
+// precedence when set, so a "transfer day that also sightsees" is just a
+// transfer preset with hasSightseeing = true.
+//
+// The rich completeness gate (grid-completeness.ts) reads these via
+// resolveComponents(day) to decide what each day requires and what's
+// missing. The 6 day_type values map 1:1 to the DB CHECK constraint added
+// in migrations/20260627_itinerary_days_day_type_components.sql.
+
+export type DayType = 'arrival' | 'tour' | 'transfer' | 'cruise' | 'free' | 'departure'
+
+export const DAY_TYPES: DayType[] = ['arrival', 'tour', 'transfer', 'cruise', 'free', 'departure']
+
+export const DAY_TYPE_LABELS: Record<DayType, string> = {
+  arrival:   'Arrival (airport in + hotel check-in)',
+  tour:      'Tour (overnight + sightseeing)',
+  transfer:  'Transfer (intercity by road)',
+  cruise:    'Cruise (on board)',
+  free:      'Free day (overnight, no sightseeing)',
+  departure: 'Departure (hotel check-out + airport out)',
+}
+
+export const DEFAULT_DAY_TYPE: DayType = 'tour'
+
+export type Intercity = 'none' | 'road' | 'flight'
+
+export interface DayComponents {
+  overnight: boolean
+  hasSightseeing: boolean
+  airportArrival: boolean
+  airportDeparture: boolean
+  hotelCheckIn: boolean
+  hotelCheckOut: boolean
+  intercity: Intercity
+}
+
+export const DAY_TYPE_DEFAULTS: Record<DayType, DayComponents> = {
+  arrival:   { overnight: true,  hasSightseeing: false, airportArrival: true,  airportDeparture: false, hotelCheckIn: true,  hotelCheckOut: false, intercity: 'none' },
+  tour:      { overnight: true,  hasSightseeing: true,  airportArrival: false, airportDeparture: false, hotelCheckIn: false, hotelCheckOut: false, intercity: 'none' },
+  transfer:  { overnight: true,  hasSightseeing: false, airportArrival: false, airportDeparture: false, hotelCheckIn: true,  hotelCheckOut: true,  intercity: 'road' },
+  cruise:    { overnight: true,  hasSightseeing: false, airportArrival: false, airportDeparture: false, hotelCheckIn: false, hotelCheckOut: false, intercity: 'none' },
+  free:      { overnight: true,  hasSightseeing: false, airportArrival: false, airportDeparture: false, hotelCheckIn: false, hotelCheckOut: false, intercity: 'none' },
+  departure: { overnight: false, hasSightseeing: false, airportArrival: false, airportDeparture: true,  hotelCheckIn: false, hotelCheckOut: true,  intercity: 'none' },
+}
+
+// Entrance-fee class — used by the rich gate so a `mandatory` fee that's
+// not priced blocks save, while `optional` / `free` are never required.
+// Selections that carry this attribute are gate-aware; ones that don't
+// fall through to the count-based fallback path.
+export type PricingClass = 'mandatory' | 'optional' | 'free'
+
 // --- Slot Definitions (fixed structure) ---
 
 export type SlotBucket = 'group' | 'per_person'
@@ -77,6 +131,12 @@ export interface SelectedItem {
   name: string
   rateEur: number
   rateNonEur: number
+  // Optional metadata attached at selection time so the rich gate can do
+  // type/class-aware checks. Slot pickers populate these from the rate row;
+  // legacy selections without them fall through to the gate's count-based
+  // path. See app/pricing-grid/lib/grid-completeness.ts.
+  serviceType?: string         // e.g. 'airport_transfer' / 'day_tour' / 'intercity_transfer' on route slot
+  pricingClass?: PricingClass  // 'mandatory' / 'optional' / 'free' on entrance_fees
 }
 
 export interface SlotValue {
@@ -95,6 +155,19 @@ export interface GridDay {
   description: string
   isExpanded: boolean
   slots: SlotValue[]
+  // Day-type preset + per-component overrides (consolidation Phase B rich).
+  // dayType picks a preset from DAY_TYPE_DEFAULTS; the override fields below
+  // (each nullable / undefined = "use the preset's default") let operators
+  // build combined days like "transfer + sightseeing". resolveComponents()
+  // in grid-completeness.ts merges the two.
+  dayType?: DayType
+  overnight?: boolean
+  hasSightseeing?: boolean
+  airportArrival?: boolean
+  airportDeparture?: boolean
+  hotelCheckIn?: boolean
+  hotelCheckOut?: boolean
+  intercity?: Intercity
 }
 
 // --- Rate Options (fetched from DB, used in dropdowns) ---
@@ -107,6 +180,13 @@ export interface RateOption {
   city?: string
   category?: string
   details?: string  // e.g., "4★", "Standard cabin", "Aswan → Luxor"
+  // Optional metadata used by the rich gate. Transport rates carry
+  // service_type (airport_transfer / day_tour / intercity_transfer / etc.);
+  // entrance fees carry pricing_class (mandatory / optional / free). Slot
+  // pickers pass these through to SelectedItem so the gate can do
+  // type-/class-aware checks.
+  service_type?: string
+  pricing_class?: PricingClass
 }
 
 export interface AllRates {

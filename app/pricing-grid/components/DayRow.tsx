@@ -1,8 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
-import type { GridDay, GridConfig, AllRates, SlotValue, DayCalc, SelectedItem } from '../types'
-import { GROUP_SLOTS, PP_SLOTS } from '../types'
+import type { GridDay, GridConfig, AllRates, SlotValue, DayCalc, SelectedItem, DayType, Intercity } from '../types'
+import { GROUP_SLOTS, PP_SLOTS, DAY_TYPES, DAY_TYPE_LABELS, DEFAULT_DAY_TYPE, DAY_TYPE_DEFAULTS } from '../types'
 import { calculateDay, convertAmount } from '../lib/calculator'
 import SlotRow from './SlotRow'
 
@@ -21,6 +22,19 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
   const calc: DayCalc = calculateDay(day, config)
   const cv = (n: number) => convertAmount(n, config.exchangeRate)
   const sym = config.currency === 'EUR' ? '€' : config.currency === 'USD' ? '$' : config.currency === 'GBP' ? '£' : config.currency
+
+  // Day-type + component override panel — collapsed by default to keep the
+  // day editor tight; operators who care about the rich completeness gate
+  // expand it on the days that need overrides.
+  const [showDayTypeOverrides, setShowDayTypeOverrides] = useState(false)
+  const activeDayType: DayType = day.dayType ?? DEFAULT_DAY_TYPE
+  const preset = DAY_TYPE_DEFAULTS[activeDayType]
+  // Helper: each component flag uses the preset's default unless explicitly
+  // overridden. Toggling sets the override; clicking "Reset" wipes it back
+  // to the preset.
+  const effective = (key: 'overnight' | 'hasSightseeing' | 'airportArrival' | 'airportDeparture' | 'hotelCheckIn' | 'hotelCheckOut'): boolean =>
+    (day[key] ?? preset[key]) as boolean
+  const effectiveIntercity: Intercity = day.intercity ?? preset.intercity
 
   const getSlotValue = (slotId: string): SlotValue => {
     return day.slots.find(s => s.slotId === slotId) || { slotId, selectedItems: [], customAmount: 0 }
@@ -308,6 +322,91 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
               />
             </div>
           )}
+
+          {/* Day Type + Component Overrides (rich gate inputs) */}
+          <div className="px-4 py-2 bg-indigo-50/40 border-b border-indigo-100/40">
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Day Type</label>
+              <select
+                value={activeDayType}
+                onChange={(e) => onUpdateDay({ dayType: e.target.value as DayType })}
+                className="text-[11px] border border-indigo-200 bg-white rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              >
+                {DAY_TYPES.map(t => (
+                  <option key={t} value={t}>{DAY_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowDayTypeOverrides(s => !s)}
+                className="text-[10px] text-indigo-600 hover:text-indigo-800 underline-offset-2 hover:underline"
+              >
+                {showDayTypeOverrides ? 'hide overrides' : 'override components'}
+              </button>
+              <span className="text-[10px] text-indigo-500/80 ml-auto">
+                The completeness gate uses these to decide what each day requires.
+              </span>
+            </div>
+
+            {showDayTypeOverrides && (
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-[11px]">
+                {([
+                  ['overnight', 'Overnight'],
+                  ['hasSightseeing', 'Sightseeing'],
+                  ['airportArrival', 'Airport arrival'],
+                  ['airportDeparture', 'Airport departure'],
+                  ['hotelCheckIn', 'Hotel check-in'],
+                  ['hotelCheckOut', 'Hotel check-out'],
+                ] as const).map(([key, label]) => {
+                  const isOverridden = day[key] !== undefined && day[key] !== null
+                  const eff = effective(key)
+                  return (
+                    <label key={key} className="flex items-center gap-1.5 cursor-pointer text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={eff}
+                        onChange={(e) => onUpdateDay({ [key]: e.target.checked } as Partial<GridDay>)}
+                        className="h-3 w-3 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400"
+                      />
+                      <span className={isOverridden ? 'font-semibold text-indigo-700' : ''}>{label}</span>
+                      {isOverridden && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); onUpdateDay({ [key]: undefined } as Partial<GridDay>) }}
+                          className="text-[9px] text-indigo-400 hover:text-indigo-700"
+                          title="Clear override (use the preset's default)"
+                        >
+                          ⨯
+                        </button>
+                      )}
+                    </label>
+                  )
+                })}
+                <label className="flex items-center gap-1.5 col-span-2 sm:col-span-3 text-gray-700">
+                  <span>Intercity:</span>
+                  <select
+                    value={effectiveIntercity}
+                    onChange={(e) => onUpdateDay({ intercity: e.target.value as Intercity })}
+                    className="text-[11px] border border-gray-200 rounded px-2 py-0.5"
+                  >
+                    <option value="none">none</option>
+                    <option value="road">road</option>
+                    <option value="flight">flight</option>
+                  </select>
+                  {day.intercity !== undefined && day.intercity !== null && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); onUpdateDay({ intercity: undefined } as Partial<GridDay>) }}
+                      className="text-[9px] text-indigo-400 hover:text-indigo-700"
+                      title="Clear override"
+                    >
+                      reset
+                    </button>
+                  )}
+                </label>
+              </div>
+            )}
+          </div>
 
           {/* GROUP SERVICES */}
           <div className="border-b border-gray-100">

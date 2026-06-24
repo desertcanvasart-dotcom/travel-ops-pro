@@ -204,6 +204,11 @@ export async function POST(request: NextRequest) {
     }
 
     // --- 3. Insert days ---
+    // Consolidation Phase B (rich gate): persist day_type + per-day component
+    // overrides so the rich gridCompleteness() can read them on the next load
+    // and decide what each day requires. Existing rows pre-migration land
+    // day_type='tour' via the DEFAULT (matching DEFAULT_DAY_TYPE), and the
+    // 7 override fields stay NULL (meaning "use the preset's default").
     const dayInserts = days.map((day: any, idx: number) => ({
       itinerary_id: itineraryId,
       day_number: day.dayNumber || idx + 1,
@@ -212,6 +217,16 @@ export async function POST(request: NextRequest) {
       city: day.city || '',
       overnight_city: day.city || '',
       date: addDays(startDate, idx),
+      // Day-type preset (defaults to NULL → DB DEFAULT 'tour' kicks in)
+      day_type: day.dayType ?? null,
+      // Per-component overrides (NULL = use the preset's default)
+      overnight: day.overnight ?? null,
+      has_sightseeing: day.hasSightseeing ?? null,
+      airport_arrival: day.airportArrival ?? null,
+      airport_departure: day.airportDeparture ?? null,
+      hotel_check_in: day.hotelCheckIn ?? null,
+      hotel_check_out: day.hotelCheckOut ?? null,
+      intercity: day.intercity ?? null,
     }))
 
     const { data: insertedDays, error: daysError } = await supabase

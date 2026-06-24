@@ -43,6 +43,13 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           name: opt.name,
           rateEur: opt.rateEur,
           rateNonEur: opt.rateNonEur,
+          // Consolidation Phase B (rich gate): propagate the rate row's
+          // service_type / pricing_class so the gate can do type-aware
+          // checks (route segments) and class-aware checks (mandatory
+          // entrance fees). Optional — older RateOption payloads won't
+          // carry these and the gate falls through to its count-based path.
+          serviceType: opt.service_type,
+          pricingClass: opt.pricing_class,
         }]
       })
     }
@@ -58,6 +65,8 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
       name: opt.name,
       rateEur: opt.rateEur,
       rateNonEur: opt.rateNonEur,
+      serviceType: opt.service_type,
+      pricingClass: opt.pricing_class,
     }
     const items: SelectedItem[] = [item]
     if (definition.slotId === 'accommodation' && (opt as any).single_supp_eur) {
