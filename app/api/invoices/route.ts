@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncInvoice } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +11,9 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
     const clientId = searchParams.get('clientId')
@@ -24,6 +28,7 @@ export async function GET(request: NextRequest) {
           client_phone
         )
       `)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
 
     if (status) {
@@ -65,6 +70,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
 
     // Validate required fields
@@ -129,6 +137,7 @@ export async function POST(request: NextRequest) {
           .from('invoices')
           .select('total_amount, currency')
           .eq('id', body.parent_invoice_id)
+          .eq('org_id', orgId)
           .single()
         if (parent?.total_amount != null) {
           depositAmount = Number(parent.total_amount)
@@ -154,6 +163,7 @@ export async function POST(request: NextRequest) {
     }
 
     const baseInvoice = {
+      org_id: orgId,
       invoice_type: invoiceType,
       deposit_percent: depositPercent,
       parent_invoice_id: body.parent_invoice_id || null,

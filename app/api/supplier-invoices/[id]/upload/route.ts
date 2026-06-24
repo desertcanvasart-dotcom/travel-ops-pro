@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +21,24 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
+
+    // Verify the supplier_invoice belongs to this org BEFORE accepting the
+    // upload — otherwise a caller could attach a file to another org's row
+    // (or worse, scribble over their document_url) using just the id.
+    const { data: parentInvoice } = await supabase
+      .from('supplier_invoices')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parentInvoice) {
+      return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 
@@ -86,6 +104,7 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (updateError) {
       console.error('Failed to update supplier invoice with document:', updateError)

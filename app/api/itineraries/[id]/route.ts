@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Server-side admin client — bypasses RLS for reliable reads/writes
 const supabase = createAdminClient(
@@ -15,12 +16,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
 
     const { data, error } = await supabase
       .from('itineraries')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) throw error
@@ -75,6 +80,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
 
@@ -115,6 +123,7 @@ export async function PUT(
         .from('itineraries')
         .select('status')
         .eq('id', id)
+        .eq('org_id', orgId)
         .single()
       previousStatus = currentItinerary?.status || null
     }
@@ -123,6 +132,7 @@ export async function PUT(
       .from('itineraries')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 
@@ -151,6 +161,7 @@ export async function PUT(
           const { data: newBooking, error: bookingError } = await supabaseAdmin
             .from('bookings')
             .insert({
+              org_id: orgId,
               booking_code: bookingCode,
               itinerary_id: id,
               client_name: data.client_name,
@@ -244,15 +255,33 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
 
     console.log('🗑️ Deleting itinerary:', id)
+
+    // Verify the itinerary belongs to this org before touching child rows
+    const { data: itinerary } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!itinerary) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     // Check if itinerary has invoices
     const { data: invoices } = await supabase
       .from('invoices')
       .select('id, invoice_number')
       .eq('itinerary_id', id)
+      .eq('org_id', orgId)
 
     if (invoices && invoices.length > 0) {
       return NextResponse.json({
@@ -288,6 +317,7 @@ export async function DELETE(
       .from('itineraries')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('❌ Error deleting itinerary:', error)

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const supabase = createServerClient()
 
@@ -20,6 +24,7 @@ export async function GET(
         )
       `)
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) throw error
@@ -49,16 +54,24 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const supabase = createServerClient()
     const body = await request.json()
 
     console.log('Updating payment:', id, body)
 
+    // M3 Phase 2A: strip any caller-supplied org_id so an update can't
+    // re-home a payment row into another org.
+    const { org_id: _ignoredOrgId, ...safeBody } = body
+
     const { data, error } = await supabase
       .from('payments')
-      .update(body)
+      .update(safeBody)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 
@@ -85,6 +98,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const supabase = createServerClient()
 
@@ -92,6 +108,7 @@ export async function DELETE(
       .from('payments')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) throw error
 

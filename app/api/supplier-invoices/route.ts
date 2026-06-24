@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,9 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
     const matchStatus = searchParams.get('matchStatus')
@@ -19,6 +23,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('supplier_invoices')
       .select('*')
+      .eq('org_id', orgId)
       .order('invoice_date', { ascending: false })
 
     if (status) query = query.eq('status', status)
@@ -56,6 +61,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
 
     if (!body.supplier_invoice_number || !body.supplier_name || !body.invoice_date || body.amount == null) {
@@ -72,6 +80,7 @@ export async function POST(request: NextRequest) {
     // 20260624_unique_document_numbers.sql, so concurrent creates can't
     // silently emit duplicate references.
     const baseSupplierInvoice = {
+      org_id: orgId,
       supplier_invoice_number: body.supplier_invoice_number,
       supplier_name: body.supplier_name,
       supplier_id: body.supplier_id || null,

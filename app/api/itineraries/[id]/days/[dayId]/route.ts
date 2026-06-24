@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -10,8 +11,25 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; dayId: string }> }
 ) {
   try {
-    const { dayId } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const { id, dayId } = await params
     const body = await request.json()
+
+    // Confirm the itinerary belongs to this org before mutating its child day
+    const { data: parent } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     const { data, error } = await supabase
       .from('itinerary_days')

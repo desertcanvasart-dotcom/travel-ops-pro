@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncInvoicePayment } from '@/lib/accounting'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,7 +13,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
+
+    // invoice_payments is a child table without org_id — verify the parent
+    // invoice belongs to this org before listing its payments.
+    const { data: parent } = await supabaseAdmin
+      .from('invoices')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('invoice_payments')
@@ -37,6 +53,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
 
@@ -48,11 +67,12 @@ export async function POST(
       )
     }
 
-    // Verify invoice exists and get current balance
+    // Verify invoice exists in this org and get current balance
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('invoices')
       .select('balance_due, currency')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (invoiceError || !invoice) {

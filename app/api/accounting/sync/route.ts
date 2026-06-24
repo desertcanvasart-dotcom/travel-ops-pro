@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncInvoice, syncExpense, syncInvoicePayment, syncExpensePayment } from '@/lib/accounting'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { entityType, entityId } = await request.json()
 
     if (!entityType || !entityId) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type') // receivable, payable
     const category = searchParams.get('category')
@@ -25,6 +29,7 @@ export async function GET(request: NextRequest) {
         itinerary:itineraries(id, itinerary_code, client_name),
         client:clients(id, first_name, last_name, email)
       `)
+      .eq('org_id', orgId)
       .order('transaction_date', { ascending: false })
 
     if (type) query = query.eq('commission_type', type)
@@ -92,6 +97,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
 
     // Validate required fields. M13: commission_amount=0 is a legitimate
@@ -119,6 +127,7 @@ export async function POST(request: NextRequest) {
       : (Number(body.base_amount) * Number(body.commission_rate)) / 100
 
     const newCommission = {
+      org_id: orgId,
       itinerary_id: body.itinerary_id || null,
       supplier_id: body.supplier_id || null,
       client_id: body.client_id || null,

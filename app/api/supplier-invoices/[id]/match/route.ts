@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,6 +13,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
     const { expenseIds } = body
@@ -23,22 +27,26 @@ export async function POST(
       )
     }
 
-    // Fetch the supplier invoice
+    // Fetch the supplier invoice — org-scoped so foreign-org rows can't be
+    // matched against, and to verify the parent before touching the junction.
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('supplier_invoices')
       .select('amount')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (invoiceError || !invoice) {
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
     }
 
-    // Fetch selected expenses
+    // Fetch selected expenses — org-scoped so a caller can't link expenses
+    // from another org into this org's supplier invoice.
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
       .select('id, amount')
       .in('id', expenseIds)
+      .eq('org_id', orgId)
 
     if (expError || !expenses) {
       return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 })
@@ -141,6 +149,7 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('org_id', orgId)
 
     return NextResponse.json({
       success: true,
@@ -160,11 +169,27 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const { expenseId } = await request.json()
 
     if (!expenseId) {
       return NextResponse.json({ error: 'expenseId is required' }, { status: 400 })
+    }
+
+    // supplier_invoice_expenses (junction) carries no org_id. Verify the
+    // parent supplier_invoice belongs to this org BEFORE touching junction
+    // rows, otherwise a caller could delete another org's junction by id.
+    const { data: parentInvoice } = await supabaseAdmin
+      .from('supplier_invoices')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parentInvoice) {
+      return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
     }
 
     await supabaseAdmin
@@ -178,6 +203,7 @@ export async function DELETE(
       .from('supplier_invoices')
       .select('amount')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     const { data: allMatches } = await supabaseAdmin
@@ -209,6 +235,7 @@ export async function DELETE(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('org_id', orgId)
 
     return NextResponse.json({ success: true, match_status: matchStatus })
   } catch (error) {

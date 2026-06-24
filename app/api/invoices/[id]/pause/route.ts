@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const supabase = createServerClient()
     const body = await request.json()
@@ -14,6 +18,7 @@ export async function PATCH(
       .from('invoices')
       .select('id, invoice_number, reminder_paused')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (fetchError || !invoice) {
@@ -26,6 +31,7 @@ export async function PATCH(
       .from('invoices')
       .update({ reminder_paused: newPausedStatus, updated_at: new Date().toISOString() })
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (updateError) throw updateError
 

@@ -3,15 +3,33 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string; dayId: string; serviceId: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id, dayId, serviceId } = await params
     const supabase = createClient()
     const body = await request.json()
+
+    // Confirm the itinerary belongs to this org before mutating child service
+    const { data: parent } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     // Extract all fields including transport-specific ones
     const updateData: Record<string, any> = {
@@ -75,8 +93,25 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; dayId: string; serviceId: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id, dayId, serviceId } = await params
     const supabase = createClient()
+
+    // Confirm the itinerary belongs to this org before deleting child service
+    const { data: parent } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     const { error } = await supabase
       .from('itinerary_services')
@@ -107,8 +142,25 @@ export async function GET(
   { params }: { params: Promise<{ id: string; dayId: string; serviceId: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id, dayId, serviceId } = await params
     const supabase = createClient()
+
+    // Confirm the itinerary belongs to this org before reading child service
+    const { data: parent } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     const { data, error } = await supabase
       .from('itinerary_services')
