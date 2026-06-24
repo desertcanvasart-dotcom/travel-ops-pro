@@ -103,13 +103,16 @@ function guideRates() {
 }
 
 function mealRates() {
+  // After the PR-4 change to getMealRates (filter by tier, no multiplier),
+  // the fixture needs one row per tier rather than a single synthetic row.
+  // The numbers below are the OLD multiplier output (0.8 budget / 1.0
+  // standard / 1.3 deluxe / 1.6 luxury × the original {30, 40}) baked in
+  // as per-tier base rates, so existing golden snapshots remain unchanged.
   return [
-    {
-      id: 'meals-std',
-      is_active: true,
-      lunch_rate_eur: 30,
-      dinner_rate_eur: 40,
-    },
+    { id: 'meals-budget',   is_active: true, tier: 'budget',   lunch_rate_eur: 24, dinner_rate_eur: 32 },
+    { id: 'meals-standard', is_active: true, tier: 'standard', lunch_rate_eur: 30, dinner_rate_eur: 40 },
+    { id: 'meals-deluxe',   is_active: true, tier: 'deluxe',   lunch_rate_eur: 39, dinner_rate_eur: 52 },
+    { id: 'meals-luxury',   is_active: true, tier: 'luxury',   lunch_rate_eur: 48, dinner_rate_eur: 64 },
   ]
 }
 
