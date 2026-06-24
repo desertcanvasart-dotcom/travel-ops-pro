@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import Papa from 'papaparse'
 import {
   UtensilsCrossed,
   Plus,
@@ -418,49 +419,51 @@ export default function RestaurantsContent() {
     }
   }
 
+  // Shared CSV column order for export/import. Header labels map to restaurant
+  // fields in handleImportCSV, so this is the single source of truth.
+  const RESTAURANT_CSV_HEADERS = [
+    'Name', 'Type', 'Cuisine', 'City', 'Address', 'Contact Person',
+    'Phone', 'Email', 'WhatsApp', 'Capacity', 'Lunch EUR', 'Dinner EUR',
+    'Lunch Non-EUR', 'Dinner Non-EUR', 'Child Discount %', 'Drinks Included',
+    'Tip Included', 'Tier', 'Notes', 'Preferred', 'Active'
+  ]
+
   // Export to CSV
   const handleExportCSV = () => {
-    const headers = [
-      'Name', 'Type', 'Cuisine', 'City', 'Address', 'Contact Person',
-      'Phone', 'Email', 'WhatsApp', 'Capacity', 'Lunch EUR', 'Dinner EUR',
-      'Lunch Non-EUR', 'Dinner Non-EUR', 'Child Discount %', 'Drinks Included',
-      'Tip Included', 'Tier', 'Preferred', 'Active'
-    ]
-    
-    const rows = filteredRestaurants.map(r => [
-      r.name,
-      r.restaurant_type || '',
-      r.cuisine_type || '',
-      r.city,
-      r.address || '',
-      r.contact_person || '',
-      r.phone || '',
-      r.email || '',
-      r.whatsapp || '',
-      r.capacity || '',
-      r.rate_lunch_eur || r.rate_per_person_eur || '',
-      r.rate_dinner_eur || '',
-      r.rate_lunch_non_eur || r.rate_per_person_non_eur || '',
-      r.rate_dinner_non_eur || '',
-      r.child_discount_percent || '',
-      r.drinks_included ? 'Yes' : 'No',
-      r.tip_included ? 'Yes' : 'No',
-      r.tier || 'standard',
-      r.is_preferred ? 'Yes' : 'No',
-      r.is_active ? 'Yes' : 'No'
-    ])
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
-    
+    const rows = filteredRestaurants.map(r => ({
+      'Name': r.name,
+      'Type': r.restaurant_type || '',
+      'Cuisine': r.cuisine_type || '',
+      'City': r.city,
+      'Address': r.address || '',
+      'Contact Person': r.contact_person || '',
+      'Phone': r.phone || '',
+      'Email': r.email || '',
+      'WhatsApp': r.whatsapp || '',
+      'Capacity': r.capacity || '',
+      'Lunch EUR': r.rate_lunch_eur || r.rate_per_person_eur || '',
+      'Dinner EUR': r.rate_dinner_eur || '',
+      'Lunch Non-EUR': r.rate_lunch_non_eur || r.rate_per_person_non_eur || '',
+      'Dinner Non-EUR': r.rate_dinner_non_eur || '',
+      'Child Discount %': r.child_discount_percent || '',
+      'Drinks Included': r.drinks_included ? 'Yes' : 'No',
+      'Tip Included': r.tip_included ? 'Yes' : 'No',
+      'Tier': r.tier || 'standard',
+      'Notes': r.notes || '',
+      'Preferred': r.is_preferred ? 'Yes' : 'No',
+      'Active': r.is_active ? 'Yes' : 'No',
+    }))
+
+    // Papa.unparse escapes quotes/commas/newlines correctly (the old manual
+    // `"${cell}"` wrapping broke on any cell containing a quote).
+    const csvContent = Papa.unparse(rows, { columns: RESTAURANT_CSV_HEADERS })
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     link.download = `restaurants_export_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
-    
+
     showToast('success', `Exported ${filteredRestaurants.length} restaurants to CSV`)
   }
 
@@ -473,41 +476,61 @@ export default function RestaurantsContent() {
     reader.onload = async (event) => {
       try {
         const text = event.target?.result as string
-        const lines = text.split('\n').filter(line => line.trim())
-        
+
+        // Header-based parse: column ORDER no longer matters, empty cells don't
+        // shift the row, and quotes/commas/newlines inside fields are handled.
+        const parsed = Papa.parse<Record<string, string>>(text, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (h) => h.trim(),
+        })
+
+        const rows = parsed.data
+        if (rows.length === 0) {
+          showToast('error', 'No data rows found in the CSV file.')
+          return
+        }
+
         let imported = 0
         let failed = 0
+        let firstError: string | null = null
 
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(v => v.replace(/"/g, '').trim()) || []
-          
-          if (values.length < 4) continue
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]
+          const rowNum = i + 2 // +1 header row, +1 for 1-based numbering
+
+          // Case-insensitive header lookup so minor casing differences still map.
+          const lc: Record<string, string> = {}
+          for (const k in row) lc[k.toLowerCase()] = row[k]
+          const get = (header: string) => (lc[header.toLowerCase()] ?? '').toString().trim()
 
           const restaurantData = {
-            name: values[0] || '',
-            restaurant_type: values[1] || 'local',
-            cuisine_type: values[2] || '',
-            city: values[3] || '',
-            address: values[4] || '',
-            contact_person: values[5] || '',
-            phone: values[6] || '',
-            email: values[7] || '',
-            whatsapp: values[8] || '',
-            capacity: parseInt(values[9]) || 0,
-            rate_lunch_eur: parseFloat(values[10]) || 0,
-            rate_dinner_eur: parseFloat(values[11]) || 0,
-            rate_lunch_non_eur: parseFloat(values[12]) || 0,
-            rate_dinner_non_eur: parseFloat(values[13]) || 0,
-            child_discount_percent: parseFloat(values[14]) || 50,
-            drinks_included: values[15]?.toLowerCase() === 'yes',
-            tip_included: values[16]?.toLowerCase() === 'yes',
-            tier: values[17] || 'standard',
-            is_preferred: values[18]?.toLowerCase() === 'yes',
-            is_active: values[19]?.toLowerCase() !== 'no'
+            name: get('Name'),
+            restaurant_type: get('Type') || 'local',
+            cuisine_type: get('Cuisine'),
+            city: get('City'),
+            address: get('Address'),
+            contact_person: get('Contact Person'),
+            phone: get('Phone'),
+            email: get('Email'),
+            whatsapp: get('WhatsApp'),
+            capacity: parseInt(get('Capacity')) || 0,
+            rate_lunch_eur: parseFloat(get('Lunch EUR')) || 0,
+            rate_dinner_eur: parseFloat(get('Dinner EUR')) || 0,
+            rate_lunch_non_eur: parseFloat(get('Lunch Non-EUR')) || 0,
+            rate_dinner_non_eur: parseFloat(get('Dinner Non-EUR')) || 0,
+            child_discount_percent: parseFloat(get('Child Discount %')) || 50,
+            drinks_included: get('Drinks Included').toLowerCase() === 'yes',
+            tip_included: get('Tip Included').toLowerCase() === 'yes',
+            tier: get('Tier') || 'standard',
+            notes: get('Notes'),
+            is_preferred: get('Preferred').toLowerCase() === 'yes',
+            is_active: get('Active').toLowerCase() !== 'no',
           }
 
           if (!restaurantData.name || !restaurantData.city) {
             failed++
+            if (!firstError) firstError = `Row ${rowNum}: missing required name or city`
             continue
           }
 
@@ -517,18 +540,32 @@ export default function RestaurantsContent() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(restaurantData)
             })
-            
+
             if (response.ok) {
               imported++
             } else {
               failed++
+              if (!firstError) {
+                const errBody = await response.json().catch(() => null)
+                firstError = `Row ${rowNum}: ${errBody?.error || `HTTP ${response.status}`}`
+              }
             }
-          } catch {
+          } catch (rowErr: any) {
             failed++
+            if (!firstError) firstError = `Row ${rowNum}: ${rowErr?.message || 'request failed'}`
           }
         }
 
-        showToast('success', `Imported ${imported} restaurants${failed > 0 ? `, ${failed} failed` : ''}`)
+        // Report accurately: never claim success when rows failed, and surface
+        // the first real reason instead of swallowing it.
+        const reason = firstError ? ` First error — ${firstError}` : ''
+        if (imported === 0) {
+          showToast('error', `Import failed: 0 of ${imported + failed} row(s) imported.${reason}`)
+        } else if (failed > 0) {
+          showToast('info', `Imported ${imported}, ${failed} failed.${reason}`)
+        } else {
+          showToast('success', `Imported ${imported} restaurants`)
+        }
         fetchRestaurants()
       } catch (error) {
         console.error('Import error:', error)

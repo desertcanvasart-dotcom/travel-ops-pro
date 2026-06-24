@@ -93,18 +93,113 @@ export async function getAuthenticatedProvider(userId: string): Promise<{
   return { provider, providerType }
 }
 
-// Helper: find or get userId from any entity
+// M3 Phase 1: resolve the user_id whose accounting connection should
+// receive THIS entity's sync. The prior implementation returned the user
+// from the first active accounting_tokens row regardless of which entity
+// was being synced — in a multi-user deployment that crossed tenants and
+// pushed one user's invoices into another's QuickBooks/Xero.
+//
+// The new resolution chain is:
+//   entity → owning user (via created_by where the column exists) →
+//   user's org (via organization_members) →
+//   accounting_tokens.user_id where org_id matches AND is_active.
+//
+// In the current single-tenant deployment (one user, one org bound by the
+// 20260624_organizations_phase1 backfill) the chain collapses to the same
+// token that was always returned, so behavior is unchanged for today.
+// Once a second org is connected, the resolver routes each entity's sync
+// to the right account.
+//
+// Phase 2 will add created_by columns to every financial entity (only
+// supplier_invoices has one today) AND an entity-level org_id, at which
+// point the resolver short-circuits at the entity layer without joining
+// through users at all.
 async function getUserIdForEntity(entityType: SyncEntityType, entityId: string): Promise<string | null> {
-  // For now, use the first active accounting token user
-  // In production with multi-user, you'd look up the entity owner
   const supabase = getSupabaseAdmin()
-  const { data } = await supabase
+
+  // Step 1: resolve the entity's owning user where the column exists.
+  // Tables that don't have created_by today fall through to the singleton
+  // fallback below — correct for the current 1-user / 1-org deployment.
+  let owningUserId: string | null = null
+  if (entityType === 'invoice') {
+    const { data } = await supabase
+      .from('invoices')
+      .select('created_by')
+      .eq('id', entityId)
+      .maybeSingle()
+    owningUserId = (data as { created_by?: string } | null)?.created_by ?? null
+  } else if (entityType === 'expense') {
+    const { data } = await supabase
+      .from('expenses')
+      .select('created_by')
+      .eq('id', entityId)
+      .maybeSingle()
+    owningUserId = (data as { created_by?: string } | null)?.created_by ?? null
+  } else if (entityType === 'invoice_payment') {
+    // Payments don't carry created_by themselves; walk to the parent invoice.
+    const { data: payment } = await supabase
+      .from('invoice_payments')
+      .select('invoice_id')
+      .eq('id', entityId)
+      .maybeSingle()
+    const invoiceId = (payment as { invoice_id?: string } | null)?.invoice_id
+    if (invoiceId) {
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('created_by')
+        .eq('id', invoiceId)
+        .maybeSingle()
+      owningUserId = (invoice as { created_by?: string } | null)?.created_by ?? null
+    }
+  } else if (entityType === 'expense_payment') {
+    const { data } = await supabase
+      .from('expenses')
+      .select('created_by')
+      .eq('id', entityId)
+      .maybeSingle()
+    owningUserId = (data as { created_by?: string } | null)?.created_by ?? null
+  }
+
+  // Step 2: resolve owning user → org_id via organization_members.
+  let orgId: string | null = null
+  if (owningUserId) {
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('org_id')
+      .eq('user_id', owningUserId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    orgId = (membership as { org_id?: string } | null)?.org_id ?? null
+  }
+
+  // Step 3: fallback — singleton-org assumption from the migration backfill.
+  // This preserves prior behavior for tables that don't yet carry the
+  // owning user (Phase 2 fixes this for good).
+  if (!orgId) {
+    const { data: defaultOrg } = await supabase
+      .from('organizations')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    orgId = (defaultOrg as { id?: string } | null)?.id ?? null
+  }
+
+  if (!orgId) return null
+
+  // Step 4: pick the active accounting token bound to that org and return
+  // its user_id (existing getAuthenticatedProvider() keys on user_id, so
+  // this preserves its contract).
+  const { data: token } = await supabase
     .from('accounting_tokens')
     .select('user_id')
+    .eq('org_id', orgId)
     .eq('is_active', true)
+    .order('created_at', { ascending: false })
     .limit(1)
-    .single()
-  return data?.user_id || null
+    .maybeSingle()
+  return (token as { user_id?: string } | null)?.user_id ?? null
 }
 
 // Helper: upsert sync log entry
@@ -347,6 +442,18 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       throw new AccountingSyncError(`Invoice payment ${paymentId} not found`)
     }
 
+    // Idempotency: if this payment was already created in the accounting system,
+    // do not create it again — retries must never double-create a payment.
+    const { data: existingPaymentSync } = await supabase
+      .from('accounting_sync_log')
+      .select('external_id')
+      .eq('provider', providerType)
+      .eq('entity_type', 'invoice_payment')
+      .eq('entity_id', paymentId)
+      .eq('sync_status', 'synced')
+      .single()
+    if (existingPaymentSync?.external_id) return
+
     // Find synced invoice external ID
     const { data: invoiceSync } = await supabase
       .from('accounting_sync_log')
@@ -357,10 +464,12 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       .eq('sync_status', 'synced')
       .single()
 
-    if (!invoiceSync?.external_id) {
+    let invoiceExternalId = invoiceSync?.external_id || ''
+
+    if (!invoiceExternalId) {
       // Invoice not synced yet, sync it first
       await syncInvoice(payment.invoice_id)
-      // Re-fetch
+      // Re-fetch the freshly-synced invoice's external id
       const { data: reSync } = await supabase
         .from('accounting_sync_log')
         .select('external_id')
@@ -373,9 +482,8 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       if (!reSync?.external_id) {
         throw new AccountingSyncError('Cannot sync payment: invoice sync failed')
       }
+      invoiceExternalId = reSync.external_id
     }
-
-    const invoiceExternalId = invoiceSync?.external_id || ''
     const payload = mapInvoicePaymentToPayload(payment, invoiceExternalId)
     const ref = await provider.createPayment(payload)
 
@@ -418,6 +526,17 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
 
     if (error || !expense || expense.status !== 'paid') return
 
+    // Idempotency: skip if this expense payment was already created.
+    const { data: existingExpensePaymentSync } = await supabase
+      .from('accounting_sync_log')
+      .select('external_id')
+      .eq('provider', providerType)
+      .eq('entity_type', 'expense_payment')
+      .eq('entity_id', expenseId)
+      .eq('sync_status', 'synced')
+      .single()
+    if (existingExpensePaymentSync?.external_id) return
+
     // Find synced bill external ID
     const { data: billSync } = await supabase
       .from('accounting_sync_log')
@@ -428,11 +547,24 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
       .eq('sync_status', 'synced')
       .single()
 
-    if (!billSync?.external_id) {
-      await syncExpense(expenseId)
-    }
+    let billExternalId = billSync?.external_id || ''
 
-    const billExternalId = billSync?.external_id || ''
+    if (!billExternalId) {
+      await syncExpense(expenseId)
+      // Re-fetch the freshly-synced bill's external id
+      const { data: reSync } = await supabase
+        .from('accounting_sync_log')
+        .select('external_id')
+        .eq('provider', providerType)
+        .eq('entity_type', 'expense')
+        .eq('entity_id', expenseId)
+        .eq('sync_status', 'synced')
+        .single()
+      if (!reSync?.external_id) {
+        throw new AccountingSyncError('Cannot sync expense payment: expense sync failed')
+      }
+      billExternalId = reSync.external_id
+    }
     const payload = mapExpensePaymentToPayload(expense, billExternalId)
     const ref = await provider.createPayment(payload)
 
@@ -464,7 +596,9 @@ export async function retrySyncErrors(): Promise<{ retried: number; succeeded: n
     .select('*')
     .eq('sync_status', 'failed')
     .lt('retry_count', 5)
-    .lte('next_retry_at', new Date().toISOString())
+    // Include rows whose next_retry_at is NULL (newly-failed entries) as well as
+    // those whose backoff window has elapsed — otherwise new failures never retry.
+    .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
     .order('created_at', { ascending: true })
     .limit(50)
 

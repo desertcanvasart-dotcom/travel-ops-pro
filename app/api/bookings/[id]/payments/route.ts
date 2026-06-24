@@ -29,20 +29,33 @@ export async function GET(
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    // Calculate totals
-    const totalPaid = payments?.reduce((sum, p) => {
-      if (p.payment_type === 'refund') {
-        return sum - p.amount
-      }
-      return sum + p.amount
-    }, 0) || 0
+    // M21: aggregate per-currency. Summing 1000 USD + 1000 EUR into 2000
+    // and comparing against an EUR booking is wrong; the response now
+    // returns both a per-currency breakdown AND a flat totalPaid for the
+    // PRIMARY currency (= the booking's currency when known, else EUR).
+    const { data: bookingRow } = await supabaseAdmin
+      .from('bookings')
+      .select('currency')
+      .eq('id', id)
+      .single()
+    const bookingCurrency = bookingRow?.currency || 'EUR'
+
+    const totalsByCurrency: Record<string, number> = {}
+    for (const p of payments || []) {
+      const c = p.currency || 'EUR'
+      const signed = p.payment_type === 'refund' ? -p.amount : p.amount
+      totalsByCurrency[c] = (totalsByCurrency[c] || 0) + signed
+    }
+    const totalPaid = totalsByCurrency[bookingCurrency] || 0
 
     return NextResponse.json({
       success: true,
       data: payments,
       summary: {
         total_paid: totalPaid,
-        payment_count: payments?.length || 0
+        currency: bookingCurrency,
+        totals_by_currency: totalsByCurrency,
+        payment_count: payments?.length || 0,
       }
     })
   } catch (error: unknown) {
@@ -69,115 +82,85 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Create payment record
-    const { data: payment, error } = await supabaseAdmin
-      .from('booking_payments')
-      .insert({
-        booking_id: id,
-        payment_type,
-        amount,
-        currency: body.currency || 'EUR',
-        payment_method: body.payment_method || null,
-        payment_date,
-        transaction_reference: body.transaction_reference || null,
-        notes: body.notes || null
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating payment:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    // Amount must be a positive, finite number — a negative/NaN amount would
+    // corrupt the booking's running totals.
+    const amountNum = Number(amount)
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'amount must be a positive number'
+      }, { status: 400 })
     }
 
-    // Update booking payment status
-    await updateBookingPaymentStatus(id)
+    // M21: a booking has a single currency. Pre-flight read just so the API
+    // returns a friendly 400 instead of letting the DB raise — the RPC also
+    // enforces this server-side.
+    const { data: bookingCurrencyRow } = await supabaseAdmin
+      .from('bookings')
+      .select('currency')
+      .eq('id', id)
+      .single()
+    const bookingCurrency = bookingCurrencyRow?.currency || 'EUR'
+    const paymentCurrency = body.currency || bookingCurrency
+    if (paymentCurrency !== bookingCurrency) {
+      return NextResponse.json({
+        success: false,
+        error: `Payment currency (${paymentCurrency}) must match booking currency (${bookingCurrency})`,
+      }, { status: 400 })
+    }
 
-    return NextResponse.json({ success: true, data: payment }, { status: 201 })
+    // M20: route the INSERT + booking-status recompute through a single
+    // PL/pgSQL function that takes a SELECT ... FOR UPDATE lock on the
+    // booking, so two concurrent POSTs serialize on this booking_id. The
+    // previous JS pattern (insert, then read all payments, sum, update)
+    // ran without a lock — two interleaved calls each computed stale
+    // totals and the last writer wiped out the other's transition.
+    const { data: rpcRows, error: rpcError } = await supabaseAdmin.rpc('record_booking_payment', {
+      p_booking_id: id,
+      p_payment_type: payment_type,
+      p_amount: amountNum,
+      p_currency: paymentCurrency,
+      p_payment_method: body.payment_method || null,
+      p_payment_date: payment_date,
+      p_transaction_reference: body.transaction_reference || null,
+      p_notes: body.notes || null,
+    })
+
+    if (rpcError) {
+      console.error('Error recording booking payment:', rpcError)
+      return NextResponse.json({ success: false, error: rpcError.message }, { status: 500 })
+    }
+
+    const rpcResult = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows
+    const paymentId = rpcResult?.payment_id
+
+    // Re-fetch the inserted row so the response shape matches the prior
+    // behavior (full row with all columns + the DB-generated defaults).
+    const { data: payment } = paymentId
+      ? await supabaseAdmin.from('booking_payments').select('*').eq('id', paymentId).single()
+      : { data: null as any }
+
+    return NextResponse.json({
+      success: true,
+      data: payment,
+      booking_summary: rpcResult
+        ? {
+            payment_status: rpcResult.payment_status,
+            balance_due: rpcResult.balance_due,
+            deposit_paid: rpcResult.deposit_paid,
+          }
+        : null,
+    }, { status: 201 })
   } catch (error: unknown) {
     console.error('Payments POST error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
 
-// Helper function to update booking payment status based on payments
-async function updateBookingPaymentStatus(bookingId: string) {
-  // Get booking details
-  const { data: booking } = await supabaseAdmin
-    .from('bookings')
-    .select('total_cost, deposit_amount')
-    .eq('id', bookingId)
-    .single()
-
-  if (!booking) return
-
-  // Get all payments
-  const { data: payments } = await supabaseAdmin
-    .from('booking_payments')
-    .select('payment_type, amount')
-    .eq('booking_id', bookingId)
-
-  if (!payments) return
-
-  // Calculate total paid
-  const totalPaid = payments.reduce((sum, p) => {
-    if (p.payment_type === 'refund') {
-      return sum - p.amount
-    }
-    return sum + p.amount
-  }, 0)
-
-  // Determine payment status
-  let paymentStatus = 'pending'
-  let depositPaid = false
-  const balanceDue = Math.max(0, (booking.total_cost || 0) - totalPaid)
-
-  if (totalPaid >= (booking.total_cost || 0)) {
-    paymentStatus = 'paid'
-    depositPaid = true
-  } else if (totalPaid >= (booking.deposit_amount || 0)) {
-    paymentStatus = totalPaid > (booking.deposit_amount || 0) ? 'partial' : 'deposit_received'
-    depositPaid = true
-  }
-
-  // Update booking
-  const updates: Record<string, unknown> = {
-    payment_status: paymentStatus,
-    deposit_paid: depositPaid,
-    balance_due: balanceDue,
-    updated_at: new Date().toISOString()
-  }
-
-  // If deposit just paid, record the date
-  if (depositPaid) {
-    const { data: currentBooking } = await supabaseAdmin
-      .from('bookings')
-      .select('deposit_paid')
-      .eq('id', bookingId)
-      .single()
-
-    if (currentBooking && !currentBooking.deposit_paid) {
-      updates.deposit_paid_date = new Date().toISOString().split('T')[0]
-    }
-  }
-
-  // Update booking status if payment received and suppliers confirmed
-  const { data: bookingData } = await supabaseAdmin
-    .from('bookings')
-    .select('status')
-    .eq('id', bookingId)
-    .single()
-
-  if (bookingData && paymentStatus !== 'pending') {
-    if (bookingData.status === 'supplier_confirmed') {
-      updates.status = 'payment_received'
-    } else if (bookingData.status === 'pending' && paymentStatus === 'deposit_received') {
-      // Don't auto-update status if just deposit received and suppliers not confirmed
-    }
-  }
-
-  await supabaseAdmin
-    .from('bookings')
-    .update(updates)
-    .eq('id', bookingId)
-}
+// updateBookingPaymentStatus() lived here pre-M20 and ran the booking total
+// recompute as a series of separate, unlocked queries. Replaced by the
+// record_booking_payment PL/pgSQL function (migrations/20260624_record_
+// booking_payment_atomic.sql) which does the insert + recompute inside a
+// single SELECT ... FOR UPDATE transaction. The function is removed from
+// this file rather than left as dead code so a future caller can't bypass
+// the lock by accident.

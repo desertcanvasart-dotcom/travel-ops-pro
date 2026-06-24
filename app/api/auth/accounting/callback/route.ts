@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
+import { verifyState } from '@/lib/oauth-state'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,8 +33,11 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const [userId, providerName] = state.split(':')
-  if (!userId || !providerName) {
+  // Verify the signed state before trusting the embedded user id / provider —
+  // otherwise an attacker could attach their accounting tokens to any account.
+  const verified = verifyState(state)
+  const [userId, providerName] = (verified || '').split(':')
+  if (!verified || !userId || !providerName) {
     return NextResponse.redirect(
       new URL('/settings?tab=integrations&error=invalid_state', baseUrl)
     )
@@ -50,11 +54,36 @@ export async function GET(request: NextRequest) {
       throw new Error('No tokens received')
     }
 
+    // M3 Phase 1: resolve the connecting user's org so the new token row
+    // can satisfy the NOT NULL accounting_tokens.org_id added by
+    // 20260624_organizations_phase1.sql. The migration's backfill made
+    // every existing user_profiles row an owner of the default org, so
+    // there's always at least one membership to find here.
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('org_id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const orgId = (membership as { org_id?: string } | null)?.org_id ?? null
+
+    if (!orgId) {
+      // Hard-fail rather than silently inserting a NULL org_id — without an
+      // org we don't know which tenant this connection belongs to and the
+      // sync resolver would have to fall back to a singleton again.
+      console.error('Accounting OAuth callback: no organization_members row for user', userId)
+      return NextResponse.redirect(
+        new URL('/settings?tab=integrations&error=no_organization', baseUrl)
+      )
+    }
+
     // Upsert token record
     const { error: dbError } = await supabase
       .from('accounting_tokens')
       .upsert({
         user_id: userId,
+        org_id: orgId,
         provider: providerName,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,

@@ -724,14 +724,23 @@ export default function EditSupplierDocumentPage() {
     return matchesSearch && matchesCity && notSelected
   })
 
-  // Service type display labels
+  // Service type display labels — canonical taxonomy.
+  // Legacy keys (intercity_transfer, sound_light_transfer) retained so that
+  // any orphan row still renders a sensible label until cleaned up.
   const SERVICE_TYPE_LABELS: Record<string, string> = {
     airport_transfer: t('serviceTypes.airportTransfer'),
+    airport_with_sightseeing: t('serviceTypes.airportWithSightseeing'),
     day_tour: t('serviceTypes.dayTour'),
+    extended_day_tour: t('serviceTypes.extendedDayTour'),
     half_day: t('serviceTypes.halfDay'),
     city_transfer: t('serviceTypes.cityTransfer'),
-    intercity_transfer: t('serviceTypes.intercityTransfer'),
+    city_tour: t('serviceTypes.cityTour'),
+    intercity: t('serviceTypes.intercity'),
+    intercity_with_sightseeing: t('serviceTypes.intercityWithSightseeing'),
+    sound_light: t('serviceTypes.soundLight'),
     dinner_transfer: t('serviceTypes.dinnerTransfer'),
+    // Legacy:
+    intercity_transfer: t('serviceTypes.intercityTransfer'),
     sound_light_transfer: t('serviceTypes.soundLightTransfer'),
   }
 

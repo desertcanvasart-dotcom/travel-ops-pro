@@ -54,30 +54,45 @@ export async function GET(request: NextRequest) {
     const quarter = searchParams.get('quarter') // Q1, Q2, Q3, Q4
     const month = searchParams.get('month') // 1-12
 
-    // Fetch all invoices
+    // M2: push the year range down to the queries instead of pulling every
+    // row of these tables on every report request. The route needs THIS year
+    // and the prior year (for YoY), so the bounded window is
+    //   [prevYear-01-01, year-12-31].
+    // `availableYears` used to come from a full-table scan; it's now derived
+    // from a min/max probe per table (4 single-row queries) and the year
+    // range is generated from those bounds — bounded irrespective of how
+    // long the business has been operating.
+    const prevYear = year - 1
+    const rangeStart = `${prevYear}-01-01`
+    const rangeEnd = `${year}-12-31`
+
     const { data: invoices, error: invError } = await supabaseAdmin
       .from('invoices')
-      .select('*')
+      .select('issue_date, total_amount, amount_paid, balance_due')
+      .gte('issue_date', rangeStart)
+      .lte('issue_date', rangeEnd)
       .order('issue_date', { ascending: true })
 
     if (invError) {
       console.error('Error fetching invoices:', invError)
     }
 
-    // Fetch all expenses
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
-      .select('*')
+      .select('expense_date, amount, status, category, supplier_name')
+      .gte('expense_date', rangeStart)
+      .lte('expense_date', rangeEnd)
       .order('expense_date', { ascending: true })
 
     if (expError) {
       console.error('Error fetching expenses:', expError)
     }
 
-    // Fetch itineraries for trip count
     const { data: itineraries, error: itinError } = await supabaseAdmin
       .from('itineraries')
       .select('id, start_date, status, total_cost')
+      .gte('start_date', rangeStart)
+      .lte('start_date', rangeEnd)
 
     if (itinError) {
       console.error('Error fetching itineraries:', itinError)
@@ -86,6 +101,26 @@ export async function GET(request: NextRequest) {
     const allInvoices = invoices || []
     const allExpenses = expenses || []
     const allItineraries = itineraries || []
+
+    // Cheap min/max probe — replaces the full-table scan that produced
+    // availableYears in the old code. Two tiny queries per table.
+    const [invMinRes, invMaxRes, expMinRes, expMaxRes] = await Promise.all([
+      supabaseAdmin.from('invoices').select('issue_date').order('issue_date', { ascending: true }).limit(1).maybeSingle(),
+      supabaseAdmin.from('invoices').select('issue_date').order('issue_date', { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from('expenses').select('expense_date').order('expense_date', { ascending: true }).limit(1).maybeSingle(),
+      supabaseAdmin.from('expenses').select('expense_date').order('expense_date', { ascending: false }).limit(1).maybeSingle(),
+    ])
+    const dateCandidates: (string | undefined | null)[] = [
+      invMinRes.data?.issue_date,
+      invMaxRes.data?.issue_date,
+      expMinRes.data?.expense_date,
+      expMaxRes.data?.expense_date,
+    ]
+    const minYear = Math.min(...dateCandidates.filter(Boolean).map(d => new Date(d as string).getFullYear()))
+    const maxYear = Math.max(...dateCandidates.filter(Boolean).map(d => new Date(d as string).getFullYear()))
+    const availableYears = Number.isFinite(minYear) && Number.isFinite(maxYear)
+      ? Array.from({ length: maxYear - minYear + 1 }, (_, i) => maxYear - i)
+      : [year]
 
     // Filter by year
     const yearInvoices = allInvoices.filter(inv => {
@@ -286,8 +321,8 @@ export async function GET(request: NextRequest) {
       recipients: commissionData
     }
 
-    // Year-over-year comparison
-    const prevYear = year - 1
+    // Year-over-year comparison (prevYear already declared above for the
+    // M2 query range).
     const prevYearInvoices = allInvoices.filter(inv => {
       const invYear = new Date(inv.issue_date).getFullYear()
       return invYear === prevYear
@@ -334,10 +369,7 @@ export async function GET(request: NextRequest) {
       taxSummary,
       commissionSummary,
       yearOverYear,
-      availableYears: [...new Set([
-        ...allInvoices.map(inv => new Date(inv.issue_date).getFullYear()),
-        ...allExpenses.map(exp => new Date(exp.expense_date).getFullYear())
-      ])].sort((a, b) => b - a)
+      availableYears,
     })
   } catch (error) {
     console.error('Error in Financial Reports GET:', error)

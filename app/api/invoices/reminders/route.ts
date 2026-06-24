@@ -361,7 +361,28 @@ export async function POST(request: NextRequest) {
     }
 
     for (const invoice of invoices) {
+      // M18: an invoice with no due_date yielded NaN here and propagated
+      // 'Invalid Date' into the email subject/body. Skip those invoices so
+      // they aren't sent a junk reminder.
+      if (!invoice.due_date) {
+        results.failed++
+        results.details.push({
+          invoice_id: invoice.id,
+          status: 'skipped',
+          reason: 'no due_date set',
+        })
+        continue
+      }
       const dueDate = new Date(invoice.due_date)
+      if (isNaN(dueDate.getTime())) {
+        results.failed++
+        results.details.push({
+          invoice_id: invoice.id,
+          status: 'skipped',
+          reason: `invalid due_date: ${invoice.due_date}`,
+        })
+        continue
+      }
       const daysUntilDue = Math.floor((dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
       
       let reminderType: string

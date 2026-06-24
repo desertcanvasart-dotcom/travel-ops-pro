@@ -121,11 +121,25 @@ const RESOURCE_TYPES = [
     nameField: 'route_name',
     phoneField: 'supplier.contact_phone',
     displayField: (r: any) => {
+      // Canonical transport service_type display labels. Legacy keys
+      // (intercity_transfer, sound_light_transfer, multi_day) retained so
+      // any orphan row still renders with a sensible label.
       const SERVICE_LABELS: Record<string, string> = {
-        'airport_transfer': 'Airport Transfer', 'day_tour': 'Day Tour', 'multi_day': 'Multi Day',
-        'city_transfer': 'City Transfer', 'intercity': 'Intercity', 'intercity_transfer': 'Intercity Transfer',
-        'half_day': 'Half Day', 'sound_light': 'Sound & Light', 'dinner_transfer': 'Dinner Transfer',
-        'sound_light_transfer': 'Sound & Light Transfer'
+        'airport_transfer': 'Airport Transfer',
+        'airport_with_sightseeing': 'Airport + Sightseeing',
+        'city_transfer': 'City Transfer',
+        'city_tour': 'City Tour',
+        'intercity': 'Intercity',
+        'intercity_with_sightseeing': 'Intercity + Sightseeing',
+        'half_day': 'Half Day',
+        'day_tour': 'Day Tour',
+        'extended_day_tour': 'Extended Day Tour',
+        'sound_light': 'Sound & Light',
+        'dinner_transfer': 'Dinner Transfer',
+        // Legacy:
+        'intercity_transfer': 'Intercity Transfer',
+        'sound_light_transfer': 'Sound & Light Transfer',
+        'multi_day': 'Multi Day',
       }
       const label = r.route_name || SERVICE_LABELS[r.service_type] || r.service_type?.replace(/_/g, ' ') || r.service_code
       const city = r.city || ''
@@ -498,11 +512,25 @@ export default function ResourceAssignmentV2({
       // Add location context to the name
       if (activeTab === 'vehicle' && selectedResource) {
         // For vehicles (transportation rates): "Airport Transfer - Aswan · Sedan (Abdulrahman)"
+        // Canonical transport service_type display labels. Legacy keys
+        // (intercity_transfer, sound_light_transfer, multi_day) retained so
+        // any orphan row still renders with a sensible label.
         const SERVICE_LABELS: Record<string, string> = {
-          'airport_transfer': 'Airport Transfer', 'day_tour': 'Day Tour', 'multi_day': 'Multi Day',
-          'city_transfer': 'City Transfer', 'intercity': 'Intercity', 'intercity_transfer': 'Intercity Transfer',
-          'half_day': 'Half Day', 'sound_light': 'Sound & Light', 'dinner_transfer': 'Dinner Transfer',
-          'sound_light_transfer': 'Sound & Light Transfer'
+          'airport_transfer': 'Airport Transfer',
+          'airport_with_sightseeing': 'Airport + Sightseeing',
+          'city_transfer': 'City Transfer',
+          'city_tour': 'City Tour',
+          'intercity': 'Intercity',
+          'intercity_with_sightseeing': 'Intercity + Sightseeing',
+          'half_day': 'Half Day',
+          'day_tour': 'Day Tour',
+          'extended_day_tour': 'Extended Day Tour',
+          'sound_light': 'Sound & Light',
+          'dinner_transfer': 'Dinner Transfer',
+          // Legacy:
+          'intercity_transfer': 'Intercity Transfer',
+          'sound_light_transfer': 'Sound & Light Transfer',
+          'multi_day': 'Multi Day',
         }
         const serviceLabel = selectedResource.route_name ||
           SERVICE_LABELS[selectedResource.service_type] ||

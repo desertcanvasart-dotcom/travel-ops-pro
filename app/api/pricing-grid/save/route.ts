@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 import { createServerClient } from '@/lib/supabase-server'
 import { gridCompleteness } from '@/app/pricing-grid/lib/grid-completeness'
 
@@ -7,16 +8,32 @@ import { gridCompleteness } from '@/app/pricing-grid/lib/grid-completeness'
 // Save pricing grid state → itineraries + itinerary_days + itinerary_services
 // ============================================
 
+// L8: the prior implementation used Math.random() in the 1000-9999 range,
+// giving only 9000 codes per year. Birthday-paradox collision probability
+// becomes meaningful at very modest volume — and itinerary_code currently
+// has no DB UNIQUE constraint, so a collision silently produces two
+// itineraries sharing the same code. randomBytes(4).toString('hex') gives
+// ~4.3B values (8 hex chars), reducing collision probability to negligible
+// across any realistic per-year throughput.
 function generateItineraryCode(): string {
   const year = new Date().getFullYear()
-  const random = Math.floor(Math.random() * 9000) + 1000
+  const random = randomBytes(4).toString('hex').toUpperCase()
   return `ITN-S-${year}-${random}`  // S = from pricing grid (slot-based)
 }
 
+// L9: do date math in UTC. The prior implementation used new Date(dateStr)
+// (which parses 'YYYY-MM-DD' as UTC midnight), mutated with setDate (which
+// operates in LOCAL time), then formatted with toISOString().split('T')[0]
+// (UTC again). In negative-UTC-offset timezones this can shift the
+// resulting date back by one day on the boundary, so per-day dates and the
+// computed end_date would drift on servers configured to non-UTC. Using
+// the UTC-prefixed accessors avoids the local-offset interaction entirely.
 function addDays(dateStr: string, numDays: number): string {
-  const d = new Date(dateStr)
-  d.setDate(d.getDate() + numDays)
-  return d.toISOString().split('T')[0]
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const ts = Date.UTC(y, (m || 1) - 1, d || 1)
+  const shifted = new Date(ts)
+  shifted.setUTCDate(shifted.getUTCDate() + numDays)
+  return shifted.toISOString().split('T')[0]
 }
 
 // Slot → service_type mapping
@@ -270,6 +287,25 @@ export async function POST(request: NextRequest) {
         .insert(serviceInserts)
 
       if (svcError) throw new Error(`Failed to insert services: ${svcError.message}`)
+    }
+
+    // Post-write reconciliation: the pre-flight supplierTotal above was computed
+    // from the raw input slots; recompute now from the actual service rows we
+    // just wrote (which may differ if service construction adjusted anything).
+    // For B2B the selling price is supplier cost × (1 + margin). For B2C the
+    // markup is applied client-side, but we still floor the stored total at
+    // supplier cost so a tampered/buggy client can never persist a quote
+    // priced below cost.
+    const actualSupplierTotal = serviceInserts.reduce((s, svc) => s + (svc.total_cost || 0), 0)
+    const marginPercent = Math.min(Math.max(Number(config.marginPercent) || 0, 0), 100)
+    let authoritativeTotal = itineraryData.total_cost
+    if (config.clientType === 'b2b') {
+      authoritativeTotal = Math.round(actualSupplierTotal * (1 + marginPercent / 100) * 100) / 100
+    } else if (authoritativeTotal < actualSupplierTotal) {
+      authoritativeTotal = Math.round(actualSupplierTotal * 100) / 100
+    }
+    if (authoritativeTotal !== itineraryData.total_cost) {
+      await supabase.from('itineraries').update({ total_cost: authoritativeTotal }).eq('id', itineraryId)
     }
 
     console.log(`Pricing grid saved: ${itineraryCode} — ${days.length} days, ${serviceInserts.length} services`)

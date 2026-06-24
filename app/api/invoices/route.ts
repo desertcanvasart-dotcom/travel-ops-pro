@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncInvoice } from '@/lib/accounting'
+import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -74,29 +75,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate invoice number with type suffix
-    const year = new Date().getFullYear()
-    const { data: seqData, error: seqError } = await supabaseAdmin
-      .rpc('nextval', { seq_name: 'invoice_number_seq' })
-
-    let baseNumber = 1
-    if (!seqError && seqData) {
-      baseNumber = seqData
-    } else {
-      const { count } = await supabaseAdmin
-        .from('invoices')
-        .select('*', { count: 'exact', head: true })
-      baseNumber = (count || 0) + 1
-    }
-
-    // Determine invoice type and number suffix
+    // M19: invoice_number generation now goes through nextDocumentNumber
+    // (sequence-first, year-scoped MAX fallback, accepts 0 as a legitimate
+    // value), and the insert below is wrapped in a retry loop against the
+    // 23505 unique violation produced by the UNIQUE constraint in
+    // 20260624_unique_document_numbers.sql. The deposit/final type suffix
+    // is appended at row-build time so the same base number stays in sync.
     const invoiceType = body.invoice_type || 'standard'
-    let invoiceNumber = `INV-${year}-${String(baseNumber).padStart(3, '0')}`
-    
-    if (invoiceType === 'deposit') {
-      invoiceNumber = `INV-${year}-${String(baseNumber).padStart(3, '0')}-DEP`
-    } else if (invoiceType === 'final') {
-      invoiceNumber = `INV-${year}-${String(baseNumber).padStart(3, '0')}-FIN`
+    const buildInvoiceNumber = async () => {
+      const base = await nextDocumentNumber({
+        supabase: supabaseAdmin,
+        prefix: 'INV',
+        sequenceName: 'invoice_number_seq',
+        table: 'invoices',
+        column: 'invoice_number',
+      })
+      if (invoiceType === 'deposit') return `${base}-DEP`
+      if (invoiceType === 'final') return `${base}-FIN`
+      return base
     }
 
     // Calculate amounts based on invoice type
@@ -115,31 +111,49 @@ export async function POST(request: NextRequest) {
         amount: totalAmount
       }]
     } else if (invoiceType === 'final') {
-      // Final invoice: remaining balance after deposit
-      const depositAmount = (fullTripCost * depositPercent) / 100
-      totalAmount = fullTripCost - depositAmount
+      // Final invoice: remaining balance after deposit.
+      //
+      // M17: when a parent_invoice_id is supplied, the actual deposit
+      // amount (and whatever was paid against it) is the authoritative
+      // figure. Recomputing the deposit as a percentage of fullTripCost
+      // silently ignores manual overrides, rounding, or a different
+      // deposit_percent on the parent, so the final could under- or
+      // over-charge by the rounding/override delta. Prefer the linked
+      // deposit invoice's actual total_amount.
+      let depositAmount = (fullTripCost * depositPercent) / 100
+      let depositSource: 'percent' | 'parent' = 'percent'
+      let depositReconciles = true
+      let reconcileNote = ''
+      if (body.parent_invoice_id) {
+        const { data: parent } = await supabaseAdmin
+          .from('invoices')
+          .select('total_amount, currency')
+          .eq('id', body.parent_invoice_id)
+          .single()
+        if (parent?.total_amount != null) {
+          depositAmount = Number(parent.total_amount)
+          depositSource = 'parent'
+          // Surface a mismatch between the recomputed percent and the
+          // actual parent amount; don't fail the request — the caller may
+          // intentionally have a manual deposit — but record the delta.
+          const expected = (fullTripCost * depositPercent) / 100
+          if (Math.abs(expected - depositAmount) > 0.01) {
+            depositReconciles = false
+            reconcileNote = ` (parent deposit ${parent.currency || ''}${depositAmount.toFixed(2)} differs from ${depositPercent}% of trip ${expected.toFixed(2)})`
+          }
+        }
+      }
+      totalAmount = Math.max(0, fullTripCost - depositAmount)
+      const headerPrefix = depositSource === 'parent' ? 'Final Balance (parent-deposit-based)' : 'Final Balance'
       lineItems = [{
-        description: `Balance Payment - ${body.line_items?.[0]?.description || 'Tour Package'}`,
-        quantity: 1,
-        unit_price: totalAmount,
-        amount: totalAmount
-      }, {
-        description: `Less: Deposit Paid (${depositPercent}%)`,
-        quantity: 1,
-        unit_price: -depositAmount,
-        amount: -depositAmount
-      }]
-      // Adjust total to just show the balance
-      lineItems = [{
-        description: `Final Balance - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${body.currency || 'EUR'} ${fullTripCost.toFixed(2)} minus ${depositPercent}% deposit)`,
+        description: `${headerPrefix} - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${body.currency || 'EUR'} ${fullTripCost.toFixed(2)} minus deposit ${body.currency || 'EUR'} ${depositAmount.toFixed(2)})${depositReconciles ? '' : reconcileNote}`,
         quantity: 1,
         unit_price: totalAmount,
         amount: totalAmount
       }]
     }
 
-    const newInvoice = {
-      invoice_number: invoiceNumber,
+    const baseInvoice = {
       invoice_type: invoiceType,
       deposit_percent: depositPercent,
       parent_invoice_id: body.parent_invoice_id || null,
@@ -166,11 +180,10 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString()
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('invoices')
-      .insert([newInvoice])
-      .select()
-      .single()
+    const { data, error } = await insertWithUniqueRetry({
+      generateRow: async () => ({ ...baseInvoice, invoice_number: await buildInvoiceNumber() }),
+      insert: async (row) => await supabaseAdmin.from('invoices').insert([row]).select().single(),
+    })
 
     if (error) {
       console.error('Error creating invoice:', error)

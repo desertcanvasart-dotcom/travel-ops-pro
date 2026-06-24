@@ -160,8 +160,32 @@ export async function GET(request: NextRequest) {
     const totalExpenses = totalSupplierCost + totalManualExpenses
     const totalProfit = totalRevenue - totalExpenses
 
+    // Currency-aware breakdown: each itinerary can carry a different currency
+    // (EUR/USD/GBP/EGP). Summing them directly is meaningless, so expose a
+    // per-currency breakdown and flag when more than one currency is present.
+    // Flat totals below are retained for backward compatibility but should only
+    // be treated as authoritative when mixed_currency is false.
+    const byCurrency: Record<string, { revenue: number; supplier_cost: number; manual_expenses: number; total_expenses: number; profit: number; trips: number }> = {}
+    for (const p of pnlData) {
+      const cur = p.currency || 'EUR'
+      const b = byCurrency[cur] || (byCurrency[cur] = { revenue: 0, supplier_cost: 0, manual_expenses: 0, total_expenses: 0, profit: 0, trips: 0 })
+      const rev = p.total_revenue || p.quoted_amount
+      const exp = p.supplier_cost + p.manual_expenses
+      b.revenue += rev
+      b.supplier_cost += p.supplier_cost
+      b.manual_expenses += p.manual_expenses
+      b.total_expenses += exp
+      b.profit += rev - exp
+      b.trips += 1
+    }
+    const currencies = Object.keys(byCurrency)
+    const mixedCurrency = currencies.length > 1
+
     const summary = {
       total_trips: pnlData.length,
+      currency: mixedCurrency ? null : (currencies[0] || 'EUR'),
+      mixed_currency: mixedCurrency,
+      by_currency: byCurrency,
       total_revenue: totalRevenue,
       total_supplier_cost: totalSupplierCost,
       total_manual_expenses: totalManualExpenses,

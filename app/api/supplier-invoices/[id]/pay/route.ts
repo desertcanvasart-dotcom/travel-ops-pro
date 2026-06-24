@@ -32,7 +32,13 @@ export async function POST(
       )
     }
 
-    // Mark supplier invoice as paid
+    // M29: conditional UPDATE — the WHERE clause includes the expected
+    // previous state, so two concurrent /pay requests can't both succeed.
+    // The earlier .single() pre-read above is retained only to produce a
+    // friendly 400 ("must be approved") for clearly-wrong states; the
+    // .eq('status','approved') below is the actual race-safety guard.
+    // .maybeSingle() returns data=null when 0 rows match, which means
+    // another concurrent caller already flipped the invoice — return 409.
     const { data, error: updateError } = await supabaseAdmin
       .from('supplier_invoices')
       .update({
@@ -43,14 +49,27 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('status', 'approved')
       .select()
-      .single()
+      .maybeSingle()
 
     if (updateError) {
       return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
     }
+    if (!data) {
+      // Invoice was 'approved' at pre-check but is no longer — a concurrent
+      // request won the race. Returning 409 lets the caller refresh and
+      // see the actual state instead of silently re-cascading expenses.
+      return NextResponse.json(
+        { error: 'Invoice state changed since the request was issued (likely already paid by a concurrent request)' },
+        { status: 409 }
+      )
+    }
 
-    // Cascade: mark linked expenses as paid
+    // Cascade: mark linked expenses as paid. Only runs when THIS request
+    // was the winning racer — the conditional UPDATE above guarantees
+    // exactly one winner per concurrent batch, so expenses can't be
+    // double-cascaded.
     const { data: links } = await supabaseAdmin
       .from('supplier_invoice_expenses')
       .select('expense_id')

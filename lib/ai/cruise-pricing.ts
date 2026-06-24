@@ -124,6 +124,29 @@ export function calculateCabinAllocations(
     }
   }
 
+  // Fallback: no exact cabin combination summed to totalPax — usually an odd
+  // passenger with no configured single rate, or only one cabin type priced.
+  // Returning [] here made getCruiseRate price the WHOLE cruise at €0 (the
+  // agency silently ate the cabin cost). Instead price every passenger at the
+  // best available per-person rate, charging any solo passenger the single
+  // supplement (a full double cabin) so the cabin is never free.
+  if (allocations.length === 0 && totalPax > 0) {
+    const ppn = rates.double > 0 ? rates.double : rates.triple > 0 ? rates.triple : rates.single
+    if (ppn > 0) {
+      const doubles = Math.floor(totalPax / 2)
+      const leftover = totalPax - doubles * 2
+      const fallback: CabinAllocation[] = []
+      if (doubles > 0) {
+        fallback.push({ type: 'double', count: doubles, pax: doubles * 2, ratePerPersonPerNight: ppn, costPerNight: ppn * 2 * doubles })
+      }
+      if (leftover > 0) {
+        fallback.push({ type: 'single', count: leftover, pax: leftover, ratePerPersonPerNight: ppn * 2, costPerNight: ppn * 2 * leftover })
+      }
+      console.warn(`⚠️ Cruise cabin allocation fallback for ${totalPax} pax (rates pppn: single=${rates.single}, double=${rates.double}, triple=${rates.triple}) — priced at best available rate to avoid a €0 cruise.`)
+      allocations.push(fallback)
+    }
+  }
+
   // Sort by total cost per night (cheapest first)
   allocations.sort((a, b) => {
     const costA = a.reduce((sum, cabin) => sum + cabin.costPerNight, 0)

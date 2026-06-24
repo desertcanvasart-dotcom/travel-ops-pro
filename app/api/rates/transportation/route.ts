@@ -12,15 +12,29 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Valid enum values
+// Canonical service_type taxonomy — locked in 2026-06-23. Matches the DB
+// CHECK constraint and the bulk-import validator enum. See memory:
+// transportation-types.md for the per-day rule semantics each value drives.
 const SERVICE_TYPES = [
   'airport_transfer',
+  'airport_with_sightseeing',
   'city_transfer',
+  'city_tour',
+  'intercity',
+  'intercity_with_sightseeing',
+  'half_day',
   'day_tour',
+  'extended_day_tour',
+  'sound_light',
   'dinner_transfer',
-  'intercity_transfer',
-  'sound_light_transfer'
 ] as const
+
+// Both intercity variants require an origin_city + destination_city rather
+// than a single city. Use this helper everywhere instead of an exact-match
+// check against the now-retired 'intercity_transfer' literal.
+function isIntercityType(serviceType: string | null | undefined): boolean {
+  return serviceType === 'intercity' || serviceType === 'intercity_with_sightseeing'
+}
 
 const DURATIONS = ['full_day', 'half_day', 'one_way'] as const
 
@@ -157,7 +171,7 @@ export async function POST(request: NextRequest) {
     if (!newRate.service_type) {
       return NextResponse.json({ success: false, error: 'service_type is required' }, { status: 400 })
     }
-    if (newRate.service_type === 'intercity_transfer') {
+    if (isIntercityType(newRate.service_type)) {
       if (!newRate.origin_city || !newRate.destination_city) {
         return NextResponse.json({
           success: false,
@@ -181,7 +195,7 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('service_type', newRate.service_type)
 
-    if (newRate.service_type === 'intercity_transfer') {
+    if (isIntercityType(newRate.service_type)) {
       existingQuery = existingQuery
         .ilike('origin_city', newRate.origin_city)
         .ilike('destination_city', newRate.destination_city)
@@ -315,7 +329,7 @@ export async function DELETE(request: NextRequest) {
 function generateServiceCode(data: any): string {
   const parts: string[] = []
 
-  if (data.service_type === 'intercity_transfer') {
+  if (isIntercityType(data.service_type)) {
     parts.push('INTERCITY')
     parts.push(data.origin_city?.substring(0, 3).toUpperCase() || 'XXX')
     parts.push(data.destination_city?.substring(0, 3).toUpperCase() || 'XXX')
@@ -333,14 +347,25 @@ function generateServiceCode(data: any): string {
     }
   }
 
-  // Service type suffix
+  // Service type suffix — canonical taxonomy. Legacy keys (intercity_transfer,
+  // sound_light_transfer, half_day_tour) are retained so any orphan rows that
+  // somehow escaped the migration still generate a sensible code.
   const typeMap: Record<string, string> = {
     'airport_transfer': 'APT',
+    'airport_with_sightseeing': 'APTSL',
     'city_transfer': 'CITY',
+    'city_tour': 'CTOUR',
+    'intercity': 'XFER',
+    'intercity_with_sightseeing': 'XFERSL',
+    'half_day': 'HALF',
     'day_tour': 'TOUR',
+    'extended_day_tour': 'TOURX',
+    'sound_light': 'SL',
     'dinner_transfer': 'DINNER',
+    // Legacy fallbacks:
     'intercity_transfer': 'XFER',
-    'sound_light_transfer': 'SL'
+    'sound_light_transfer': 'SL',
+    'half_day_tour': 'HALF',
   }
   parts.push(typeMap[data.service_type] || data.service_type?.toUpperCase() || 'SVC')
 
@@ -348,8 +373,9 @@ function generateServiceCode(data: any): string {
 }
 
 function generateRouteName(data: any): string {
-  if (data.service_type === 'intercity_transfer') {
-    return `${data.origin_city || 'Origin'} to ${data.destination_city || 'Destination'}`
+  if (isIntercityType(data.service_type)) {
+    const suffix = data.service_type === 'intercity_with_sightseeing' ? ' (with sightseeing)' : ''
+    return `${data.origin_city || 'Origin'} to ${data.destination_city || 'Destination'}${suffix}`
   }
 
   const parts: string[] = []
@@ -374,12 +400,23 @@ function generateRouteName(data: any): string {
     parts.push('Full Day')
   }
 
+  // Canonical display labels. Legacy keys retained as fallbacks.
   const serviceNames: Record<string, string> = {
     'airport_transfer': 'Airport Transfer',
+    'airport_with_sightseeing': 'Airport Transfer with Sightseeing',
     'city_transfer': 'City Transfer',
+    'city_tour': 'City Tour',
+    'intercity': 'Intercity Transfer',
+    'intercity_with_sightseeing': 'Intercity Transfer with Sightseeing',
+    'half_day': 'Half Day Tour',
     'day_tour': 'Day Tour',
+    'extended_day_tour': 'Extended Day Tour',
+    'sound_light': 'Sound & Light Transfer',
     'dinner_transfer': 'Dinner Transfer',
-    'sound_light_transfer': 'Sound & Light Transfer'
+    // Legacy fallbacks:
+    'intercity_transfer': 'Intercity Transfer',
+    'sound_light_transfer': 'Sound & Light Transfer',
+    'half_day_tour': 'Half Day Tour',
   }
   parts.push(serviceNames[data.service_type] || data.service_type || 'Service')
 

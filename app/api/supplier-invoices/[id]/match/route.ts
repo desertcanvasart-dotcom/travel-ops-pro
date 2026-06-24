@@ -13,7 +13,8 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const { expenseIds } = await request.json()
+    const body = await request.json()
+    const { expenseIds } = body
 
     if (!expenseIds || !Array.isArray(expenseIds) || expenseIds.length === 0) {
       return NextResponse.json(
@@ -43,12 +44,59 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 })
     }
 
-    // Insert junction records
-    const links = expenses.map(exp => ({
-      supplier_invoice_id: id,
-      expense_id: exp.id,
-      matched_amount: exp.amount,
-    }))
+    // M30: an expense can be linked to multiple supplier_invoices via this
+    // junction. The previous code blindly set matched_amount = exp.amount on
+    // every link, so the same €1000 expense could appear "fully matched"
+    // against three invoices and inflate matched totals + flip multiple
+    // invoices to 'matched'. Cap each link's matched_amount at the amount
+    // STILL AVAILABLE on the expense (its total minus what's already matched
+    // against OTHER supplier_invoices, excluding the current one).
+    const { data: existingOther } = await supabaseAdmin
+      .from('supplier_invoice_expenses')
+      .select('expense_id, matched_amount')
+      .in('expense_id', expenseIds)
+      .neq('supplier_invoice_id', id)
+
+    const usedByExpense = new Map<string, number>()
+    for (const row of existingOther || []) {
+      usedByExpense.set(row.expense_id, (usedByExpense.get(row.expense_id) || 0) + Number(row.matched_amount || 0))
+    }
+
+    // Optional per-expense override from the caller — allows partial matches
+    // (e.g. €600 of a €1000 expense). Validated below against the available
+    // remainder.
+    const requestedAmounts: Record<string, number> | undefined = body?.matched_amounts
+
+    const links: Array<{ supplier_invoice_id: string; expense_id: string; matched_amount: number }> = []
+    const overcommitted: string[] = []
+    for (const exp of expenses) {
+      const expTotal = Number(exp.amount || 0)
+      const alreadyMatchedElsewhere = usedByExpense.get(exp.id) || 0
+      const available = Math.max(0, expTotal - alreadyMatchedElsewhere)
+      if (available <= 0) {
+        overcommitted.push(exp.id)
+        continue
+      }
+      const requested = requestedAmounts && Number.isFinite(Number(requestedAmounts[exp.id]))
+        ? Number(requestedAmounts[exp.id])
+        : expTotal
+      if (requested < 0) {
+        return NextResponse.json({ error: `matched_amount for expense ${exp.id} must be non-negative` }, { status: 400 })
+      }
+      const matched = Math.min(requested, available)
+      links.push({
+        supplier_invoice_id: id,
+        expense_id: exp.id,
+        matched_amount: matched,
+      })
+    }
+
+    if (links.length === 0) {
+      return NextResponse.json({
+        error: 'All selected expenses are already fully matched to other invoices',
+        details: { fully_matched_expense_ids: overcommitted },
+      }, { status: 409 })
+    }
 
     const { error: insertError } = await supabaseAdmin
       .from('supplier_invoice_expenses')
@@ -79,8 +127,10 @@ export async function POST(
       matchStatus = 'discrepancy'
     }
 
-    // Update supplier invoice
-    const newStatus = matchStatus === 'matched' || matchStatus === 'partial' ? 'matched' : 'received'
+    // Update supplier invoice. M28: 'partial' must NOT promote the invoice
+    // to status='matched' — partials still need follow-up before approve/pay.
+    // Only an exact match should flip the high-level status.
+    const newStatus = matchStatus === 'matched' ? 'matched' : 'received'
     await supabaseAdmin
       .from('supplier_invoices')
       .update({

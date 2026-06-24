@@ -47,7 +47,16 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient()
     const body = await request.json()
 
-    console.log('Recording payment:', body)
+    // Validate the amount is a positive, finite number before recording — a
+    // negative/NaN/string amount would silently corrupt invoice balances.
+    const amount = Number(body.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'amount must be a positive number' },
+        { status: 400 }
+      )
+    }
+    body.amount = amount
 
     const { data, error } = await supabase
       .from('payments')

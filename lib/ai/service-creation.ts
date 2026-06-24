@@ -754,6 +754,37 @@ export async function createLandItineraryServices(
   }
 
   const allDays = itineraryData.days || []
+
+  // M6: hoist the per-cruise-day rate lookup OUT of the loop. The previous
+  // code called getCruiseRate() once per cruise day even though the args
+  // (tier, totalPax, nights, startDate, isEuroPassport) don't change across
+  // days — so an N-night cruise issued N identical DB round-trips to
+  // nile_cruises. The "first cruise day" check (used to persist
+  // cabin_allocation only once) was also re-derived via Array.find every
+  // iteration. Compute both ONCE here.
+  const cruiseDayNumbers = allDays
+    .filter((d: any) => (d.is_cruise_day || d.accommodation_type === 'cruise') && d.day_number !== durationDays)
+    .map((d: any) => d.day_number || 1)
+  const firstCruiseDayNumber: number | null = cruiseDayNumbers.length > 0 ? cruiseDayNumbers[0] : null
+  let hoistedCruiseRate: Awaited<ReturnType<typeof getCruiseRate>> | null = null
+  if (cruiseDayNumbers.length > 0) {
+    hoistedCruiseRate = await getCruiseRate({
+      tier,
+      recommendedSuppliers: [],
+      supabase,
+      totalPax,
+      nights: cruiseDayNumbers.length,
+      startDate,
+      isEuroPassport,
+    })
+    if (!hoistedCruiseRate.found) {
+      // Single trip-level warning instead of one per cruise day (which the
+      // old per-day call produced).
+      warnings.push(`No Nile cruise rate found for ${tier} tier / ${totalPax} pax / ${cruiseDayNumbers.length} nights — cruise pricing will be missing. Please add a cruise rate in Rates > Nile Cruise.`)
+      console.warn(`⚠️ getCruiseRate() returned found=false — tier=${tier}, pax=${totalPax}, nights=${cruiseDayNumbers.length}`)
+    }
+  }
+
   for (let dayIndex = 0; dayIndex < allDays.length; dayIndex++) {
     const dayData = allDays[dayIndex]
     const dayNumber = dayData.day_number || 1
@@ -1211,13 +1242,16 @@ export async function createLandItineraryServices(
         ? dayData.overnight_city
         : currentCity
 
-      // Try to fetch route-specific intercity rate from transportation_rates
+      // Try to fetch route-specific intercity rate from transportation_rates.
+      // Uses the canonical 'intercity' service_type (one-way drop-off). The DB
+      // migration normalized the old 'intercity_transfer' rows to 'intercity',
+      // so this is the only value that returns rows here.
       const { getTransportRateForPax: getIntercityRate } = await import('@/lib/transport-rate-utils')
       const { data: intercityRates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('is_active', true)
-        .eq('service_type', 'intercity_transfer')
+        .eq('service_type', 'intercity')
         .ilike('origin_city', originCity)
         .ilike('destination_city', destCity)
         .limit(1)
@@ -1338,15 +1372,21 @@ export async function createLandItineraryServices(
     const isDayTrip = !!dayTripCity && !isIntercityTransfer && !isCruiseDay
 
     if (isDayTrip) {
-      // Fetch round-trip intercity rate for the day trip (e.g., Cairo→Alexandria round trip)
+      // Fetch the same-day round-trip intercity rate for the day trip
+      // (e.g., Cairo→Alexandria → back same day, with sightseeing). The
+      // canonical service_type for this pattern is intercity_with_sightseeing
+      // (priced higher than the plain one-way intercity, see the rate sheet's
+      // -OVER-DAY rows). Falls back to plain intercity when no sightseeing
+      // variant exists for the route.
       const { getTransportRateForPax: getDayTripRate } = await import('@/lib/transport-rate-utils')
       const { data: dayTripRates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('is_active', true)
-        .eq('service_type', 'intercity_transfer')
+        .in('service_type', ['intercity_with_sightseeing', 'intercity'])
         .ilike('origin_city', overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1))
         .ilike('destination_city', dayTripCity)
+        .order('service_type', { ascending: true }) // 'intercity_with_sightseeing' < 'intercity' lexicographically — sightseeing variant preferred
         .limit(1)
 
       let dayTripRate = 0
@@ -1816,51 +1856,33 @@ export async function createLandItineraryServices(
     }
 
     // Cruise accommodation + bundled transport (for cruise days in cruise-land packages)
-    if (isCruiseDay && !isLastDay) {
-      // Count cruise nights for this itinerary
-      const cruiseNightsInPackage = (itineraryData.days || []).filter(
-        (d: any) => (d.is_cruise_day || d.accommodation_type === 'cruise') && d.day_number !== durationDays
-      ).length
+    // M6: getCruiseRate() and the "first cruise day" derivation are hoisted
+    // above the loop. Per-day code just reads the cached result and the
+    // pre-computed firstCruiseDayNumber.
+    if (isCruiseDay && !isLastDay && hoistedCruiseRate?.found) {
+      const nightCost = hoistedCruiseRate.totalPerNight
+      const cabinDesc = hoistedCruiseRate.cabinAllocation.map((a: CabinAllocation) => `${a.count}×${a.type}`).join(' + ')
 
-      const landCruiseRate = await getCruiseRate({
-        tier,
-        recommendedSuppliers: [],
-        supabase,
-        totalPax,
-        nights: cruiseNightsInPackage,
-        startDate,
-        isEuroPassport
+      services.push({
+        service_type: 'cruise',
+        service_code: hoistedCruiseRate.supplierId || 'CRUISE',
+        service_name: `${hoistedCruiseRate.shipName} - Full Board (${cabinDesc})`,
+        supplier_name: hoistedCruiseRate.shipName,
+        quantity: totalPax,
+        rate_eur: hoistedCruiseRate.totalPerNight / totalPax,
+        rate_non_eur: hoistedCruiseRate.totalPerNight / totalPax,
+        total_cost: nightCost,
+        client_price: withMargin(nightCost),
+        notes: `Night ${dayNumber}: On board | ${hoistedCruiseRate.season} season | ${cabinDesc}`
       })
+      totalSupplierCost += nightCost
+      totalClientPrice += withMargin(nightCost)
 
-      if (!landCruiseRate.found) {
-        warnings.push(`Day ${dayNumber}: No Nile cruise rate found for ${tier} tier / ${totalPax} pax / ${cruiseNightsInPackage} nights — cruise pricing will be missing. Please add a cruise rate in Rates > Nile Cruise.`)
-        console.warn(`⚠️ Day ${dayNumber}: getCruiseRate() returned found=false — tier=${tier}, pax=${totalPax}, nights=${cruiseNightsInPackage}`)
-      }
-      if (landCruiseRate.found) {
-        const nightCost = landCruiseRate.totalPerNight
-        const cabinDesc = landCruiseRate.cabinAllocation.map((a: CabinAllocation) => `${a.count}×${a.type}`).join(' + ')
-
-        services.push({
-          service_type: 'cruise',
-          service_code: landCruiseRate.supplierId || 'CRUISE',
-          service_name: `${landCruiseRate.shipName} - Full Board (${cabinDesc})`,
-          supplier_name: landCruiseRate.shipName,
-          quantity: totalPax,
-          rate_eur: landCruiseRate.totalPerNight / totalPax,
-          rate_non_eur: landCruiseRate.totalPerNight / totalPax,
-          total_cost: nightCost,
-          client_price: withMargin(nightCost),
-          notes: `Night ${dayNumber}: On board | ${landCruiseRate.season} season | ${cabinDesc}`
-        })
-        totalSupplierCost += nightCost
-        totalClientPrice += withMargin(nightCost)
-
-        // Store cabin allocation on itinerary (once)
-        if (dayNumber === (itineraryData.days || []).find((d: any) => d.is_cruise_day || d.accommodation_type === 'cruise')?.day_number) {
-          await supabase.from('itineraries').update({
-            cabin_allocation: landCruiseRate.cabinAllocation
-          }).eq('id', itineraryId)
-        }
+      // Store cabin allocation on itinerary — only on the first cruise day.
+      if (dayNumber === firstCruiseDayNumber) {
+        await supabase.from('itineraries').update({
+          cabin_allocation: hoistedCruiseRate.cabinAllocation
+        }).eq('id', itineraryId)
       }
     }
 

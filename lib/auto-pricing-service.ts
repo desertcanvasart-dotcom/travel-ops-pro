@@ -43,14 +43,21 @@ export type ServiceTier = 'budget' | 'standard' | 'deluxe' | 'luxury'
 export type AccommodationType = 'hotel' | 'cruise' | 'none'
 export type MealStatus = 'included' | 'external' | 'none'
 
-// Transport service types (normalized)
-export type TransportServiceType = 
+// Transport service types — canonical 11-value taxonomy (locked-in 2026-06-23).
+// See ~/.claude/.../memory/transportation-types.md for the full spec and the
+// per-day derivation rules implemented in determineTransportNeeds().
+export type TransportServiceType =
   | 'airport_transfer'
+  | 'airport_with_sightseeing'
   | 'city_transfer'
+  | 'city_tour'
+  | 'intercity'
+  | 'intercity_with_sightseeing'
+  | 'half_day'
   | 'day_tour'
+  | 'extended_day_tour'
+  | 'sound_light'
   | 'dinner_transfer'
-  | 'intercity_transfer'
-  | 'sound_light_transfer'
 
 export type TransportDuration = 'full_day' | 'half_day' | 'one_way'
 
@@ -98,6 +105,25 @@ export interface ItineraryDay {
   // NEW: Nile Cruise package flag - when true, uses bundled transport package
   // instead of calculating individual transport costs for this day
   is_cruise_day?: boolean
+
+  // B3 (2026-06-23): per-day transport rule flags.
+
+  // Arrival-day pattern. false (default) = airport -> hotel -> tour
+  // (two transport line items). true = airport -> tour -> hotel (one
+  // bundled `airport_with_sightseeing` line item).
+  skip_arrival_checkin?: boolean
+
+  // For city-change days: 'flight' means TWO airport transfers on the same
+  // day (one in the departure city, one in the arrival city). 'ground'
+  // (default) means a single `intercity` / `intercity_with_sightseeing`
+  // line. Pre-existing data without this field is treated as 'ground'.
+  transport_type?: 'flight' | 'ground'
+
+  // Additive transport line items independent of the day's primary, e.g.
+  // ['sound_light'] for an evening Sound & Light show transfer at Karnak
+  // even on a cruise day. Each entry emits one line item looked up at
+  // `day.city`.
+  extras?: TransportServiceType[]
 }
 
 // Pricing parameters
@@ -394,90 +420,206 @@ export function detectDurationFromAttractions(attractions: string[]): TransportD
 }
 
 /**
- * Determine transport requirements for a day
+ * One transport line item required by a day. A day may need zero, one, or
+ * many of these — e.g. a mid-trip flight day needs TWO airport transfers
+ * (one in the departure city, one in the arrival city). The per-day rule
+ * engine (`determineTransportNeeds`) returns a list of these.
  */
-export function determineTransportNeeds(
-  day: ItineraryDay,
-  previousDay: ItineraryDay | null,
-  nextDay: ItineraryDay | null
-): {
+export interface TransportNeed {
   serviceType: TransportServiceType
   duration: TransportDuration
   area: TransportArea
   useSpecialVehicle: boolean
   specialVehicleType?: VehicleType
-} | null {
-  // Check for explicit overrides first
+  // Optional city override for rate lookup. Used when this leg's rate should
+  // be priced in a different city than day.city — e.g. the departure-side
+  // leg of a mid-trip flight (hotel→airport happens in the PREVIOUS city,
+  // not the arrival city). When undefined, day.city is used.
+  city?: string
+  // For intercity legs, the rate lookup may need an origin→destination pair.
+  // When undefined, the caller uses (previousDay.city, day.city) for intercity.
+  originCity?: string
+  destinationCity?: string
+}
+
+/**
+ * Determine transport requirements for a day.
+ *
+ * Returns a list of TransportNeed entries (zero, one, or many). This structural
+ * shape — list rather than a single-decision-or-null — is what lets a day
+ * carry multiple transport line items (B3 will use it for flight-day
+ * multi-transfers; today each branch still produces at most one entry, so
+ * behavior is unchanged from the previous single-need version).
+ */
+export function determineTransportNeeds(
+  day: ItineraryDay,
+  previousDay: ItineraryDay | null,
+  nextDay: ItineraryDay | null
+): TransportNeed[] {
+  // Explicit per-day transport override wins (admin pinned a specific
+  // service_type for this day). Returns one line; extras still get added.
+  const lines: TransportNeed[] = []
+
   if (day.transport?.service_type) {
-    return {
+    lines.push({
       serviceType: day.transport.service_type,
       duration: day.transport.duration || 'full_day',
       area: day.transport.area || null,
       useSpecialVehicle: !!day.transport.vehicle_type,
-      specialVehicleType: day.transport.vehicle_type as VehicleType
-    }
+      specialVehicleType: day.transport.vehicle_type as VehicleType,
+    })
+    appendExtras(lines, day)
+    return lines
   }
-  
+
   const cityLower = day.city.toLowerCase()
-  
-  // Check for special vehicle cities (e.g., Edfu → Horse Carriage)
   const useSpecialVehicle = !!SPECIAL_VEHICLE_CITIES[cityLower]
   const specialVehicleType = SPECIAL_VEHICLE_CITIES[cityLower]
-  
-  // Airport arrival
-  if (day.services.airport_arrival) {
-    return {
+  const hasAttractions = !!(day.attractions && day.attractions.length > 0)
+  const attractionCount = day.attractions?.length || 0
+  // City change = cities differ AND it's not pure in-cruise movement (the ship
+  // moving Aswan → Kom Ombo → Edfu → Luxor across consecutive cruise days is
+  // not a transfer). Cruise *boundaries* (hotel → cruise on a boarding day,
+  // cruise → hotel on a disembarkation day) ARE city changes and need their
+  // own transport line.
+  const isCityChange = !!(previousDay &&
+    previousDay.city.toLowerCase() !== cityLower &&
+    !(day.accommodation_type === 'cruise' && previousDay.accommodation_type === 'cruise'))
+  // On a disembarkation flight day, the cruise → airport transfer is bundled
+  // in the cruise package — suppress the departure-side leg.
+  const isCruiseDisembarkFlight = previousDay?.accommodation_type === 'cruise'
+  const isFlightDay = day.transport_type === 'flight'
+  const isCruise = day.is_cruise_day === true
+  const transportArea = hasAttractions ? detectAreaFromAttractions(day.attractions) : null
+
+  // First day (arrival).
+  if (day.services.airport_arrival && !previousDay) {
+    if (day.skip_arrival_checkin && hasAttractions) {
+      // One bundled line: airport → sites → hotel.
+      lines.push({
+        serviceType: 'airport_with_sightseeing',
+        duration: 'one_way',
+        area: transportArea,
+        useSpecialVehicle: false,
+      })
+    } else {
+      // Two lines: airport_transfer + sightseeing tour (if attractions).
+      lines.push({
+        serviceType: 'airport_transfer',
+        duration: 'one_way',
+        area: null,
+        useSpecialVehicle: false,
+      })
+      if (hasAttractions) {
+        lines.push({
+          serviceType: sightseeingServiceType(attractionCount),
+          duration: sightseeingDuration(attractionCount),
+          area: transportArea,
+          useSpecialVehicle,
+          specialVehicleType,
+        })
+      }
+    }
+  }
+  // Last day (departure).
+  else if (day.services.airport_departure && !nextDay) {
+    lines.push({
       serviceType: 'airport_transfer',
       duration: 'one_way',
       area: null,
-      useSpecialVehicle: false
-    }
+      useSpecialVehicle: false,
+    })
   }
-  
-  // Airport departure
-  if (day.services.airport_departure) {
-    return {
-      serviceType: 'airport_transfer',
+  // Mid-trip flight day (city change, transport_type='flight').
+  // Two airport transfers — one in the departure city, one in the arrival
+  // city. On a DISEMBARKATION flight day (previous day on cruise), the cruise
+  // package covers cruise → airport, so the departure-side leg is suppressed
+  // and only the arrival-side leg is emitted. On a boarding day (previous
+  // day NOT on cruise) both legs are emitted normally.
+  else if (isCityChange && isFlightDay) {
+    if (!isCruiseDisembarkFlight && previousDay) {
+      lines.push({
+        serviceType: 'airport_transfer',
+        duration: 'one_way',
+        area: null,
+        useSpecialVehicle: false,
+        city: previousDay.city, // departure-side: previous city's airport
+      })
+    }
+    // Arrival-side leg — upgrade to airport_with_sightseeing when attractions.
+    lines.push({
+      serviceType: hasAttractions ? 'airport_with_sightseeing' : 'airport_transfer',
+      duration: 'one_way',
+      area: transportArea,
+      useSpecialVehicle: false,
+    })
+  }
+  // Cruise day (non-flight): primary ground excursion transport is bundled
+  // in the cruise package — emit nothing here. Extras still fire below.
+  else if (isCruise) {
+    // intentional no-op
+  }
+  // Ground intercity day (city change, no flight): same-day round-trip with
+  // sightseeing → intercity_with_sightseeing; otherwise one-way intercity.
+  else if (isCityChange) {
+    lines.push({
+      serviceType: hasAttractions ? 'intercity_with_sightseeing' : 'intercity',
       duration: 'one_way',
       area: null,
-      useSpecialVehicle: false
-    }
+      useSpecialVehicle: false,
+      originCity: previousDay?.city,
+      destinationCity: day.city,
+    })
   }
-  
-  // Intercity transfer (city changed from previous day, and not a cruise)
-  if (previousDay && 
-      previousDay.city.toLowerCase() !== cityLower &&
-      day.accommodation_type !== 'cruise' &&
-      previousDay.accommodation_type !== 'cruise') {
-    return {
-      serviceType: 'intercity_transfer',
-      duration: 'one_way',
-      area: null,
-      useSpecialVehicle: false
-    }
-  }
-  
-  // Regular sightseeing day
-  // Only assign sightseeing transport if there are actual attractions.
-  // If guide_required but 0 attractions, the day is likely a transfer-only
-  // or rest day where guide was auto-detected from title keywords.
-  const hasAttractions = day.attractions && day.attractions.length > 0
-
-  if (hasAttractions) {
-    const area = detectAreaFromAttractions(day.attractions)
-    const duration = detectDurationFromAttractions(day.attractions)
-
-    return {
-      serviceType: 'day_tour',
-      duration: duration || 'half_day',
-      area,
+  // Same-city sightseeing day: tier by attraction count.
+  else if (hasAttractions) {
+    lines.push({
+      serviceType: sightseeingServiceType(attractionCount),
+      duration: sightseeingDuration(attractionCount),
+      area: transportArea,
       useSpecialVehicle,
-      specialVehicleType
-    }
+      specialVehicleType,
+    })
   }
 
-  // No attractions and no airport/intercity need → no transport required
-  return null
+  // Extras are always additive — even on cruise days (e.g. Day 4 sound &
+  // light at Karnak from the worked itinerary).
+  appendExtras(lines, day)
+
+  return lines
+}
+
+/**
+ * Map attraction count to the sightseeing tier per the locked-in rule:
+ *   1 attraction   → half_day      (~4h)
+ *   2–3 attractions → day_tour     (~8h)
+ *   4+ attractions  → extended_day_tour (~12h)
+ */
+function sightseeingServiceType(attractionCount: number): TransportServiceType {
+  if (attractionCount === 1) return 'half_day'
+  if (attractionCount <= 3) return 'day_tour'
+  return 'extended_day_tour'
+}
+
+function sightseeingDuration(attractionCount: number): TransportDuration {
+  return attractionCount === 1 ? 'half_day' : 'full_day'
+}
+
+/**
+ * Append each entry in day.extras as its own transport line. Used in every
+ * branch above (including cruise days) so a sound_light / dinner_transfer /
+ * city_transfer add-on always emits its own pricing row.
+ */
+function appendExtras(lines: TransportNeed[], day: ItineraryDay): void {
+  if (!day.extras || day.extras.length === 0) return
+  for (const extra of day.extras) {
+    lines.push({
+      serviceType: extra,
+      duration: 'one_way',
+      area: null,
+      useSpecialVehicle: false,
+    })
+  }
 }
 
 /**
@@ -909,11 +1051,21 @@ export async function getCruiseRates(
     }
 
     const cruise = cruises[0]
-    // rate_double_eur is already per-person (double occupancy)
-    const ppdTrip = cruise.rate_double_eur
-    const ppdNight = ppdTrip / cruise.duration_nights
-    const singleSuppTrip = cruise.rate_single_eur - cruise.rate_double_eur
-    const singleSuppNight = singleSuppTrip / cruise.duration_nights
+    // rate_double_eur is already per-person (double occupancy).
+    // M23: guard against bad/missing data — duration_nights of 0 or null
+    // would otherwise propagate Infinity/NaN through the entire pricing
+    // tree. Same for missing per-trip rates.
+    const safeNights = cruise.duration_nights && cruise.duration_nights > 0
+      ? cruise.duration_nights
+      : null
+    if (!safeNights) {
+      console.warn(`⚠️ Cruise ${cruise.ship_name} has invalid duration_nights (${cruise.duration_nights}) — flagging hole (no fabrication)`)
+      return null
+    }
+    const ppdTrip = cruise.rate_double_eur ?? 0
+    const singleSuppTrip = (cruise.rate_single_eur ?? 0) - (cruise.rate_double_eur ?? 0)
+    const ppdNight = ppdTrip / safeNights
+    const singleSuppNight = singleSuppTrip / safeNights
 
     console.log(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
 
@@ -921,7 +1073,7 @@ export async function getCruiseRates(
       shipName: cruise.ship_name,
       ppdNight,
       singleSuppNight,
-      durationNights: cruise.duration_nights
+      durationNights: safeNights,
     }
   } catch (err) {
     console.error('Error fetching cruise rates:', err)
@@ -1267,10 +1419,13 @@ export async function buildTransportCache(): Promise<Map<string, TransportRate>>
       cache.set(keyNoDurationNoArea, rate)
     }
 
-    // For intercity, also cache by origin-destination
-    if (rate.service_type === 'intercity_transfer' && rate.origin_city && rate.destination_city) {
+    // For intercity rows (both 'intercity' and 'intercity_with_sightseeing'),
+    // also cache by service_type|origin|destination so a flight/ground city
+    // change can find the right row even when the lookup doesn't know city.
+    if ((rate.service_type === 'intercity' || rate.service_type === 'intercity_with_sightseeing') &&
+        rate.origin_city && rate.destination_city) {
       const intercityKey = [
-        'intercity_transfer',
+        rate.service_type,
         (rate.origin_city || '').toLowerCase(),
         (rate.destination_city || '').toLowerCase()
       ].join('|')
@@ -1338,9 +1493,12 @@ export function findTransportRate(
     }
   }
 
-  // Priority 4: Intercity lookup
-  if (!record && serviceType === 'intercity_transfer' && originCity && destinationCity) {
-    const intercityKey = ['intercity_transfer', originCity.toLowerCase(), destinationCity.toLowerCase()].join('|')
+  // Priority 4: Intercity lookup by origin→destination. Applies to both
+  // 'intercity' and 'intercity_with_sightseeing' (the sightseeing variant
+  // is the same route physically — just priced higher).
+  if (!record && (serviceType === 'intercity' || serviceType === 'intercity_with_sightseeing') &&
+      originCity && destinationCity) {
+    const intercityKey = [serviceType, originCity.toLowerCase(), destinationCity.toLowerCase()].join('|')
     if (cache.has(intercityKey)) {
       record = cache.get(intercityKey)!
       console.log(`✅ Transport intercity match: ${intercityKey}`)
@@ -2083,10 +2241,14 @@ export async function calculateDayBasedPricing(
   // STEP 8: Analyze transport needs per day
   // ============================================
 
+  // One entry per transport line item — a day may produce zero, one, or many
+  // entries (e.g. a flight day in B3 will produce TWO airport_transfer entries).
+  // legIndex disambiguates multiple entries on the same calendar day.
   interface DayTransportInfo {
     day: number
+    legIndex: number
     city: string
-    needs: NonNullable<ReturnType<typeof determineTransportNeeds>>
+    needs: TransportNeed
     requiresTransport: boolean
     isCruisePackageDay: boolean // Part of cruise transport package
   }
@@ -2098,40 +2260,38 @@ export async function calculateDayBasedPricing(
     const previousDay = i > 0 ? itinerary[i - 1] : null
     const nextDay = i < itinerary.length - 1 ? itinerary[i + 1] : null
 
-    // Check if this day is part of a cruise transport package
+    // B3: cruise-day handling now lives inside determineTransportNeeds —
+    // it returns ONLY the extras and the arrival-side flight leg (when
+    // applicable). So every line returned from the function should be
+    // priced normally; the cruise transport package itself is added
+    // separately below as a single line item per trip.
     const isCruisePackageDay = day.is_cruise_day === true
+    const needsList = determineTransportNeeds(day, previousDay, nextDay)
 
-    if (isCruisePackageDay) {
-      const needs = determineTransportNeeds(day, previousDay, nextDay)
-      if (needs) {
-        transportInfoByDay.push({
-          day: day.day,
-          city: day.city,
-          needs,
-          requiresTransport: false,
-          isCruisePackageDay: true
-        })
-      }
-      console.log(`🚢 Day ${day.day} (${day.city}): Cruise package day - bundled transport`)
+    if (needsList.length === 0) {
+      const label = isCruisePackageDay
+        ? `🚢 Day ${day.day} (${day.city}): Cruise package day - bundled transport (no extras)`
+        : `⏸️ Day ${day.day} (${day.city}): No transport required`
+      console.log(label)
       continue
     }
 
-    // determineTransportNeeds returns null when no transport is needed
-    // (e.g., 0 attractions, no airport, no intercity)
-    const needs = determineTransportNeeds(day, previousDay, nextDay)
-
-    if (needs) {
+    needsList.forEach((needs, legIndex) => {
+      // Per-leg city override: an entry can pin its own city (e.g. the
+      // departure-side leg of a mid-trip flight day uses previousDay.city).
+      const legCity = needs.city || day.city
       transportInfoByDay.push({
         day: day.day,
-        city: day.city,
+        legIndex,
+        city: legCity,
         needs,
         requiresTransport: true,
-        isCruisePackageDay: false
+        isCruisePackageDay,
       })
-      console.log(`🚗 Day ${day.day} (${day.city}): ${needs.serviceType} | ${needs.duration} | area: ${needs.area || 'none'} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
-    } else {
-      console.log(`⏸️ Day ${day.day} (${day.city}): No transport required`)
-    }
+      const suffix = needsList.length > 1 ? ` leg ${legIndex + 1}/${needsList.length}` : ''
+      const cruiseTag = isCruisePackageDay ? ' [cruise day]' : ''
+      console.log(`🚗 Day ${day.day} (${legCity})${suffix}${cruiseTag}: ${needs.serviceType} | ${needs.duration} | area: ${needs.area || 'none'} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
+    })
   }
 
   // ============================================
@@ -2154,14 +2314,21 @@ export async function calculateDayBasedPricing(
       area: needs.area,
       pax: 2,
       vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
-      originCity: itinerary[info.day - 2]?.city, // Previous day city for intercity
-      destinationCity: info.city
+      // Prefer per-leg overrides set by determineTransportNeeds (used for the
+      // departure-side flight leg and for intercity origin→destination), then
+      // fall back to the previous-day-by-index heuristic for legacy callers.
+      originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
+      destinationCity: info.needs.destinationCity || info.city
     })
 
+    // Disambiguate ID when a day has more than one transport leg (B3 flight days).
+    // Single-leg days keep the original `day${N}-transport` shape to avoid
+    // churn in callers that may key on the existing id format.
+    const idSuffix = info.legIndex > 0 ? `-${info.legIndex + 1}` : ''
     if (rate) {
       baseTransportCost += rate.base_rate_eur
       services.push({
-        id: `day${info.day}-transport`,
+        id: `day${info.day}-transport${idSuffix}`,
         dayNumber: info.day,
         serviceType: 'transportation',
         serviceName: rate.route_name || `${rate.vehicle_type || baseVehicleType} - ${info.city}`,
@@ -2175,7 +2342,6 @@ export async function calculateDayBasedPricing(
         notes: `${needs.serviceType} | ${needs.duration}${needs.area ? ` | ${needs.area}` : ''}`
       })
     } else {
-      // No matching transport rate — flag a hole, add nothing (no fabricated vehicle cost).
       addHole({
         kind: 'transport',
         reason: 'missing',
@@ -2245,8 +2411,8 @@ export async function calculateDayBasedPricing(
         area: needs.area,
         pax: numPax,
         vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
-        originCity: itinerary[info.day - 2]?.city,
-        destinationCity: info.city
+        originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
+        destinationCity: info.needs.destinationCity || info.city
       })
 
       if (rate) {
@@ -2288,8 +2454,8 @@ export async function calculateDayBasedPricing(
         area: needs.area,
         pax: numPax + 1,  // +1 for tour leader
         vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
-        originCity: itinerary[info.day - 2]?.city,
-        destinationCity: info.city
+        originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
+        destinationCity: info.needs.destinationCity || info.city
       })
 
       if (rate) {
