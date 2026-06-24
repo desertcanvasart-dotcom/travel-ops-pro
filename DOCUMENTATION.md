@@ -468,11 +468,6 @@ Public:               /, /login, /signup, /forgot-password, /reset-password,
 | `/tasks` | Task management (Kanban/Table/List views) |
 | `/reminders` | Reminder management |
 
-### Utilities
-| Route | Description |
-|-------|-------------|
-| `/test-calculator` | Pricing calculator test page |
-
 ---
 
 ## 7. API Reference
@@ -867,7 +862,6 @@ Additional rate endpoints:
 | File | Description |
 |------|-------------|
 | `package-types.ts` | Tour package type definitions |
-| `test-tour-calculator.ts` | Tour calculator test utilities |
 
 ---
 
