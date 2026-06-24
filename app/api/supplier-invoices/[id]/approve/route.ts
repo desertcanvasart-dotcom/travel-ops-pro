@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,6 +12,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json().catch(() => ({}))
     const override = body.override === true
@@ -20,6 +24,7 @@ export async function POST(
       .from('supplier_invoices')
       .select('match_status, status')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error || !invoice) {
@@ -57,6 +62,7 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('org_id', orgId)
       .neq('status', 'paid')
       .neq('status', 'cancelled')
     if (!override) {

@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +17,25 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
+
+    // M3 Phase 2A: verify the parent booking belongs to this org BEFORE
+    // returning its child payments. booking_payments has no org_id of its
+    // own — it inherits via FK — so without this check one org could read
+    // another's payments by guessing a booking_id. We fold the currency
+    // fetch (used below for M21 totals) into the same query.
+    const { data: bookingRow } = await supabaseAdmin
+      .from('bookings')
+      .select('currency')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!bookingRow) {
+      return NextResponse.json({ success: false, error: 'Booking not found' }, { status: 404 })
+    }
 
     const { data: payments, error } = await supabaseAdmin
       .from('booking_payments')
@@ -33,11 +52,6 @@ export async function GET(
     // and comparing against an EUR booking is wrong; the response now
     // returns both a per-currency breakdown AND a flat totalPaid for the
     // PRIMARY currency (= the booking's currency when known, else EUR).
-    const { data: bookingRow } = await supabaseAdmin
-      .from('bookings')
-      .select('currency')
-      .eq('id', id)
-      .single()
     const bookingCurrency = bookingRow?.currency || 'EUR'
 
     const totalsByCurrency: Record<string, number> = {}
@@ -70,6 +84,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
 
@@ -94,12 +111,17 @@ export async function POST(
 
     // M21: a booking has a single currency. Pre-flight read just so the API
     // returns a friendly 400 instead of letting the DB raise — the RPC also
-    // enforces this server-side.
+    // enforces this server-side. M3 Phase 2A: org-scope the read so a caller
+    // can't record a payment against another org's booking_id.
     const { data: bookingCurrencyRow } = await supabaseAdmin
       .from('bookings')
       .select('currency')
       .eq('id', id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!bookingCurrencyRow) {
+      return NextResponse.json({ success: false, error: 'Booking not found' }, { status: 404 })
+    }
     const bookingCurrency = bookingCurrencyRow?.currency || 'EUR'
     const paymentCurrency = body.currency || bookingCurrency
     if (paymentCurrency !== bookingCurrency) {

@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createServerClient()
+
+// Shared: confirm the itinerary belongs to the caller's org. Returns the
+// id when ok, or a NextResponse to return early.
+async function assertItineraryInOrg(id: string, orgId: string) {
+  const { data: parent } = await supabase
+    .from('itineraries')
+    .select('id')
+    .eq('id', id)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  if (!parent) {
+    return NextResponse.json(
+      { success: false, error: 'Itinerary not found' },
+      { status: 404 }
+    )
+  }
+  return null
+}
 
 // GET - Get a specific language version
 export async function GET(
@@ -9,6 +28,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string; lang: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id, lang } = await params
 
     if (!['en', 'ja'].includes(lang)) {
@@ -17,6 +39,9 @@ export async function GET(
         { status: 400 }
       )
     }
+
+    const parentCheck = await assertItineraryInOrg(id, orgId)
+    if (parentCheck) return parentCheck
 
     const { data, error } = await supabase
       .from('itinerary_versions')
@@ -57,6 +82,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; lang: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id, lang } = await params
     const body = await request.json()
 
@@ -66,6 +94,9 @@ export async function PUT(
         { status: 400 }
       )
     }
+
+    const parentCheck = await assertItineraryInOrg(id, orgId)
+    if (parentCheck) return parentCheck
 
     // Build update object
     const updateData: any = {
@@ -120,6 +151,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; lang: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id, lang } = await params
 
     if (!['en', 'ja'].includes(lang)) {
@@ -128,6 +162,9 @@ export async function DELETE(
         { status: 400 }
       )
     }
+
+    const parentCheck = await assertItineraryInOrg(id, orgId)
+    if (parentCheck) return parentCheck
 
     // Check how many versions exist - don't allow deleting the last one
     const { data: allVersions } = await supabase

@@ -7,6 +7,7 @@ import {
   findDepartmentForServiceType,
   type DayForTasks,
 } from '@/lib/ai/task-generation'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,6 +19,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id: itineraryId } = await params
     const body = await request.json()
     const assignments: Record<string, string> = body.assignments || {}
@@ -27,6 +31,7 @@ export async function POST(
       .from('itineraries')
       .select('id, itinerary_code, client_name, trip_name, start_date, end_date, total_days, num_adults, num_children, num_infants, status')
       .eq('id', itineraryId)
+      .eq('org_id', orgId)
       .single()
 
     if (itinError || !itinerary) {

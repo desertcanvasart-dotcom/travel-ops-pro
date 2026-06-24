@@ -202,11 +202,59 @@ async function getUserIdForEntity(entityType: SyncEntityType, entityId: string):
   return (token as { user_id?: string } | null)?.user_id ?? null
 }
 
-// Helper: upsert sync log entry
+// M3 Phase 2A: resolve the org_id for an entity being synced. Unlike
+// getUserIdForEntity (which routes the entity to the right accounting
+// token via owning user → org → token), this returns the org_id directly
+// from the financial root table now that every such table carries
+// org_id. Sync code uses this to scope accounting_sync_log reads/writes
+// so two orgs' syncs of the same entity_id never collide.
+async function getOrgIdForEntity(entityType: SyncEntityType, entityId: string): Promise<string | null> {
+  const supabase = getSupabaseAdmin()
+
+  if (entityType === 'invoice') {
+    const { data } = await supabase
+      .from('invoices')
+      .select('org_id')
+      .eq('id', entityId)
+      .maybeSingle()
+    return (data as { org_id?: string } | null)?.org_id ?? null
+  }
+  if (entityType === 'expense' || entityType === 'expense_payment') {
+    // expense_payment uses the expense's id as entityId (see syncExpensePayment).
+    const { data } = await supabase
+      .from('expenses')
+      .select('org_id')
+      .eq('id', entityId)
+      .maybeSingle()
+    return (data as { org_id?: string } | null)?.org_id ?? null
+  }
+  if (entityType === 'invoice_payment') {
+    // Payments don't carry org_id themselves; walk to the parent invoice.
+    const { data: payment } = await supabase
+      .from('invoice_payments')
+      .select('invoice_id')
+      .eq('id', entityId)
+      .maybeSingle()
+    const invoiceId = (payment as { invoice_id?: string } | null)?.invoice_id
+    if (!invoiceId) return null
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('org_id')
+      .eq('id', invoiceId)
+      .maybeSingle()
+    return (invoice as { org_id?: string } | null)?.org_id ?? null
+  }
+  return null
+}
+
+// Helper: upsert sync log entry. orgId scopes both the lookup (so two
+// orgs syncing the same entity_id don't collide on the unique check)
+// and the INSERT (so new rows are stamped with the right tenant).
 async function upsertSyncLog(
   provider: AccountingProviderType,
   entityType: SyncEntityType,
   entityId: string,
+  orgId: string,
   updates: Record<string, unknown>
 ) {
   const supabase = getSupabaseAdmin()
@@ -214,6 +262,7 @@ async function upsertSyncLog(
   const { data: existing } = await supabase
     .from('accounting_sync_log')
     .select('id')
+    .eq('org_id', orgId)
     .eq('provider', provider)
     .eq('entity_type', entityType)
     .eq('entity_id', entityId)
@@ -228,6 +277,7 @@ async function upsertSyncLog(
     await supabase
       .from('accounting_sync_log')
       .insert({
+        org_id: orgId,
         provider,
         entity_type: entityType,
         entity_id: entityId,
@@ -238,15 +288,17 @@ async function upsertSyncLog(
   }
 }
 
-// Helper: get cached external ID for a contact
+// Helper: get cached external ID for a contact, scoped to org.
 async function getCachedContactId(
   provider: AccountingProviderType,
+  orgId: string,
   contactKey: string
 ): Promise<string | null> {
   const supabase = getSupabaseAdmin()
   const { data } = await supabase
     .from('accounting_sync_log')
     .select('external_id')
+    .eq('org_id', orgId)
     .eq('provider', provider)
     .eq('entity_type', 'contact')
     .eq('entity_id', contactKey)
@@ -260,6 +312,8 @@ async function getCachedContactId(
  */
 export async function syncInvoice(invoiceId: string): Promise<void> {
   const supabase = getSupabaseAdmin()
+  const orgId = await getOrgIdForEntity('invoice', invoiceId)
+  if (!orgId) return // Entity has no org, shouldn't sync
   const userId = await getUserIdForEntity('invoice', invoiceId)
   if (!userId) return
 
@@ -282,14 +336,14 @@ export async function syncInvoice(invoiceId: string): Promise<void> {
 
     // Upsert contact first
     const contactKey = invoice.client_id || invoice.client_name
-    let contactExternalId = await getCachedContactId(providerType, contactKey)
+    let contactExternalId = await getCachedContactId(providerType, orgId, contactKey)
 
     if (!contactExternalId) {
       const contactPayload = mapClientToContact(invoice)
       const contactRef = await provider.upsertContact(contactPayload)
       contactExternalId = contactRef.id
 
-      await upsertSyncLog(providerType, 'contact', contactKey, {
+      await upsertSyncLog(providerType, 'contact', contactKey, orgId, {
         external_id: contactRef.id,
         external_number: contactRef.number,
         sync_status: 'synced',
@@ -301,6 +355,7 @@ export async function syncInvoice(invoiceId: string): Promise<void> {
     const { data: existingSync } = await supabase
       .from('accounting_sync_log')
       .select('external_id')
+      .eq('org_id', orgId)
       .eq('provider', providerType)
       .eq('entity_type', 'invoice')
       .eq('entity_id', invoiceId)
@@ -317,7 +372,7 @@ export async function syncInvoice(invoiceId: string): Promise<void> {
       ref = await provider.createInvoice(payload)
     }
 
-    await upsertSyncLog(providerType, 'invoice', invoiceId, {
+    await upsertSyncLog(providerType, 'invoice', invoiceId, orgId, {
       external_id: ref.id,
       external_number: ref.number,
       sync_status: 'synced',
@@ -330,7 +385,7 @@ export async function syncInvoice(invoiceId: string): Promise<void> {
     const retryable = err instanceof AccountingSyncError ? err.retryable : true
     const isAuthError = err instanceof AccountingAuthError
 
-    await upsertSyncLog(providerType, 'invoice', invoiceId, {
+    await upsertSyncLog(providerType, 'invoice', invoiceId, orgId, {
       sync_status: isAuthError ? 'skipped' : 'failed',
       last_error: message,
       retry_count: retryable ? undefined : 5, // Max out retries for non-retryable
@@ -345,6 +400,8 @@ export async function syncInvoice(invoiceId: string): Promise<void> {
  */
 export async function syncExpense(expenseId: string): Promise<void> {
   const supabase = getSupabaseAdmin()
+  const orgId = await getOrgIdForEntity('expense', expenseId)
+  if (!orgId) return
   const userId = await getUserIdForEntity('expense', expenseId)
   if (!userId) return
 
@@ -366,14 +423,14 @@ export async function syncExpense(expenseId: string): Promise<void> {
 
     // Upsert vendor contact
     const vendorKey = expense.supplier_id || expense.supplier_name || 'unknown'
-    let vendorExternalId = await getCachedContactId(providerType, vendorKey)
+    let vendorExternalId = await getCachedContactId(providerType, orgId, vendorKey)
 
     if (!vendorExternalId && expense.supplier_name) {
       const contactPayload = mapSupplierToContact(expense)
       const contactRef = await provider.upsertContact(contactPayload)
       vendorExternalId = contactRef.id
 
-      await upsertSyncLog(providerType, 'contact', vendorKey, {
+      await upsertSyncLog(providerType, 'contact', vendorKey, orgId, {
         external_id: contactRef.id,
         external_number: contactRef.number,
         sync_status: 'synced',
@@ -384,6 +441,7 @@ export async function syncExpense(expenseId: string): Promise<void> {
     const { data: existingSync } = await supabase
       .from('accounting_sync_log')
       .select('external_id')
+      .eq('org_id', orgId)
       .eq('provider', providerType)
       .eq('entity_type', 'expense')
       .eq('entity_id', expenseId)
@@ -400,7 +458,7 @@ export async function syncExpense(expenseId: string): Promise<void> {
       ref = await provider.createBill(payload)
     }
 
-    await upsertSyncLog(providerType, 'expense', expenseId, {
+    await upsertSyncLog(providerType, 'expense', expenseId, orgId, {
       external_id: ref.id,
       external_number: ref.number,
       sync_status: 'synced',
@@ -410,7 +468,7 @@ export async function syncExpense(expenseId: string): Promise<void> {
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    await upsertSyncLog(providerType, 'expense', expenseId, {
+    await upsertSyncLog(providerType, 'expense', expenseId, orgId, {
       sync_status: 'failed',
       last_error: message,
     })
@@ -423,6 +481,8 @@ export async function syncExpense(expenseId: string): Promise<void> {
  */
 export async function syncInvoicePayment(paymentId: string): Promise<void> {
   const supabase = getSupabaseAdmin()
+  const orgId = await getOrgIdForEntity('invoice_payment', paymentId)
+  if (!orgId) return
   const userId = await getUserIdForEntity('invoice_payment', paymentId)
   if (!userId) return
 
@@ -447,6 +507,7 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
     const { data: existingPaymentSync } = await supabase
       .from('accounting_sync_log')
       .select('external_id')
+      .eq('org_id', orgId)
       .eq('provider', providerType)
       .eq('entity_type', 'invoice_payment')
       .eq('entity_id', paymentId)
@@ -458,6 +519,7 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
     const { data: invoiceSync } = await supabase
       .from('accounting_sync_log')
       .select('external_id')
+      .eq('org_id', orgId)
       .eq('provider', providerType)
       .eq('entity_type', 'invoice')
       .eq('entity_id', payment.invoice_id)
@@ -473,6 +535,7 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       const { data: reSync } = await supabase
         .from('accounting_sync_log')
         .select('external_id')
+        .eq('org_id', orgId)
         .eq('provider', providerType)
         .eq('entity_type', 'invoice')
         .eq('entity_id', payment.invoice_id)
@@ -487,7 +550,7 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
     const payload = mapInvoicePaymentToPayload(payment, invoiceExternalId)
     const ref = await provider.createPayment(payload)
 
-    await upsertSyncLog(providerType, 'invoice_payment', paymentId, {
+    await upsertSyncLog(providerType, 'invoice_payment', paymentId, orgId, {
       external_id: ref.id,
       external_number: ref.number,
       sync_status: 'synced',
@@ -496,7 +559,7 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    await upsertSyncLog(providerType, 'invoice_payment', paymentId, {
+    await upsertSyncLog(providerType, 'invoice_payment', paymentId, orgId, {
       sync_status: 'failed',
       last_error: message,
     })
@@ -509,6 +572,8 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
  */
 export async function syncExpensePayment(expenseId: string): Promise<void> {
   const supabase = getSupabaseAdmin()
+  const orgId = await getOrgIdForEntity('expense_payment', expenseId)
+  if (!orgId) return
   const userId = await getUserIdForEntity('expense_payment', expenseId)
   if (!userId) return
 
@@ -530,6 +595,7 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
     const { data: existingExpensePaymentSync } = await supabase
       .from('accounting_sync_log')
       .select('external_id')
+      .eq('org_id', orgId)
       .eq('provider', providerType)
       .eq('entity_type', 'expense_payment')
       .eq('entity_id', expenseId)
@@ -541,6 +607,7 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
     const { data: billSync } = await supabase
       .from('accounting_sync_log')
       .select('external_id')
+      .eq('org_id', orgId)
       .eq('provider', providerType)
       .eq('entity_type', 'expense')
       .eq('entity_id', expenseId)
@@ -555,6 +622,7 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
       const { data: reSync } = await supabase
         .from('accounting_sync_log')
         .select('external_id')
+        .eq('org_id', orgId)
         .eq('provider', providerType)
         .eq('entity_type', 'expense')
         .eq('entity_id', expenseId)
@@ -568,7 +636,7 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
     const payload = mapExpensePaymentToPayload(expense, billExternalId)
     const ref = await provider.createPayment(payload)
 
-    await upsertSyncLog(providerType, 'expense_payment', expenseId, {
+    await upsertSyncLog(providerType, 'expense_payment', expenseId, orgId, {
       external_id: ref.id,
       external_number: ref.number,
       sync_status: 'synced',
@@ -577,7 +645,7 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    await upsertSyncLog(providerType, 'expense_payment', expenseId, {
+    await upsertSyncLog(providerType, 'expense_payment', expenseId, orgId, {
       sync_status: 'failed',
       last_error: message,
     })
@@ -588,12 +656,13 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
 /**
  * Retry all failed syncs with exponential backoff.
  */
-export async function retrySyncErrors(): Promise<{ retried: number; succeeded: number; failed: number }> {
+export async function retrySyncErrors(orgId: string): Promise<{ retried: number; succeeded: number; failed: number }> {
   const supabase = getSupabaseAdmin()
 
   const { data: failedEntries } = await supabase
     .from('accounting_sync_log')
     .select('*')
+    .eq('org_id', orgId)
     .eq('sync_status', 'failed')
     .lt('retry_count', 5)
     // Include rows whose next_retry_at is NULL (newly-failed entries) as well as

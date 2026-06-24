@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncExpense } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +11,9 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
     const category = searchParams.get('category')
@@ -21,6 +25,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('expenses')
       .select('*')
+      .eq('org_id', orgId)
       .order('expense_date', { ascending: false })
 
     if (status) {
@@ -63,6 +68,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
 
     // Validate required fields (use explicit null check for amount since 0 is falsy but valid)
@@ -79,6 +87,7 @@ export async function POST(request: NextRequest) {
     // below is wrapped in a retry loop so concurrent writers never silently
     // produce duplicate expense_number values.
     const baseExpense = {
+      org_id: orgId,
       itinerary_id: body.itinerary_id || null,
       supplier_id: body.supplier_id || null,
       category: body.category,

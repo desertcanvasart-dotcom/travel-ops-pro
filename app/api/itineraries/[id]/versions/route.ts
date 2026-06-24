@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createServerClient()
 
@@ -9,7 +10,24 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
+
+    // Confirm the itinerary belongs to this org before reading children
+    const { data: parent } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     const { data, error } = await supabase
       .from('itinerary_versions')
@@ -42,8 +60,25 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
+
+    // Confirm the itinerary belongs to this org before mutating children
+    const { data: parent } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     const { language, ...content } = body
 

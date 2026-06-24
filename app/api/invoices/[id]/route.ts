@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,12 +12,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
 
     const { data, error } = await supabaseAdmin
       .from('invoices')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) {
@@ -36,6 +41,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
 
@@ -68,8 +76,9 @@ export async function PUT(
         .from('invoices')
         .select('amount_paid')
         .eq('id', id)
+        .eq('org_id', orgId)
         .single()
-      
+
       if (currentInvoice) {
         updateData.balance_due = updateData.total_amount - (currentInvoice.amount_paid || 0)
       }
@@ -79,6 +88,7 @@ export async function PUT(
       .from('invoices')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 
@@ -99,7 +109,24 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
+
+    // Verify the invoice belongs to this org BEFORE touching its children.
+    // invoice_payments doesn't carry org_id (it inherits via FK), so deleting
+    // by invoice_id without this check would let one org delete another's
+    // payments while the parent invoice survives the org-scoped delete below.
+    const { data: invoice } = await supabaseAdmin
+      .from('invoices')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!invoice) {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    }
 
     // First delete related payments
     await supabaseAdmin
@@ -112,6 +139,7 @@ export async function DELETE(
       .from('invoices')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting invoice:', error)

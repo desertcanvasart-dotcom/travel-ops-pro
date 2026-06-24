@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,6 +12,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
 
     // Fetch supplier invoice
@@ -18,6 +22,7 @@ export async function GET(
       .from('supplier_invoices')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error || !invoice) {
@@ -45,13 +50,17 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
 
     // Remove immutable fields AND reconciliation/state fields — those are owned by
     // the approve / pay / match / dispute routes, not this generic edit endpoint.
+    // org_id is also stripped to prevent a caller from re-homing a row.
     const {
-      id: _, created_at, internal_reference, matched_expenses,
+      id: _, org_id: __, created_at, internal_reference, matched_expenses,
       status, match_status, matched_amount, discrepancy_amount, discrepancy_notes,
       paid_at, payment_date, payment_method, payment_reference, approved_at, approved_by,
       ...updateData
@@ -64,6 +73,7 @@ export async function PUT(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 
@@ -84,12 +94,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
 
     const { error } = await supabaseAdmin
       .from('supplier_invoices')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting supplier invoice:', error)

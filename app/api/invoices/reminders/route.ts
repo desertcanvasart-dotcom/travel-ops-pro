@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Email service - adjust based on your setup (Resend, SendGrid, etc.)
 // This example uses a generic sendEmail function - replace with your actual implementation
@@ -250,16 +251,20 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
 // GET: Fetch invoices due for reminders (preview)
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const preview = searchParams.get('preview') === 'true'
 
     // Get invoices that need reminders
     const today = new Date().toISOString().split('T')[0]
-    
+
     const { data: invoices, error } = await supabase
       .from('invoices')
       .select('*')
+      .eq('org_id', orgId)
       .not('status', 'in', '("paid","cancelled")')
       .gt('balance_due', 0)
       .eq('reminder_paused', false)
@@ -316,6 +321,9 @@ export async function GET(request: NextRequest) {
 // POST: Process and send reminders
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
     const body = await request.json()
     const { invoiceIds, sendAll = false } = body
@@ -324,6 +332,7 @@ export async function POST(request: NextRequest) {
     let query = supabase
       .from('invoices')
       .select('*')
+      .eq('org_id', orgId)
       .not('status', 'in', '("paid","cancelled")')
       .gt('balance_due', 0)
       .eq('reminder_paused', false)
@@ -416,6 +425,7 @@ export async function POST(request: NextRequest) {
             next_reminder_date: nextReminderDate.toISOString().split('T')[0]
           })
           .eq('id', invoice.id)
+          .eq('org_id', orgId)
 
         // Log reminder
         await supabase

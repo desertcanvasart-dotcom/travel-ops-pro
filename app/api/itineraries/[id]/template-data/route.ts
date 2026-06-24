@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +14,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id: itineraryId } = await params
 
     // Fetch full itinerary data
@@ -46,6 +50,7 @@ export async function GET(
         tier
       `)
       .eq('id', itineraryId)
+      .eq('org_id', orgId)
       .single()
 
     if (itineraryError || !itinerary) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +12,22 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; paymentId: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id, paymentId } = await params
+
+    // invoice_payments is a child without org_id — verify the parent invoice
+    // belongs to this org before touching anything keyed off invoice_id.
+    const { data: parent } = await supabaseAdmin
+      .from('invoices')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    }
 
     // Verify payment belongs to this invoice
     const { data: payment, error: fetchError } = await supabaseAdmin
@@ -48,6 +64,7 @@ export async function DELETE(
       .from('invoices')
       .select('total_amount, status')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (invoice) {
@@ -73,6 +90,7 @@ export async function DELETE(
           updated_at: new Date().toISOString()
         })
         .eq('id', id)
+        .eq('org_id', orgId)
     }
 
     return NextResponse.json({ success: true })

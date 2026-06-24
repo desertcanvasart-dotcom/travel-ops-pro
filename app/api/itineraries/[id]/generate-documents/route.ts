@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Map service types to document types
 // null = skip (no document needed)
@@ -121,22 +122,26 @@ export async function POST(
 ) {
   const supabase = createClient()
   const { id: itineraryId } = await params
-  
+
   // Reset offsets for each request
   Object.keys(typeOffsets).forEach(key => delete typeOffsets[key])
-  
+
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json().catch(() => ({}))
     const { document_types } = body
-    
+
     console.log('📄 Generating documents for itinerary:', itineraryId)
     console.log('📋 Requested types:', document_types || 'ALL')
-    
+
     // Fetch itinerary with client details
     const { data: itinerary, error: itinError } = await supabase
       .from('itineraries')
       .select('*')
       .eq('id', itineraryId)
+      .eq('org_id', orgId)
       .single()
     
     if (itinError) {

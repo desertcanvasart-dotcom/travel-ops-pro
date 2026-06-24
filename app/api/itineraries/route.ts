@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Generate unique itinerary code
 function generateItineraryCode(): string {
@@ -20,6 +21,9 @@ function calculateTotalDays(startDate: string, endDate: string): number {
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
 
     // Fetch itineraries with their language versions
@@ -29,6 +33,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('itineraries')
       .select('*')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
 
     // By default, exclude B2B itineraries from the list
@@ -89,8 +94,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
     const body = await request.json()
+    body.org_id = orgId
 
     // Generate itinerary_code if not provided
     if (!body.itinerary_code) {

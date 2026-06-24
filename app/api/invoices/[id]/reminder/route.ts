@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Reuse the email generation from the main route
 function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
@@ -132,6 +133,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const supabase = createServerClient()
 
@@ -140,6 +144,7 @@ export async function POST(
       .from('invoices')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error || !invoice) {
@@ -210,6 +215,7 @@ export async function POST(
         next_reminder_date: nextReminderDate.toISOString().split('T')[0]
       })
       .eq('id', id)
+      .eq('org_id', orgId)
 
     // Log reminder
     await supabase
@@ -243,8 +249,26 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const supabase = createServerClient()
+
+    // invoice_reminders is a child without org_id — verify the parent invoice
+    // belongs to this org before listing its reminder history.
+    const { data: parent } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Invoice not found' },
+        { status: 404 }
+      )
+    }
 
     const { data: reminders, error } = await supabase
       .from('invoice_reminders')

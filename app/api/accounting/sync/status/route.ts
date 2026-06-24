@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const entityType = request.nextUrl.searchParams.get('entityType')
     const entityId = request.nextUrl.searchParams.get('entityId')
 
@@ -21,6 +25,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from('accounting_sync_log')
       .select('*')
+      .eq('org_id', orgId)
       .eq('entity_type', entityType)
       .eq('entity_id', entityId)
       .order('updated_at', { ascending: false })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS, SERVICE_TRANSLATION_FIELDS } from '@/lib/translation-utils'
 import type { Language } from '@/types/multilingual'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createServerClient()
 
@@ -181,9 +182,26 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
     const { targetLanguage, forceRetranslate } = body
+
+    // Confirm the itinerary belongs to this org before touching any of its versions
+    const { data: parent } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parent) {
+      return NextResponse.json(
+        { success: false, error: 'Itinerary not found' },
+        { status: 404 }
+      )
+    }
 
     // Validate target language
     if (!targetLanguage || !['en', 'ja'].includes(targetLanguage)) {

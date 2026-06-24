@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
     const { data: payments, error } = await supabase
       .from('payments')
@@ -16,6 +20,7 @@ export async function GET(request: NextRequest) {
           total_cost
         )
       `)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -44,6 +49,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
     const body = await request.json()
 
@@ -58,9 +66,11 @@ export async function POST(request: NextRequest) {
     }
     body.amount = amount
 
+    // M3 Phase 2A: stamp org_id from the session, overriding any value the
+    // client might have tried to inject through the spread body.
     const { data, error } = await supabase
       .from('payments')
-      .insert([body])
+      .insert([{ ...body, org_id: orgId }])
       .select()
       .single()
 

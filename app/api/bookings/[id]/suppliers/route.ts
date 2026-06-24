@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +17,23 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
+
+    // M3 Phase 2A: verify the parent booking belongs to this org BEFORE
+    // returning its child supplier rows. booking_supplier_status inherits
+    // org scoping via FK.
+    const { data: parentBooking } = await supabaseAdmin
+      .from('bookings')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parentBooking) {
+      return NextResponse.json({ success: false, error: 'Booking not found' }, { status: 404 })
+    }
 
     const { data: suppliers, error } = await supabaseAdmin
       .from('booking_supplier_status')
@@ -42,8 +59,25 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
+
+    // M3 Phase 2A: verify the parent booking belongs to this org BEFORE
+    // mutating any child rows (insert or status update). booking_supplier_
+    // status has no org_id of its own — without this pre-check a caller
+    // could insert a supplier row against another org's booking_id.
+    const { data: parentBooking } = await supabaseAdmin
+      .from('bookings')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!parentBooking) {
+      return NextResponse.json({ success: false, error: 'Booking not found' }, { status: 404 })
+    }
 
     // If supplier_id is provided in body, update existing supplier
     if (body.id) {

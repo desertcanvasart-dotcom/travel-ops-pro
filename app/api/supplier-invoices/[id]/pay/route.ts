@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,6 +12,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id } = await params
     const body = await request.json()
 
@@ -19,6 +23,7 @@ export async function POST(
       .from('supplier_invoices')
       .select('status')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error || !invoice) {
@@ -49,6 +54,7 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('org_id', orgId)
       .eq('status', 'approved')
       .select()
       .maybeSingle()
@@ -77,6 +83,9 @@ export async function POST(
 
     if (links && links.length > 0) {
       const expenseIds = links.map(l => l.expense_id)
+      // Org-scope the expense cascade. The junction rows above belong to a
+      // supplier_invoice this org owns (the conditional UPDATE confirmed
+      // ownership), but expenses gets its own filter as defense in depth.
       await supabaseAdmin
         .from('expenses')
         .update({
@@ -87,6 +96,7 @@ export async function POST(
           updated_at: new Date().toISOString(),
         })
         .in('id', expenseIds)
+        .eq('org_id', orgId)
     }
 
     return NextResponse.json({ success: true, data })

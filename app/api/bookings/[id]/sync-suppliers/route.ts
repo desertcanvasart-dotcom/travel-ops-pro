@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,13 +17,20 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id: bookingId } = await params
 
-    // Get booking with itinerary_id and start_date
+    // Get booking with itinerary_id and start_date. The org_id filter doubles
+    // as the parent-belongs-to-org pre-check before we touch any of the child
+    // booking_supplier_status rows further down (those inherit org scoping
+    // via FK).
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
       .select('id, itinerary_id, booking_code, start_date')
       .eq('id', bookingId)
+      .eq('org_id', orgId)
       .single()
 
     if (bookingError || !booking) {
@@ -38,6 +46,7 @@ export async function POST(
       .from('itineraries')
       .select('start_date')
       .eq('id', booking.itinerary_id)
+      .eq('org_id', orgId)
       .single()
 
     const tripStartDate = booking.start_date || itinerary?.start_date

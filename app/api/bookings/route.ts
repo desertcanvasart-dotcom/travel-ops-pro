@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +14,9 @@ const supabaseAdmin = createClient(
 // GET - List bookings with filters
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { searchParams } = new URL(request.url)
 
     // Filters
@@ -31,6 +35,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('bookings')
       .select('*', { count: 'exact' })
+      .eq('org_id', orgId)
       .order('start_date', { ascending: true })
 
     // Apply filters
@@ -68,6 +73,7 @@ export async function GET(request: NextRequest) {
     const { data: allBookings } = await supabaseAdmin
       .from('bookings')
       .select('status')
+      .eq('org_id', orgId)
 
     const summary = {
       total: allBookings?.length || 0,
@@ -100,6 +106,9 @@ export async function GET(request: NextRequest) {
 // POST - Create booking from itinerary
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const { itinerary_id } = body
 
@@ -112,6 +121,7 @@ export async function POST(request: NextRequest) {
       .from('bookings')
       .select('id, booking_code')
       .eq('itinerary_id', itinerary_id)
+      .eq('org_id', orgId)
       .single()
 
     if (existingBooking) {
@@ -127,6 +137,7 @@ export async function POST(request: NextRequest) {
       .from('itineraries')
       .select('*, b2b_partners(id, company_name, partner_code)')
       .eq('id', itinerary_id)
+      .eq('org_id', orgId)
       .single()
 
     if (itineraryError || !itinerary) {
@@ -148,6 +159,7 @@ export async function POST(request: NextRequest) {
     const { data: booking, error: createError } = await supabaseAdmin
       .from('bookings')
       .insert({
+        org_id: orgId,
         booking_code: bookingCode,
         itinerary_id: itinerary_id,
         client_name: itinerary.client_name,
