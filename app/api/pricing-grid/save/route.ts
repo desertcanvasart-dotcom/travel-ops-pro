@@ -272,18 +272,20 @@ export async function POST(request: NextRequest) {
       if (svcError) throw new Error(`Failed to insert services: ${svcError.message}`)
     }
 
-    // Recompute the itinerary total server-side from the ACTUAL service costs
-    // rather than trusting the client-supplied total. For B2B the selling price is
-    // supplier cost × (1 + margin). For B2C the markup is applied client-side, but
-    // we still floor the stored total at supplier cost so a tampered/buggy client
-    // can never persist a quote priced below cost.
-    const supplierTotal = serviceInserts.reduce((s, svc) => s + (svc.total_cost || 0), 0)
+    // Post-write reconciliation: the pre-flight supplierTotal above was computed
+    // from the raw input slots; recompute now from the actual service rows we
+    // just wrote (which may differ if service construction adjusted anything).
+    // For B2B the selling price is supplier cost × (1 + margin). For B2C the
+    // markup is applied client-side, but we still floor the stored total at
+    // supplier cost so a tampered/buggy client can never persist a quote
+    // priced below cost.
+    const actualSupplierTotal = serviceInserts.reduce((s, svc) => s + (svc.total_cost || 0), 0)
     const marginPercent = Math.min(Math.max(Number(config.marginPercent) || 0, 0), 100)
     let authoritativeTotal = itineraryData.total_cost
     if (config.clientType === 'b2b') {
-      authoritativeTotal = Math.round(supplierTotal * (1 + marginPercent / 100) * 100) / 100
-    } else if (authoritativeTotal < supplierTotal) {
-      authoritativeTotal = Math.round(supplierTotal * 100) / 100
+      authoritativeTotal = Math.round(actualSupplierTotal * (1 + marginPercent / 100) * 100) / 100
+    } else if (authoritativeTotal < actualSupplierTotal) {
+      authoritativeTotal = Math.round(actualSupplierTotal * 100) / 100
     }
     if (authoritativeTotal !== itineraryData.total_cost) {
       await supabase.from('itineraries').update({ total_cost: authoritativeTotal }).eq('id', itineraryId)
