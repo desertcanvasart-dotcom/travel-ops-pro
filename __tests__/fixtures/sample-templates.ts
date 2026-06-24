@@ -151,6 +151,15 @@ function transportationRates() {
       duration: 'full_day', area: 'cairo', route_name: 'Cairo Day Tour',
       is_active: true, ...tiers,
     },
+    // B3 (PR #9): per-day transport rule engine now distinguishes half_day
+    // (4-hour) from day_tour (full_day), so Pyramids-area visits resolve to
+    // half_day. Fixture must provide one or the test flags a transport hole.
+    {
+      id: 'trn-cai-halfday', service_code: 'CAI-HALFDAY', service_type: 'half_day',
+      vehicle_type: null, city: 'Cairo', origin_city: 'Cairo', destination_city: 'Cairo',
+      duration: 'half_day', area: 'pyramids', route_name: 'Cairo Half Day Pyramids',
+      is_active: true, ...tiers,
+    },
   ]
 }
 
