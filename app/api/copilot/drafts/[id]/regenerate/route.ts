@@ -78,12 +78,6 @@ export async function POST(
       if (settings?.tone) tone = settings.tone as CopilotTone
     }
 
-    // Mark old draft as expired
-    await supabase
-      .from('communication_drafts')
-      .update({ status: 'expired' })
-      .eq('id', id)
-
     // Generate new draft with optional additional instructions
     const result = await generateDraft(
       {
@@ -119,6 +113,14 @@ export async function POST(
       .single()
 
     if (insertError) throw insertError
+
+    // Only NOW expire the original — after the replacement is safely stored. If
+    // generation or the insert above had failed, the original stays 'pending'
+    // (was: expired before the AI call, so an AI failure lost it with no replacement).
+    await supabase
+      .from('communication_drafts')
+      .update({ status: 'expired' })
+      .eq('id', id)
 
     // Update thread last_draft_at
     await supabase

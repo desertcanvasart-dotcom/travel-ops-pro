@@ -21,8 +21,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let claimedForSend = false
+  let draftId: string | null = null
   try {
     const { id } = await params
+    draftId = id
     const body = await request.json()
     const userId = body.user_id
 
@@ -84,6 +87,34 @@ export async function POST(
         )
       }
     }
+
+    // Atomically CLAIM the draft for sending. There's no 'sending' status (the
+    // CHECK constraint only allows pending/approved/rejected/sent/expired), so we
+    // use sent_at as the lock: stamp it WHERE status='approved' AND sent_at IS
+    // NULL. PostgreSQL serializes the row update, so of two concurrent POSTs only
+    // one gets a row back from RETURNING; the other matches 0 rows and bails —
+    // preventing a double-send. On failure we clear sent_at again to release it.
+    const { data: claimed, error: claimError } = await supabase
+      .from('communication_drafts')
+      .update({ sent_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('status', 'approved')
+      .is('sent_at', null)
+      .select('id')
+
+    if (claimError) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to claim draft for sending' },
+        { status: 500 }
+      )
+    }
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Draft is already being sent or has already been sent.' },
+        { status: 409 }
+      )
+    }
+    claimedForSend = true
 
     // 5. Determine the message body to send
     const messageBody = draft.was_edited && draft.edited_body
@@ -204,10 +235,11 @@ export async function POST(
         message_id: sendResult.messageId,
       })
     } else {
-      // Store the send error
+      // Send failed — release the claim (clear sent_at; status is still 'approved')
+      // so the operator can retry, and record why it failed.
       await supabase
         .from('communication_drafts')
-        .update({ send_error: sendResult.error })
+        .update({ sent_at: null, send_error: sendResult.error })
         .eq('id', id)
 
       return NextResponse.json(
@@ -217,6 +249,16 @@ export async function POST(
     }
   } catch (error: any) {
     console.error('Error sending copilot draft:', error)
+    // If we'd claimed the draft (sent_at stamped) but threw before finalizing,
+    // clear sent_at so it isn't stranded un-sendable. Guarded on status='approved'
+    // so we never clobber a draft another request legitimately moved to 'sent'.
+    if (claimedForSend && draftId) {
+      await supabase
+        .from('communication_drafts')
+        .update({ sent_at: null, send_error: error.message })
+        .eq('id', draftId)
+        .eq('status', 'approved')
+    }
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
