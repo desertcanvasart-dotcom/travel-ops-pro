@@ -4,6 +4,8 @@ import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { generateEmailTemplate } from '@/lib/communication-utils'
 import { google } from 'googleapis'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { lookupServerMessage } from '@/lib/i18n/server-messages'
+import { resolveClientLocaleByEmail, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,6 +29,9 @@ export async function POST(request: Request) {
       to,
       subject: customSubject,
       html: customHtml,
+      // Optional explicit recipient locale (caller may pass it; otherwise we
+      // resolve it from the client record below).
+      locale: bodyLocale,
     } = body
 
     const recipientEmail = clientEmail || to
@@ -36,6 +41,16 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+
+    // Tier 2: the email is written in the CLIENT's language, not the operator's.
+    // Prefer an explicit locale from the caller; else resolve from
+    // clients.preferred_language by email; else default 'en'. (The generic
+    // reminder/cron path arrives pre-localized, so this only affects the
+    // itinerary email composed below.)
+    const recipientLocale: RecipientLocale =
+      bodyLocale === 'ja' || bodyLocale === 'en'
+        ? bodyLocale
+        : await resolveClientLocaleByEmail(supabase, recipientEmail)
 
     // Determine subject and body
     let emailSubject: string
@@ -55,8 +70,8 @@ export async function POST(request: Request) {
           { status: 422 }
         )
       }
-      emailSubject = `Your Egypt Tour Itinerary - ${tripName} (${itineraryCode})`
-      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency)
+      emailSubject = lookupServerMessage(recipientLocale, 'email.itinerary.subject', { tripName, itineraryCode })
+      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency, recipientLocale)
     } else {
       return NextResponse.json(
         { success: false, error: 'Missing email content parameters' },
@@ -139,19 +154,31 @@ export async function POST(request: Request) {
 // EMAIL BUILDING HELPERS
 // ============================================
 
+// RFC 2047 encoded-word for a header value (e.g. a Japanese Subject). Email
+// headers must be 7-bit ASCII; a raw non-ASCII Subject mojibakes in many
+// clients. ASCII subjects are passed through unchanged.
+function encodeEmailHeader(value: string): string {
+  if (/^[\x00-\x7F]*$/.test(value)) return value
+  return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`
+}
+
 function buildSimpleEmail(to: string, subject: string, body: string): string {
   const fromAddress = process.env.GMAIL_USER || 'info@travel2egypt.org'
   const fromName = 'Islam Mohamed - Travel2Egypt.org'
 
+  // The HTML body is base64-encoded (Content-Transfer-Encoding: base64) so
+  // multi-byte UTF-8 (Japanese) survives intact rather than being emitted as
+  // raw 8-bit text under a default 7-bit assumption.
   const emailLines = [
     `From: ${fromName} <${fromAddress}>`,
     `To: ${to}`,
     `Bcc: ${fromAddress}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeEmailHeader(subject)}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
     '',
-    body,
+    Buffer.from(body, 'utf8').toString('base64'),
   ]
 
   return Buffer.from(emailLines.join('\r\n'))
@@ -176,7 +203,7 @@ function buildEmailWithAttachment(
     `From: ${fromName} <${fromAddress}>`,
     `To: ${to}`,
     `Bcc: ${fromAddress}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeEmailHeader(subject)}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',

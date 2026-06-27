@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { MODEL_PARSER } from '@/lib/ai/models'
 import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 
 // Allow longer execution for large PDFs
@@ -378,7 +379,7 @@ export async function POST(request: Request) {
     console.log(`[parse-file] Calling Claude with ${files.length} file(s), primary type: ${primaryType}`)
 
     const message = await createMessageWithRetry({
-      model: 'claude-sonnet-4-20250514',
+      model: MODEL_PARSER,
       max_tokens: 8192,
       messages: [{
         role: 'user',

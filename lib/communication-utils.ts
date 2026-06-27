@@ -1,5 +1,8 @@
 // Email and WhatsApp integration utilities
 
+import { lookupServerMessage } from '@/lib/i18n/server-messages'
+import type { RecipientLocale } from '@/lib/i18n/recipient-locale'
+
 export const COMPANY_INFO = {
   name: 'Islam Mohamed',
   title: 'Travel Consultant',
@@ -14,8 +17,13 @@ export function generateEmailTemplate(
   itineraryCode: string,
   tripName: string,
   totalCost: string,
-  currency: string
+  currency: string,
+  locale: RecipientLocale = 'en'
 ): string {
+  // Client-facing copy is localized to the recipient's language (email.itinerary.*).
+  // Brand constants (COMPANY_INFO), colors and layout stay as-is.
+  const t = (k: string, p: Record<string, string | number> = {}) =>
+    lookupServerMessage(locale, `email.itinerary.${k}`, p)
   return `
 <html>
 <head>
@@ -59,35 +67,35 @@ export function generateEmailTemplate(
 </head>
 <body>
   <div class="header">
-    <h1 style="margin: 0;">🌟 Your Egypt Adventure Awaits!</h1>
-    <p style="margin: 10px 0 0 0; opacity: 0.9;">Professional Itinerary & Quote</p>
+    <h1 style="margin: 0;">${t('heroTitle')}</h1>
+    <p style="margin: 10px 0 0 0; opacity: 0.9;">${t('heroSubtitle')}</p>
   </div>
-  
+
   <div class="content">
-    <p>Dear <strong>${clientName}</strong>,</p>
-    
-    <p>Thank you for your interest in exploring the wonders of Egypt! We're excited to present your personalized itinerary.</p>
-    
+    <p>${t('greeting', { clientName: `<strong>${clientName}</strong>` })}</p>
+
+    <p>${t('intro')}</p>
+
     <div class="highlight">
-      <h3 style="margin-top: 0; color: #2563eb;">📋 Your Trip Details</h3>
-      <p><strong>Quote Reference:</strong> ${itineraryCode}</p>
-      <p><strong>Tour:</strong> ${tripName}</p>
-      <p><strong>Total Investment:</strong> ${currency} ${totalCost}</p>
+      <h3 style="margin-top: 0; color: #2563eb;">${t('detailsTitle')}</h3>
+      <p><strong>${t('quoteRef')}</strong> ${itineraryCode}</p>
+      <p><strong>${t('tour')}</strong> ${tripName}</p>
+      <p><strong>${t('totalInvestment')}</strong> ${currency} ${totalCost}</p>
     </div>
-    
-    <p>Please find your complete itinerary attached as a PDF. This includes:</p>
-    
+
+    <p>${t('pdfIntro')}</p>
+
     <ul>
-      <li>✅ Detailed day-by-day schedule</li>
-      <li>✅ All services and inclusions</li>
-      <li>✅ Complete pricing breakdown</li>
-      <li>✅ Payment and cancellation terms</li>
-      <li>✅ Contact information</li>
+      <li>${t('bullet1')}</li>
+      <li>${t('bullet2')}</li>
+      <li>${t('bullet3')}</li>
+      <li>${t('bullet4')}</li>
+      <li>${t('bullet5')}</li>
     </ul>
-    
-    <p><strong>Ready to confirm your booking?</strong> We're here to make your Egypt dreams come true! Our team is available to answer any questions and assist with your reservation.</p>
-    
-    <p>To confirm your booking, simply reply to this email or contact us directly via WhatsApp or phone. A 30% deposit secures your adventure!</p>
+
+    <p><strong>${t('ctaTitle')}</strong> ${t('cta')}</p>
+
+    <p>${t('ctaDeposit')}</p>
     
     <div class="signature">
       <p style="margin: 5px 0;"><strong>${COMPANY_INFO.name}</strong></p>
@@ -100,10 +108,10 @@ export function generateEmailTemplate(
   
   <div class="footer">
     <p style="color: #6b7280; font-size: 14px; margin: 0;">
-      We look forward to showing you the wonders of Egypt! 🇪🇬✨
+      ${t('footerTagline')}
     </p>
     <p style="color: #9ca3af; font-size: 12px; margin: 10px 0 0 0;">
-      © ${new Date().getFullYear()} Travel2Egypt.org - Creating Unforgettable Memories
+      ${t('copyright', { year: new Date().getFullYear() })}
     </p>
   </div>
 </body>

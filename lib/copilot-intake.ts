@@ -8,6 +8,7 @@
 // ============================================
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { getDefaultOrgId } from '@/lib/auth/default-org'
 
 interface CopilotIntakeParams {
   channel: 'whatsapp' | 'email'
@@ -158,11 +159,17 @@ async function findOrCreateThread(
     }
   }
 
+  // Phase 2 — stamp org_id at intake. Webhook context (no operator session)
+  // so we use the default-org placeholder. Per-channel resolution comes with
+  // the G1 gate flip (see DEFERRED_GATES.md).
+  const orgId = await getDefaultOrgId(supabase)
+
   // Create new thread
   const { data: newThread, error } = await supabase
     .from('communication_threads')
     .insert({
       channel: params.channel,
+      org_id: orgId,
       whatsapp_conversation_id: params.whatsappConversationId || null,
       email_conversation_id: params.emailConversationId || null,
       client_id: params.clientId,

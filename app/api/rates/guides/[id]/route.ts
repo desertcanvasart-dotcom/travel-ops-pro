@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -51,7 +52,13 @@ export async function PUT(
     if (body.season !== undefined) updateData.season = body.season || null
     if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
     if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
-    if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
+    if ('supplier_id' in body || 'supplier_name' in body) {
+      const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      updateData.supplier_id = supplierCheck.supplier_id
+    }
     if (body.notes !== undefined) updateData.notes = body.notes || null
     if (body.is_active !== undefined) updateData.is_active = body.is_active
 

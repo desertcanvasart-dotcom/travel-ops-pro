@@ -2,7 +2,7 @@
 // API Route: /api/resources/vehicles
 // ============================================
 // Fetches transport suppliers from suppliers table
-// (type = 'transport_company', 'transport', or 'driver')
+// (type = 'transport', 'local_operator', or 'driver')
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('suppliers')
       .select('*')
-      .in('type', ['transport_company', 'transport', 'driver'])
+      .in('type', ['transport', 'local_operator', 'driver'])
       .order('name', { ascending: true })
 
     if (isActive === 'true') {

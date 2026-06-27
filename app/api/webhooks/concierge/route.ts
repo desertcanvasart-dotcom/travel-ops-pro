@@ -32,6 +32,7 @@ import {
 } from '@/lib/concierge-webhook-auth'
 import { validateBrief, mapBrief } from '@/lib/concierge-brief-schema'
 import { ingestBrief, type IngestOutcome } from '@/lib/concierge-brief-intake'
+import { promoteBriefToThread } from '@/lib/concierge/promote-brief-to-thread'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -143,6 +144,31 @@ export async function POST(request: NextRequest) {
   // 6. Ingest (idempotent upsert + revision history).
   try {
     const result = await ingestBrief(mapped, { requestId, rawPayload: validation.payload }, supabase)
+
+    // 6a. Promote the brief into the Copilot inbox (new thread on first
+    // receipt; refresh + new inbox row on revision). Failure here MUST NOT
+    // turn a successful brief storage into a 500 — the operator can recover
+    // by re-firing the webhook; the brief itself is already durable.
+    if (result.outcome === 'received' || result.outcome === 'updated') {
+      try {
+        const promotion = await promoteBriefToThread(result.briefId, supabase)
+        console.log('[concierge] brief promoted to copilot thread', {
+          requestId,
+          brief_id: result.briefId,
+          thread_id: promotion.threadId,
+          inbox_id: promotion.inboxId,
+          was_new_thread: promotion.wasNewThread,
+          was_new_inbox: promotion.wasNewInbox,
+        })
+      } catch (promoteError: any) {
+        console.error('[concierge] copilot promotion failed (non-fatal)', {
+          requestId,
+          brief_id: result.briefId,
+          error: promoteError?.message,
+        })
+      }
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
     return json(
       {

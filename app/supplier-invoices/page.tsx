@@ -218,9 +218,9 @@ export default function SupplierInvoicesPage() {
   // Map service categories to supplier types for filtering
   const serviceToSupplierType: Record<string, string[]> = {
     guide: ['guide'],
-    driver: ['driver', 'transport_company', 'transport'],
+    driver: ['driver', 'transport', 'local_operator'],
     hotel: ['hotel'],
-    transportation: ['transport_company', 'transport', 'driver'],
+    transportation: ['transport', 'local_operator', 'driver'],
     entrance: ['attraction', 'government'],
     meal: ['restaurant'],
     airport_staff: ['airport_staff', 'ground_handler'],

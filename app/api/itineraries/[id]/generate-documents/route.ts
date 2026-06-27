@@ -46,7 +46,7 @@ const SUPPLIER_TO_DOC_TYPE: Record<string, string> = {
   hotel: 'hotel_voucher',
   hotel_chain: 'hotel_voucher',
   transport: 'transport_voucher',
-  transport_company: 'transport_voucher',
+  local_operator: 'transport_voucher',
   driver: 'transport_voucher',
   guide: 'guide_assignment',
   cruise: 'cruise_voucher',

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       .select('*')
       .order('name', { ascending: true })
 
-    // Support comma-separated types (e.g., type=transport_company,transport,driver)
+    // Support comma-separated types (e.g., type=transport,local_operator,driver)
     if (type) {
       const types = type.split(',').map(t => t.trim()).filter(Boolean)
       if (types.length === 1) {

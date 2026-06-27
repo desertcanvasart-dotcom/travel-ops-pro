@@ -4,6 +4,7 @@
 // ============================================
 
 import { jsPDF } from 'jspdf'
+import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
 
 // ============================================
 // TYPES
@@ -60,14 +61,90 @@ interface AggregatedService {
   rate: number
 }
 
+// Pre-translated string set passed in by the caller. Built once in the calling
+// page via useTranslations('pdf'), then handed in. Keeps the generator pure
+// and decoupled from next-intl (which only works in component contexts).
+export interface PdfLabels {
+  brand: string
+  quote: string
+  date: string
+  client: string
+  travelDates: string
+  duration: string
+  durationDays: (count: number) => string
+  travelers: string
+  travelerCountAdultsOnly: (adults: number) => string
+  travelerCountWithChildren: (adults: number, children: number) => string
+  package: string
+  packageTier: (tier: string) => string
+  egyptTourPackage: string
+  day: string
+  dayN: (n: number) => string
+  dayNumberTitle: (n: number, title: string) => string
+  activities: string
+  overnight: string
+  pricingSummary: string
+  subtotal: string
+  total: string
+  totalPerPerson: string
+  service: string
+  quantity: string
+  rate: string
+  amount: string
+  inclusions: string
+  exclusions: string
+  notes: string
+}
+
 interface PDFOptions {
   showPricingBreakdown?: boolean  // true = show service breakdown, false = total only
   showServiceDetails?: boolean    // show individual service lines
+  // Phase 3 Tier 1 — Japanese delivery. Caller passes locale + pre-translated
+  // labels. When locale='ja', the generator loads NotoSansJP and switches the
+  // font for every text call. Helvetica (jsPDF default) cannot render kanji.
+  locale?: 'en' | 'ja'
+  labels?: PdfLabels
 }
 
 const DEFAULT_OPTIONS: PDFOptions = {
   showPricingBreakdown: true,
-  showServiceDetails: true
+  showServiceDetails: true,
+  locale: 'en',
+}
+
+// English fallback labels — used when a caller doesn't pass labels (back-compat).
+// Caller SHOULD always pass labels in production; this avoids hard-breaking
+// edge callers like tests or one-off scripts.
+const FALLBACK_LABELS_EN: PdfLabels = {
+  brand: 'Travel2Egypt',
+  quote: 'Quote',
+  date: 'Date',
+  client: 'Client',
+  travelDates: 'Travel Dates',
+  duration: 'Duration',
+  durationDays: (n) => `${n} days`,
+  travelers: 'Travelers',
+  travelerCountAdultsOnly: (a) => `${a} adult${a === 1 ? '' : 's'}`,
+  travelerCountWithChildren: (a, c) => `${a} adult${a === 1 ? '' : 's'}, ${c} child${c === 1 ? '' : 'ren'}`,
+  package: 'Package',
+  packageTier: (t) => `${t} Tier`,
+  egyptTourPackage: 'Egypt Tour Package',
+  day: 'Day',
+  dayN: (n) => `Day ${n}`,
+  dayNumberTitle: (n, t) => `Day ${n}: ${t}`,
+  activities: 'Activities',
+  overnight: 'Overnight',
+  pricingSummary: 'PRICING SUMMARY',
+  subtotal: 'Subtotal',
+  total: 'Total',
+  totalPerPerson: 'Total per person',
+  service: 'Service',
+  quantity: 'Quantity',
+  rate: 'Rate',
+  amount: 'Amount',
+  inclusions: 'Inclusions',
+  exclusions: 'Exclusions',
+  notes: 'Notes',
 }
 
 // ============================================
@@ -102,14 +179,17 @@ function cleanDayTitle(title: string, dayNumber: number): string {
   return cleaned || `Day ${dayNumber}`
 }
 
-/**
- * Format date for display
- */
-function formatDate(dateStr: string): string {
+// Locale → BCP-47 tag for Intl. 'en' → 'en-GB' preserves the prior date shape;
+// 'ja' → 'ja-JP' renders Japanese-style dates (2026年6月27日).
+function intlLocale(locale: 'en' | 'ja'): string {
+  return locale === 'ja' ? 'ja-JP' : 'en-GB'
+}
+
+function formatDate(dateStr: string, locale: 'en' | 'ja' = 'en'): string {
   if (!dateStr) return ''
   try {
     const date = new Date(dateStr)
-    return date.toLocaleDateString('en-GB', {
+    return date.toLocaleDateString(intlLocale(locale), {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
@@ -120,14 +200,11 @@ function formatDate(dateStr: string): string {
   }
 }
 
-/**
- * Format short date (day + month only)
- */
-function formatShortDate(dateStr: string): string {
+function formatShortDate(dateStr: string, locale: 'en' | 'ja' = 'en'): string {
   if (!dateStr) return ''
   try {
     const date = new Date(dateStr)
-    return date.toLocaleDateString('en-GB', {
+    return date.toLocaleDateString(intlLocale(locale), {
       day: 'numeric',
       month: 'short'
     })
@@ -166,7 +243,8 @@ function drawTable(
   headers: string[],
   rows: string[][],
   colWidths: number[],
-  margin: number
+  margin: number,
+  fontFamily: string = 'helvetica'
 ): number {
   const rowHeight = 8
   const headerHeight = 10
@@ -178,7 +256,7 @@ function drawTable(
   
   // Draw header text
   doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(fontFamily, 'bold')
   doc.setTextColor(255, 255, 255)
   
   let x = margin + 2
@@ -190,7 +268,7 @@ function drawTable(
   y += headerHeight
   
   // Draw rows
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(fontFamily, 'normal')
   doc.setTextColor(60, 60, 60)
   
   rows.forEach((row, rowIndex) => {
@@ -230,36 +308,45 @@ function drawTable(
 // MAIN EXPORT FUNCTION
 // ============================================
 
-export function generateItineraryPDF(
-  itinerary: Itinerary, 
+export async function generateItineraryPDF(
+  itinerary: Itinerary,
   days: DayWithServices[],
   options: PDFOptions = DEFAULT_OPTIONS
-): jsPDF {
+): Promise<jsPDF> {
   console.log('📄 PDF Generator started')
-  
+
   const opts = { ...DEFAULT_OPTIONS, ...options }
-  
+  const locale: 'en' | 'ja' = opts.locale === 'ja' ? 'ja' : 'en'
+  const labels: PdfLabels = opts.labels ?? FALLBACK_LABELS_EN
+
   try {
     if (!itinerary) {
       throw new Error('Itinerary data is required')
     }
-    
+
     if (!days || !Array.isArray(days)) {
       days = []
     }
-    
+
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     })
-    
+
+    // Noto Sans JP is the base font for ALL locales (renders Latin + CJK), so
+    // a Japanese supplier/client name inside an English document renders
+    // instead of tofu. Loaded unconditionally (Regular + Bold). Loader throws
+    // if the asset is missing; do NOT silently fall back.
+    await loadJapaneseFont(doc)
+    const fontFamily = pickFontFamily(locale)
+
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
     const margin = 15
     const contentWidth = pageWidth - 2 * margin
     let yPos = margin
-    
+
     const currency = itinerary.currency || 'EUR'
     
     // ============================================
@@ -267,15 +354,15 @@ export function generateItineraryPDF(
     // ============================================
     
     doc.setFontSize(24)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(fontFamily, 'bold')
     doc.setTextColor(100, 124, 71)
-    doc.text('Travel2Egypt', margin, yPos + 8)
-    
+    doc.text(labels.brand, margin, yPos + 8)
+
     doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(fontFamily, 'normal')
     doc.setTextColor(100, 100, 100)
-    doc.text(`Quote: ${itinerary.itinerary_code || 'N/A'}`, pageWidth - margin, yPos + 5, { align: 'right' })
-    doc.text(`Date: ${formatDate(new Date().toISOString())}`, pageWidth - margin, yPos + 10, { align: 'right' })
+    doc.text(`${labels.quote}: ${itinerary.itinerary_code || 'N/A'}`, pageWidth - margin, yPos + 5, { align: 'right' })
+    doc.text(`${labels.date}: ${formatDate(new Date().toISOString(), locale)}`, pageWidth - margin, yPos + 10, { align: 'right' })
     
     yPos += 20
     
@@ -291,9 +378,9 @@ export function generateItineraryPDF(
     // ============================================
     
     doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(fontFamily, 'bold')
     doc.setTextColor(40, 40, 40)
-    doc.text(itinerary.trip_name || 'Egypt Tour Package', margin, yPos)
+    doc.text(itinerary.trip_name || labels.egyptTourPackage, margin, yPos)
     
     yPos += 10
     
@@ -302,18 +389,24 @@ export function generateItineraryPDF(
     // ============================================
     
     doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(fontFamily, 'normal')
     doc.setTextColor(80, 80, 80)
     
+    const numAdults = itinerary.num_adults || 0
+    const numChildren = itinerary.num_children || 0
+    const travelerLine = numChildren > 0
+      ? labels.travelerCountWithChildren(numAdults, numChildren)
+      : labels.travelerCountAdultsOnly(numAdults)
     const infoLines = [
-      `Client: ${itinerary.client_name || 'N/A'}`,
-      `Travel Dates: ${formatDate(itinerary.start_date)} - ${formatDate(itinerary.end_date)}`,
-      `Duration: ${itinerary.total_days || 0} days`,
-      `Travelers: ${itinerary.num_adults || 0} adult${(itinerary.num_adults || 0) > 1 ? 's' : ''}${(itinerary.num_children || 0) > 0 ? `, ${itinerary.num_children} child${(itinerary.num_children || 0) > 1 ? 'ren' : ''}` : ''}`,
+      `${labels.client}: ${itinerary.client_name || 'N/A'}`,
+      `${labels.travelDates}: ${formatDate(itinerary.start_date, locale)} - ${formatDate(itinerary.end_date, locale)}`,
+      `${labels.duration}: ${labels.durationDays(itinerary.total_days || 0)}`,
+      `${labels.travelers}: ${travelerLine}`,
     ]
-    
+
     if (itinerary.tier) {
-      infoLines.push(`Package: ${itinerary.tier.charAt(0).toUpperCase() + itinerary.tier.slice(1)} Tier`)
+      const tierLabel = itinerary.tier.charAt(0).toUpperCase() + itinerary.tier.slice(1)
+      infoLines.push(`${labels.package}: ${labels.packageTier(tierLabel)}`)
     }
     
     infoLines.forEach(line => {
@@ -329,21 +422,22 @@ export function generateItineraryPDF(
     
     if (days.length > 0) {
       doc.setFontSize(14)
-      doc.setFont('helvetica', 'bold')
+      doc.setFont(fontFamily, 'bold')
       doc.setTextColor(100, 124, 71)
-      doc.text('ITINERARY OVERVIEW', margin, yPos)
+      // Reuses 'activities' label for the overview heading — same column header.
+      doc.text(labels.activities.toUpperCase(), margin, yPos)
       
       yPos += 8
       
       // Build table data - clean the titles to avoid "Day X: Day X:"
       const daysData = days.map(day => [
-        `Day ${day.day_number || '?'}`,
-        formatShortDate(day.date),
+        labels.dayN(day.day_number || 0),
+        formatShortDate(day.date, locale),
         cleanDayTitle(day.title, day.day_number) || day.city || '',
         day.overnight_city || ''
       ])
       
-      yPos = drawTable(doc, yPos, ['Day', 'Date', 'Activities', 'Overnight'], daysData, [20, 25, 90, 45], margin)
+      yPos = drawTable(doc, yPos, [labels.day, labels.date, labels.activities, labels.overnight], daysData, [20, 25, 90, 45], margin, fontFamily)
       
       yPos += 5
     }
@@ -363,24 +457,24 @@ export function generateItineraryPDF(
       doc.rect(margin, yPos - 3, contentWidth, 10, 'F')
       
       doc.setFontSize(11)
-      doc.setFont('helvetica', 'bold')
+      doc.setFont(fontFamily, 'bold')
       doc.setTextColor(74, 92, 53)
       
       // FIX: Clean the title to avoid "Day X: Day X:" duplication
       const cleanedTitle = cleanDayTitle(day.title, day.day_number)
-      doc.text(`Day ${day.day_number || index + 1}: ${cleanedTitle}`, margin + 3, yPos + 3)
+      doc.text(labels.dayNumberTitle(day.day_number || index + 1, cleanedTitle), margin + 3, yPos + 3)
       
       doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(fontFamily, 'normal')
       doc.setTextColor(120, 120, 120)
-      doc.text(formatShortDate(day.date), pageWidth - margin - 3, yPos + 3, { align: 'right' })
+      doc.text(formatShortDate(day.date, locale), pageWidth - margin - 3, yPos + 3, { align: 'right' })
       
       yPos += 12
       
       // Description
       if (day.description) {
         doc.setFontSize(9)
-        doc.setFont('helvetica', 'normal')
+        doc.setFont(fontFamily, 'normal')
         doc.setTextColor(60, 60, 60)
         
         const lines = doc.splitTextToSize(day.description, contentWidth - 10)
@@ -401,9 +495,9 @@ export function generateItineraryPDF(
     }
     
     doc.setFontSize(14)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(fontFamily, 'bold')
     doc.setTextColor(100, 124, 71)
-    doc.text('PRICING SUMMARY', margin, yPos)
+    doc.text(labels.pricingSummary, margin, yPos)
     
     yPos += 8
     
@@ -447,10 +541,10 @@ export function generateItineraryPDF(
       ])
       
       if (serviceRows.length > 0) {
-        yPos = drawTable(doc, yPos, ['Service', 'Qty', 'Rate', 'Total'], serviceRows, [85, 20, 35, 40], margin)
+        yPos = drawTable(doc, yPos, [labels.service, labels.quantity, labels.rate, labels.total], serviceRows, [85, 20, 35, 40], margin, fontFamily)
       } else {
         doc.setFontSize(10)
-        doc.setFont('helvetica', 'italic')
+        doc.setFont(fontFamily, 'italic')
         doc.setTextColor(150, 150, 150)
         doc.text('No services calculated yet', margin, yPos)
         yPos += 10
@@ -458,7 +552,7 @@ export function generateItineraryPDF(
     } else {
       // Total only - no breakdown
       doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(fontFamily, 'normal')
       doc.setTextColor(80, 80, 80)
       doc.text('Package includes all services as per itinerary.', margin, yPos)
       yPos += 10
@@ -476,12 +570,12 @@ export function generateItineraryPDF(
     doc.roundedRect(pageWidth - margin - 80, yPos, 80, 22, 2, 2, 'F')
     
     doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(fontFamily, 'normal')
     doc.setTextColor(255, 255, 255)
     doc.text('TOTAL PRICE', pageWidth - margin - 75, yPos + 7)
     
     doc.setFontSize(16)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(fontFamily, 'bold')
     doc.text(formatCurrency(totalPrice, currency), pageWidth - margin - 5, yPos + 17, { align: 'right' })
     
     yPos += 32
@@ -489,7 +583,7 @@ export function generateItineraryPDF(
     // Per person cost (if multiple travelers)
     if (totalPax > 1 && totalPrice > 0) {
       doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(fontFamily, 'normal')
       doc.setTextColor(100, 100, 100)
       const perPerson = totalPrice / totalPax
       doc.text(`(${formatCurrency(perPerson, currency)} per person)`, pageWidth - margin, yPos, { align: 'right' })
@@ -506,13 +600,13 @@ export function generateItineraryPDF(
     }
     
     doc.setFontSize(12)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(fontFamily, 'bold')
     doc.setTextColor(100, 124, 71)
     doc.text('INCLUSIONS', margin, yPos)
     yPos += 6
     
     doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(fontFamily, 'normal')
     doc.setTextColor(60, 60, 60)
     
     const inclusions = itinerary.inclusions && itinerary.inclusions.length > 0
@@ -546,13 +640,13 @@ export function generateItineraryPDF(
     }
 
     doc.setFontSize(12)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(fontFamily, 'bold')
     doc.setTextColor(100, 124, 71)
     doc.text('EXCLUSIONS', margin, yPos)
     yPos += 6
 
     doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(fontFamily, 'normal')
     doc.setTextColor(60, 60, 60)
 
     const exclusions = itinerary.exclusions && itinerary.exclusions.length > 0
@@ -585,13 +679,13 @@ export function generateItineraryPDF(
     }
     
     doc.setFontSize(12)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(fontFamily, 'bold')
     doc.setTextColor(100, 124, 71)
     doc.text('PAYMENT TERMS', margin, yPos)
     yPos += 6
     
     doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(fontFamily, 'normal')
     doc.setTextColor(60, 60, 60)
     
     const terms = [
@@ -637,13 +731,13 @@ export function generateItineraryPDF(
 // DOWNLOAD HELPER
 // ============================================
 
-export function downloadItineraryPDF(
-  itinerary: Itinerary, 
-  days: DayWithServices[], 
+export async function downloadItineraryPDF(
+  itinerary: Itinerary,
+  days: DayWithServices[],
   filename?: string,
   options?: PDFOptions
-): void {
-  const doc = generateItineraryPDF(itinerary, days, options)
+): Promise<void> {
+  const doc = await generateItineraryPDF(itinerary, days, options)
   const clientName = (itinerary.client_name || 'Client').replace(/\s+/g, '_')
   const defaultFilename = `${itinerary.itinerary_code}_${clientName}.pdf`
   doc.save(filename || defaultFilename)

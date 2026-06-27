@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { RATE_TABLE_CONFIGS, validateImportData } from '@/lib/bulk-rate-service'
-import type { ImportResult } from '@/lib/bulk-rate-service'
+import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 import { validateRatePayload } from '@/lib/rate-validation'
+import { batchResolveSuppliers } from '@/lib/suppliers/resolve-supplier'
+import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 
 const supabase = createServerClient()
 
@@ -74,6 +76,67 @@ export async function POST(request: NextRequest) {
     // Validate
     const preview = validateImportData(rows, config)
 
+    // Phase 3 durability: supplier resolution. The bulk-import path used to
+    // upsert supplier_name verbatim with supplier_id NULL, which is what
+    // produced the 102-row NULL spike on 2026-06-23 that started this work.
+    // Resolve per-row BEFORE the dry-run preview is returned so unresolved
+    // names surface as validation errors in the operator's existing preview,
+    // not as silent NULL writes.
+    //
+    // Rules:
+    //   - row has explicit supplier_id → confirm it exists in suppliers, else error
+    //   - row has supplier_name (no id) → resolve by lower(btrim(name)); exact-1 → set id; 0 or 2+ → error
+    //   - row has neither → pass through (legitimate supplier-less row)
+    const parsedRows = preview.parsedValidRows ?? []
+    const resolution = await batchResolveSuppliers(parsedRows, supabase)
+    const supplierErrors: ValidationError[] = []
+    const indicesToDemote = new Set<number>()
+    const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().trim()
+    const locale = await getServerLocale()
+
+    parsedRows.forEach((row, idx) => {
+      const rowNum = idx + 2
+      const idValue = typeof row.supplier_id === 'string' ? row.supplier_id.trim() : ''
+      const nameValue = typeof row.supplier_name === 'string' ? row.supplier_name : ''
+
+      if (idValue) {
+        if (resolution.unknownIds.has(idValue)) {
+          supplierErrors.push({ row: rowNum, column: 'supplier_id', message: lookupServerMessage(locale, 'rates.common.errors.supplierIdNotFound', { id: idValue }) })
+          indicesToDemote.add(idx)
+        }
+        return
+      }
+
+      if (!nameValue) return
+
+      const normName = norm(nameValue)
+      if (resolution.resolvedIdByName.has(normName)) {
+        row.supplier_id = resolution.resolvedIdByName.get(normName)
+        return
+      }
+      if (resolution.ambiguousNames.has(normName)) {
+        const candidates = resolution.ambiguousNames.get(normName)!
+        const idList = candidates.map((c) => `${c.id} (${c.name})`).join(', ')
+        supplierErrors.push({ row: rowNum, column: 'supplier_name', message: lookupServerMessage(locale, 'rates.common.errors.supplierNameAmbiguous', { name: nameValue, count: candidates.length, candidates: idList }) })
+        indicesToDemote.add(idx)
+        return
+      }
+      if (resolution.noMatchNames.has(normName)) {
+        supplierErrors.push({ row: rowNum, column: 'supplier_name', message: lookupServerMessage(locale, 'rates.common.errors.supplierNameNoMatchBulk', { name: nameValue }) })
+        indicesToDemote.add(idx)
+        return
+      }
+    })
+
+    if (supplierErrors.length > 0) {
+      const demotedCount = indicesToDemote.size
+      preview.errors = [...preview.errors, ...supplierErrors].slice(0, 100)
+      preview.validRows = Math.max(0, preview.validRows - demotedCount)
+      preview.invalidRows = preview.invalidRows + demotedCount
+      preview.parsedValidRows = parsedRows.filter((_, idx) => !indicesToDemote.has(idx))
+      preview.sampleData = preview.parsedValidRows.slice(0, 5)
+    }
+
     // L7: don't serialize the FULL parsed rows back to the caller in the
     // dry-run response — only the sampleData (first 5) is part of the
     // public preview contract.
@@ -102,6 +165,9 @@ export async function POST(request: NextRequest) {
     // rejected them at validation, this loop coerced them to false). The
     // validator and the upsert now share ONE parser, so anything that passes
     // validation lands as the exact same record at write time.
+    //
+    // parsedValidRows has already been filtered for unresolved suppliers above
+    // and any resolved-by-name rows now carry the canonical supplier_id.
     const rowsToUpsert: Record<string, any>[] = preview.parsedValidRows || []
 
     // Rate-entry validation (harness Layer 4): reject the import if any row has

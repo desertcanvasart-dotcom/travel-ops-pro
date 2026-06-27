@@ -39,19 +39,24 @@ export async function translateText(
       })
     })
 
-    const data = await response.json()
+    const data = await response.json().catch(() => null)
 
-    if (data.success && data.data?.translatedText) {
+    if (response.ok && data?.success && data.data?.translatedText) {
       return data.data.translatedText
     }
 
-    // On failure, return original text as fallback
-    console.warn('Translation failed, using original text:', data.error)
-    return text
+    // Systemic failure (retired model, outage, bad key, rate limit). DO NOT
+    // silently return the English original — that's the silent-failure class
+    // that produced "Japanese" versions that were actually still English with
+    // a SUCCESS response. Throw so the caller (copy-translate routes) surfaces
+    // a clear error instead of writing untranslated content. The route already
+    // localized data.error via the cookie pattern.
+    const reason = data?.error || `translate API returned ${response.status}`
+    throw new Error(reason)
   } catch (error) {
-    console.error('Translation error:', error)
-    // Return original text as fallback
-    return text
+    // Re-throw so the failure is visible to the operator. (Empty input is
+    // handled by the early `return null` above and never reaches here.)
+    throw error instanceof Error ? error : new Error(String(error))
   }
 }
 

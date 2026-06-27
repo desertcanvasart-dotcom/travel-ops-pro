@@ -3,6 +3,122 @@
 // Unified branding with Travel2Egypt / Autoura colors
 
 import jsPDF from 'jspdf'
+import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
+
+// Caller-supplied translations. Construct in the calling page via
+// useTranslations('pdf.voucher') and pass in. Async font load happens
+// inside generateSupplierDocumentPDF when locale='ja'.
+export interface SupplierDocPdfLabels {
+  brand: string
+  tagline: string
+  documentNumber: string
+  issueDate: string
+  supplier: string
+  supplierUpper: string
+  guestInformation: string
+  pax: string
+  checkIn: string
+  checkOut: string
+  duration: string
+  nights: (count: number) => string
+  serviceDate: string
+  pickupTime: string
+  from: string
+  to: string
+  service: string
+  vehicleType: string
+  driver: string
+  servicesItems: string
+  description: string
+  qty: string
+  amount: string
+  specialRequests: string
+  paymentTerms: string
+  totalAmount: string
+  total: string
+  authorizedBy: string
+  supplierConfirmationStamp: string
+  footerContact: string
+  // Added in the JA fix pass — these were rendering English in the JA voucher.
+  nationality: string
+  // Japanese uses counters (名), not word swaps — built as a function so the
+  // count composes naturally: '大人2名、子供1名' (NOT '2 大人 + 1 子供').
+  paxComposition: (adults: number, children: number) => string
+  driverTBA: string                          // driver fallback when unassigned
+  paymentTBC: string                         // payment-terms fallback
+  paymentTermsByKey: Record<string, string>  // prepaid/credit/on_service/commission
+  vehicleTypes: Record<string, string>       // sedan/minivan/van/... localized
+  generatedOn: (datetime: string) => string  // footer "generated on {dt}"
+  documentTitle: Record<string, string>  // by document_type
+}
+
+const FALLBACK_LABELS_EN: SupplierDocPdfLabels = {
+  brand: 'TRAVEL2EGYPT',
+  tagline: 'Your Gateway to Egypt',
+  documentNumber: 'Document Number',
+  issueDate: 'Issue Date',
+  supplier: 'Supplier',
+  supplierUpper: 'SUPPLIER',
+  guestInformation: 'GUEST INFORMATION',
+  pax: 'PAX',
+  checkIn: 'CHECK-IN',
+  checkOut: 'CHECK-OUT',
+  duration: 'DURATION',
+  nights: (n) => `${n} night${n === 1 ? '' : 's'}`,
+  serviceDate: 'SERVICE DATE',
+  pickupTime: 'PICKUP TIME',
+  from: 'FROM:',
+  to: 'TO:',
+  service: 'SERVICE',
+  vehicleType: 'VEHICLE TYPE',
+  driver: 'DRIVER',
+  servicesItems: 'SERVICES / ITEMS',
+  description: 'Description',
+  qty: 'Qty',
+  amount: 'Amount',
+  specialRequests: 'SPECIAL REQUESTS',
+  paymentTerms: 'PAYMENT TERMS',
+  totalAmount: 'TOTAL AMOUNT',
+  total: 'Total',
+  authorizedBy: 'Authorized by Travel2Egypt',
+  supplierConfirmationStamp: 'Supplier Confirmation & Stamp',
+  footerContact: 'Travel2Egypt | www.travel2egypt.com | reservations@travel2egypt.com | +20 100 XXX XXXX',
+  nationality: 'Nationality',
+  paxComposition: (a, c) => `${a} Adult${a !== 1 ? 's' : ''}${c > 0 ? ` + ${c} Child${c !== 1 ? 'ren' : ''}` : ''}`,
+  driverTBA: 'To be assigned',
+  paymentTBC: 'To be confirmed',
+  paymentTermsByKey: {
+    prepaid: 'Prepaid',
+    credit: 'Credit terms',
+    on_service: 'Pay on service date',
+    commission: 'Commission based',
+  },
+  vehicleTypes: {
+    sedan: 'Sedan (1-3 pax)',
+    suv: 'SUV / 4x4 (1-4 pax)',
+    minivan: 'Minivan (4-6 pax)',
+    van: 'Van (7-10 pax)',
+    minibus: 'Minibus (11-20 pax)',
+    bus: 'Bus (21+ pax)',
+    luxury_sedan: 'Luxury Sedan',
+    luxury_van: 'Luxury Van / Sprinter',
+  },
+  generatedOn: (dt) => `Document generated on ${dt}`,
+  documentTitle: {
+    hotel_voucher: 'HOTEL VOUCHER',
+    service_order: 'SERVICE ORDER',
+    transport_voucher: 'TRANSPORT VOUCHER',
+    activity_voucher: 'ACTIVITY VOUCHER',
+    guide_assignment: 'GUIDE ASSIGNMENT',
+    cruise_voucher: 'CRUISE VOUCHER',
+    entrance_fees: 'ENTRANCE FEES ORDER',
+  },
+}
+
+export interface SupplierDocPdfOptions {
+  locale?: 'en' | 'ja'
+  labels?: SupplierDocPdfLabels
+}
 
 interface ServiceItem {
   date?: string
@@ -124,21 +240,33 @@ const DOCUMENT_ICONS: Record<string, string> = {
   entrance_fees: '🎟️'
 }
 
-export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
+export async function generateSupplierDocumentPDF(
+  doc: SupplierDocument,
+  options: SupplierDocPdfOptions = {}
+): Promise<jsPDF> {
+  const locale: 'en' | 'ja' = options.locale === 'ja' ? 'ja' : 'en'
+  const labels: SupplierDocPdfLabels = options.labels ?? FALLBACK_LABELS_EN
+
   const pdf = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4'
   })
 
+  // Noto Sans JP is the base font for ALL locales (Latin + CJK) so a Japanese
+  // supplier/client name on an English voucher renders instead of tofu.
+  // Loaded unconditionally (Regular + Bold).
+  await loadJapaneseFont(pdf)
+  const fontFamily = pickFontFamily(locale)
+
   const pageWidth = pdf.internal.pageSize.getWidth()
   const pageHeight = pdf.internal.pageSize.getHeight()
   const margin = 15
   const contentWidth = pageWidth - (margin * 2)
-  
+
   let y = margin
-  
-  const title = DOCUMENT_TITLES[doc.document_type] || 'SERVICE DOCUMENT'
+
+  const title = labels.documentTitle[doc.document_type] || DOCUMENT_TITLES[doc.document_type] || 'SERVICE DOCUMENT'
 
   // ==================== HEADER SECTION ====================
 
@@ -153,14 +281,14 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.roundedRect(margin, y, 55, 20, 3, 3, 'F')
   
   pdf.setFontSize(16)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-  pdf.text('TRAVEL2EGYPT', margin + 5, y + 9)
+  pdf.text(labels.brand, margin + 5, y + 9)
   
   pdf.setFontSize(7)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text('Your Gateway to Egypt', margin + 5, y + 15)
+  pdf.text(labels.tagline, margin + 5, y + 15)
   
   // Document Type & Number (Right side)
   const rightBoxX = pageWidth - margin - 65
@@ -168,27 +296,27 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.roundedRect(rightBoxX, y, 65, 20, 3, 3, 'F')
   
   pdf.setFontSize(10)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.white.r, BRAND.white.g, BRAND.white.b)
   pdf.text(title, rightBoxX + 32.5, y + 8, { align: 'center' })
   
   pdf.setFontSize(9)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.text(doc.document_number, rightBoxX + 32.5, y + 15, { align: 'center' })
   
   y += 28
   
   // Issue date line
   pdf.setFontSize(8)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  const issueDate = new Date().toLocaleDateString('en-US', { 
+  const issueDate = new Date().toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', { 
     weekday: 'long',
     month: 'long', 
     day: 'numeric', 
     year: 'numeric' 
   })
-  pdf.text(`Issue Date: ${issueDate}`, pageWidth - margin, y, { align: 'right' })
+  pdf.text(`${labels.issueDate}: ${issueDate}`, pageWidth - margin, y, { align: 'right' })
   
   y += 8
 
@@ -204,17 +332,17 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.roundedRect(margin, y, colWidth, 38, 3, 3, 'FD')
   
   pdf.setFontSize(7)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-  pdf.text('SUPPLIER', margin + 4, y + 5)
+  pdf.text(labels.supplierUpper, margin + 4, y + 5)
   
   pdf.setFontSize(11)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
   pdf.text(doc.supplier_name || 'N/A', margin + 4, y + 12)
   
   pdf.setFontSize(8)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
   
   let supplierY = y + 18
@@ -242,39 +370,36 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.roundedRect(guestBoxX, y, colWidth, 38, 3, 3, 'FD')
   
   pdf.setFontSize(7)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-  pdf.text('GUEST INFORMATION', guestBoxX + 4, y + 5)
+  pdf.text(labels.guestInformation, guestBoxX + 4, y + 5)
   
   pdf.setFontSize(11)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
   pdf.text(doc.client_name || 'N/A', guestBoxX + 4, y + 12)
   
   pdf.setFontSize(8)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
   
   if (doc.client_nationality) {
-    pdf.text(`Nationality: ${doc.client_nationality}`, guestBoxX + 4, y + 18)
+    pdf.text(`${labels.nationality}: ${doc.client_nationality}`, guestBoxX + 4, y + 18)
   }
   
   // PAX display
   const totalPax = doc.num_adults + (doc.num_children || 0)
   pdf.setFontSize(20)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
   pdf.text(totalPax.toString(), guestBoxX + colWidth - 15, y + 18)
   
   pdf.setFontSize(7)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text('PAX', guestBoxX + colWidth - 15, y + 23)
+  pdf.text(labels.pax, guestBoxX + colWidth - 15, y + 23)
   
-  let paxDetail = `${doc.num_adults} Adult${doc.num_adults !== 1 ? 's' : ''}`
-  if (doc.num_children > 0) {
-    paxDetail += ` + ${doc.num_children} Child${doc.num_children !== 1 ? 'ren' : ''}`
-  }
+  const paxDetail = labels.paxComposition(doc.num_adults, doc.num_children || 0)
   pdf.text(paxDetail, guestBoxX + 4, y + 33)
   
   if (doc.city) {
@@ -295,30 +420,34 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     pdf.roundedRect(margin, y, dateBoxWidth, 22, 3, 3, 'FD')
     
     pdf.setFontSize(7)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('CHECK-IN', margin + 4, y + 5)
+    pdf.text(labels.checkIn, margin + 4, y + 5)
     
     pdf.setFontSize(10)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-    const checkInDate = doc.check_in ? new Date(doc.check_in).toLocaleDateString('en-US', { 
+    const checkInDate = doc.check_in ? new Date(doc.check_in).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', { 
       weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' 
     }) : '—'
     pdf.text(checkInDate, margin + 4, y + 14)
     
-    // Check-out
+    // Check-out — set fill+draw explicitly. Previously this box had no
+    // setFillColor and inherited the prior fill state, rendering solid black
+    // over the date (mis-rendered in EN too — a pre-existing drawing bug).
+    pdf.setFillColor(BRAND.white.r, BRAND.white.g, BRAND.white.b)
+    pdf.setDrawColor(BRAND.border.r, BRAND.border.g, BRAND.border.b)
     pdf.roundedRect(margin + dateBoxWidth + 6, y, dateBoxWidth, 22, 3, 3, 'FD')
-    
+
     pdf.setFontSize(7)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('CHECK-OUT', margin + dateBoxWidth + 10, y + 5)
+    pdf.text(labels.checkOut, margin + dateBoxWidth + 10, y + 5)
     
     pdf.setFontSize(10)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-    const checkOutDate = doc.check_out ? new Date(doc.check_out).toLocaleDateString('en-US', { 
+    const checkOutDate = doc.check_out ? new Date(doc.check_out).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', { 
       weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' 
     }) : '—'
     pdf.text(checkOutDate, margin + dateBoxWidth + 10, y + 14)
@@ -334,13 +463,15 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     }
 
     pdf.setFontSize(7)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('DURATION', margin + (dateBoxWidth + 6) * 2 + 4, y + 5)
+    pdf.text(labels.duration, margin + (dateBoxWidth + 6) * 2 + 4, y + 5)
 
     pdf.setFontSize(14)
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-    pdf.text(`${nights} NIGHT${nights !== 1 ? 'S' : ''}`, margin + (dateBoxWidth + 6) * 2 + dateBoxWidth / 2, y + 15, { align: 'center' })
+    // Use the locale-aware nights() label (e.g. '3泊' / '3 nights') instead of
+    // the hardcoded English 'N NIGHTS'.
+    pdf.text(labels.nights(nights), margin + (dateBoxWidth + 6) * 2 + dateBoxWidth / 2, y + 15, { align: 'center' })
     
     y += 28
     
@@ -354,14 +485,14 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     pdf.roundedRect(margin, y, dateBoxWidth, 22, 3, 3, 'FD')
     
     pdf.setFontSize(7)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('SERVICE DATE', margin + 4, y + 5)
+    pdf.text(labels.serviceDate, margin + 4, y + 5)
     
     pdf.setFontSize(10)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-    const serviceDate = doc.service_date ? new Date(doc.service_date).toLocaleDateString('en-US', { 
+    const serviceDate = doc.service_date ? new Date(doc.service_date).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', { 
       weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
     }) : '—'
     pdf.text(serviceDate, margin + 4, y + 14)
@@ -372,12 +503,12 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     pdf.roundedRect(margin + dateBoxWidth + 6, y, dateBoxWidth, 22, 3, 3, 'FD')
 
     pdf.setFontSize(7)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('PICKUP TIME', margin + dateBoxWidth + 10, y + 5)
+    pdf.text(labels.pickupTime, margin + dateBoxWidth + 10, y + 5)
 
     pdf.setFontSize(14)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
     pdf.text(doc.pickup_time || '—', margin + dateBoxWidth + 10, y + 15)
     
@@ -389,22 +520,22 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
       pdf.roundedRect(margin, y, contentWidth, 18, 3, 3, 'F')
 
       pdf.setFontSize(8)
-      pdf.setFont('helvetica', 'normal')
+      pdf.setFont(fontFamily, 'normal')
       pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
 
       if (doc.pickup_location) {
-        pdf.setFont('helvetica', 'bold')
-        pdf.text('FROM:', margin + 4, y + 7)
-        pdf.setFont('helvetica', 'normal')
+        pdf.setFont(fontFamily, 'bold')
+        pdf.text(labels.from, margin + 4, y + 7)
+        pdf.setFont(fontFamily, 'normal')
         pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
         pdf.text(doc.pickup_location, margin + 20, y + 7)
       }
 
       if (doc.dropoff_location) {
         pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text('TO:', margin + 4, y + 13)
-        pdf.setFont('helvetica', 'normal')
+        pdf.setFont(fontFamily, 'bold')
+        pdf.text(labels.to, margin + 4, y + 13)
+        pdf.setFont(fontFamily, 'normal')
         pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
         pdf.text(doc.dropoff_location, margin + 20, y + 13)
       }
@@ -414,16 +545,8 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
 
     // Vehicle Type & Driver for transport
     if (doc.document_type === 'transport_voucher' && (doc.vehicle_type || doc.driver_name)) {
-      const vehicleTypeLabels: Record<string, string> = {
-        'sedan': 'Sedan (1-3 pax)',
-        'suv': 'SUV / 4x4 (1-4 pax)',
-        'minivan': 'Minivan (4-6 pax)',
-        'van': 'Van (7-10 pax)',
-        'minibus': 'Minibus (11-20 pax)',
-        'bus': 'Bus (21+ pax)',
-        'luxury_sedan': 'Luxury Sedan',
-        'luxury_van': 'Luxury Van / Sprinter'
-      }
+      // Locale-aware vehicle type names (was a hardcoded English dict).
+      const vehicleTypeLabels = labels.vehicleTypes
 
       const halfWidth = (contentWidth - 6) / 2
 
@@ -433,12 +556,12 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
       pdf.roundedRect(margin, y, halfWidth, 18, 3, 3, 'FD')
 
       pdf.setFontSize(7)
-      pdf.setFont('helvetica', 'bold')
+      pdf.setFont(fontFamily, 'bold')
       pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-      pdf.text('VEHICLE TYPE', margin + 4, y + 5)
+      pdf.text(labels.vehicleType, margin + 4, y + 5)
 
       pdf.setFontSize(10)
-      pdf.setFont('helvetica', 'bold')
+      pdf.setFont(fontFamily, 'bold')
       pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
       const vehicleLabel = doc.vehicle_type ? (vehicleTypeLabels[doc.vehicle_type] || doc.vehicle_type) : '—'
       pdf.text(vehicleLabel, margin + 4, y + 13)
@@ -449,14 +572,14 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
       pdf.roundedRect(margin + halfWidth + 6, y, halfWidth, 18, 3, 3, 'FD')
 
       pdf.setFontSize(7)
-      pdf.setFont('helvetica', 'bold')
+      pdf.setFont(fontFamily, 'bold')
       pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-      pdf.text('DRIVER', margin + halfWidth + 10, y + 5)
+      pdf.text(labels.driver, margin + halfWidth + 10, y + 5)
 
       pdf.setFontSize(10)
-      pdf.setFont('helvetica', 'normal')
+      pdf.setFont(fontFamily, 'normal')
       pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-      pdf.text(doc.driver_name || 'To be assigned', margin + halfWidth + 10, y + 13)
+      pdf.text(doc.driver_name || labels.driverTBA, margin + halfWidth + 10, y + 13)
 
       y += 24
     }
@@ -468,9 +591,9 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   
   if (hasServices) {
     pdf.setFontSize(9)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-    pdf.text('SERVICES / ITEMS', margin, y + 5)
+    pdf.text(labels.servicesItems, margin, y + 5)
     y += 10
     
     // Table header
@@ -480,11 +603,11 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     pdf.roundedRect(margin, y, contentWidth, 10, 2, 2, 'FD')
 
     pdf.setFontSize(8)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('Description', margin + 4, y + 6.5)
-    pdf.text('Qty', pageWidth - margin - 40, y + 6.5, { align: 'center' })
-    pdf.text('Amount', pageWidth - margin - 4, y + 6.5, { align: 'right' })
+    pdf.text(labels.description, margin + 4, y + 6.5)
+    pdf.text(labels.qty, pageWidth - margin - 40, y + 6.5, { align: 'center' })
+    pdf.text(labels.amount, pageWidth - margin - 4, y + 6.5, { align: 'right' })
     
     y += 12
     
@@ -499,7 +622,7 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
       }
       
       pdf.setFontSize(8)
-      pdf.setFont('helvetica', 'normal')
+      pdf.setFont(fontFamily, 'normal')
       pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
       
       // Get item name
@@ -545,12 +668,12 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
     pdf.roundedRect(margin, y, contentWidth, 22, 3, 3, 'FD')
     
     pdf.setFontSize(7)
-    pdf.setFont('helvetica', 'bold')
+    pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text('SPECIAL REQUESTS', margin + 4, y + 5)
+    pdf.text(labels.specialRequests, margin + 4, y + 5)
     
     pdf.setFontSize(9)
-    pdf.setFont('helvetica', 'normal')
+    pdf.setFont(fontFamily, 'normal')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
     const requestLines = pdf.splitTextToSize(doc.special_requests, contentWidth - 8)
     pdf.text(requestLines.slice(0, 3), margin + 4, y + 12)
@@ -566,20 +689,17 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.roundedRect(margin, y, paymentBoxWidth, 18, 3, 3, 'F')
   
   pdf.setFontSize(7)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text('PAYMENT TERMS', margin + 4, y + 5)
+  pdf.text(labels.paymentTerms, margin + 4, y + 5)
   
   pdf.setFontSize(10)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-  const paymentTermsDisplay: Record<string, string> = {
-    'prepaid': 'PREPAID',
-    'credit': 'CREDIT TERMS',
-    'on_service': 'PAY ON SERVICE DATE',
-    'commission': 'COMMISSION BASED'
-  }
-  const paymentTermsText = doc.payment_terms ? (paymentTermsDisplay[doc.payment_terms] || doc.payment_terms.replace(/_/g, ' ').toUpperCase()) : 'TO BE CONFIRMED'
+  // Locale-aware payment-terms display (was a hardcoded English dict + fallback).
+  const paymentTermsText = doc.payment_terms
+    ? (labels.paymentTermsByKey[doc.payment_terms] || doc.payment_terms.replace(/_/g, ' '))
+    : labels.paymentTBC
   pdf.text(paymentTermsText, margin + 4, y + 13)
   
   // Total (right)
@@ -591,12 +711,12 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.roundedRect(totalBoxX, y, totalBoxWidth, 18, 3, 3, 'FD')
 
   pdf.setFontSize(7)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-  pdf.text('TOTAL AMOUNT', totalBoxX + 4, y + 5)
+  pdf.text(labels.totalAmount, totalBoxX + 4, y + 5)
 
   pdf.setFontSize(14)
-  pdf.setFont('helvetica', 'bold')
+  pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
   pdf.text(`${doc.currency} ${doc.total_cost.toFixed(2)}`, totalBoxX + totalBoxWidth - 4, y + 14, { align: 'right' })
   
@@ -612,13 +732,13 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.line(margin, y + 12, margin + sigWidth, y + 12)
   
   pdf.setFontSize(8)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text('Authorized by Travel2Egypt', margin, y + 18)
+  pdf.text(labels.authorizedBy, margin, y + 18)
   
   // Supplier signature
   pdf.line(pageWidth - margin - sigWidth, y + 12, pageWidth - margin, y + 12)
-  pdf.text('Supplier Confirmation & Stamp', pageWidth - margin - sigWidth, y + 18)
+  pdf.text(labels.supplierConfirmationStamp, pageWidth - margin - sigWidth, y + 18)
 
   // ==================== FOOTER ====================
   
@@ -629,13 +749,14 @@ export function generateSupplierDocumentPDF(doc: SupplierDocument): jsPDF {
   pdf.rect(0, footerY - 8, pageWidth, 20, 'F')
   
   pdf.setFontSize(7)
-  pdf.setFont('helvetica', 'normal')
+  pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text('Travel2Egypt | www.travel2egypt.com | reservations@travel2egypt.com | +20 100 XXX XXXX', pageWidth / 2, footerY, { align: 'center' })
+  pdf.text(labels.footerContact, pageWidth / 2, footerY, { align: 'center' })
   
   pdf.setFontSize(6)
   pdf.setTextColor(BRAND.textLight.r, BRAND.textLight.g, BRAND.textLight.b)
-  pdf.text(`Document generated on ${new Date().toLocaleString()} | ${doc.document_number}`, pageWidth / 2, footerY + 5, { align: 'center' })
+  const generatedAt = new Date().toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US')
+  pdf.text(`${labels.generatedOn(generatedAt)} | ${doc.document_number}`, pageWidth / 2, footerY + 5, { align: 'center' })
 
   return pdf
 }

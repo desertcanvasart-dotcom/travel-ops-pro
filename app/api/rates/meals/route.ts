@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateRatePayload } from '@/lib/rate-validation'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -52,6 +53,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
     }
 
+    const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+
     // Discover actual table columns by fetching one row
     const { data: sampleRow } = await supabaseAdmin
       .from('meal_rates')
@@ -82,8 +88,8 @@ export async function POST(request: NextRequest) {
       season: body.season || null,
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
-      supplier_id: body.supplier_id || null,
-      supplier_name: body.supplier_name || null,
+      supplier_id: supplierCheck.supplier_id,
+      supplier_name: supplierCheck.supplier_name,
       tier: body.tier || null,
       meal_category: body.meal_category || null,
       dietary_options: body.dietary_options || [],

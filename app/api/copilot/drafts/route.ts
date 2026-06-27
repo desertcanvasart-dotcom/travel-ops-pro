@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateDraft } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { MODEL_DRAFT } from '@/lib/ai/models'
 import type { GenerateDraftRequest, CopilotTone } from '@/types/copilot'
 
 const supabase = createClient(
@@ -16,8 +17,11 @@ const supabase = createClient(
 )
 
 export async function POST(request: NextRequest) {
+  // Hoisted so the catch block can mark this inbox row terminally failed.
+  let inboxMessageIdForFailure: string | undefined
   try {
     const body: GenerateDraftRequest & { user_id?: string } = await request.json()
+    inboxMessageIdForFailure = body.inbox_message_id
 
     if (!body.inbox_message_id || !body.thread_id) {
       return NextResponse.json(
@@ -113,7 +117,7 @@ export async function POST(request: NextRequest) {
         inbox_message_id: body.inbox_message_id,
         draft_body: result.output.draft_body,
         operator_notes: result.output.operator_notes,
-        ai_model: 'claude-sonnet-4-20250514',
+        ai_model: MODEL_DRAFT,
         ai_confidence: result.output.confidence,
         ai_flags: result.output.flags,
         context_used: result.context,
@@ -143,6 +147,27 @@ export async function POST(request: NextRequest) {
 
     // Use AI-specific error handling if it's an Anthropic error
     const aiError = getUserFriendlyError(error)
+
+    // Mark the inbox row terminally failed so the auto-draft poller stops
+    // retrying this row (poller gates on status === 'draft_pending'; anything
+    // else is skipped). Without this the same failing request loops forever
+    // and the operator sees an eternal spinner. Best-effort — never block the
+    // error response on this update.
+    if (inboxMessageIdForFailure) {
+      try {
+        await supabase
+          .from('communication_inbox')
+          .update({
+            status: 'draft_failed',
+            last_error: aiError.message,
+            processed_at: new Date().toISOString(),
+          })
+          .eq('id', inboxMessageIdForFailure)
+      } catch (markErr) {
+        console.error('Failed to mark inbox draft_failed (non-fatal):', markErr)
+      }
+    }
+
     return NextResponse.json(
       { success: false, error: aiError.message },
       { status: aiError.status }

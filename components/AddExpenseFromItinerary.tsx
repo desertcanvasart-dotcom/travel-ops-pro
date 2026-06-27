@@ -44,7 +44,7 @@ const CATEGORY_KEYS = [
 ] as const
 
 const SUPPLIER_TYPE_KEYS = [
-  'guide', 'driver', 'hotel', 'restaurant', 'transport_company',
+  'guide', 'driver', 'hotel', 'restaurant', 'transport', 'local_operator',
   'airport_staff', 'hotel_staff', 'ground_handler', 'government', 'other'
 ] as const
 

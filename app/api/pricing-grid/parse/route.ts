@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { MODEL_PARSER } from '@/lib/ai/models'
 import { enrichSlots } from '@/app/pricing-grid/lib/enrich-slots'
 
 // ============================================
@@ -522,7 +523,7 @@ export async function POST(request: NextRequest) {
 
     // 3. Send to AI
     const response = await createMessageWithRetry({
-      model: 'claude-sonnet-4-20250514',
+      model: MODEL_PARSER,
       max_tokens: 8192,
       system: systemPrompt,
       messages: [
@@ -554,7 +555,7 @@ export async function POST(request: NextRequest) {
 
       const genPrompt = buildGenerativePrompt(catalog)
       const genResponse = await createMessageWithRetry({
-        model: 'claude-sonnet-4-20250514',
+        model: MODEL_PARSER,
         max_tokens: 8192,
         system: genPrompt,
         messages: [

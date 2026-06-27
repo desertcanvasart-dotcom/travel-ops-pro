@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { Search, MessageSquare, Mail, Filter, RefreshCw } from 'lucide-react'
 import type { CopilotThreadWithLatest, CopilotChannel, ThreadStatus } from '@/types/copilot'
 
@@ -13,6 +14,7 @@ const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   new: { label: 'New', className: 'bg-blue-100 text-blue-700' },
   draft_pending: { label: 'Generating...', className: 'bg-yellow-100 text-yellow-700 animate-pulse' },
   draft_ready: { label: 'Draft Ready', className: 'bg-green-100 text-green-700' },
+  draft_failed: { label: 'Draft Failed', className: 'bg-red-100 text-red-700' },
   responded: { label: 'Sent', className: 'bg-gray-100 text-gray-600' },
   skipped: { label: 'Skipped', className: 'bg-gray-100 text-gray-400' },
 }
@@ -25,6 +27,8 @@ const URGENCY_COLORS: Record<string, string> = {
 }
 
 export default function CopilotThreadList({ onSelectThread, selectedThreadId }: CopilotThreadListProps) {
+  const tConcierge = useTranslations('copilot.concierge')
+  const tDraft = useTranslations('copilot.draft')
   const [threads, setThreads] = useState<CopilotThreadWithLatest[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -188,8 +192,13 @@ export default function CopilotThreadList({ onSelectThread, selectedThreadId }: 
 
                     {/* Status badge + confidence */}
                     <div className="flex items-center gap-1.5 mt-1.5">
+                      {thread.origin === 'concierge' && (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title={tConcierge('badgeTooltip')}>
+                          {tConcierge('badge')}
+                        </span>
+                      )}
                       <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.className}`}>
-                        {badge.label}
+                        {inboxStatus === 'draft_failed' ? tDraft('failed') : badge.label}
                       </span>
                       {thread.latest_draft?.ai_confidence && (
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${

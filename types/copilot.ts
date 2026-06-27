@@ -9,7 +9,7 @@
 export type CopilotChannel = 'whatsapp' | 'email'
 export type ThreadStatus = 'open' | 'waiting' | 'resolved' | 'archived'
 export type ThreadUrgency = 'low' | 'normal' | 'high' | 'urgent'
-export type InboxStatus = 'new' | 'draft_pending' | 'draft_ready' | 'responded' | 'skipped'
+export type InboxStatus = 'new' | 'draft_pending' | 'draft_ready' | 'draft_failed' | 'responded' | 'skipped'
 export type DraftStatus = 'pending' | 'approved' | 'rejected' | 'sent' | 'expired'
 export type AIConfidence = 'high' | 'medium' | 'low'
 export type CopilotTone = 'professional' | 'friendly' | 'formal'
@@ -30,6 +30,8 @@ export interface CopilotThread {
   message_count: number
   created_at: string
   updated_at: string
+  brief_id: string | null
+  origin: string | null
 }
 
 export interface CopilotInboxMessage {
@@ -43,6 +45,7 @@ export interface CopilotInboxMessage {
   message_snippet: string | null
   subject: string | null
   status: InboxStatus
+  last_error: string | null
   received_at: string
   processed_at: string | null
   created_at: string

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -39,6 +40,19 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
+    // Validate supplier fields only when the client touched them.
+    const supplierFieldPresent = 'supplier_id' in body || 'supplier_name' in body
+    let resolvedSupplierId: string | null | undefined
+    let resolvedSupplierName: string | null | undefined
+    if (supplierFieldPresent) {
+      const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      resolvedSupplierId = supplierCheck.supplier_id
+      resolvedSupplierName = supplierCheck.supplier_name
+    }
+
     // First, fetch the existing record to discover actual table columns
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from('meal_rates')
@@ -68,8 +82,12 @@ export async function PUT(
       season: (v) => v || null,
       rate_valid_from: (v) => v || null,
       rate_valid_to: (v) => v || null,
-      supplier_id: (v) => v || null,
-      supplier_name: (v) => v || null,
+      // supplier_id/supplier_name are written by the resolver override block
+      // below after the field-map loop. The fieldMap entries are no-ops kept
+      // here only so `supplierFieldPresent` rows pass the "field exists" gate
+      // in the loop without falling through to body[field].
+      supplier_id: () => null,
+      supplier_name: () => null,
       tier: (v) => v || null,
       meal_category: (v) => v || null,
       dietary_options: (v) => v || [],
@@ -84,6 +102,13 @@ export async function PUT(
       if (body[field] !== undefined && existingColumns.has(field)) {
         updateData[field] = transform(body[field])
       }
+    }
+
+    // Apply the validated supplier fields AFTER the field-map loop so the
+    // resolver's values (resolved id, sentinel→null, or rejected) win.
+    if (supplierFieldPresent) {
+      if (existingColumns.has('supplier_id')) updateData.supplier_id = resolvedSupplierId ?? null
+      if (existingColumns.has('supplier_name')) updateData.supplier_name = resolvedSupplierName ?? null
     }
 
     // Always set updated_at if the column exists

@@ -94,6 +94,7 @@ export default function ViewItineraryPage() {
   const t = useTranslations('itineraries.detail')
   const tEdit = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
+  const tPdf = useTranslations('pdf')
   const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
@@ -631,6 +632,42 @@ export default function ViewItineraryPage() {
     }
   }
 
+  // Build the localized labels bundle for the PDF generator. Done at call
+  // time so it picks up the current activeLanguage (operator can toggle in
+  // the editor; the PDF should render in the same language). The PdfLabels
+  // shape is defined in lib/pdf-generator.ts.
+  const buildPdfLabels = () => ({
+    brand: tPdf('brand'),
+    quote: tPdf('quote'),
+    date: tPdf('date'),
+    client: tPdf('client'),
+    travelDates: tPdf('travelDates'),
+    duration: tPdf('duration'),
+    durationDays: (count: number) => tPdf('durationDays', { count }),
+    travelers: tPdf('travelers'),
+    travelerCountAdultsOnly: (adults: number) => tPdf('travelerCountAdultsOnly', { adults }),
+    travelerCountWithChildren: (adults: number, children: number) => tPdf('travelerCountWithChildren', { adults, children }),
+    package: tPdf('package'),
+    packageTier: (tier: string) => tPdf('packageTier', { tier }),
+    egyptTourPackage: tPdf('egyptTourPackage'),
+    day: tPdf('day'),
+    dayN: (n: number) => tPdf('dayN', { n }),
+    dayNumberTitle: (n: number, title: string) => tPdf('dayNumberTitle', { n, title }),
+    activities: tPdf('activities'),
+    overnight: tPdf('overnight'),
+    pricingSummary: tPdf('pricingSummary'),
+    subtotal: tPdf('subtotal'),
+    total: tPdf('total'),
+    totalPerPerson: tPdf('totalPerPerson'),
+    service: tPdf('service'),
+    quantity: tPdf('quantity'),
+    rate: tPdf('rate'),
+    amount: tPdf('amount'),
+    inclusions: tPdf('inclusions'),
+    exclusions: tPdf('exclusions'),
+    notes: tPdf('notes'),
+  })
+
   const handlePreviewPDF = async (showBreakdown = true) => {
     if (!itinerary || days.length === 0) return
 
@@ -638,7 +675,9 @@ export default function ViewItineraryPage() {
     try {
       const pdf = await generateItineraryPDF(itinerary, days, {
         showPricingBreakdown: showBreakdown,
-        showServiceDetails: showBreakdown
+        showServiceDetails: showBreakdown,
+        locale: activeLanguage as 'en' | 'ja',
+        labels: buildPdfLabels(),
       })
       const blob = pdf.output('blob')
       setPdfPreviewBlob(blob)
@@ -657,7 +696,9 @@ export default function ViewItineraryPage() {
     try {
       const pdf = await generateItineraryPDF(itinerary, days, {
         showPricingBreakdown: showBreakdown,
-        showServiceDetails: showBreakdown
+        showServiceDetails: showBreakdown,
+        locale: activeLanguage as 'en' | 'ja',
+        labels: buildPdfLabels(),
       })
       const blob = pdf.output('blob')
       setPdfPreviewBlob(blob)
@@ -840,7 +881,10 @@ export default function ViewItineraryPage() {
     setShowSendModal(false)
     
     try {
-      const pdf = generateItineraryPDF(itinerary, days)
+      const pdf = await generateItineraryPDF(itinerary, days, {
+        locale: activeLanguage as 'en' | 'ja',
+        labels: buildPdfLabels(),
+      })
       const pdfBlob = pdf.output('blob')
       const pdfBase64 = await blobToBase64(pdfBlob)
 

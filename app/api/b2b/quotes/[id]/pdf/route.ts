@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
+import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 
 // ============================================
 // B2B QUOTE PDF GENERATION
@@ -13,35 +15,40 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Format date helper
-function formatDate(dateStr: string, format: 'long' | 'short' = 'long'): string {
-  if (!dateStr) return 'TBD'
+// Locale-aware date helper. Caller passes locale; en-US for English,
+// ja-JP for Japanese — matches the rest of the app's date display.
+function formatDate(dateStr: string, locale: 'en' | 'ja', tbd: string, format: 'long' | 'short' = 'long'): string {
+  if (!dateStr) return tbd
   const date = new Date(dateStr)
+  const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
   if (format === 'short') {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    return date.toLocaleDateString(tag, { month: 'short', day: 'numeric', year: 'numeric' })
   }
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
+  return date.toLocaleDateString(tag, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
-// Generate HTML template
-function generateQuoteHTML(quote: any): string {
-  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+// Generate HTML template. labels is a pre-localized dict from getServerLocale +
+// lookupServerMessage at the route handler. Font is base64-embedded via
+// @font-face — no system-font dependency, no CDN.
+async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record<string, string>): Promise<string> {
+  const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
+  const today = new Date().toLocaleDateString(tag, { year: 'numeric', month: 'short', day: 'numeric' })
   const template = quote.tour_variations?.tour_templates
   const variation = quote.tour_variations
   const partner = quote.b2b_partners
   const services = quote.services_snapshot || []
+  const tbd = labels.tbd
+  const fontFace = await getJapaneseFontFace()
 
   return `
 <!DOCTYPE html>
-<html lang="en">
+<html lang="${locale}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${quote.quote_number} - Quote</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    ${fontFace}
     * {
       margin: 0;
       padding: 0;
@@ -49,7 +56,7 @@ function generateQuoteHTML(quote: any): string {
     }
 
     body {
-      font-family: 'Inter', 'Noto Sans JP', sans-serif;
+      font-family: 'NotoSansJP', 'Inter', sans-serif;
       font-size: 10pt;
       line-height: 1.5;
       color: #1f2937;
@@ -432,38 +439,38 @@ function generateQuoteHTML(quote: any): string {
       <div class="logo-section">
         <div class="logo-circle">T2E</div>
         <div class="company-info">
-          <h1>TRAVEL TO EGYPT</h1>
-          <p>B2B Partner Quote</p>
+          <h1>${labels.brand}</h1>
+          <p>${labels.subtitle}</p>
         </div>
       </div>
       <div class="quote-box">
         <div class="quote-number">${quote.quote_number}</div>
         <div class="quote-dates">
-          Issued: ${today}<br>
-          Valid until: ${formatDate(quote.valid_until, 'short')}
+          ${labels.issued}: ${today}<br>
+          ${labels.validUntil}: ${formatDate(quote.valid_until, locale, tbd, 'short')}
         </div>
       </div>
     </header>
-    
+
     <!-- Partner & Client Info -->
     <div class="info-grid">
       ${partner ? `
       <div class="info-card">
-        <h4>Partner</h4>
+        <h4>${labels.partner}</h4>
         <p>${partner.company_name}</p>
         <p class="secondary">${partner.partner_code}</p>
         ${partner.contact_name ? `<p class="secondary">${partner.contact_name}</p>` : ''}
       </div>
       ` : `
       <div class="info-card">
-        <h4>Quote Type</h4>
-        <p>Direct Client</p>
+        <h4>${labels.quoteType}</h4>
+        <p>${labels.directClient}</p>
       </div>
       `}
-      
+
       <div class="info-card">
-        <h4>Client</h4>
-        <p>${quote.client_name || 'To be confirmed'}</p>
+        <h4>${labels.client}</h4>
+        <p>${quote.client_name || labels.clientTBC}</p>
         ${quote.client_email ? `<p class="secondary">${quote.client_email}</p>` : ''}
         ${quote.client_phone ? `<p class="secondary">${quote.client_phone}</p>` : ''}
         ${quote.client_nationality ? `<p class="secondary">${quote.client_nationality}</p>` : ''}
@@ -472,41 +479,41 @@ function generateQuoteHTML(quote: any): string {
     
     <!-- Tour Banner -->
     <div class="tour-banner">
-      <h2>${template?.template_name || quote.trip_name || 'Tour Package'}</h2>
-      <p>${variation?.variation_name || (quote.source === 'whatsapp_b2b' ? 'Custom Tour (WhatsApp)' : '')}</p>
+      <h2>${template?.template_name || quote.trip_name || labels.tourPackage}</h2>
+      <p>${variation?.variation_name || (quote.source === 'whatsapp_b2b' ? labels.customTourWhatsApp : '')}</p>
       <div class="tour-meta">
         <div class="tour-meta-item">
-          📅 ${template?.duration_days || quote.itineraries?.total_days || '-'} Days / ${template?.duration_nights || (quote.itineraries?.total_days ? quote.itineraries.total_days - 1 : '-')} Nights
+          📅 ${labels.daysNights.replace('{days}', String(template?.duration_days || quote.itineraries?.total_days || '-')).replace('{nights}', String(template?.duration_nights || (quote.itineraries?.total_days ? quote.itineraries.total_days - 1 : '-')))}
         </div>
         <div class="tour-meta-item">
-          👥 ${quote.num_adults} Pax${quote.tour_leader_included ? ' (+1 TL)' : ''}
+          👥 ${(quote.tour_leader_included ? labels.paxWithLeader : labels.paxLabel).replace('{pax}', String(quote.num_adults))}
         </div>
         <div class="tour-meta-item">
-          🗓️ ${quote.travel_date ? formatDate(quote.travel_date, 'short') : 'TBD'}
+          🗓️ ${quote.travel_date ? formatDate(quote.travel_date, locale, tbd, 'short') : tbd}
         </div>
         <div class="tour-meta-item">
-          🌡️ ${quote.season ? quote.season.charAt(0).toUpperCase() + quote.season.slice(1) : '-'} Season
+          🌡️ ${quote.season ? labels.seasonSuffix.replace('{name}', quote.season.charAt(0).toUpperCase() + quote.season.slice(1)) : '-'}
         </div>
       </div>
     </div>
-    
+
     <!-- Services Breakdown -->
     ${services.length > 0 ? `
-    <div class="section-header">Services Included</div>
+    <div class="section-header">${labels.servicesIncluded}</div>
     <div class="pricing-section">
       <table class="pricing-table">
         <thead>
           <tr>
-            <th>Service</th>
-            <th>Qty</th>
-            <th>Rate</th>
-            <th>Total</th>
+            <th>${labels.tableService}</th>
+            <th>${labels.tableQty}</th>
+            <th>${labels.tableRate}</th>
+            <th>${labels.tableTotal}</th>
           </tr>
         </thead>
         <tbody>
           ${services.slice(0, 20).map((service: any) => `
             <tr>
-              <td>${service.service_name || 'Service'}</td>
+              <td>${service.service_name || labels.fallbackService}</td>
               <td>${service.quantity || 1}</td>
               <td>€${(service.unit_cost || 0).toFixed(2)}</td>
               <td><strong>€${(service.line_total || 0).toFixed(2)}</strong></td>
@@ -515,7 +522,7 @@ function generateQuoteHTML(quote: any): string {
           ${services.length > 20 ? `
             <tr>
               <td colspan="4" style="text-align: center; color: #6b7280; font-style: italic;">
-                ... and ${services.length - 20} more services
+                ... ${services.length - 20}+
               </td>
             </tr>
           ` : ''}
@@ -523,38 +530,38 @@ function generateQuoteHTML(quote: any): string {
       </table>
     </div>
     ` : ''}
-    
+
     <!-- Pricing Summary -->
-    <div class="section-header">Pricing Summary</div>
+    <div class="section-header">${labels.pricingSummary}</div>
     <div class="totals-section">
       <div class="totals-row">
-        <span>Subtotal (Cost)</span>
+        <span>${labels.subtotalCost}</span>
         <span>€${(quote.total_cost || 0).toFixed(2)}</span>
       </div>
       <div class="totals-row">
-        <span>Margin (${quote.margin_percent || 0}%)</span>
+        <span>${labels.marginPercent.replace('{percent}', String(quote.margin_percent || 0))}</span>
         <span>€${(quote.margin_amount || 0).toFixed(2)}</span>
       </div>
       <div class="totals-row highlight">
-        <span class="label">SELLING PRICE</span>
+        <span class="label">${labels.tableTotal.toUpperCase()}</span>
         <span class="value">€${(quote.selling_price || 0).toFixed(2)}</span>
       </div>
     </div>
-    
+
     <div class="per-person-note">
-      Price per person: <strong>€${(quote.price_per_person || 0).toFixed(2)}</strong>
+      ${labels.tableRate}: <strong>€${(quote.price_per_person || 0).toFixed(2)}</strong>
     </div>
-    
+
     ${quote.tour_leader_included && quote.tour_leader_cost ? `
     <div class="tour-leader-badge">
-      <span class="label">Tour Leader Cost (included in total)</span>
+      <span class="label">${labels.tourLeaderIncluded}</span>
       <span class="value">€${quote.tour_leader_cost.toFixed(2)}</span>
     </div>
     ` : ''}
-    
+
     ${quote.single_supplement && quote.single_supplement > 0 ? `
     <div class="single-supplement">
-      <span class="label">Single Supplement (for solo travelers)</span>
+      <span class="label">${labels.singleSupplement}</span>
       <span class="value">€${quote.single_supplement.toFixed(2)}</span>
     </div>
     ` : ''}
@@ -562,51 +569,51 @@ function generateQuoteHTML(quote: any): string {
     <!-- Notes -->
     ${quote.notes ? `
     <div class="notes-section">
-      <h4>Notes</h4>
+      <h4>${labels.notes}</h4>
       <p>${quote.notes}</p>
     </div>
     ` : ''}
-    
+
     <!-- Terms -->
-    <div class="section-header">Terms & Conditions</div>
+    <div class="section-header">${labels.termsConditions}</div>
     <div class="terms-grid">
       <div class="terms-column">
-        <h4>Payment Terms</h4>
+        <h4>${labels.paymentTerms}</h4>
         <ul>
-          <li>30% deposit to confirm booking</li>
-          <li>Balance due 14 days before travel</li>
-          <li>Bank transfer or credit card accepted</li>
+          <li>${labels.paymentDeposit}</li>
+          <li>${labels.paymentBalance}</li>
+          <li>${labels.paymentMethods}</li>
         </ul>
-        <h4 style="margin-top: 12px;">Cancellation Policy</h4>
+        <h4 style="margin-top: 12px;">${labels.cancellationPolicy}</h4>
         <ul>
-          <li>30+ days: Full refund minus 10% fee</li>
-          <li>15-29 days: 50% refund</li>
-          <li>Less than 15 days: No refund</li>
+          <li>${labels.cancelGenerous}</li>
+          <li>${labels.cancelMedium}</li>
+          <li>${labels.cancelShort}</li>
         </ul>
       </div>
       <div class="terms-column">
-        <h4>Price Includes</h4>
+        <h4>${labels.priceIncludes}</h4>
         <ul>
-          <li>All tours and transfers as per itinerary</li>
-          <li>Professional English-speaking guide</li>
-          <li>Entrance fees to all sites</li>
-          <li>Bottled water during tours</li>
+          <li>${labels.includesItinerary}</li>
+          <li>${labels.includesGuide}</li>
+          <li>${labels.includesEntranceFees}</li>
+          <li>${labels.includesWater}</li>
         </ul>
-        <h4 style="margin-top: 12px;">Not Included</h4>
+        <h4 style="margin-top: 12px;">${labels.notIncluded}</h4>
         <ul>
-          <li>International flights</li>
-          <li>Personal expenses & tips</li>
-          <li>Travel insurance</li>
+          <li>${labels.excludesFlights}</li>
+          <li>${labels.excludesPersonal}</li>
+          <li>${labels.excludesInsurance}</li>
         </ul>
       </div>
     </div>
-    
+
     <!-- Footer -->
     <footer class="footer">
       <div class="footer-card">
-        <h3>TRAVEL TO EGYPT</h3>
-        <p>info@travel2egypt.org • +20 115 801 1600 • www.travel2egypt.org</p>
-        <p class="tagline">Your trusted partner for authentic Egyptian experiences</p>
+        <h3>${labels.footerBrand}</h3>
+        <p>${labels.footerContact}</p>
+        <p class="tagline">${labels.footerTagline}</p>
       </div>
     </footer>
   </div>
@@ -677,8 +684,31 @@ export async function GET(
       )
     }
 
+    // Resolve operator locale from cookie (next-intl source of truth).
+    const locale = await getServerLocale()
+
+    // Build the per-locale labels dictionary in one place — picks the right
+    // JA or EN string for every section heading + bullet point in the
+    // template.
+    const labelKeys = [
+      'brand', 'subtitle', 'issued', 'validUntil', 'partner', 'quoteType',
+      'directClient', 'client', 'clientTBC', 'tourPackage', 'customTourWhatsApp',
+      'daysNights', 'paxLabel', 'paxWithLeader', 'tbd', 'seasonSuffix',
+      'servicesIncluded', 'tableService', 'tableQty', 'tableRate', 'tableTotal',
+      'fallbackService', 'pricingSummary', 'subtotalCost', 'marginPercent',
+      'tourLeaderIncluded', 'singleSupplement', 'notes', 'termsConditions',
+      'paymentTerms', 'paymentDeposit', 'paymentBalance', 'paymentMethods',
+      'cancellationPolicy', 'cancelGenerous', 'cancelMedium', 'cancelShort',
+      'priceIncludes', 'includesItinerary', 'includesGuide', 'includesEntranceFees',
+      'includesWater', 'notIncluded', 'excludesFlights', 'excludesPersonal',
+      'excludesInsurance', 'footerBrand', 'footerContact', 'footerTagline',
+    ]
+    const labels: Record<string, string> = Object.fromEntries(
+      labelKeys.map(k => [k, lookupServerMessage(locale, `pdf.b2b.${k}`)])
+    )
+
     // Generate HTML
-    const html = generateQuoteHTML(finalQuote)
+    const html = await generateQuoteHTML(finalQuote, locale, labels)
 
     // Launch Puppeteer
     const browser = await puppeteer.launch({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { translateFields, QUOTE_TRANSLATION_FIELDS } from '@/lib/translation-utils'
 import type { Language } from '@/types/multilingual'
+import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -136,13 +137,16 @@ export async function POST(
       sourceLanguage,
       targetLanguage
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in copy-translate:', error)
+    // Localized translation-failure surface (same pattern + keys as the
+    // itineraries copy-translate route). translateText throws on systemic
+    // failure, so this no longer silently produces an untranslated version.
+    const locale = await getServerLocale()
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to translate and create version',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        error: lookupServerMessage(locale, 'translate.errors.versionFailed', { reason: error?.message || 'Unknown error' })
       },
       { status: 500 }
     )

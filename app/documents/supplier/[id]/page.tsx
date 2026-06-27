@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Send, Mail, MessageSquare, Printer, CheckCircle, Eye } from 'lucide-react'
@@ -47,6 +47,84 @@ interface SupplierDocument {
 
 export default function SupplierDocumentViewPage() {
   const t = useTranslations('supplierDocumentDetail')
+  const tVoucher = useTranslations('pdf.voucher')
+  const tBrand = useTranslations('pdf')
+  const currentLocale = useLocale()
+
+  // Caller-side builder for the voucher PDF labels — pulls from i18n so a
+  // JA operator gets a Japanese voucher even though the generator itself is
+  // a pure utility.
+  const buildVoucherLabels = () => ({
+    brand: 'TRAVEL2EGYPT',                                  // brand mark stays Latin
+    tagline: tBrand('voucher.supplier') === 'サプライヤー' ? 'エジプトへの架け橋' : 'Your Gateway to Egypt',
+    documentNumber: tVoucher('documentNumber'),
+    issueDate: tVoucher('issueDate'),
+    supplier: tVoucher('supplier'),
+    supplierUpper: tVoucher('supplier').toUpperCase(),
+    guestInformation: tVoucher('clientName').toUpperCase(),
+    pax: tVoucher('paxUnit'),
+    nationality: tVoucher('nationality'),
+    // Japanese counters (名), composed naturally: '大人2名、子供1名'.
+    paxComposition: (adults: number, children: number) => {
+      const a = tVoucher('adultsCount', { count: adults })
+      return children > 0 ? `${a}${tVoucher('paxJoin')}${tVoucher('childrenCount', { count: children })}` : a
+    },
+    driverTBA: tVoucher('driverTBA'),
+    paymentTBC: tVoucher('paymentTBC'),
+    paymentTermsByKey: {
+      prepaid: tVoucher('paymentPrepaid'),
+      credit: tVoucher('paymentCredit'),
+      on_service: tVoucher('paymentOnService'),
+      commission: tVoucher('paymentCommission'),
+    } as Record<string, string>,
+    vehicleTypes: {
+      sedan: tVoucher('vehicleSedan'),
+      suv: tVoucher('vehicleSuv'),
+      minivan: tVoucher('vehicleMinivan'),
+      van: tVoucher('vehicleVan'),
+      minibus: tVoucher('vehicleMinibus'),
+      bus: tVoucher('vehicleBus'),
+      luxury_sedan: tVoucher('vehicleLuxurySedan'),
+      luxury_van: tVoucher('vehicleLuxuryVan'),
+    } as Record<string, string>,
+    generatedOn: (datetime: string) => tVoucher('generatedOn', { datetime }),
+    checkIn: tVoucher('checkIn').toUpperCase(),
+    checkOut: tVoucher('checkOut').toUpperCase(),
+    duration: tVoucher('tourDuration').toUpperCase(),
+    nights: (n: number) => tVoucher('nights', { count: n }),
+    serviceDate: tVoucher('serviceDate').toUpperCase(),
+    pickupTime: currentLocale === 'ja' ? 'お迎え時間' : 'PICKUP TIME',
+    from: currentLocale === 'ja' ? '出発:' : 'FROM:',
+    to: currentLocale === 'ja' ? '到着:' : 'TO:',
+    service: tVoucher('service').toUpperCase(),
+    vehicleType: tVoucher('vehicleType').toUpperCase(),
+    driver: currentLocale === 'ja' ? 'ドライバー' : 'DRIVER',
+    servicesItems: tVoucher('items').toUpperCase(),
+    description: currentLocale === 'ja' ? '内容' : 'Description',
+    qty: currentLocale === 'ja' ? '数量' : 'Qty',
+    amount: tBrand('amount'),
+    specialRequests: currentLocale === 'ja' ? '特別なご要望' : 'SPECIAL REQUESTS',
+    paymentTerms: currentLocale === 'ja' ? 'お支払い条件' : 'PAYMENT TERMS',
+    totalAmount: tBrand('total').toUpperCase(),
+    total: tBrand('total'),
+    authorizedBy: currentLocale === 'ja' ? 'Travel2Egyptが承認' : 'Authorized by Travel2Egypt',
+    supplierConfirmationStamp: currentLocale === 'ja' ? 'サプライヤー確認 & 押印' : 'Supplier Confirmation & Stamp',
+    footerContact: 'Travel2Egypt | www.travel2egypt.com | reservations@travel2egypt.com | +20 100 XXX XXXX',
+    documentTitle: {
+      hotel_voucher: tVoucher('hotelVoucher').toUpperCase(),
+      service_order: tVoucher('serviceOrder').toUpperCase(),
+      transport_voucher: tVoucher('transportVoucher').toUpperCase(),
+      activity_voucher: tVoucher('activityVoucher').toUpperCase(),
+      guide_assignment: tVoucher('guideAssignment').toUpperCase(),
+      cruise_voucher: tVoucher('cruiseVoucher').toUpperCase(),
+      entrance_fees: currentLocale === 'ja' ? '入場料注文書' : 'ENTRANCE FEES ORDER',
+    },
+  })
+
+  const pdfOptions = () => ({
+    locale: (currentLocale === 'ja' ? 'ja' : 'en') as 'en' | 'ja',
+    labels: buildVoucherLabels(),
+  })
   const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
@@ -90,21 +168,21 @@ export default function SupplierDocumentViewPage() {
     }
   }
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!document) return
-    
-    const pdf = generateSupplierDocumentPDF(document)
+
+    const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
     const filename = `${document.document_number}_${document.supplier_name.replace(/\s+/g, '_')}.pdf`
     pdf.save(filename)
   }
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!document) return
-    
-    const pdf = generateSupplierDocumentPDF(document)
+
+    const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
     const pdfBlob = pdf.output('blob')
     const pdfUrl = URL.createObjectURL(pdfBlob)
-    
+
     const printWindow = window.open(pdfUrl, '_blank')
     if (printWindow) {
       printWindow.onload = () => {
@@ -113,10 +191,10 @@ export default function SupplierDocumentViewPage() {
     }
   }
 
-  const handlePreviewPDF = () => {
+  const handlePreviewPDF = async () => {
     if (!document) return
 
-    const pdf = generateSupplierDocumentPDF(document)
+    const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
     const blob = pdf.output('blob')
     setPdfPreviewBlob(blob)
     setShowPdfPreview(true)
@@ -130,7 +208,7 @@ export default function SupplierDocumentViewPage() {
 
     setActionLoading('email')
     try {
-      const pdf = generateSupplierDocumentPDF(document)
+      const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
       const pdfBase64 = pdf.output('datauristring').split(',')[1]
 
       const response = await fetch('/api/send-supplier-document', {
@@ -180,7 +258,7 @@ export default function SupplierDocumentViewPage() {
 
     setActionLoading('whatsapp')
     try {
-      const pdf = generateSupplierDocumentPDF(document)
+      const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
       const pdfBase64 = pdf.output('datauristring').split(',')[1]
 
       const response = await fetch('/api/whatsapp/send-supplier-document', {

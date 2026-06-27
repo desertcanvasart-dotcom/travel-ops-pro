@@ -89,7 +89,8 @@ const CRUISE_ROUTES = ['Luxor to Aswan', 'Aswan to Luxor', 'Round Trip', 'Esna t
 // Supplier type configuration
   const TYPE_CONFIG: Record<string, { icon: any; label: string; singular: string; color: string; borderColor: string }> = {
   hotel: { icon: Building2, label: 'Hotels', singular: 'Hotel', color: 'bg-blue-100 text-blue-700', borderColor: 'border-blue-200' },
-  transport_company: { icon: Car, label: 'Transport', singular: 'Transport Company', color: 'bg-cyan-100 text-cyan-700', borderColor: 'border-cyan-200' },
+  transport: { icon: Car, label: 'Transport', singular: 'Transport', color: 'bg-cyan-100 text-cyan-700', borderColor: 'border-cyan-200' },
+  local_operator: { icon: Globe, label: 'Local Operators', singular: 'Local Operator', color: 'bg-emerald-100 text-emerald-700', borderColor: 'border-emerald-200' },
   driver: { icon: Car, label: 'Drivers', singular: 'Driver', color: 'bg-teal-100 text-teal-700', borderColor: 'border-teal-200' },
   guide: { icon: Compass, label: 'Guides', singular: 'Guide', color: 'bg-green-100 text-green-700', borderColor: 'border-green-200' },
   cruise: { icon: Ship, label: 'Cruises', singular: 'Cruise', color: 'bg-indigo-100 text-indigo-700', borderColor: 'border-indigo-200' },
@@ -386,8 +387,8 @@ export default function SuppliersContent() {
     setShowViewModal(true)
     setOpenMenuId(null)
     
-    // Fetch rates for transport companies
-    if (['transport_company', 'transport', 'driver'].includes(supplier.type)) {
+    // Fetch rates for transport-side suppliers
+    if (['transport', 'local_operator', 'driver'].includes(supplier.type)) {
       fetchSupplierRates(supplier.id)
     }
     
@@ -529,7 +530,10 @@ export default function SuppliersContent() {
         { name: 'Property Type', key: 'property_type', type: 'select', options: ['Hotel', 'Resort', 'Boutique Hotel', 'Guest House', 'Camp'] },
         { name: 'Star Rating', key: 'star_rating', type: 'select', options: ['1', '2', '3', '4', '5'] },
       ],
-      transport_company: [
+      transport: [
+        { name: 'Vehicle Types', key: 'vehicle_types', type: 'multiselect', options: VEHICLE_TYPES },
+      ],
+      local_operator: [
         { name: 'Vehicle Types', key: 'vehicle_types', type: 'multiselect', options: VEHICLE_TYPES },
       ],
       guide: [
@@ -1117,7 +1121,7 @@ export default function SuppliersContent() {
             <div className="px-6 border-b border-gray-200">
               <div className="flex gap-6">
                 <button type="button" onClick={() => setViewTab('details')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'details' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{t('details')}</button>
-                {['transport_company', 'transport', 'driver'].includes(selectedSupplier.type) && (
+                {['transport', 'local_operator', 'driver'].includes(selectedSupplier.type) && (
                   <button type="button" onClick={() => setViewTab('rates')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'rates' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                     {t('rates')} {supplierRates.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs">{supplierRates.length}</span>}
                   </button>

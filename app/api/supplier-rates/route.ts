@@ -12,8 +12,8 @@ const supabaseAdmin = createClient(
 
 // Map supplier type to rate table(s)
 const SUPPLIER_RATE_TABLES: Record<string, string[]> = {
-  transport_company: ['transportation_rates', 'vehicle_rates'],
   transport: ['transportation_rates', 'vehicle_rates'],
+  local_operator: ['transportation_rates', 'vehicle_rates'],
   driver: ['transportation_rates'],
   hotel: ['accommodation_rates', 'seasonal_rates'],
   guide: ['guide_rates', 'assistant_rates'],

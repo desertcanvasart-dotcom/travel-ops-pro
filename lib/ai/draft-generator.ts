@@ -8,7 +8,9 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createMessageWithRetry } from '@/lib/ai/anthropic-client'
+import { MODEL_DRAFT } from '@/lib/ai/models'
 import { buildCommunicationContext } from '@/lib/ai/communication-context-builder'
+import { localeFromPreferred, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 import {
   CopilotContext,
   CopilotChannel,
@@ -47,13 +49,20 @@ export async function generateDraft(
   // Build context from database
   const context = await buildCommunicationContext(params.threadId, supabase)
 
+  // Tier 4: write the reply in the CLIENT's registered language
+  // (clients.preferred_language, surfaced as context.client.language) rather
+  // than only mirroring the inbound message. Null when no preference is set →
+  // fall back to mirroring the customer's language.
+  const pref = context.client?.language
+  const clientLocale: RecipientLocale | null = pref && pref.trim() ? localeFromPreferred(pref) : null
+
   // Build prompts
-  const systemPrompt = buildSystemPrompt(params.channel, params.tone || 'professional')
+  const systemPrompt = buildSystemPrompt(params.channel, params.tone || 'professional', clientLocale)
   const userPrompt = buildUserPrompt(params, context)
 
   // Call Claude
   const message = await createMessageWithRetry({
-    model: 'claude-sonnet-4-20250514',
+    model: MODEL_DRAFT,
     max_tokens: 4096,
     messages: [
       { role: 'user', content: userPrompt },
@@ -83,12 +92,27 @@ export async function generateDraft(
 // PROMPT BUILDERS
 // ============================================
 
-function buildSystemPrompt(channel: CopilotChannel, tone: CopilotTone): string {
+// Exported for testability — lets a render check exercise the exact prompt
+// (incl. the language rule) without a live DB context.
+export function buildSystemPrompt(
+  channel: CopilotChannel,
+  tone: CopilotTone,
+  clientLocale: RecipientLocale | null = null,
+): string {
   const toneInstructions: Record<CopilotTone, string> = {
     professional: 'Use a professional, warm tone. Be courteous and efficient. Balance friendliness with competence.',
     friendly: 'Use a warm, conversational tone. Be personable and approachable. Use casual language while remaining respectful.',
     formal: 'Use a formal, polished tone. Be respectful and dignified. Use proper salutations and formal language.',
   }
+
+  // The client's registered language wins when set; otherwise mirror the
+  // customer's own message language.
+  const languageRule =
+    clientLocale === 'ja'
+      ? "- LANGUAGE: Write your ENTIRE reply in natural, polite Japanese (日本語). Japanese is the client's registered language — reply in Japanese even if the customer's latest message happened to be in another language."
+      : clientLocale === 'en'
+        ? "- LANGUAGE: Write your reply in English (the client's registered language)."
+        : '- LANGUAGE: Reply in the same language the customer wrote their most recent message in. If that is unclear, default to English.'
 
   return `You are a communication assistant for a travel operations company specializing in Egypt tours (Travel2Egypt / Autoura).
 
@@ -100,7 +124,7 @@ TONE:
 ${toneInstructions[tone]}
 
 RULES:
-- If the customer wrote in a non-English language, reply in their language.
+${languageRule}
 - ${channel === 'whatsapp' ? 'Keep WhatsApp replies concise — under 300 words. Use appropriate formatting (*bold*, line breaks).' : 'Email replies can be longer and more detailed. Use proper email formatting.'}
 - Never fabricate information. If the context data doesn't contain the answer, say you will check and get back to them.
 - Never make promises about refunds, discounts, or policy exceptions without flagging for escalation.

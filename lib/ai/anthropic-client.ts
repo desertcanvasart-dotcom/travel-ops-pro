@@ -161,6 +161,10 @@ export function getUserFriendlyError(error: unknown): { message: string; status:
       return { message: 'AI service is temporarily unavailable. Please try again shortly.', status: 503 }
     case 401:
       return { message: 'AI service authentication failed. Please contact support.', status: 500 }
+    case 404:
+      // Anthropic returns 404 with `not_found_error` when a model ID is invalid
+      // or has been retired. Surface a clear cause instead of "unexpected error".
+      return { message: 'AI service rejected the request (model not found or retired). Please update the AI model configuration.', status: 502 }
     case 400:
       return { message: 'The request was too large or malformed for the AI service. Try shortening the input.', status: 400 }
   }

@@ -204,9 +204,11 @@ export default function FlightsContent() {
       const response = await fetch('/api/suppliers?status=active')
       if (response.ok) {
         const result = await response.json()
-        // Filter to airline-related suppliers
-        const airlineSuppliers = (result.data || []).filter((s: Supplier) => 
-          ['airline', 'transport_company', 'travel_agent'].includes(s.type)
+        // Filter to airline-related suppliers. transport_company was a
+        // legacy fallback bundle for road transport; flights belong to
+        // airlines/agents only post-vocab-migration.
+        const airlineSuppliers = (result.data || []).filter((s: Supplier) =>
+          ['airline', 'travel_agent'].includes(s.type)
         )
         setSuppliers(airlineSuppliers)
       }

@@ -830,6 +830,11 @@ function WhatsAppParserContent() {
   const conversationParam = searchParams?.get('conversation')
   const phoneParam = searchParams?.get('phone')
   const emailParam = searchParams?.get('email')
+  // Phase 2 — provenance pointer back to the Copilot thread, set when the
+  // parser was launched from /whatsapp-inbox. Forwarded to generate-itinerary
+  // so the new itinerary carries thread_id (one-itinerary-per-thread is
+  // enforced by idx_itineraries_thread_id_unique).
+  const whatsappConversationIdParam = searchParams?.get('whatsappConversationId')
 
   // ============================================
   // STATE
@@ -1357,6 +1362,9 @@ function WhatsAppParserContent() {
           source: selectedPartnerId ? 'b2b_custom' : 'b2c_whatsapp',
           // Idempotency
           idempotency_key: idempotencyKey,
+          // Phase 2 — provenance pointer; the route resolves communication_
+          // threads.id from this and stamps it on the itinerary.
+          whatsapp_conversation_id: whatsappConversationIdParam || null,
         })
       })
 

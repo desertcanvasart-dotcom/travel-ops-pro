@@ -117,15 +117,34 @@ export async function POST(
       })
     }
 
-    // Check existing suppliers to avoid duplicates
+    // Check existing suppliers to avoid duplicates.
+    // Phase 3 step 2: include supplier_id so the dedup key can be FK-aware.
     const { data: existingSuppliers } = await supabaseAdmin
       .from('booking_supplier_status')
-      .select('supplier_name, supplier_type, service_date')
+      .select('supplier_id, supplier_name, supplier_type, service_date')
       .eq('booking_id', bookingId)
 
-    // Create a more robust key for deduplication
+    // Dedup key rule (id-or-name grouping):
+    //   - When supplier_id IS NOT NULL: key on supplier_id + supplier_type + service_date.
+    //     Same FK = same canonical supplier even if the snapshot `supplier_name`
+    //     drifted across renames.
+    //   - When supplier_id IS NULL: fall back to supplier_name + supplier_type +
+    //     service_date. Legitimately supplier-less rows (tips, water, entrance
+    //     fees) stay grouped on the human-readable name so they don't all
+    //     collapse into one row.
+    // A resolved-FK row and an unresolved-name row that happen to share the
+    // same display name are NOT collapsed — they have different keys. This
+    // is correct: one carries provenance to the canonical supplier; the
+    // other is awaiting resolution.
+    const dedupKey = (row: { supplier_id?: string | null; supplier_name?: string | null; supplier_type?: string | null; service_date?: string | null }) => {
+      const type = row.supplier_type ?? ''
+      const date = row.service_date ?? 'no-date'
+      return row.supplier_id
+        ? `id:${row.supplier_id}|${type}|${date}`
+        : `name:${row.supplier_name ?? ''}|${type}|${date}`
+    }
     const existingKeys = new Set(
-      existingSuppliers?.map(s => `${s.supplier_type}|${s.supplier_name}|${s.service_date || 'no-date'}`) || []
+      (existingSuppliers || []).map(dedupKey)
     )
 
     // Helper to calculate service date from day_number
@@ -156,9 +175,13 @@ export async function POST(
         const supplierName = service.supplier_name || service.service_name || 'Unknown Service'
         const serviceDate = calculateServiceDate(day)
         const supplierType = mapServiceType(service.service_type)
+        const supplierId = service.supplier_id || null
 
-        // Create dedup key
-        const key = `${supplierType}|${supplierName}|${serviceDate || 'no-date'}`
+        // Id-or-name dedup key — see dedupKey() defined above for the rule.
+        // Resolved-FK rows group on supplier_id; unresolved rows group on
+        // supplier_name; the two never collapse even when the display name
+        // happens to match.
+        const key = dedupKey({ supplier_id: supplierId, supplier_name: supplierName, supplier_type: supplierType, service_date: serviceDate })
 
         // Skip if already exists
         if (existingKeys.has(key)) {

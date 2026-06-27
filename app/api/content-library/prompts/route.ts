@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { MODEL_DEFAULT } from '@/lib/ai/models'
 
 const VALID_PURPOSES = [
   'itinerary_full',
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
         system_prompt: system_prompt || null,
         user_prompt_template,
         variables: finalVariables,
-        model: model || 'claude-sonnet-4-20250514',
+        model: model || MODEL_DEFAULT,
         temperature: finalTemperature,
         max_tokens: max_tokens || 2000,
         is_default: is_default || false,

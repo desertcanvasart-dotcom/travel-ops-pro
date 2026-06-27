@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateRatePayload } from '@/lib/rate-validation'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -51,6 +52,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
     }
 
+    const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+
     const newHotel = {
       // Basic info
       service_code: body.service_code || `ACC-${Date.now().toString(36).toUpperCase()}`,
@@ -59,8 +65,8 @@ export async function POST(request: NextRequest) {
       city: body.city || null,
       board_basis: body.board_basis || 'BB',
       tier: body.tier || 'standard',
-      supplier_id: body.supplier_id || null,
-      supplier_name: body.supplier_name || null,
+      supplier_id: supplierCheck.supplier_id,
+      supplier_name: supplierCheck.supplier_name,
       
       // Hotel contacts
       contact_name: body.contact_name || null,

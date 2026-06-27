@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { MODEL_PARSER } from '@/lib/ai/models'
 
 const ACCEPTED_TYPES: Record<string, 'pdf' | 'image'> = {
   'application/pdf': 'pdf',
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest) {
 
     // Call Claude
     const message = await createMessageWithRetry({
-      model: 'claude-sonnet-4-20250514',
+      model: MODEL_PARSER,
       max_tokens: 4096,
       messages: [{
         role: 'user',

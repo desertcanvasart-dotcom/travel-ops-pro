@@ -31,7 +31,17 @@ export async function fetchGuideRate(
   supabase: any,
   tier: string,
   language: string
-): Promise<{ guidePerDay: number; guideName: string | null; guideId: string | null }> {
+): Promise<{
+  guidePerDay: number
+  guideName: string | null
+  // Rate-row id (guide_rates.id) — used as service_code in itinerary_services
+  // for grouping. NOT a suppliers FK.
+  guideId: string | null
+  // FK to suppliers when the source rate row carries one. NULL when the
+  // fallback `guides` registry table is used (separate from suppliers).
+  // Added Phase 3 step 1 to stop dropping the supplier FK.
+  guideSupplierId: string | null
+}> {
   // PRIORITY 1: Check guide_rates table (managed via Rates > Tour Guides UI)
   const { data: guideRates } = await supabase
     .from('guide_rates')
@@ -44,7 +54,12 @@ export async function fetchGuideRate(
     const rate = toNumber(guideRates[0].base_rate_eur, 0)
     const name = guideRates[0].guide_name || `${language} Speaking Guide`
     console.log(`✅ Guide rate from guide_rates: €${rate}/day (${language})`)
-    return { guidePerDay: rate, guideName: name, guideId: guideRates[0].id }
+    return {
+      guidePerDay: rate,
+      guideName: name,
+      guideId: guideRates[0].id,
+      guideSupplierId: guideRates[0].supplier_id || null,
+    }
   }
 
   // PRIORITY 2: Fall back to guides table (supplier contacts)
@@ -80,6 +95,10 @@ export async function fetchGuideRate(
     guidePerDay,
     guideName: guide?.name || null,
     guideId: guide?.id || null,
+    // `guides` is a separate registry without a supplier_id column — leave
+    // the FK null on this fallback path. Normalization of guides ↔ suppliers
+    // is out of scope for this step.
+    guideSupplierId: null,
   }
 }
 
@@ -241,6 +260,10 @@ export async function createCruiseItineraryServices(
         service_code: cruiseRate.supplierId || 'CRUISE',
         service_name: `${cruiseRate.shipName} - Full Board (${cabinDesc})`,
         supplier_name: cruiseRate.shipName,
+        // Phase 3 step 1: capture the FK to suppliers. (cruiseRate.supplierId
+        // is currently doubled into service_code — that semantic cleanup is
+        // out of scope for this step.)
+        supplier_id: cruiseRate.supplierId,
         quantity: totalPax,
         rate_eur: cruiseRate.totalPerNight / totalPax,
         rate_non_eur: cruiseRate.totalPerNight / totalPax,
@@ -288,6 +311,9 @@ export async function createCruiseItineraryServices(
         service_code: guideResult.guideId || 'GUIDE',
         service_name: `${guideLanguage} Speaking Guide`,
         supplier_name: guideResult.guideName,
+        // Phase 3 step 1: capture the FK to suppliers when the source was
+        // guide_rates. NULL on the `guides` fallback path (separate registry).
+        supplier_id: guideResult.guideSupplierId,
         quantity: 1,
         rate_eur: guideResult.guidePerDay,
         rate_non_eur: guideResult.guidePerDay,
@@ -343,6 +369,9 @@ export async function createCruiseItineraryServices(
     if (dayData.attractions?.length > 0) {
       let dayEntranceTotal = 0
       const matchedAttractions: string[] = []
+      // G2.2: attribute the entrance row to the antiquities authority
+      // (entrance_fees.supplier_id); null if only activity-rate fallbacks matched.
+      let entranceSupplierId: string | null = null
 
       // Fetch aliases for resolving alternative attraction names
       let aliasToCanonical: Map<string, string> | null = null
@@ -378,6 +407,7 @@ export async function createCruiseItineraryServices(
           const feePerPerson = isEuroPassport ? toNumber(fee.eur_rate, 0) : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
           dayEntranceTotal += feePerPerson * totalPax
           matchedAttractions.push(fee.attraction_name)
+          if (fee.supplier_id && !entranceSupplierId) entranceSupplierId = fee.supplier_id
           continue
         }
 
@@ -405,6 +435,7 @@ export async function createCruiseItineraryServices(
           service_type: 'entrance',
           service_code: 'ENTRANCE',
           service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'})`,
+          supplier_id: entranceSupplierId,
           quantity: totalPax,
           rate_eur: dayEntranceTotal / totalPax,
           rate_non_eur: dayEntranceTotal / totalPax,

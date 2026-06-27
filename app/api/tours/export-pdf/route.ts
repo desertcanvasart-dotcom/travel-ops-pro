@@ -1,18 +1,36 @@
 // PDF Export API Endpoint
 // Location: /app/api/tours/export-pdf/route.ts
+//
+// Returns an HTML document that the operator's browser can print. Not a
+// puppeteer route — but JA characters still need the bundled font, since
+// the deploy container's system fonts may not include CJK and the user
+// may print from a kiosk/print server with the same gap. We embed
+// NotoSansJP via @font-face for both EN and JA so the print result is
+// self-contained.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
+import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 
 export async function POST(request: NextRequest) {
   try {
     const { tour, pax, is_euro_passport, pricing } = await request.json()
 
-    // Generate HTML for PDF
-    const html = generateTourHTML(tour, pax, is_euro_passport, pricing)
+    const locale = await getServerLocale()
+    const labelKeys = [
+      'itinerary', 'tourCode', 'tourInformation', 'passengers', 'passportType',
+      'passportEU', 'passportNonEU', 'tourSuffix', 'daysCities', 'dayN',
+      'accommodation', 'lunch', 'dinner', 'guide', 'guideIncluded', 'notes',
+      'pricingSummary', 'meals', 'guides', 'transportation', 'entrances',
+      'total', 'perPersonHint', 'saveAsPdfHint', 'printButton', 'generatedBy',
+    ]
+    const labels: Record<string, string> = Object.fromEntries(
+      labelKeys.map(k => [k, lookupServerMessage(locale, `pdf.tour.${k}`)])
+    )
+    const fontFace = await getJapaneseFontFace()
 
-    // For now, return HTML that can be printed
-    // Later we can use libraries like jsPDF or Puppeteer for actual PDF generation
-    
+    const html = generateTourHTML(tour, pax, is_euro_passport, pricing, locale, labels, fontFace)
+
     return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html',
@@ -29,18 +47,29 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function generateTourHTML(tour: any, pax: number, isEuro: boolean, pricing: any) {
+function generateTourHTML(
+  tour: any,
+  pax: number,
+  isEuro: boolean,
+  pricing: any,
+  locale: 'en' | 'ja',
+  labels: Record<string, string>,
+  fontFace: string,
+) {
   const formatCurrency = (amount: number) => `€${amount.toFixed(2)}`
-  
+  const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
+  const generatedDate = new Date().toLocaleDateString(tag)
+
   return `
 <!DOCTYPE html>
-<html>
+<html lang="${locale}">
 <head>
   <meta charset="UTF-8">
-  <title>${tour.tour_name} - Itinerary</title>
+  <title>${tour.tour_name} - ${labels.itinerary}</title>
   <style>
+    ${fontFace}
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'NotoSansJP', Arial, sans-serif;
       max-width: 800px;
       margin: 40px auto;
       padding: 20px;
@@ -119,54 +148,54 @@ function generateTourHTML(tour: any, pax: number, isEuro: boolean, pricing: any)
 <body>
   <div class="header">
     <h1>🏛️ ${tour.tour_name}</h1>
-    <p>Tour Code: ${tour.tour_code}</p>
-    <p>${tour.duration_days} Days • ${tour.cities.join(' → ')}</p>
-    <p style="text-transform: capitalize;">${tour.tour_type} Tour</p>
+    <p>${labels.tourCode}: ${tour.tour_code}</p>
+    <p>${labels.daysCities.replace('{days}', String(tour.duration_days)).replace('{cities}', tour.cities.join(' → '))}</p>
+    <p style="text-transform: capitalize;">${tour.tour_type} ${labels.tourSuffix}</p>
   </div>
 
   <div class="info-box">
-    <strong>📋 Tour Information</strong><br>
-    👥 Passengers: ${pax}<br>
-    🛂 Passport Type: ${isEuro ? 'European Union' : 'Non-European'}<br>
+    <strong>📋 ${labels.tourInformation}</strong><br>
+    👥 ${labels.passengers}: ${pax}<br>
+    🛂 ${labels.passportType}: ${isEuro ? labels.passportEU : labels.passportNonEU}<br>
     ${tour.description ? `📝 ${tour.description}<br>` : ''}
   </div>
 
-  ${tour.days.map((day: any, index: number) => `
+  ${tour.days.map((day: any) => `
     <div class="day-section">
       <div class="day-header">
-        <strong>Day ${day.day_number}</strong> - ${day.city}
+        <strong>${labels.dayN.replace('{n}', String(day.day_number))}</strong> - ${day.city}
       </div>
 
       ${day.accommodation ? `
         <div class="service-item">
-          <strong>🏨 Accommodation:</strong> ${day.accommodation.property_name}<br>
+          <strong>🏨 ${labels.accommodation}:</strong> ${day.accommodation.property_name}<br>
           <small>${'⭐'.repeat(day.accommodation.star_rating)} ${day.accommodation.tier} • ${day.accommodation.board_basis} • ${day.accommodation.room_type}</small>
         </div>
       ` : ''}
 
       ${day.lunch_meal ? `
         <div class="service-item">
-          <strong>🥗 Lunch:</strong> ${day.lunch_meal.restaurant_name}<br>
+          <strong>🥗 ${labels.lunch}:</strong> ${day.lunch_meal.restaurant_name}<br>
           <small>${day.lunch_meal.cuisine_type} • ${day.lunch_meal.restaurant_type}</small>
         </div>
       ` : ''}
 
       ${day.dinner_meal ? `
         <div class="service-item">
-          <strong>🍽️ Dinner:</strong> ${day.dinner_meal.restaurant_name}<br>
+          <strong>🍽️ ${labels.dinner}:</strong> ${day.dinner_meal.restaurant_name}<br>
           <small>${day.dinner_meal.cuisine_type} • ${day.dinner_meal.restaurant_type}</small>
         </div>
       ` : ''}
 
       ${day.guide_required ? `
         <div class="service-item">
-          <strong>👨‍🏫 Guide:</strong> Professional tour guide included
+          <strong>👨‍🏫 ${labels.guide}:</strong> ${labels.guideIncluded}
         </div>
       ` : ''}
 
       ${day.notes ? `
         <div class="service-item">
-          <strong>📝 Notes:</strong> ${day.notes}
+          <strong>📝 ${labels.notes}:</strong> ${day.notes}
         </div>
       ` : ''}
     </div>
@@ -174,50 +203,50 @@ function generateTourHTML(tour: any, pax: number, isEuro: boolean, pricing: any)
 
   ${pricing ? `
     <div class="pricing-summary">
-      <h2 style="margin-top: 0; color: #047857;">💰 Pricing Summary</h2>
-      
+      <h2 style="margin-top: 0; color: #047857;">💰 ${labels.pricingSummary}</h2>
+
       <div class="pricing-row">
-        <span>🏨 Accommodation</span>
+        <span>🏨 ${labels.accommodation}</span>
         <strong>${formatCurrency(pricing.totals.total_accommodation)}</strong>
       </div>
       <div class="pricing-row">
-        <span>🍽️ Meals</span>
+        <span>🍽️ ${labels.meals}</span>
         <strong>${formatCurrency(pricing.totals.total_meals)}</strong>
       </div>
       <div class="pricing-row">
-        <span>👨‍🏫 Guides</span>
+        <span>👨‍🏫 ${labels.guides}</span>
         <strong>${formatCurrency(pricing.totals.total_guides)}</strong>
       </div>
       <div class="pricing-row">
-        <span>🚗 Transportation</span>
+        <span>🚗 ${labels.transportation}</span>
         <strong>${formatCurrency(pricing.totals.total_transportation)}</strong>
       </div>
       <div class="pricing-row">
-        <span>🎫 Entrances</span>
+        <span>🎫 ${labels.entrances}</span>
         <strong>${formatCurrency(pricing.totals.total_entrances)}</strong>
       </div>
-      
+
       <div class="pricing-total">
         <div style="display: flex; justify-content: space-between;">
-          <span>TOTAL</span>
+          <span>${labels.total}</span>
           <span>${formatCurrency(pricing.totals.grand_total)}</span>
         </div>
         <div style="font-size: 0.7em; font-weight: normal; margin-top: 5px;">
-          ${formatCurrency(pricing.per_person)} per person (${pax} passengers)
+          ${labels.perPersonHint.replace('{rate}', formatCurrency(pricing.per_person)).replace('{pax}', String(pax))}
         </div>
       </div>
     </div>
   ` : ''}
 
   <div class="no-print" style="text-align: center; margin: 30px 0; padding: 20px; background: #f3f4f6; border-radius: 8px;">
-    <p><strong>To save as PDF:</strong> Press Ctrl+P (Cmd+P on Mac) and select "Save as PDF"</p>
+    <p><strong>${labels.saveAsPdfHint}</strong></p>
     <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 30px; border-radius: 5px; cursor: pointer; font-size: 16px;">
-      🖨️ Print / Save as PDF
+      🖨️ ${labels.printButton}
     </button>
   </div>
 
   <div style="text-align: center; color: #9ca3af; font-size: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-    Generated by Travel2Egypt Tour Builder • ${new Date().toLocaleDateString()}
+    ${labels.generatedBy} • ${generatedDate}
   </div>
 </body>
 </html>

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS, SERVICE_TRANSLATION_FIELDS } from '@/lib/translation-utils'
 import type { Language } from '@/types/multilingual'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 
 const supabase = createServerClient()
 
@@ -447,10 +448,14 @@ export async function POST(
     })
   } catch (error: any) {
     console.error('Error in copy-translate:', error)
+    // Surface the translation failure to the operator (localized). Previously a
+    // translation failure was swallowed by translateText and produced an
+    // untranslated "version" with a success response — the silent-failure class.
+    const locale = await getServerLocale()
     return NextResponse.json(
       {
         success: false,
-        error: `Failed to translate and create version: ${error?.message || 'Unknown error'}`
+        error: lookupServerMessage(locale, 'translate.errors.versionFailed', { reason: error?.message || 'Unknown error' })
       },
       { status: 500 }
     )

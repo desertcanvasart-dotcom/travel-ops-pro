@@ -795,11 +795,12 @@ export default function ResourcesPage() {
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{vehicle.name}</td>
                       <td className="px-4 py-3">
                         <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                          vehicle.type === 'transport_company' ? 'bg-cyan-100 text-cyan-700' :
+                          vehicle.type === 'transport' ? 'bg-cyan-100 text-cyan-700' :
+                          vehicle.type === 'local_operator' ? 'bg-emerald-100 text-emerald-700' :
                           vehicle.type === 'driver' ? 'bg-teal-100 text-teal-700' :
                           'bg-gray-100 text-gray-700'
                         }`}>
-                          {vehicle.type === 'transport_company' ? 'Company' : vehicle.type === 'driver' ? 'Driver' : vehicle.type}
+                          {vehicle.type === 'transport' ? 'Transport' : vehicle.type === 'local_operator' ? 'Local Operator' : vehicle.type === 'driver' ? 'Driver' : vehicle.type}
                         </span>
                       </td>
                       <td className="px-4 py-3">

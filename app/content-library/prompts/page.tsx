@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { CLAUDE_SONNET_4_6, CLAUDE_OPUS_4_8, CLAUDE_HAIKU_4_5 } from '@/lib/ai/models'
 import {
   ArrowLeft,
   Plus,
@@ -77,7 +78,7 @@ const DEFAULT_FORM: PromptFormData = {
   system_prompt: '',
   user_prompt_template: '',
   variables: [],
-  model: 'claude-sonnet-4-20250514',
+  model: CLAUDE_SONNET_4_6,
   temperature: 0.7,
   max_tokens: 2000,
   is_default: false,
@@ -578,11 +579,12 @@ export default function AIPromptsPage() {
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                   >
-                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                    <option value="gpt-4o">GPT-4o</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    {/* Content-library generation is Anthropic-only (no OpenAI
+                        execution path exists in this subsystem). Don't offer
+                        OpenAI models here — they'd select a model that can't run. */}
+                    <option value={CLAUDE_SONNET_4_6}>Claude Sonnet 4.6</option>
+                    <option value={CLAUDE_OPUS_4_8}>Claude Opus 4.8</option>
+                    <option value={CLAUDE_HAIKU_4_5}>Claude Haiku 4.5</option>
                   </select>
                 </div>
                 <div>

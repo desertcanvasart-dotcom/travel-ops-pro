@@ -39,6 +39,8 @@ import {
   UserCheck,
   UserX,
   Ship,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-react'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ServiceRatePicker from '@/components/ServiceRatePicker'
@@ -124,6 +126,10 @@ interface Itinerary {
   total_cost: number
   notes: string
   cabin_allocation?: CabinAllocationItem[] | null
+  // Provenance: when set, this itinerary was spun from a Copilot thread
+  // (Concierge brief in Phase 1; WhatsApp later). NULL for manually-created
+  // itineraries.
+  thread_id?: string | null
 }
 
 interface ItineraryService {
@@ -1055,6 +1061,21 @@ export default function ItineraryEditorPage() {
 
             {/* Itinerary Code */}
             <h1 className="text-base lg:text-lg font-bold text-gray-900 whitespace-nowrap">{itinerary.itinerary_code}</h1>
+
+            {/* Provenance: link back to the originating Copilot thread (Phase 1
+                wires Concierge briefs; WhatsApp threads will populate the same
+                column in a later phase). NULL for manually-created itineraries. */}
+            {itinerary.thread_id && (
+              <Link
+                href={`/copilot?thread=${itinerary.thread_id}`}
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-medium hover:bg-purple-200 transition-colors whitespace-nowrap"
+                title={t('sourceConversation')}
+              >
+                <Sparkles className="w-3 h-3" />
+                {t('sourceConversation')}
+                <ExternalLink className="w-3 h-3" />
+              </Link>
+            )}
 
             {/* Separator - hidden on small screens */}
             <span className="text-gray-300 hidden lg:inline">|</span>

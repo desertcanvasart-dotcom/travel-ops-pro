@@ -16,6 +16,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { MappedBrief } from './concierge-brief-schema'
+import { getDefaultOrgId } from './auth/default-org'
 
 export type IngestOutcome = 'received' | 'updated' | 'duplicate_ignored' | 'older_revision_filed'
 
@@ -154,11 +155,17 @@ export async function ingestBrief(
     .eq('conversation_id', conversationId)
     .maybeSingle()
 
+  // Phase 2 — intake-side org stamping. Webhook has no operator session, so
+  // we resolve to a default org. When the G1 gate flips (DEFERRED_GATES.md),
+  // this becomes per-webhook-secret resolution and commit reads thread.org_id.
+  const orgId = await getDefaultOrgId(supabase)
+
   // ---- FIRST TIME: no current row ----
   if (!current) {
     const insertRow = {
       ...mapped.briefRow,
       client_id: clientId,
+      org_id: orgId,
       request_id: meta.requestId,
       raw_payload: meta.rawPayload,
     }
@@ -198,8 +205,18 @@ export async function ingestBrief(
 
   // ---- NEWER REVISION: update in place, re-open for review ----
   if (incomingRevision > currentRevision) {
+    // org_id is stamped once at INSERT (Phase 2). Destructure it out of the
+    // mapper's spread BEFORE building the update so it can't ride along into
+    // the UPDATE and clobber the value set at intake. This is the structural
+    // version of the protection — even if a future change adds org_id to the
+    // mapper's briefRow output, the destructure here drops it by name. See
+    // DEFERRED_GATES.md → G1 for the broader org-authority context.
+    const { org_id: _doNotClobberOrgId, ...spreadable } = mapped.briefRow as Record<string, unknown> & {
+      org_id?: unknown
+    }
+    void _doNotClobberOrgId
     const updateRow = {
-      ...mapped.briefRow,
+      ...spreadable,
       is_update: true,
       client_id: clientId,
       request_id: meta.requestId,

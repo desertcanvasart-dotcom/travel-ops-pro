@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { type PackageType } from '@/lib/package-types'
 import { createMessageWithRetry } from '@/lib/ai/anthropic-client'
+import { MODEL_GENERATOR } from '@/lib/ai/models'
 import {
   type ServiceTier,
   type ExtractedDay,
@@ -351,7 +352,7 @@ NOW CONVERT THE ITINERARY TO JSON:`
   console.log('🤖 Sending STRICT structured prompt to AI...')
 
   const message = await createMessageWithRetry({
-    model: 'claude-sonnet-4-20250514',
+    model: MODEL_GENERATOR,
     max_tokens: 16384,
     messages: [
       {
@@ -646,7 +647,7 @@ Use EXACT attraction names from the provided list. Set includes_hotel to false o
 For cruise packages: set is_cruise_day: true and accommodation_type: "cruise" for all days on the Nile cruise.`
 
   const message = await createMessageWithRetry({
-    model: 'claude-sonnet-4-20250514',
+    model: MODEL_GENERATOR,
     max_tokens: 8192,
     messages: [
       {

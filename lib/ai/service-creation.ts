@@ -179,9 +179,14 @@ export interface PricingRates {
   vehicleTypeName: string
   vehicleServiceCode: string
   vehicleSupplierName: string | null
+  // FK to suppliers when the source rate row carries one. Captured alongside
+  // supplier_name as a paired FK + snapshot — same pattern as thread_id +
+  // contact_info. Added in Phase 3 step 1.
+  vehicleSupplierId: string | null
   transferRate: number
   transferServiceCode: string
   transferSupplierName: string | null
+  transferSupplierId: string | null
   guidePerDay: number
   selectedGuide: any
   allEntranceFees: any[]
@@ -230,6 +235,7 @@ export async function fetchAllPricingRates(
   const vehicleTypeName = transportResult ? transportResult.vehicleType : 'Vehicle'
   const vehicleServiceCode = transportRates?.[0]?.id || 'TRANS'
   const vehicleSupplierName = transportRates?.[0]?.supplier_name || null
+  const vehicleSupplierId = transportRates?.[0]?.supplier_id || null
 
   // Transfer rate: query transportation_rates for airport_transfer service type
   const { data: transferRates } = await supabase
@@ -260,7 +266,15 @@ export async function fetchAllPricingRates(
 
   if (guideRates?.length) {
     guidePerDay = toNumber(guideRates[0].base_rate_eur, 0)
-    selectedGuide = { name: guideRates[0].guide_name || `${language} Speaking Guide`, id: guideRates[0].id }
+    selectedGuide = {
+      name: guideRates[0].guide_name || `${language} Speaking Guide`,
+      id: guideRates[0].id,
+      // Phase 3 step 1: capture FK to suppliers when the rate row carries it.
+      // The fallback `guides` table (PRIORITY 2) is a separate registry with
+      // no supplier_id column — selectedGuide.supplierId stays undefined
+      // there, which the push site treats as a legitimate NULL.
+      supplierId: guideRates[0].supplier_id || null,
+    }
     console.log(`✅ Guide rate from guide_rates: €${guidePerDay}/day (${language})`)
   }
 
@@ -394,9 +408,11 @@ export async function fetchAllPricingRates(
     vehicleTypeName,
     vehicleServiceCode,
     vehicleSupplierName,
+    vehicleSupplierId,
     transferRate,
     transferServiceCode: transferRates?.[0]?.id || vehicleServiceCode,
     transferSupplierName: transferRates?.[0]?.supplier_name || vehicleSupplierName,
+    transferSupplierId: transferRates?.[0]?.supplier_id || vehicleSupplierId,
     guidePerDay,
     selectedGuide,
     allEntranceFees: allEntranceFees || [],
@@ -425,9 +441,11 @@ interface CityTransportRates {
   vehicleTypeName: string
   vehicleServiceCode: string
   vehicleSupplierName: string | null
+  vehicleSupplierId: string | null
   transferRate: number
   transferServiceCode: string
   transferSupplierName: string | null
+  transferSupplierId: string | null
 }
 
 // Cache to avoid re-fetching for the same city
@@ -459,6 +477,7 @@ async function getTransportRatesForCity(
   const vehicleTypeName = dayTourResult ? dayTourResult.vehicleType : primaryRates.vehicleTypeName
   const vehicleServiceCode = dayTourRates?.[0]?.id || primaryRates.vehicleServiceCode
   const vehicleSupplierName = dayTourRates?.[0]?.supplier_name || primaryRates.vehicleSupplierName
+  const vehicleSupplierId = dayTourRates?.[0]?.supplier_id || primaryRates.vehicleSupplierId
 
   // Airport transfer for this city
   const { data: transferRates } = await supabase
@@ -473,15 +492,18 @@ async function getTransportRatesForCity(
   const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
   const transferServiceCode = transferRates?.[0]?.id || primaryRates.transferServiceCode
   const transferSupplierName = transferRates?.[0]?.supplier_name || primaryRates.transferSupplierName
+  const transferSupplierId = transferRates?.[0]?.supplier_id || primaryRates.transferSupplierId
 
   const result: CityTransportRates = {
     vehiclePerDay,
     vehicleTypeName,
     vehicleServiceCode,
     vehicleSupplierName,
+    vehicleSupplierId,
     transferRate,
     transferServiceCode,
     transferSupplierName,
+    transferSupplierId,
   }
   _cityTransportCache.set(cacheKey, result)
   return result
@@ -986,6 +1008,7 @@ export async function createLandItineraryServices(
         service_code: depTransport.transferServiceCode,
         service_name: 'Airport Transfer',
         supplier_name: depTransport.transferSupplierName,
+        supplier_id: depTransport.transferSupplierId,
         quantity: 1,
         rate_eur: depTransport.transferRate,
         rate_non_eur: depTransport.transferRate,
@@ -1139,6 +1162,7 @@ export async function createLandItineraryServices(
           service_code: flightDepTransport.transferServiceCode,
           service_name: `Airport Transfer - ${flightDepCity}`,
           supplier_name: flightDepTransport.transferSupplierName,
+          supplier_id: flightDepTransport.transferSupplierId,
           quantity: 1,
           rate_eur: flightDepTransport.transferRate,
           rate_non_eur: flightDepTransport.transferRate,
@@ -1154,6 +1178,7 @@ export async function createLandItineraryServices(
           service_code: flightArrTransport.transferServiceCode,
           service_name: `Airport Transfer - ${flightArrCity}`,
           supplier_name: flightArrTransport.transferSupplierName,
+          supplier_id: flightArrTransport.transferSupplierId,
           quantity: 1,
           rate_eur: flightArrTransport.transferRate,
           rate_non_eur: flightArrTransport.transferRate,
@@ -1172,6 +1197,7 @@ export async function createLandItineraryServices(
             service_code: hybridDepTransport.transferServiceCode,
             service_name: `Airport Transfer - International Departure (${flightArrCity})`,
             supplier_name: hybridDepTransport.transferSupplierName,
+            supplier_id: hybridDepTransport.transferSupplierId,
             quantity: 1,
             rate_eur: hybridDepTransport.transferRate,
             rate_non_eur: hybridDepTransport.transferRate,
@@ -1260,6 +1286,7 @@ export async function createLandItineraryServices(
       let intercityVehicle = 'Vehicle'
       let intercityServiceCode = 'INTERCITY'
       let intercitySupplier: string | null = null
+      let intercitySupplierId: string | null = null
 
       if (intercityRates?.length) {
         const result = getIntercityRate(intercityRates[0], totalPax, isEuroPassport)
@@ -1268,6 +1295,7 @@ export async function createLandItineraryServices(
           intercityVehicle = result.vehicleType
           intercityServiceCode = intercityRates[0].id || 'INTERCITY'
           intercitySupplier = intercityRates[0].supplier_name || null
+          intercitySupplierId = intercityRates[0].supplier_id || null
         }
       }
 
@@ -1278,6 +1306,7 @@ export async function createLandItineraryServices(
         intercityVehicle = rates.vehicleTypeName
         intercityServiceCode = rates.vehicleServiceCode
         intercitySupplier = rates.vehicleSupplierName
+        intercitySupplierId = rates.vehicleSupplierId
       }
 
       services.push({
@@ -1285,6 +1314,7 @@ export async function createLandItineraryServices(
         service_code: intercityServiceCode,
         service_name: `Intercity Transfer (${originCity} → ${destCity})`,
         supplier_name: intercitySupplier,
+        supplier_id: intercitySupplierId,
         quantity: 1,
         rate_eur: intercityRate,
         rate_non_eur: intercityRate,
@@ -1348,6 +1378,7 @@ export async function createLandItineraryServices(
         service_code: airportCityTransport.transferServiceCode,
         service_name: `Airport Transfer (${airportCity})`,
         supplier_name: airportCityTransport.transferSupplierName,
+        supplier_id: airportCityTransport.transferSupplierId,
         quantity: 1,
         rate_eur: airportCityTransport.transferRate,
         rate_non_eur: airportCityTransport.transferRate,
@@ -1393,6 +1424,7 @@ export async function createLandItineraryServices(
       let dayTripVehicle = 'Vehicle'
       let dayTripCode = 'DAY-TRIP-TRANSPORT'
       let dayTripSupplier: string | null = null
+      let dayTripSupplierId: string | null = null
 
       if (dayTripRates?.length) {
         const result = getDayTripRate(dayTripRates[0], totalPax, isEuroPassport)
@@ -1401,6 +1433,7 @@ export async function createLandItineraryServices(
           dayTripVehicle = result.vehicleType
           dayTripCode = dayTripRates[0].id || 'DAY-TRIP-TRANSPORT'
           dayTripSupplier = dayTripRates[0].supplier_name || null
+          dayTripSupplierId = dayTripRates[0].supplier_id || null
         }
       }
 
@@ -1410,6 +1443,7 @@ export async function createLandItineraryServices(
           service_code: dayTripCode,
           service_name: `${dayTripVehicle} Day Trip Transfer (${overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1)} → ${dayTripCity} → ${overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1)})`,
           supplier_name: dayTripSupplier,
+          supplier_id: dayTripSupplierId,
           quantity: 1,
           rate_eur: dayTripRate,
           rate_non_eur: dayTripRate,
@@ -1442,9 +1476,11 @@ export async function createLandItineraryServices(
       let dayTransportName = rates.vehicleTypeName
       let dayTransportCode = rates.vehicleServiceCode
       let dayTransportSupplier = rates.vehicleSupplierName
+      let dayTransportSupplierId = rates.vehicleSupplierId
       let dayTransferRate = rates.transferRate
       let dayTransferCode = rates.transferServiceCode
       let dayTransferSupplier = rates.transferSupplierName
+      let dayTransferSupplierId = rates.transferSupplierId
 
       if (dayCity.toLowerCase() !== effectiveCity.toLowerCase()) {
         // Fetch city-specific transport rates
@@ -1464,6 +1500,7 @@ export async function createLandItineraryServices(
             dayTransportName = result.vehicleType
             dayTransportCode = cityDayTourRates[0].id || rates.vehicleServiceCode
             dayTransportSupplier = cityDayTourRates[0].supplier_name || null
+            dayTransportSupplierId = cityDayTourRates[0].supplier_id || null
             console.log(`🚗 Day ${dayNumber} (${dayCity}): Using city-specific transport rate €${dayTransportRate}`)
           }
         } else {
@@ -1485,6 +1522,7 @@ export async function createLandItineraryServices(
             dayTransferRate = isEuroPassport ? result.rateEur : result.rateNonEur
             dayTransferCode = cityTransferRates[0].id || rates.transferServiceCode
             dayTransferSupplier = cityTransferRates[0].supplier_name || null
+            dayTransferSupplierId = cityTransferRates[0].supplier_id || null
           }
         }
       }
@@ -1502,6 +1540,7 @@ export async function createLandItineraryServices(
         service_code: (isTransferOnly && !isIntercityTransfer) ? dayTransferCode : dayTransportCode,
         service_name: transportName,
         supplier_name: (isTransferOnly && !isIntercityTransfer) ? dayTransferSupplier : dayTransportSupplier,
+        supplier_id: (isTransferOnly && !isIntercityTransfer) ? dayTransferSupplierId : dayTransportSupplierId,
         quantity: 1,
         rate_eur: transportRate,
         rate_non_eur: transportRate,
@@ -1525,6 +1564,7 @@ export async function createLandItineraryServices(
       let flightDayTourName = rates.vehicleTypeName
       let flightDayTourCode = rates.vehicleServiceCode
       let flightDayTourSupplier = rates.vehicleSupplierName
+      let flightDayTourSupplierId = rates.vehicleSupplierId
 
       // Fetch city-specific day tour rate if sightseeing is in a different city than the base
       if (flightSightseeingCity.toLowerCase() !== effectiveCity.toLowerCase()) {
@@ -1544,6 +1584,7 @@ export async function createLandItineraryServices(
             flightDayTourName = result.vehicleType
             flightDayTourCode = flightCityRates[0].id || rates.vehicleServiceCode
             flightDayTourSupplier = flightCityRates[0].supplier_name || null
+            flightDayTourSupplierId = flightCityRates[0].supplier_id || null
             console.log(`🚗 Day ${dayNumber} (${flightSightseeingCity}): Using city-specific transport rate €${flightDayTourRate} for domestic flight sightseeing`)
           }
         } else {
@@ -1556,6 +1597,7 @@ export async function createLandItineraryServices(
         service_code: flightDayTourCode,
         service_name: `${flightDayTourName} Sightseeing Transportation`,
         supplier_name: flightDayTourSupplier,
+        supplier_id: flightDayTourSupplierId,
         quantity: 1,
         rate_eur: flightDayTourRate,
         rate_non_eur: flightDayTourRate,
@@ -1574,6 +1616,10 @@ export async function createLandItineraryServices(
         service_code: rates.selectedGuide?.id || 'GUIDE',
         service_name: `${language} Speaking Guide`,
         supplier_name: rates.selectedGuide?.name || null,
+        // From guide_rates source: supplierId is populated (Phase 3 step 1).
+        // From the `guides` table fallback: supplierId is absent — that table
+        // is a separate registry without a supplier_id column — left NULL.
+        supplier_id: rates.selectedGuide?.supplierId ?? null,
         quantity: 1,
         rate_eur: rates.guidePerDay,
         rate_non_eur: rates.guidePerDay,
@@ -1623,6 +1669,11 @@ export async function createLandItineraryServices(
     if (entranceAttractions.length > 0 && !isTransferOnly && !isFreeDay) {
       let dayEntranceTotal = 0
       const matchedAttractions: string[] = []
+      // G2.2: attribute the aggregated entrance row to the antiquities authority
+      // (entrance_fees.supplier_id → Supreme Council of Antiquities). Captured
+      // from the first matched entrance fee; stays null if only activity-rate
+      // fallbacks matched (those aren't an authority cost).
+      let entranceSupplierId: string | null = null
       const processedAttractionIds = new Set<string>()  // Deduplicate by DB record ID
 
       for (const attr of entranceAttractions) {
@@ -1678,6 +1729,7 @@ export async function createLandItineraryServices(
             : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
           dayEntranceTotal += feePerPerson * totalPax
           matchedAttractions.push(fee.attraction_name)
+          if (fee.supplier_id && !entranceSupplierId) entranceSupplierId = fee.supplier_id
           if (matchType === 'exact') {
             console.log(`✅ Day ${dayNumber}: Entrance fee matched: "${attr}" → "${fee.attraction_name}" = €${feePerPerson}/person`)
           }
@@ -1719,6 +1771,7 @@ export async function createLandItineraryServices(
           service_type: 'entrance',
           service_code: 'ENTRANCE',
           service_name: `Entrance Fees (${isEuroPassport ? 'EUR' : 'non-EUR'})`,
+          supplier_id: entranceSupplierId,
           quantity: totalPax,
           rate_eur: dayEntranceTotal / totalPax,
           rate_non_eur: dayEntranceTotal / totalPax,
@@ -1843,6 +1896,7 @@ export async function createLandItineraryServices(
           service_code: cityHotel.selectedHotel?.id || 'HOTEL',
           service_name: `${cityHotel.hotelName} (${totalPax} ${totalPax > 1 ? 'persons' : 'person'})`,
           supplier_name: cityHotel.hotelName,
+          supplier_id: cityHotel.selectedHotel?.supplier_id ?? null,
           quantity: totalPax,
           rate_eur: perPersonRate,
           rate_non_eur: perPersonRate,
@@ -1868,6 +1922,10 @@ export async function createLandItineraryServices(
         service_code: hoistedCruiseRate.supplierId || 'CRUISE',
         service_name: `${hoistedCruiseRate.shipName} - Full Board (${cabinDesc})`,
         supplier_name: hoistedCruiseRate.shipName,
+        // Phase 3 step 1: stop dropping supplierId. (It was previously stored
+        // in service_code at the line above — leaving that as-is for now;
+        // semantic cleanup of service_code is out of this step's scope.)
+        supplier_id: hoistedCruiseRate.supplierId,
         quantity: totalPax,
         rate_eur: hoistedCruiseRate.totalPerNight / totalPax,
         rate_non_eur: hoistedCruiseRate.totalPerNight / totalPax,
@@ -1900,7 +1958,9 @@ export async function createLandItineraryServices(
           service_type: 'transportation',
           service_code: landCruiseTransportRule.id || 'CRUISE-TRANSPORT',
           service_name: `Cruise Transport Package (${transport.vehicleType})`,
+          // Bundled cruise transport package — no canonical supplier.
           supplier_name: null,
+          supplier_id: null,
           quantity: 1,
           rate_eur: transport.rate,
           rate_non_eur: transport.rate,

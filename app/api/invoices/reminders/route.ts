@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { lookupServerMessage } from '@/lib/i18n/server-messages'
+import { resolveClientLocalesByEmail, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 
 // Email service - adjust based on your setup (Resend, SendGrid, etc.)
 // This example uses a generic sendEmail function - replace with your actual implementation
@@ -54,56 +56,40 @@ async function sendReminderEmail(params: {
   }
 }
 
-function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
+function generateReminderEmail(invoice: any, reminderType: string, locale: RecipientLocale = 'en'): { subject: string; html: string } {
+  // Client-facing copy localized to the recipient's language (email.reminder.*).
+  // Colors / layout stay in code; dates format per the recipient's locale.
+  const t = (k: string, p: Record<string, string | number> = {}) =>
+    lookupServerMessage(locale, `email.reminder.${k}`, p)
+  const dateLocale = locale === 'ja' ? 'ja-JP' : 'en-GB'
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString(dateLocale, {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+
   const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
   const balanceDue = `${currencySymbol}${Number(invoice.balance_due).toFixed(2)}`
   const totalAmount = `${currencySymbol}${Number(invoice.total_amount).toFixed(2)}`
-  const dueDate = new Date(invoice.due_date).toLocaleDateString('en-GB', { 
-    day: 'numeric', month: 'long', year: 'numeric' 
-  })
-  
-  const daysOverdue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24))
-  
-  let subject: string
-  let urgencyMessage: string
-  let urgencyColor: string
+  const dueDate = fmtDate(invoice.due_date)
 
-  switch (reminderType) {
-    case 'before_due_7':
-      subject = `Upcoming Payment Due: Invoice ${invoice.invoice_number}`
-      urgencyMessage = `This is a friendly reminder that your invoice is due in 7 days.`
-      urgencyColor = '#3b82f6' // blue
-      break
-    case 'before_due_3':
-      subject = `Payment Reminder: Invoice ${invoice.invoice_number} due in 3 days`
-      urgencyMessage = `Your invoice payment is due in 3 days.`
-      urgencyColor = '#f59e0b' // amber
-      break
-    case 'on_due':
-      subject = `Payment Due Today: Invoice ${invoice.invoice_number}`
-      urgencyMessage = `Your invoice payment is due today.`
-      urgencyColor = '#f59e0b' // amber
-      break
-    case 'overdue_7':
-      subject = `Payment Overdue: Invoice ${invoice.invoice_number}`
-      urgencyMessage = `Your payment is now ${daysOverdue} days overdue. Please arrange payment as soon as possible.`
-      urgencyColor = '#ef4444' // red
-      break
-    case 'overdue_14':
-      subject = `Second Notice: Invoice ${invoice.invoice_number} is overdue`
-      urgencyMessage = `Your payment is now ${daysOverdue} days overdue. This is your second reminder.`
-      urgencyColor = '#ef4444' // red
-      break
-    case 'overdue_30':
-      subject = `Final Notice: Invoice ${invoice.invoice_number} - Immediate Payment Required`
-      urgencyMessage = `Your payment is now ${daysOverdue} days overdue. This is your final notice before further action may be taken.`
-      urgencyColor = '#dc2626' // dark red
-      break
-    default:
-      subject = `Payment Reminder: Invoice ${invoice.invoice_number}`
-      urgencyMessage = `This is a reminder about your outstanding invoice.`
-      urgencyColor = '#6b7280' // gray
+  const daysOverdue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24))
+
+  // Validate the stage key against the known set (else fall back to 'default'),
+  // then pull localized subject + urgency copy. Color stays in code.
+  const stage = ['before_due_7', 'before_due_3', 'on_due', 'overdue_7', 'overdue_14', 'overdue_30'].includes(reminderType)
+    ? reminderType
+    : 'default'
+  const urgencyColors: Record<string, string> = {
+    before_due_7: '#3b82f6', // blue
+    before_due_3: '#f59e0b', // amber
+    on_due: '#f59e0b', // amber
+    overdue_7: '#ef4444', // red
+    overdue_14: '#ef4444', // red
+    overdue_30: '#dc2626', // dark red
+    default: '#6b7280', // gray
   }
+  const subject = t(`subject.${stage}`, { invoiceNumber: invoice.invoice_number })
+  const urgencyMessage = t(`urgency.${stage}`, { days: daysOverdue })
+  const urgencyColor = urgencyColors[stage]
 
   const html = `
 <!DOCTYPE html>
@@ -139,11 +125,11 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 20px; color: #374151; font-size: 16px; line-height: 1.6;">
-                Dear ${invoice.client_name},
+                ${t('greeting', { clientName: invoice.client_name })}
               </p>
-              
+
               <p style="margin: 0 0 30px; color: #374151; font-size: 16px; line-height: 1.6;">
-                We are writing regarding the following invoice:
+                ${t('intro')}
               </p>
               
               <!-- Invoice Details Box -->
@@ -153,7 +139,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td style="padding: 8px 0;">
-                          <span style="color: #6b7280; font-size: 14px;">Invoice Number:</span>
+                          <span style="color: #6b7280; font-size: 14px;">${t('invoiceNumber')}</span>
                         </td>
                         <td style="padding: 8px 0; text-align: right;">
                           <span style="color: #111827; font-size: 14px; font-weight: 600;">${invoice.invoice_number}</span>
@@ -161,15 +147,15 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
                       </tr>
                       <tr>
                         <td style="padding: 8px 0;">
-                          <span style="color: #6b7280; font-size: 14px;">Invoice Date:</span>
+                          <span style="color: #6b7280; font-size: 14px;">${t('invoiceDate')}</span>
                         </td>
                         <td style="padding: 8px 0; text-align: right;">
-                          <span style="color: #111827; font-size: 14px;">${new Date(invoice.issue_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                          <span style="color: #111827; font-size: 14px;">${fmtDate(invoice.issue_date)}</span>
                         </td>
                       </tr>
                       <tr>
                         <td style="padding: 8px 0;">
-                          <span style="color: #6b7280; font-size: 14px;">Due Date:</span>
+                          <span style="color: #6b7280; font-size: 14px;">${t('dueDate')}</span>
                         </td>
                         <td style="padding: 8px 0; text-align: right;">
                           <span style="color: ${daysOverdue > 0 ? '#ef4444' : '#111827'}; font-size: 14px; font-weight: ${daysOverdue > 0 ? '600' : '400'};">${dueDate}</span>
@@ -177,7 +163,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
                       </tr>
                       <tr>
                         <td style="padding: 8px 0;">
-                          <span style="color: #6b7280; font-size: 14px;">Total Amount:</span>
+                          <span style="color: #6b7280; font-size: 14px;">${t('totalAmount')}</span>
                         </td>
                         <td style="padding: 8px 0; text-align: right;">
                           <span style="color: #111827; font-size: 14px;">${totalAmount}</span>
@@ -188,7 +174,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
                           <table width="100%">
                             <tr>
                               <td style="padding-top: 10px;">
-                                <span style="color: #111827; font-size: 16px; font-weight: 600;">Balance Due:</span>
+                                <span style="color: #111827; font-size: 16px; font-weight: 600;">${t('balanceDue')}</span>
                               </td>
                               <td style="padding-top: 10px; text-align: right;">
                                 <span style="color: #ef4444; font-size: 20px; font-weight: 700;">${balanceDue}</span>
@@ -203,24 +189,24 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
               </table>
               
               <p style="margin: 0 0 30px; color: #374151; font-size: 16px; line-height: 1.6;">
-                Please arrange payment at your earliest convenience. If you have already made this payment, please disregard this reminder.
+                ${t('arrange')}
               </p>
-              
+
               <!-- Payment Instructions -->
               ${invoice.payment_instructions ? `
               <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin-bottom: 30px; border-radius: 0 8px 8px 0;">
-                <p style="margin: 0 0 5px; color: #166534; font-size: 14px; font-weight: 600;">Payment Instructions</p>
+                <p style="margin: 0 0 5px; color: #166534; font-size: 14px; font-weight: 600;">${t('paymentInstructions')}</p>
                 <p style="margin: 0; color: #15803d; font-size: 14px; line-height: 1.5;">${invoice.payment_instructions}</p>
               </div>
               ` : ''}
-              
+
               <p style="margin: 0 0 10px; color: #374151; font-size: 16px; line-height: 1.6;">
-                If you have any questions about this invoice, please don't hesitate to contact us.
+                ${t('questions')}
               </p>
-              
+
               <p style="margin: 30px 0 0; color: #374151; font-size: 16px; line-height: 1.6;">
-                Best regards,<br>
-                <strong>Travel2Egypt Team</strong>
+                ${t('regards')}<br>
+                <strong>${t('team')}</strong>
               </p>
             </td>
           </tr>
@@ -229,10 +215,10 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
           <tr>
             <td style="background-color: #f9fafb; padding: 25px 40px; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0 0 10px; color: #6b7280; font-size: 13px; text-align: center;">
-                Travel2Egypt | Cairo, Egypt
+                ${t('footerLocation')}
               </p>
               <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
-                This is an automated payment reminder. Please do not reply directly to this email.
+                ${t('footerAutomated')}
               </p>
             </td>
           </tr>
@@ -369,6 +355,13 @@ export async function POST(request: NextRequest) {
       details: [] as any[]
     }
 
+    // Tier 2: resolve each recipient's language once (clients.preferred_language
+    // by email), so each reminder is written in the client's own language.
+    const localeByEmail = await resolveClientLocalesByEmail(
+      supabase,
+      invoices.map((i: any) => i.client_email)
+    )
+
     for (const invoice of invoices) {
       // M18: an invoice with no due_date yielded NaN here and propagated
       // 'Invalid Date' into the email subject/body. Skip those invoices so
@@ -402,7 +395,8 @@ export async function POST(request: NextRequest) {
       else if (daysUntilDue >= -14) reminderType = 'overdue_14'
       else reminderType = 'overdue_30'
 
-      const { subject, html } = generateReminderEmail(invoice, reminderType)
+      const recipientLocale: RecipientLocale = localeByEmail.get(invoice.client_email) ?? 'en'
+      const { subject, html } = generateReminderEmail(invoice, reminderType, recipientLocale)
 
       // Send email
       const emailResult = await sendReminderEmail({

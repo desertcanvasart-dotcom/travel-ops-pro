@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
 
 // ============================================
@@ -71,6 +72,21 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
+    // Validate supplier fields if either was provided. PUT can patch a subset
+    // of columns, so only run the guard when the client touched supplier_id
+    // or supplier_name; otherwise the existing row's FK stays untouched.
+    const supplierFieldPresent = 'supplier_id' in body || 'supplier_name' in body
+    let resolvedSupplierId: string | null | undefined
+    let resolvedSupplierName: string | null | undefined
+    if (supplierFieldPresent) {
+      const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      resolvedSupplierId = supplierCheck.supplier_id
+      resolvedSupplierName = supplierCheck.supplier_name
+    }
+
     // Remove id from body to avoid conflicts
     const { id: _, ...rawUpdates } = body
 
@@ -83,6 +99,13 @@ export async function PUT(
       if (!VEHICLE_TIERS.some(t => key.startsWith(`${t}_`))) {
         updates[key] = val
       }
+    }
+
+    // Apply the validated supplier fields AFTER the raw spread so the
+    // sentinel-or-resolved values win over the client's raw body.
+    if (supplierFieldPresent) {
+      updates.supplier_id = resolvedSupplierId ?? null
+      updates.supplier_name = resolvedSupplierName ?? null
     }
 
     updates.updated_at = new Date().toISOString()

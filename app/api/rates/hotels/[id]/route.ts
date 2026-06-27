@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -42,6 +43,11 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
+    const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+
     const updateData = {
       // Basic info
       service_code: body.service_code,
@@ -50,8 +56,8 @@ export async function PUT(
       city: body.city || null,
       board_basis: body.board_basis || 'BB',
       tier: body.tier || 'standard',
-      supplier_id: body.supplier_id || null,
-      supplier_name: body.supplier_name || null,
+      supplier_id: supplierCheck.supplier_id,
+      supplier_name: supplierCheck.supplier_name,
       
       // Hotel contacts
       contact_name: body.contact_name || null,

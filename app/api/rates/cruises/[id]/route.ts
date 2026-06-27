@@ -1,6 +1,7 @@
 // app/api/rates/cruises/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 
 export async function PUT(
   request: NextRequest,
@@ -11,9 +12,19 @@ export async function PUT(
     const supabase = createClient()
     const body = await request.json()
 
+    // Validate supplier_id only when the client touched the field (PUT can patch).
+    let updateBody = body
+    if ('supplier_id' in body || 'supplier_name' in body) {
+      const supplierCheck = await validateAndResolveSupplierFields(body, supabase)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      updateBody = { ...body, supplier_id: supplierCheck.supplier_id }
+    }
+
     const { data, error } = await supabase
       .from('nile_cruises')
-      .update(body)
+      .update(updateBody)
       .eq('id', id)
       .select()
       .single()

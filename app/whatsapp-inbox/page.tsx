@@ -799,6 +799,11 @@ export default function WhatsAppInboxPage() {
     })
     if (clientName) params.set('clientName', clientName)
     if (selectedConversation.clients?.email) params.set('email', selectedConversation.clients.email)
+    // Phase 2 — provenance: hand the whatsapp_conversations.id to the parser
+    // so the generated itinerary can be stamped with the originating
+    // communication_threads.id. The generate-itinerary route resolves the
+    // thread from this conversation id server-side.
+    if (selectedConversation.id) params.set('whatsappConversationId', selectedConversation.id)
     // Conversations go to the parser → an UNPRICED draft the operator revises,
     // then prices in the grid. (Ready-made itineraries are pasted/uploaded
     // directly into the grid.)

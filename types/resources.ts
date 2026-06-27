@@ -76,7 +76,7 @@ export interface Guide {
   // Vehicles are external transport suppliers (companies/drivers),
   // not internally owned fleet. Managed via the Suppliers page.
 
-  export type TransportSupplierType = 'transport_company' | 'transport' | 'driver'
+  export type TransportSupplierType = 'transport' | 'local_operator' | 'driver'
 
   // Kept for backward compatibility with code that references VehicleType
   export type VehicleType = 'car' | 'van' | 'minibus' | 'bus' | 'suv'
@@ -326,8 +326,8 @@ export interface Guide {
   ]
 
   export const TRANSPORT_SUPPLIER_TYPES: { value: TransportSupplierType; label: string }[] = [
-    { value: 'transport_company', label: 'Transport Company' },
     { value: 'transport', label: 'Transport' },
+    { value: 'local_operator', label: 'Local Operator' },
     { value: 'driver', label: 'Driver' },
   ]
   

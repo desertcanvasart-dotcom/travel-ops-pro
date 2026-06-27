@@ -39,7 +39,7 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { name, description, category, subcategory, channel, subject, body: templateBody } = body
+    const { name, description, category, subcategory, channel, subject, body: templateBody, language } = body
 
     // Extract placeholders from body
     const placeholderMatches = templateBody?.match(/\{\{[^}]+\}\}/g) || []
@@ -52,6 +52,7 @@ export async function PUT(
     if (subcategory !== undefined) updateData.subcategory = subcategory
     if (channel !== undefined) updateData.channel = channel
     if (subject !== undefined) updateData.subject = subject
+    if (language !== undefined) updateData.language = language === 'ja' ? 'ja' : 'en'
     if (templateBody !== undefined) {
       updateData.body = templateBody
       updateData.placeholders = placeholders

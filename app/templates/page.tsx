@@ -37,9 +37,10 @@ interface Template {
   id: string
   name: string
   description: string
-  category: 'customer' | 'partner' | 'supplier' | 'internal'
+  category: 'customer' | 'partner' | 'supplier' | 'internal' | 'b2b'
   subcategory: string
   channel: 'email' | 'whatsapp' | 'both'
+  language: 'en' | 'ja'
   subject?: string
   body: string
   placeholders: string[]
@@ -81,6 +82,7 @@ const CATEGORY_IDS = [
   { id: 'all', icon: FileText },
   { id: 'customer', icon: Users },
   { id: 'partner', icon: Building2 },
+  { id: 'b2b', icon: Building2 },
   { id: 'supplier', icon: Car },
   { id: 'internal', icon: Briefcase },
 ]
@@ -126,7 +128,8 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedChannel, setSelectedChannel] = useState('all')
-  
+  const [selectedLanguage, setSelectedLanguage] = useState('all')
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
@@ -141,6 +144,7 @@ export default function TemplatesPage() {
     category: 'customer' as const,
     subcategory: '',
     channel: 'email' as const,
+    language: 'en' as 'en' | 'ja',
     subject: '',
     body: '',
   })
@@ -215,8 +219,10 @@ export default function TemplatesPage() {
         matchesChannel = template.channel === 'both'
       }
     }
-    
-    return matchesSearch && matchesCategory && matchesChannel
+
+    const matchesLanguage = selectedLanguage === 'all' || (template.language || 'en') === selectedLanguage
+
+    return matchesSearch && matchesCategory && matchesChannel && matchesLanguage
   })
 
   // ============================================
@@ -252,6 +258,7 @@ export default function TemplatesPage() {
       category: template.category as any,
             subcategory: template.subcategory || '',
             channel: template.channel as any,
+      language: (template.language === 'ja' ? 'ja' : 'en'),
       subject: template.subject || '',
       body: template.body,
     })
@@ -301,6 +308,7 @@ export default function TemplatesPage() {
           category: 'customer',
           subcategory: '',
           channel: 'email',
+          language: 'en',
           subject: '',
           body: '',
         })
@@ -338,6 +346,7 @@ export default function TemplatesPage() {
     switch (category) {
       case 'customer': return 'bg-emerald-100 text-emerald-700'
       case 'partner': return 'bg-amber-100 text-amber-700'
+      case 'b2b': return 'bg-purple-100 text-purple-700'
       case 'supplier': return 'bg-blue-100 text-blue-700'
       case 'internal': return 'bg-slate-100 text-slate-700'
       default: return 'bg-gray-100 text-gray-700'
@@ -376,6 +385,7 @@ export default function TemplatesPage() {
               category: 'customer',
               subcategory: '',
               channel: 'email',
+              language: 'en',
               subject: '',
               body: '',
             })
@@ -442,6 +452,26 @@ export default function TemplatesPage() {
             ))}
           </div>
         </div>
+
+        {/* Row 3: Language Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">{t('languageFilter')}:</span>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            {(['all', 'en', 'ja'] as const).map((lang) => (
+              <button
+                key={lang}
+                onClick={() => setSelectedLanguage(lang)}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  selectedLanguage === lang
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {t(`languages.${lang}`)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Templates Grid */}
@@ -476,7 +506,10 @@ export default function TemplatesPage() {
               {/* Tags */}
               <div className="flex items-center gap-1.5 mb-2">
                 <span className={`px-1.5 py-0.5 rounded text-[10px] ${getCategoryColor(template.category)}`}>
-                  {t(`categories.${template.category}`)}
+                  {t.has(`categories.${template.category}`) ? t(`categories.${template.category}`) : template.category}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-700 font-medium uppercase">
+                  {template.language || 'en'}
                 </span>
                 <span className="text-[10px] text-gray-400 uppercase">
                   {template.subcategory}
@@ -575,7 +608,8 @@ export default function TemplatesPage() {
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   >
                     <option value="customer">{t('categories.customer')}</option>
-                    <option value="partner">{t('modal.partnerB2B')}</option>
+                    <option value="partner">{t('categories.partner')}</option>
+                    <option value="b2b">{t('categories.b2b')}</option>
                     <option value="supplier">{t('categories.supplier')}</option>
                     <option value="internal">{t('categories.internal')}</option>
                   </select>
@@ -593,6 +627,17 @@ export default function TemplatesPage() {
                     <option value="email">{t('channels.email')}</option>
                     <option value="whatsapp">{t('channels.whatsapp')}</option>
                     <option value="both">{t('channels.both')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('modal.languageLabel')}</label>
+                  <select
+                    value={formData.language}
+                    onChange={(e) => setFormData({ ...formData, language: e.target.value as 'en' | 'ja' })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                  >
+                    <option value="en">{t('languages.en')}</option>
+                    <option value="ja">{t('languages.ja')}</option>
                   </select>
                 </div>
                 <div>
@@ -932,7 +977,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
             endpoint = '/api/cruises'
             break
           case 'transport':
-            endpoint = '/api/suppliers?type=transport_company'
+            endpoint = '/api/suppliers?type=transport,local_operator'
             break
           case 'guide':
             endpoint = '/api/guides'

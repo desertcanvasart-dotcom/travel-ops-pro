@@ -15,7 +15,7 @@ interface Guide {
 interface Vehicle {
   id: string
   name: string
-  type?: string // transport_company | transport | driver
+  type?: string // transport | local_operator | driver
   city?: string
   contact_phone?: string
   whatsapp?: string
@@ -247,7 +247,7 @@ export default function ResourceSummaryCard({
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Truck className="w-4 h-4 flex-shrink-0" />
                       <span className="font-medium capitalize">
-                        {vehicle.type === 'transport_company' ? 'Transport Company' : vehicle.type === 'driver' ? 'Driver' : 'Transport'}
+                        {vehicle.type === 'local_operator' ? 'Local Operator' : vehicle.type === 'driver' ? 'Driver' : 'Transport'}
                       </span>
                       {vehicle.city && (
                         <>

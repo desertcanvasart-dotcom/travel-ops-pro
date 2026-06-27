@@ -332,7 +332,7 @@ export default function EditSupplierDocumentPage() {
     if (!document) return suppliers
 
     const typeMapping: Record<string, string[]> = {
-      transport_voucher: ['transport', 'transport_company', 'driver', 'dmc', 'ground_handler'],
+      transport_voucher: ['transport', 'local_operator', 'driver', 'dmc', 'ground_handler'],
       hotel_voucher: ['hotel', 'hotel_chain'],
       cruise_voucher: ['cruise', 'cruise_line'],
       guide_assignment: ['guide', 'dmc', 'ground_handler'],

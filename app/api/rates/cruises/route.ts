@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateRatePayload } from '@/lib/rate-validation'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -49,10 +50,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
     }
 
-    // Include supplier_id in insert
+    const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+
+    // Include supplier_id in insert (resolved/validated above)
     const newCruise = {
       ...body,
-      supplier_id: body.supplier_id || null
+      supplier_id: supplierCheck.supplier_id
     }
 
     // Check for existing rate with same natural key

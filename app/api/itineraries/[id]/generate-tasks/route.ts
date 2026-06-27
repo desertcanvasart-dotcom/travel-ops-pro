@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { MODEL_GENERATOR } from '@/lib/ai/models'
 import {
   buildTaskGenerationPrompt,
   parseTaskGenerationResponse,
@@ -97,7 +98,7 @@ export async function POST(
     const prompt = buildTaskGenerationPrompt(itinerary, daysWithServices)
 
     const message = await createMessageWithRetry({
-      model: 'claude-sonnet-4-20250514',
+      model: MODEL_GENERATOR,
       max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
     })

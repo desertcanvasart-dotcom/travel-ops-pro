@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateDraft } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { MODEL_DRAFT } from '@/lib/ai/models'
 import type { RegenerateDraftRequest, CopilotTone } from '@/types/copilot'
 
 const supabase = createClient(
@@ -107,7 +108,7 @@ export async function POST(
         parent_draft_id: id,
         draft_body: result.output.draft_body,
         operator_notes: result.output.operator_notes,
-        ai_model: 'claude-sonnet-4-20250514',
+        ai_model: MODEL_DRAFT,
         ai_confidence: result.output.confidence,
         ai_flags: result.output.flags,
         context_used: result.context,

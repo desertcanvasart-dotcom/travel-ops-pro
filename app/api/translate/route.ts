@@ -1,6 +1,8 @@
 // app/api/translate/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { OPENAI_TRANSLATION_MODEL } from '@/lib/ai/openai-models'
+import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -48,12 +50,19 @@ Guidelines:
 }
 
 export async function POST(request: NextRequest) {
+  // Resolve operator locale once (cookie pattern) so error messages localize.
+  // Note: when called server-to-server (copy-translate via fetch), the cookie
+  // isn't forwarded and this defaults to 'en' — the copy-translate route
+  // localizes its own wrapper from the operator's request context.
+  const locale = await getServerLocale()
+  const tErr = (key: string, params?: Record<string, string | number>) =>
+    lookupServerMessage(locale, `translate.errors.${key}`, params)
   try {
     // Check API key first
     if (!process.env.OPENAI_API_KEY) {
       console.error('Missing OPENAI_API_KEY')
       return NextResponse.json(
-        { success: false, error: 'Translation service not configured' },
+        { success: false, error: tErr('notConfigured') },
         { status: 500 }
       )
     }
@@ -80,7 +89,7 @@ Return ONLY the translated items as a JSON array of strings, preserving the same
 ${numberedItems}`
 
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: OPENAI_TRANSLATION_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt }
@@ -93,7 +102,7 @@ ${numberedItems}`
       const content = response.choices[0]?.message?.content?.trim()
       if (!content) {
         return NextResponse.json(
-          { success: false, error: 'Translation returned empty' },
+          { success: false, error: tErr('empty') },
           { status: 500 }
         )
       }
@@ -173,7 +182,7 @@ ${numberedItems}`
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: OPENAI_TRANSLATION_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
@@ -186,7 +195,7 @@ ${numberedItems}`
 
     if (!translatedText) {
       return NextResponse.json(
-        { success: false, error: 'Translation returned empty' },
+        { success: false, error: tErr('empty') },
         { status: 500 }
       )
     }
@@ -206,20 +215,30 @@ ${numberedItems}`
 
     if (error?.status === 401 || error?.code === 'invalid_api_key') {
       return NextResponse.json(
-        { success: false, error: 'Invalid API key' },
+        { success: false, error: tErr('invalidKey') },
         { status: 401 }
       )
     }
 
     if (error?.status === 429) {
       return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded' },
+        { success: false, error: tErr('rateLimit') },
         { status: 429 }
       )
     }
 
+    // Retired/typo'd model — the silent-outage class. OpenAI returns 404
+    // model_not_found. Surface it explicitly (and name the model) so a
+    // retirement is diagnosable, not a generic "translation failed".
+    if (error?.status === 404 || error?.code === 'model_not_found') {
+      return NextResponse.json(
+        { success: false, error: tErr('modelNotFound', { model: OPENAI_TRANSLATION_MODEL }) },
+        { status: 502 }
+      )
+    }
+
     return NextResponse.json(
-      { success: false, error: 'Translation failed' },
+      { success: false, error: tErr('failed', { reason: error?.message || 'unknown' }) },
       { status: 500 }
     )
   }
