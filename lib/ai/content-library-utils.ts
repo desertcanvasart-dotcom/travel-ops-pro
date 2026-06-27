@@ -3,6 +3,7 @@
 // =====================================================
 
 import { createClient } from '@/app/supabase'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import type {
   ContentVariation,
   WritingRule,
@@ -201,7 +202,11 @@ export async function searchContent(
   limit: number = 10
 ): Promise<ContentForGeneration[]> {
   const supabase = createClient()
-  
+
+  // Sanitize before interpolating into the PostgREST .or() filter — a raw
+  // searchTerm with metacharacters could inject extra OR conditions.
+  const safeSearch = sanitizeSearchTerm(searchTerm)
+
   const { data, error } = await supabase
     .from('content_library')
     .select(`
@@ -210,7 +215,7 @@ export async function searchContent(
       category:content_categories(name),
       variations:content_variations(*)
     `)
-    .or(`name.ilike.%${searchTerm}%,short_description.ilike.%${searchTerm}%`)
+    .or(`name.ilike.%${safeSearch}%,short_description.ilike.%${safeSearch}%`)
     .eq('is_active', true)
     .limit(limit)
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import Link from 'next/link'
 import RichTextEditor, { SignatureEditor, TemplateEditor } from '@/components/email/RichTextEditor'
 import { 
@@ -381,7 +382,7 @@ function EmailSettingsContent() {
                       </div>
                       <div 
                         className="mt-2 text-xs text-gray-600 prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: sig.content }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(sig.content) }}
                       />
                     </div>
                   ))}
