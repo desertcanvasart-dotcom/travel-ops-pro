@@ -382,20 +382,23 @@ export default function TasksPage() {
 
     setArchiving('bulk')
     try {
-      await Promise.all(doneTasks.map(task => 
+      // allSettled so one failed PUT doesn't abort the whole batch (was
+      // Promise.all → first rejection left the rest unprocessed and the UI stale).
+      await Promise.allSettled(doneTasks.map(task =>
         fetch(`/api/tasks/${task.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             archived: true,
             archived_at: new Date().toISOString()
           })
         })
       ))
-      fetchTasks()
     } catch (error) {
       console.error('Error bulk archiving:', error)
     } finally {
+      // Always refetch so the table reflects DB truth, even on a partial failure.
+      fetchTasks()
       setArchiving(null)
     }
   }

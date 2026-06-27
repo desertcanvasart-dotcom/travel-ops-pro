@@ -315,28 +315,27 @@ export default function ResourceAssignmentV2({
     }
   }
   const fetchAvailableResources = async () => {
-    const resources: Record<string, Resource[]> = {}
-    
-    for (const type of RESOURCE_TYPES) {
-      try {
-        const response = await fetch(`${type.apiEndpoint}?is_active=true`)
-        
-        // Handle 404 or other errors gracefully
-        if (!response.ok) {
-          console.log(`Resource API not available: ${type.apiEndpoint}`)
-          resources[type.key] = []
-          continue
+    // Fetch every resource type in PARALLEL (was a serial await-in-loop = 7
+    // sequential round-trips on mount). Each still degrades to [] on its own
+    // error, independent of the others.
+    const entries = await Promise.all(
+      RESOURCE_TYPES.map(async (type): Promise<[string, Resource[]]> => {
+        try {
+          const response = await fetch(`${type.apiEndpoint}?is_active=true`)
+          if (!response.ok) {
+            console.log(`Resource API not available: ${type.apiEndpoint}`)
+            return [type.key, []]
+          }
+          const data = await response.json()
+          return [type.key, Array.isArray(data) ? data : (data.data || [])]
+        } catch (error) {
+          console.log(`Error fetching ${type.key}:`, error)
+          return [type.key, []]
         }
-        
-        const data = await response.json()
-        resources[type.key] = Array.isArray(data) ? data : (data.data || [])
-      } catch (error) {
-        console.log(`Error fetching ${type.key}:`, error)
-        resources[type.key] = []
-      }
-    }
-    
-    setAvailableResources(resources)
+      })
+    )
+
+    setAvailableResources(Object.fromEntries(entries))
   }
 
   const fetchAssignedResources = async () => {
