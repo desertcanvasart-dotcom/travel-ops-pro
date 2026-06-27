@@ -343,7 +343,18 @@ export async function POST(request: NextRequest) {
       startCity: effectiveCity
     })
 
-    const totalPax = num_adults + num_children
+    const totalPax = Number(num_adults) + Number(num_children)
+
+    // Guard against a zero/invalid pax count: totalPax is the divisor for
+    // per_person_cost below, so 0 (or a non-numeric body value) would save an
+    // Infinity/NaN price. The defaults (num_adults=2) only apply when the keys
+    // are absent — an explicit num_adults:0 reaches here.
+    if (!Number.isFinite(totalPax) || totalPax < 1) {
+      return NextResponse.json(
+        { success: false, error: 'At least 1 passenger (adult or child) is required.' },
+        { status: 400 }
+      )
+    }
 
     // Passport type — match both country names AND demonyms (e.g., "French", "German")
     let isEuroPassport = is_euro_passport
