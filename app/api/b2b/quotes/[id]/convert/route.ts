@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -20,6 +21,15 @@ export async function POST(
     const { id } = await params
     const body = await request.json()
     const { user_id } = body
+
+    // M3 Phase 2A — itineraries.org_id is NOT NULL. Resolve from session.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) {
+      return NextResponse.json(
+        { success: false, error: 'No organization context — re-login or contact admin.' },
+        { status: 403 }
+      )
+    }
 
     const { data: quote, error: quoteError } = await supabaseAdmin
       .from('tour_quotes')
@@ -171,6 +181,7 @@ export async function POST(
       .from('itineraries')
       .insert({
         itinerary_code: itineraryCode,
+        org_id: orgId,
         client_id: clientId,
         client_name: quote.client_name || 'B2B Client',
         trip_name: template?.template_name || quote.trip_name || 'Tour Package',
@@ -204,15 +215,22 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to create itinerary' }, { status: 500 })
     }
 
-    // Create itinerary days
+    // Create itinerary days + services. Track failures: a partial conversion
+    // must NOT mark the quote 'converted' (that permanently locks the quote to
+    // an incomplete itinerary). This delete/insert chain isn't a DB transaction,
+    // so on any error we roll back by deleting the just-created itinerary (and
+    // its days/services) and leave the quote unconverted, so it can be retried.
     const tourDays = template?.tour_days || []
+    const servicesSnapshot = quote.services_snapshot || []
+    const insertedDayIds: string[] = []
+    let conversionError: string | null = null
 
     for (let dayNum = 1; dayNum <= (template?.duration_days || 1); dayNum++) {
       const tourDay = tourDays.find((d: any) => d.day_number === dayNum)
       const dayDate = new Date(startDate)
       dayDate.setDate(dayDate.getDate() + dayNum - 1)
 
-      const { data: itinDay } = await supabaseAdmin
+      const { data: itinDay, error: dayError } = await supabaseAdmin
         .from('itinerary_days')
         .insert({
           itinerary_id: itinerary.id,
@@ -226,17 +244,22 @@ export async function POST(
         .select()
         .single()
 
-      if (!itinDay) continue
+      if (dayError || !itinDay) {
+        conversionError = dayError?.message || `Failed to create day ${dayNum}`
+        break
+      }
+      insertedDayIds.push(itinDay.id)
 
-      const servicesSnapshot = quote.services_snapshot || []
+      const dayServices = servicesSnapshot.filter((service: any) => {
+        if (service.day_number && service.day_number !== dayNum) return false
+        if (!service.day_number && dayNum > 1) return false
+        return true
+      })
 
-      for (const service of servicesSnapshot) {
-        if (service.day_number && service.day_number !== dayNum) continue
-        if (!service.day_number && dayNum > 1) continue
-
-        await supabaseAdmin
+      if (dayServices.length > 0) {
+        const { error: svcError } = await supabaseAdmin
           .from('itinerary_services')
-          .insert({
+          .insert(dayServices.map((service: any) => ({
             itinerary_day_id: itinDay.id,
             service_type: service.service_category || 'other',
             service_name: service.service_name,
@@ -247,11 +270,30 @@ export async function POST(
             selling_price: service.line_total * (1 + (quote.margin_percent || 25) / 100),
             currency: 'EUR',
             status: 'pending'
-          })
+          })))
+        if (svcError) {
+          conversionError = svcError.message
+          break
+        }
       }
     }
 
-    await supabaseAdmin
+    if (conversionError) {
+      // Roll back the partial conversion: services → days → the itinerary itself.
+      if (insertedDayIds.length > 0) {
+        await supabaseAdmin.from('itinerary_services').delete().in('itinerary_day_id', insertedDayIds)
+        await supabaseAdmin.from('itinerary_days').delete().in('id', insertedDayIds)
+      }
+      await supabaseAdmin.from('itineraries').delete().eq('id', itinerary.id)
+      console.error(`Quote ${id} conversion failed; rolled back itinerary ${itinerary.id}:`, conversionError)
+      return NextResponse.json(
+        { error: 'Failed to convert quote — no changes were saved, please retry' },
+        { status: 500 }
+      )
+    }
+
+    // All inserts succeeded — only NOW mark the quote converted.
+    const { error: markError } = await supabaseAdmin
       .from('tour_quotes')
       .update({
         status: 'converted',
@@ -259,6 +301,14 @@ export async function POST(
         converted_at: new Date().toISOString()
       })
       .eq('id', id)
+
+    if (markError) {
+      console.error(`Itinerary ${itinerary.id} created but failed to mark quote ${id} converted:`, markError)
+      return NextResponse.json(
+        { error: 'Itinerary created but updating the quote status failed' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       success: true,

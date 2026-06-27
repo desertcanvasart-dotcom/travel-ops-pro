@@ -2,8 +2,15 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
+// Use the service-role key (admin client) — RLS on itineraries (Phase 2B)
+// requires `user_is_in_org(org_id)` which needs the user's JWT. This module
+// instantiates the client at import time, so it has no session context. We
+// rely on the explicit `eq('org_id', orgId)` app-layer check below for
+// tenant isolation. Matches the pattern used by the sibling
+// /api/itineraries/[id]/route.ts. The previous anon-key client silently
+// returned no rows (RLS filter), and the route surfaced that as a 404.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 export async function GET(
@@ -44,113 +51,86 @@ export async function GET(
 
     if (daysError) throw daysError
 
-    // Fetch services and language versions for each day
-    const daysWithServices = await Promise.all(
-      (days || []).map(async (day) => {
-        // Fetch services
-        const { data: services, error: servicesError } = await supabase
+    // Batch-fetch services + language versions for ALL days, then group in
+    // memory. Previously this ran 3 queries PER DAY (services, service versions,
+    // day version) — a 14-day itinerary meant ~42 round-trips. Now it's 3 total.
+    const dayIds = (days || []).map(d => d.id)
+
+    const { data: allServices } = dayIds.length > 0
+      ? await supabase
           .from('itinerary_services')
           .select('*')
-          .eq('itinerary_day_id', day.id)
+          .in('itinerary_day_id', dayIds)
           .order('created_at', { ascending: true })
+      : { data: [] as any[] }
 
-        if (servicesError) {
-          console.error('Error fetching services for day:', servicesError)
-        }
+    const serviceIds = (allServices || []).map((s: any) => s.id)
 
-        // Fetch language versions for services
-        let serviceVersionsMap: Record<string, { service_name?: string; notes?: string }> = {}
-        if (services && services.length > 0) {
-          const serviceIds = services.map((s: any) => s.id)
-          const { data: serviceVersions } = await supabase
-            .from('itinerary_service_versions')
-            .select('itinerary_service_id, service_name, notes')
-            .in('itinerary_service_id', serviceIds)
-            .eq('language', language)
-
-          if (serviceVersions) {
-            for (const sv of serviceVersions) {
-              serviceVersionsMap[sv.itinerary_service_id] = {
-                service_name: sv.service_name,
-                notes: sv.notes
-              }
-            }
-          }
-        }
-
-        // Merge service versions (version takes precedence)
-        const mergedServices = (services || []).map((service: any) => {
-          const version = serviceVersionsMap[service.id]
-          return {
-            ...service,
-            service_name: version?.service_name || service.service_name,
-            notes: version?.notes ?? service.notes
-          }
-        })
-
-        // Fetch language version for this day
-        const { data: dayVersion, error: dayVersionError } = await supabase
-          .from('itinerary_day_versions')
-          .select('title, description, city, overnight_city')
-          .eq('itinerary_day_id', day.id)
+    const { data: allServiceVersions } = serviceIds.length > 0
+      ? await supabase
+          .from('itinerary_service_versions')
+          .select('itinerary_service_id, service_name, notes')
+          .in('itinerary_service_id', serviceIds)
           .eq('language', language)
-          .single()
+      : { data: [] as any[] }
 
-        if (language !== 'en') {
-          console.log(`[days-api] Day ${day.day_number} (${day.id}): version found=${!!dayVersion}, error=${dayVersionError?.message || 'none'}`)
-          if (dayVersion) {
-            console.log(`[days-api] Day ${day.day_number} version title: "${dayVersion.title}"`)
-          }
-          // Check service versions found
-          const svCount = Object.keys(serviceVersionsMap).length
-          console.log(`[days-api] Day ${day.day_number}: ${services?.length || 0} services, ${svCount} service versions found`)
-        }
+    const { data: allDayVersions } = dayIds.length > 0
+      ? await supabase
+          .from('itinerary_day_versions')
+          .select('itinerary_day_id, title, description, city, overnight_city')
+          .in('itinerary_day_id', dayIds)
+          .eq('language', language)
+      : { data: [] as any[] }
 
-        // Merge version content with main day (version takes precedence)
+    // Index by day / service id for in-memory joins.
+    const servicesByDay = new Map<string, any[]>()
+    for (const s of (allServices || [])) {
+      const arr = servicesByDay.get(s.itinerary_day_id) || []
+      arr.push(s)
+      servicesByDay.set(s.itinerary_day_id, arr)
+    }
+    const serviceVersionById = new Map<string, { service_name?: string; notes?: string }>()
+    for (const sv of (allServiceVersions || [])) {
+      serviceVersionById.set(sv.itinerary_service_id, { service_name: sv.service_name, notes: sv.notes })
+    }
+    const dayVersionByDay = new Map<string, any>()
+    for (const dv of (allDayVersions || [])) {
+      dayVersionByDay.set(dv.itinerary_day_id, dv)
+    }
+
+    const daysWithServices = (days || []).map((day) => {
+      // Merge service versions (version takes precedence)
+      const mergedServices = (servicesByDay.get(day.id) || []).map((service: any) => {
+        const version = serviceVersionById.get(service.id)
         return {
-          ...day,
-          title: dayVersion?.title || day.title,
-          description: dayVersion?.description || day.description,
-          city: dayVersion?.city || day.city,
-          overnight_city: dayVersion?.overnight_city || day.overnight_city,
-          services: mergedServices
+          ...service,
+          service_name: version?.service_name || service.service_name,
+          notes: version?.notes ?? service.notes
         }
       })
-    )
 
-    // Add diagnostic info for non-English languages
+      // Merge version content with main day (version takes precedence)
+      const dayVersion = dayVersionByDay.get(day.id)
+      return {
+        ...day,
+        title: dayVersion?.title || day.title,
+        description: dayVersion?.description || day.description,
+        city: dayVersion?.city || day.city,
+        overnight_city: dayVersion?.overnight_city || day.overnight_city,
+        services: mergedServices
+      }
+    })
+
+    // Add diagnostic info for non-English languages (reuses the batched data
+    // fetched above — no extra round-trips).
     let debug: any = undefined
     if (language !== 'en') {
-      // Quick check: how many day versions and service versions exist for this language?
-      const dayIds = (days || []).map(d => d.id)
-      const { count: dayVersionCount } = await supabase
-        .from('itinerary_day_versions')
-        .select('*', { count: 'exact', head: true })
-        .in('itinerary_day_id', dayIds)
-        .eq('language', language)
-
-      // Get all service IDs for this itinerary
-      const { data: allServices } = await supabase
-        .from('itinerary_services')
-        .select('id')
-        .in('itinerary_day_id', dayIds)
-
-      let serviceVersionCount = 0
-      if (allServices && allServices.length > 0) {
-        const { count } = await supabase
-          .from('itinerary_service_versions')
-          .select('*', { count: 'exact', head: true })
-          .in('itinerary_service_id', allServices.map(s => s.id))
-          .eq('language', language)
-        serviceVersionCount = count || 0
-      }
-
       debug = {
         language,
         totalDays: days?.length || 0,
-        dayVersionsFound: dayVersionCount || 0,
-        totalServices: allServices?.length || 0,
-        serviceVersionsFound: serviceVersionCount
+        dayVersionsFound: (allDayVersions || []).length,
+        totalServices: (allServices || []).length,
+        serviceVersionsFound: (allServiceVersions || []).length
       }
       console.log('[days-api] Debug summary:', debug)
     }

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Document number prefixes
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get('status')
   const itineraryId = searchParams.get('itineraryId')
   const supplierId = searchParams.get('supplierId')
-  const search = searchParams.get('search')
+  const search = sanitizeSearchTerm(searchParams.get('search'))
   const startDate = searchParams.get('startDate')
   const endDate = searchParams.get('endDate')
   

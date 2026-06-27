@@ -42,6 +42,20 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/notifications': ['admin', 'manager', 'agent', 'viewer'],
 }
 
+// Financial / privileged API routes — MUTATIONS (POST/PUT/PATCH/DELETE) require a
+// role even though the request carries a valid session. These routes use the
+// service-role client (which bypasses RLS), so without this an authenticated
+// low-privilege user (e.g. viewer) could edit or delete financial records the UI
+// restricts to admin/manager. GET stays session-only so lower roles can still
+// read. Matched by path prefix; mirrors the page-level permissions above.
+const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
+  { prefix: '/api/invoices', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/payments', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/commissions', roles: ['admin', 'manager'] },
+  { prefix: '/api/supplier-invoices', roles: ['admin', 'manager'] },
+]
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
 export async function middleware(request: NextRequest) {
   // ============================================
   // MACHINE-TO-MACHINE WEBHOOK ALLOWLIST
@@ -139,6 +153,28 @@ export async function middleware(request: NextRequest) {
   // bypasses RLS), leaving them callable by anonymous internet clients.
   if (isApiRoute && !isSelfAuthApi && !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
+  // service-role key, so this is the authorization layer for them).
+  if (isApiRoute && user && MUTATING_METHODS.has(request.method)) {
+    const matched = API_MUTATION_PERMISSIONS.find(p =>
+      request.nextUrl.pathname.startsWith(p.prefix)
+    )
+    if (matched) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role, is_active')
+        .eq('id', user.id)
+        .single()
+      if (profile && profile.is_active === false) {
+        return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
+      }
+      const userRole = profile?.role || 'viewer'
+      if (!matched.roles.includes(userRole)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
   }
 
   // If user is not logged in and trying to access a protected page

@@ -187,6 +187,13 @@ export interface RateOption {
   // type-/class-aware checks.
   service_type?: string
   pricing_class?: PricingClass
+  // Vehicle-tier capacity (transport rates only). The rates route expands each
+  // transportation_rates row into one option per vehicle tier (sedan/minivan/
+  // van/minibus/bus), each carrying its capacity band. The multi-pax engine
+  // (calculator.ts → buildTransportTierIndex) uses these to re-select the right
+  // vehicle as group size grows — the one cost that is non-linear in pax.
+  capacity_min?: number
+  capacity_max?: number
 }
 
 export interface AllRates {
@@ -221,4 +228,21 @@ export interface GridTotals {
   marginAmount: number
   sellingPricePerPerson: number
   sellingPriceTotal: number
+}
+
+// --- Multi-Pax Rate Sheet (B2B shape of the one grid engine) ---
+//
+// The grid produces a single quote per GridConfig.pax. The B2B "shape" is the
+// same trip priced across a pax RANGE, with the vehicle tier re-selected per
+// pax count. The per-pax row shape lives in the canonical core primitive
+// (lib/pricing/pax-range.ts) so both shapes — grid and auto-pricing — share it.
+import type { PaxPricingRow } from '@/lib/pricing/pax-range'
+export type { PaxPriceCell, PaxPricingRow } from '@/lib/pricing/pax-range'
+
+export interface PaxRangeResult {
+  paxPricing: PaxPricingRow[]
+  // One number for the whole tour (single-room add-on), summed from
+  // accommodation single-supplement selections + cruise single rates.
+  singleSupplement: number
+  currency: string
 }

@@ -6,6 +6,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 
 function getSupabase() {
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     
     // Parse query parameters
-    const search = searchParams.get('search') || ''
+    const search = sanitizeSearchTerm(searchParams.get('search')) || ''
     const is_active = searchParams.get('is_active')
     const availability_from = searchParams.get('availability_from')
     const availability_to = searchParams.get('availability_to')

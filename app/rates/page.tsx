@@ -215,31 +215,19 @@ export default function RatesPage() {
   useEffect(() => {
     const fetchAllRates = async () => {
       try {
-        const [
-          transportationRes,
-          guidesRes,
-          entrancesRes,
-          accommodationRes,
-          mealsRes,
-          airportStaffRes,
-          hotelStaffRes,
-          cruisesRes,
-          sleepingTrainsRes,
-          trainsRes,
-          tippingRes
-        ] = await Promise.all([
-          fetch('/api/rates?type=transportation'),
-          fetch('/api/rates?type=guide'),
-          fetch('/api/rates?type=entrance'),
-          fetch('/api/rates?type=accommodation'),
-          fetch('/api/rates?type=meal'),
-          fetch('/api/rates?type=airport_staff'),
-          fetch('/api/rates?type=hotel_staff'),
-          fetch('/api/rates?type=cruises'),
-          fetch('/api/rates?type=sleeping_trains'),
-          fetch('/api/rates?type=trains'),
-          fetch('/api/rates?type=tipping')
-        ])
+        // Load each category INDEPENDENTLY — a single failing endpoint (or a
+        // non-JSON response) degrades just that category to [] instead of dropping
+        // the whole page into the error state (was: one rejected fetch/.json()
+        // nuked all 11 categories even when 10 loaded fine).
+        const loadType = async (type: string) => {
+          try {
+            const res = await fetch(`/api/rates?type=${type}`)
+            const json = await res.json()
+            return json?.success ? json.data : []
+          } catch {
+            return []
+          }
+        }
 
         const [
           transportationData,
@@ -254,31 +242,31 @@ export default function RatesPage() {
           trainsData,
           tippingData
         ] = await Promise.all([
-          transportationRes.json(),
-          guidesRes.json(),
-          entrancesRes.json(),
-          accommodationRes.json(),
-          mealsRes.json(),
-          airportStaffRes.json(),
-          hotelStaffRes.json(),
-          cruisesRes.json(),
-          sleepingTrainsRes.json(),
-          trainsRes.json(),
-          tippingRes.json()
+          loadType('transportation'),
+          loadType('guide'),
+          loadType('entrance'),
+          loadType('accommodation'),
+          loadType('meal'),
+          loadType('airport_staff'),
+          loadType('hotel_staff'),
+          loadType('cruises'),
+          loadType('sleeping_trains'),
+          loadType('trains'),
+          loadType('tipping')
         ])
 
         const combinedData: RatesData = {
-          transportation: transportationData.success ? transportationData.data : [],
-          guides: guidesData.success ? guidesData.data : [],
-          entrances: entrancesData.success ? entrancesData.data : [],
-          accommodation: accommodationData.success ? accommodationData.data : [],
-          meals: mealsData.success ? mealsData.data : [],
-          airportStaff: airportStaffData.success ? airportStaffData.data : [],
-          hotelStaff: hotelStaffData.success ? hotelStaffData.data : [],
-          cruises: cruisesData.success ? cruisesData.data : [],
-          sleepingTrains: sleepingTrainsData.success ? sleepingTrainsData.data : [],
-          trains: trainsData.success ? trainsData.data : [],
-          tipping: tippingData.success ? tippingData.data : []
+          transportation: transportationData,
+          guides: guidesData,
+          entrances: entrancesData,
+          accommodation: accommodationData,
+          meals: mealsData,
+          airportStaff: airportStaffData,
+          hotelStaff: hotelStaffData,
+          cruises: cruisesData,
+          sleepingTrains: sleepingTrainsData,
+          trains: trainsData,
+          tipping: tippingData
         }
 
         setRates(combinedData)

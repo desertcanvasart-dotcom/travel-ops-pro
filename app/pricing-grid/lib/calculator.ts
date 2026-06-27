@@ -3,7 +3,11 @@
 // No conditionals about day type. Just math.
 // ============================================
 
-import type { GridDay, GridConfig, SlotValue, DayCalc, GridTotals, SLOT_DEFINITIONS } from '../types'
+import type {
+  GridDay, GridConfig, SlotValue, SelectedItem, RateOption,
+  DayCalc, GridTotals, PaxRangeResult, SLOT_DEFINITIONS,
+} from '../types'
+import { priceAcrossPax } from '@/lib/pricing/pax-range'
 
 // --- Helpers ---
 
@@ -105,6 +109,188 @@ export function calculateGrandTotals(days: GridDay[], config: GridConfig): GridT
     marginAmount,
     sellingPricePerPerson,
     sellingPriceTotal,
+  }
+}
+
+// ============================================
+// MULTI-PAX RATE SHEET (B2B shape)
+// ============================================
+// The grid prices a single GridConfig.pax. The B2B rate sheet is the SAME trip
+// priced across a pax range. The cost decomposes as:
+//
+//     totalCost(pax) = GroupFixed + Transport(pax) + PerPerson × pax
+//
+// where PerPerson (accommodation double-occupancy PPD, entrance, meals, water,
+// cruise, flights) and GroupFixed (guide, tipping, airport/hotel services, boat
+// rides) are pax-invariant, and Transport(pax) is the ONE non-linear term — the
+// vehicle tier (Sedan→Minivan→Van→Minibus→Bus) is re-selected by group size.
+// This mirrors auto-pricing-service's per-pax loop exactly; here the inputs are
+// grid slots instead of derived day services. "One engine, two shapes."
+
+const MARGIN_CAP = 200
+
+/** One vehicle tier of a transport row: a capacity band and its rates. */
+export interface TransportTier {
+  capMin: number
+  capMax: number
+  rateEur: number
+  rateNonEur: number
+}
+
+/**
+ * Index of transport rowId → its vehicle tiers, built from the route rate
+ * options the grid already fetched. The rates route encodes each option id as
+ * `${rowId}__${tier}` (e.g. `abc__minivan`) and attaches capacity_min/max, so
+ * a single transport SERVICE (the rowId) recovers all of its vehicle tiers.
+ */
+export type TransportTierIndex = Map<string, TransportTier[]>
+
+export function buildTransportTierIndex(routeOptions: RateOption[]): TransportTierIndex {
+  const index: TransportTierIndex = new Map()
+  for (const opt of routeOptions) {
+    const sep = opt.id.indexOf('__')
+    if (sep === -1) continue // non-tiered (e.g. cruise transport package) — priced flat
+    const rowId = opt.id.slice(0, sep)
+    const tier: TransportTier = {
+      capMin: opt.capacity_min ?? 1,
+      capMax: opt.capacity_max ?? Number.MAX_SAFE_INTEGER,
+      rateEur: opt.rateEur,
+      rateNonEur: opt.rateNonEur,
+    }
+    const existing = index.get(rowId)
+    if (existing) existing.push(tier)
+    else index.set(rowId, [tier])
+  }
+  return index
+}
+
+/**
+ * Rate for one transport selection at a given pax count. A tier-encoded
+ * selection (`rowId__tier`) is RE-RESOLVED to the vehicle whose capacity band
+ * covers `pax` (falling back to the largest tier when the group exceeds every
+ * band) — the stored tier's rate is ignored. A non-tiered selection (cruise
+ * package, custom) is treated as a flat group cost at its stored rate.
+ */
+function resolveTransportRate(
+  item: SelectedItem,
+  pax: number,
+  passport: 'eu' | 'non_eu',
+  tierIndex: TransportTierIndex,
+): number {
+  const sep = item.rateId.indexOf('__')
+  const tiers = sep === -1 ? undefined : tierIndex.get(item.rateId.slice(0, sep))
+  if (!tiers || tiers.length === 0) {
+    return passport === 'eu' ? item.rateEur : item.rateNonEur
+  }
+  const sorted = [...tiers].sort((a, b) => a.capMin - b.capMin)
+  const match = sorted.find(t => pax >= t.capMin && pax <= t.capMax) ?? sorted[sorted.length - 1]
+  return passport === 'eu' ? match.rateEur : match.rateNonEur
+}
+
+/**
+ * Pax-invariant aggregates: group costs (excluding transport) and per-person
+ * costs, plus the whole-tour single supplement. Computed once; reused at every
+ * pax count. Mirrors calculateDay's group/per-person rules (withGuide toggle,
+ * tipping guide-exclusion, accommodation double-occupancy PPD).
+ */
+function aggregateNonTransport(days: GridDay[], config: GridConfig) {
+  const { passport, withGuide } = config
+  let groupFixed = 0
+  let perPerson = 0
+  let singleSupplement = 0
+
+  for (const day of days) {
+    for (const slot of day.slots) {
+      if (slot.slotId === 'route') continue // transport is pax-dependent — handled separately
+
+      if (GROUP_SLOT_IDS.has(slot.slotId)) {
+        if (slot.slotId === 'guide' && !withGuide) continue
+        if (slot.slotId === 'tipping' && !withGuide) {
+          groupFixed += slot.selectedItems
+            .filter(item => !item.rateId.includes('guide'))
+            .reduce((sum, item) => sum + getRate(item, passport), 0)
+          continue
+        }
+        groupFixed += slotTotal(slot, passport)
+
+      } else if (PP_SLOT_IDS.has(slot.slotId)) {
+        if (slot.slotId === 'accommodation') {
+          if (slot.selectedItems.length > 0) {
+            // First item = double-occupancy per-person rate; any further items
+            // are single-supplement add-ons (see SlotRow's `${id}_supp`).
+            perPerson += getRate(slot.selectedItems[0], passport)
+            for (let k = 1; k < slot.selectedItems.length; k++) {
+              singleSupplement += getRate(slot.selectedItems[k], passport)
+            }
+          } else if (slot.customAmount > 0) {
+            perPerson += slot.customAmount
+          }
+        } else {
+          perPerson += slotTotal(slot, passport)
+        }
+      }
+    }
+  }
+
+  return { groupFixed, perPerson, singleSupplement }
+}
+
+/** Whole-tour transport cost at a given pax count (vehicle re-selected per pax). */
+function transportForPax(
+  days: GridDay[],
+  config: GridConfig,
+  pax: number,
+  tierIndex: TransportTierIndex,
+): number {
+  const { passport } = config
+  let total = 0
+  for (const day of days) {
+    const slot = day.slots.find(s => s.slotId === 'route')
+    if (!slot) continue
+    if (slot.customAmount > 0) {
+      total += slot.customAmount // flat custom transport — pax-invariant
+      continue
+    }
+    for (const item of slot.selectedItems) {
+      total += resolveTransportRate(item, pax, passport, tierIndex)
+    }
+  }
+  return total
+}
+
+/**
+ * Price the trip across a pax range — the B2B rate sheet, produced from the
+ * same grid slots that drive the single-quote (B2C) shape.
+ *
+ * @param tierIndex Built from the grid's already-fetched route rate options via
+ *   buildTransportTierIndex(allRates.route).
+ */
+export function calculatePaxRange(
+  days: GridDay[],
+  config: GridConfig,
+  tierIndex: TransportTierIndex,
+  opts?: { paxFrom?: number; paxTo?: number },
+): PaxRangeResult {
+  const safeMargin = Math.max(0, Math.min(isNaN(config.marginPercent) ? 0 : config.marginPercent, MARGIN_CAP))
+  const { groupFixed, perPerson, singleSupplement } = aggregateNonTransport(days, config)
+
+  // The per-pax math is the shared core primitive — the grid only supplies the
+  // shape-specific bits: aggregates, a tier-index transport resolver, and the
+  // leader-cost policy (leader takes a single room + their own per-person costs).
+  const paxPricing = priceAcrossPax({
+    groupFixed,
+    perPerson,
+    marginPercent: safeMargin,
+    transportAt: (pax) => transportForPax(days, config, pax, tierIndex),
+    tourLeaderCost: perPerson + singleSupplement,
+    paxFrom: opts?.paxFrom,
+    paxTo: opts?.paxTo,
+  })
+
+  return {
+    paxPricing,
+    singleSupplement: round2(singleSupplement),
+    currency: config.currency,
   }
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
 
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     const agentId = searchParams.get('agent_id')
     const unassignedOnly = searchParams.get('unassigned_only') === 'true'
     const hasUnread = searchParams.get('has_unread') === 'true'
-    const search = searchParams.get('search') || ''
+    const search = sanitizeSearchTerm(searchParams.get('search')) || ''
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 

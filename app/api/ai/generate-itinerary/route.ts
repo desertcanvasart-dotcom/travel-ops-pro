@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { debugLog } from '@/lib/debug-log'
 import { createClient } from '@/lib/supabase'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import {
   fetchCruiseTransportPricingRules,
   findCruiseTransportRule,
@@ -60,6 +63,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const supabase = supabaseAdmin
     const userPrefs = await getUserPreferences(supabase)
+
+    // M3 Phase 2A — every itinerary INSERT must stamp org_id (NOT NULL).
+    // Resolve from the operator's session. Both INSERT paths below (cruise +
+    // land) use this same orgId.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) {
+      return NextResponse.json(
+        { success: false, error: 'No organization context — re-login or contact admin.' },
+        { status: 403 }
+      )
+    }
     
     const {
       client_name,
@@ -110,6 +124,15 @@ export async function POST(request: NextRequest) {
 
       // Idempotency
       idempotency_key = null,
+
+      // Phase 2 — provenance pointer back to the originating Copilot thread.
+      // Preferred: caller (the WhatsApp inbox launcher or the parser page)
+      // passes thread_id directly. Backstop: caller passes
+      // whatsapp_conversation_id (resolved server-side below). The Concierge
+      // path doesn't go through this route; its thread_id is wired in
+      // lib/concierge/commit-brief-to-itinerary.ts.
+      thread_id = null,
+      whatsapp_conversation_id = null,
     } = body
 
     // ============================================
@@ -134,7 +157,7 @@ export async function POST(request: NextRequest) {
       if (raw_include_dinner === undefined || raw_include_dinner === null) {
         include_dinner = ['FB', 'AI'].includes(mp)
       }
-      console.log(`🍽️ Meal plan "${mp}" → include_lunch=${include_lunch}, include_dinner=${include_dinner}`)
+      debugLog(`🍽️ Meal plan "${mp}" → include_lunch=${include_lunch}, include_dinner=${include_dinner}`)
     } else {
       // No meal_plan and no explicit values: use safe defaults
       if (include_lunch === undefined || include_lunch === null) include_lunch = true
@@ -154,7 +177,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (existing) {
-        console.log(`\u267B\uFE0F Idempotency hit: returning existing itinerary ${existing.id}`)
+        debugLog(`\u267B\uFE0F Idempotency hit: returning existing itinerary ${existing.id}`)
         return NextResponse.json({
           success: true,
           data: {
@@ -174,6 +197,53 @@ export async function POST(request: NextRequest) {
             total_cost: existing.total_cost,
             deduplicated: true,
           }
+        })
+      }
+    }
+
+    // ============================================
+    // PHASE 2 — THREAD_ID RESOLUTION + IDEMPOTENCY
+    // Prefer the caller-supplied thread_id; otherwise resolve from
+    // whatsapp_conversation_id as a backstop. If a thread resolves AND an
+    // itinerary already exists for it (one-itinerary-per-thread is enforced
+    // by idx_itineraries_thread_id_unique), return that existing itinerary.
+    // ============================================
+    let resolvedThreadId: string | null = thread_id || null
+    if (!resolvedThreadId && whatsapp_conversation_id) {
+      const { data: threadRow } = await supabase
+        .from('communication_threads')
+        .select('id')
+        .eq('whatsapp_conversation_id', whatsapp_conversation_id)
+        .maybeSingle()
+      resolvedThreadId = threadRow?.id || null
+    }
+    if (resolvedThreadId) {
+      const { data: existingByThread } = await supabase
+        .from('itineraries')
+        .select('id, itinerary_code, trip_name, tier, package_type, currency, total_days, total_cost, supplier_cost, status')
+        .eq('thread_id', resolvedThreadId)
+        .maybeSingle()
+      if (existingByThread) {
+        debugLog(`♻️ Thread idempotency hit: returning existing itinerary ${existingByThread.id} for thread ${resolvedThreadId}`)
+        return NextResponse.json({
+          success: true,
+          data: {
+            id: existingByThread.id,
+            itinerary_id: existingByThread.id,
+            itinerary_code: existingByThread.itinerary_code,
+            trip_name: existingByThread.trip_name,
+            tier: existingByThread.tier,
+            package_type: existingByThread.package_type,
+            mode: existingByThread.status,
+            redirect_to: existingByThread.status === 'draft'
+              ? `/itineraries/${existingByThread.id}/edit`
+              : `/itineraries/${existingByThread.id}`,
+            currency: existingByThread.currency,
+            total_days: existingByThread.total_days,
+            supplier_cost: existingByThread.supplier_cost,
+            total_cost: existingByThread.total_cost,
+            deduplicated: true,
+          },
         })
       }
     }
@@ -213,7 +283,7 @@ export async function POST(request: NextRequest) {
       extracted_days,
       raw_itinerary,
     })
-    console.log('🤖 Input Mode:', inputMode, '| Override:', input_mode_override, '| is_structured_input:', is_structured_input)
+    debugLog('🤖 Input Mode:', inputMode, '| Override:', input_mode_override, '| is_structured_input:', is_structured_input)
 
     let duration_days = parseInt(raw_duration_days) || 1
     
@@ -222,7 +292,7 @@ export async function POST(request: NextRequest) {
       const calculatedDays = calculateExpectedDays(raw_itinerary, extracted_days)
       if (calculatedDays > duration_days) {
         duration_days = calculatedDays
-        console.log(`📊 Adjusted duration to ${duration_days} days based on itinerary analysis`)
+        debugLog(`📊 Adjusted duration to ${duration_days} days based on itinerary analysis`)
       }
     } else if (inputMode === 'structured' && extracted_days?.length) {
       duration_days = extracted_days.length
@@ -248,13 +318,13 @@ export async function POST(request: NextRequest) {
       const bestDuration = cruiseDetection.detectedDuration || defaultCruiseDuration
       if (duration_days === 1 || (cruiseDetection.detectedDuration && cruiseDetection.detectedDuration > duration_days)) {
         duration_days = bestDuration
-        console.log(`🚢 Adjusted cruise duration to ${duration_days} days`)
+        debugLog(`🚢 Adjusted cruise duration to ${duration_days} days`)
       }
     }
 
     // UPDATED: Determine effective package type
     const effectivePackageType = determinePackageType(requested_package_type, cruiseDetection)
-    console.log(`📦 Package type: ${effectivePackageType}`)
+    debugLog(`📦 Package type: ${effectivePackageType}`)
 
     let effectiveCity = city
     if (cruiseDetection.isCruise && cruiseDetection.startCity) {
@@ -263,7 +333,7 @@ export async function POST(request: NextRequest) {
       effectiveCity = cities[0]
     }
 
-    console.log('🤖 Starting itinerary generation:', {
+    debugLog('🤖 Starting itinerary generation:', {
       client: client_name,
       inputMode,
       isCruise: cruiseDetection.isCruise,
@@ -278,31 +348,14 @@ export async function POST(request: NextRequest) {
     // Passport type — match both country names AND demonyms (e.g., "French", "German")
     let isEuroPassport = is_euro_passport
     if (isEuroPassport === null && nationality) {
-      const euTerms = [
-        // Country names
-        'austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark',
-        'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland',
-        'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands',
-        'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden',
-        'norway', 'iceland', 'liechtenstein', 'switzerland',
-        // Demonyms (nationality adjectives)
-        'austrian', 'belgian', 'bulgarian', 'croatian', 'cypriot', 'czech', 'danish',
-        'estonian', 'finnish', 'french', 'german', 'greek', 'hungarian', 'irish',
-        'italian', 'latvian', 'lithuanian', 'luxembourgish', 'maltese', 'dutch',
-        'polish', 'portuguese', 'romanian', 'slovak', 'slovenian', 'spanish', 'swedish',
-        'norwegian', 'icelandic', 'swiss',
-        // Common abbreviations
-        'eu', 'eur', 'euro', 'european', 'schengen',
-      ]
-      const natLower = nationality.toLowerCase().trim()
-      isEuroPassport = euTerms.some(t => natLower.includes(t))
+      isEuroPassport = isEuroPassportFromNationality(nationality)
     }
     isEuroPassport = isEuroPassport ?? false
 
     // Auto-set currency to EUR for Euro passport holders
     let effectiveCurrency = currency
     if (isEuroPassport && effectiveCurrency !== 'EUR') {
-      console.log(`💶 Euro passport detected (${nationality}) — setting currency to EUR (was ${effectiveCurrency})`)
+      debugLog(`💶 Euro passport detected (${nationality}) — setting currency to EUR (was ${effectiveCurrency})`)
       effectiveCurrency = 'EUR'
     }
 
@@ -322,12 +375,12 @@ export async function POST(request: NextRequest) {
     // If the user provided a day-by-day itinerary, we must follow it — not replace with a cruise template.
     // ============================================
     if (cruiseDetection.isCruise && inputMode === 'creative' && !is_structured_input && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
-      console.log(`🚢 Processing as ${effectivePackageType} itinerary (creative mode, no structured input)...`)
+      debugLog(`🚢 Processing as ${effectivePackageType} itinerary (creative mode, no structured input)...`)
       
       const cruiseContent = await findCruiseContent(supabaseAdmin, cruiseDetection, tier, duration_days)
       
       if (cruiseContent.found && cruiseContent.dayByDay.length > 0) {
-        console.log(`📚 Using Content Library cruise: ${cruiseContent.content.name}`)
+        debugLog(`📚 Using Content Library cruise: ${cruiseContent.content.name}`)
         
         // Use Content Library duration if available
         if (cruiseContent.content.duration_days) {
@@ -344,9 +397,9 @@ export async function POST(request: NextRequest) {
           startDate: start_date,
           isEuroPassport
         })
-        console.log(`💰 Cruise rate: ${cruiseRate.totalPerNight}/night total on ${cruiseRate.shipName} (${cruiseRate.season} season)`)
+        debugLog(`💰 Cruise rate: ${cruiseRate.totalPerNight}/night total on ${cruiseRate.shipName} (${cruiseRate.season} season)`)
         if (cruiseRate.cabinAllocation.length > 0) {
-          console.log(`🛏️ Cabins: ${cruiseRate.cabinAllocation.map(a => `${a.count}×${a.type}`).join(' + ')}`)
+          debugLog(`🛏️ Cabins: ${cruiseRate.cabinAllocation.map(a => `${a.count}×${a.type}`).join(' + ')}`)
         }
 
         // Quick transport lookup for inclusions vehicle type (actual rate fetched inside module)
@@ -389,7 +442,7 @@ export async function POST(request: NextRequest) {
             ? cruiseDetails.intercityTransfers : undefined,
         })
 
-        console.log('📋 Built cruise inclusions/exclusions:', {
+        debugLog('📋 Built cruise inclusions/exclusions:', {
           inclusionsCount: cruiseIncExc.inclusions.length,
           exclusionsCount: cruiseIncExc.exclusions.length,
           firstInclusion: cruiseIncExc.inclusions[0],
@@ -401,6 +454,7 @@ export async function POST(request: NextRequest) {
           .from('itineraries')
           .insert({
             itinerary_code,
+            org_id: orgId,
             client_name,
             client_email: client_email || null,
             client_phone: client_phone || null,
@@ -436,7 +490,7 @@ export async function POST(request: NextRequest) {
 
         if (itineraryError) throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
 
-        console.log('✅ Created cruise itinerary:', itinerary.id)
+        debugLog('✅ Created cruise itinerary:', itinerary.id)
 
         // Delegate day + service creation to the extracted cruise module
         const cruiseServiceResult = await createCruiseItineraryServices(supabase, {
@@ -479,7 +533,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log('🎉 Cruise itinerary complete!')
+        debugLog('🎉 Cruise itinerary complete!')
 
         // Log content library usage for cruise path
         if (cruiseContent.found && cruiseContent.content?.id) {
@@ -519,7 +573,7 @@ export async function POST(request: NextRequest) {
           }
         })
       } else {
-        console.log('⚠️ No cruise content in Content Library, falling back to AI generation')
+        debugLog('⚠️ No cruise content in Content Library, falling back to AI generation')
         // Fall through to standard AI generation
       }
     }
@@ -527,7 +581,7 @@ export async function POST(request: NextRequest) {
     // ============================================
     // LAND TOUR / CRUISE+LAND PATH (STRUCTURED OR CREATIVE)
     // ============================================
-    console.log(`🏛️ Processing as ${effectivePackageType} itinerary (${inputMode} mode)...`)
+    debugLog(`🏛️ Processing as ${effectivePackageType} itinerary (${inputMode} mode)...`)
 
     // Fetch rates and content
     const searchCities = cities.length > 0 ? cities : [effectiveCity]
@@ -571,7 +625,7 @@ export async function POST(request: NextRequest) {
     let itineraryData: any
 
     if (inputMode === 'structured' && raw_itinerary) {
-      console.log('📋 Using STRUCTURED mode - following provided itinerary')
+      debugLog('📋 Using STRUCTURED mode - following provided itinerary')
       
       itineraryData = await generateFromStructuredInput(
         extracted_days || [],
@@ -588,7 +642,7 @@ export async function POST(request: NextRequest) {
         }
       )
     } else {
-      console.log('🎨 Using CREATIVE mode - AI generating itinerary')
+      debugLog('🎨 Using CREATIVE mode - AI generating itinerary')
       
       itineraryData = await generateCreativeItinerary({
         clientName: client_name,
@@ -623,14 +677,14 @@ export async function POST(request: NextRequest) {
       // The parser extracts detailed per-day data (attractions with INSIDE/OUTSIDE,
       // meals, flights, cities) that the AI may miss when re-parsing raw text.
       if (extracted_days && extracted_days.length > 0) {
-        console.log('🔧 Running reconciliation layer (parser data → AI output)...')
+        debugLog('🔧 Running reconciliation layer (parser data → AI output)...')
         itineraryData.days = reconcileWithParserData(itineraryData.days, extracted_days)
       }
 
       // Step 2: Apply deterministic day rules
-      console.log('🔧 Applying day rules engine (pre-service-creation validation)...')
+      debugLog('🔧 Applying day rules engine (pre-service-creation validation)...')
       itineraryData.days = applyDayRules(itineraryData.days, effectivePackageType)
-      console.log('✅ Day rules applied successfully')
+      debugLog('✅ Day rules applied successfully')
 
       // Step 3: Validate AI attractions against database (with alias resolution)
       // If the AI used an alias, auto-correct to the canonical name before flagging
@@ -647,7 +701,7 @@ export async function POST(request: NextRequest) {
             // Check if it's a known alias → auto-correct to canonical name
             const canonical = aliasToCanonical.get(attrLower)
             if (canonical && dbAttractionSet.has(canonical.toLowerCase())) {
-              console.log(`🔄 Day ${day.day_number}: Auto-corrected "${attr}" → "${canonical}" (alias match)`)
+              debugLog(`🔄 Day ${day.day_number}: Auto-corrected "${attr}" → "${canonical}" (alias match)`)
               day.attractions[i] = canonical
               continue
             }
@@ -731,7 +785,7 @@ export async function POST(request: NextRequest) {
         ? itineraryDetails.intercityTransfers : undefined,
     })
 
-    console.log('📋 Built inclusions/exclusions:', {
+    debugLog('📋 Built inclusions/exclusions:', {
       inclusionsCount: landIncExc.inclusions.length,
       exclusionsCount: landIncExc.exclusions.length,
       firstInclusion: landIncExc.inclusions[0],
@@ -743,6 +797,7 @@ export async function POST(request: NextRequest) {
       .from('itineraries')
       .insert({
         itinerary_code,
+        org_id: orgId,
         client_name,
         client_email: client_email || null,
         client_phone: client_phone || null,
@@ -769,6 +824,11 @@ export async function POST(request: NextRequest) {
         partner_id: partner_id || null,
         partner_commission_percent: partner_commission_percent || 0,
         source: partner_id ? 'b2b_custom' : source,
+        // Phase 2 — provenance pointer to the Copilot thread that produced
+        // this itinerary. NULL for direct-paste itineraries (no inbound
+        // conversation). Same column as Concierge (lib/concierge/commit-brief-
+        // to-itinerary.ts uses it too).
+        thread_id: resolvedThreadId,
         // Idempotency
         idempotency_key: idempotency_key || null,
       })
@@ -780,7 +840,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
     }
 
-    console.log(`✅ Created itinerary ${itinerary.id} with ${duration_days} days`)
+    debugLog(`✅ Created itinerary ${itinerary.id} with ${duration_days} days`)
 
     // Create days and services using extracted module
     const serviceResult = await createLandItineraryServices(supabase, {
@@ -859,7 +919,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to save pricing: ${updateError.message}`)
     }
 
-    console.log('🎉 Land tour itinerary complete!', {
+    debugLog('🎉 Land tour itinerary complete!', {
       id: itinerary.id,
       mode: inputMode,
       packageType: effectivePackageType,

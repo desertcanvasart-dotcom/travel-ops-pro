@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
+import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import type { PricingHole } from '@/lib/pricing-types'
 
 // Consolidation Phase D — this route used to fall back to
@@ -57,16 +58,7 @@ export async function POST(request: NextRequest) {
     // ============================================
     let isEuroPassport = is_euro_passport
     if (isEuroPassport === null && nationality) {
-      const euCountries = [
-        'austria', 'belgium', 'bulgaria', 'croatia', 'cyprus', 'czech', 'denmark',
-        'estonia', 'finland', 'france', 'germany', 'greece', 'hungary', 'ireland',
-        'italy', 'latvia', 'lithuania', 'luxembourg', 'malta', 'netherlands',
-        'poland', 'portugal', 'romania', 'slovakia', 'slovenia', 'spain', 'sweden',
-        'norway', 'iceland', 'liechtenstein', 'switzerland'
-      ]
-      isEuroPassport = euCountries.some(c => 
-        nationality.toLowerCase().includes(c)
-      )
+      isEuroPassport = isEuroPassportFromNationality(nationality)
     }
     isEuroPassport = isEuroPassport ?? false
 

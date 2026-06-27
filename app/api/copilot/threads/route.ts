@@ -5,6 +5,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const channel = searchParams.get('channel')
     const urgency = searchParams.get('urgency')
-    const search = searchParams.get('search')
+    const search = sanitizeSearchTerm(searchParams.get('search'))
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '30')
     const offset = (page - 1) * limit

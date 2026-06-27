@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import type { EmailConversation } from '@/types/unified'
 
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active'
-    const search = searchParams.get('search') || ''
+    const search = sanitizeSearchTerm(searchParams.get('search')) || ''
     const includeHidden = searchParams.get('include_hidden') === 'true'
     const agentId = searchParams.get('agent_id')
     const unassignedOnly = searchParams.get('unassigned_only') === 'true'

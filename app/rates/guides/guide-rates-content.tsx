@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -188,20 +189,24 @@ export default function GuideRatesContent() {
     }
   }
 
-  // Fetch guides (suppliers)
+  // Fetch the guide roster from suppliers(type='guide').
+  // Was previously fetching from the separate `guides` table — the picker
+  // wrote guides.id into guide_rates.supplier_id, and most of those ids
+  // didn't exist in suppliers, so the FK rejected. Reading from suppliers
+  // matches the other 5 rate forms and guarantees the FK passes.
+  // Language-based filtering is dropped (suppliers has no `languages`
+  // column; reintroducing it is part of the deferred G2 guide-model work).
   const fetchGuides = async () => {
     try {
-      const response = await fetch('/api/guides?is_active=true')
+      const response = await fetch('/api/suppliers?type=guide&status=active')
       const data = await response.json()
-
-      // API returns array directly, not { success, data } format
       if (Array.isArray(data)) {
         setGuides(data)
       } else if (data.success && data.data) {
         setGuides(data.data)
       }
     } catch (error) {
-      console.error('Error fetching guides:', error)
+      console.error('Error fetching guides (suppliers):', error)
     }
   }
 
@@ -215,25 +220,19 @@ export default function GuideRatesContent() {
     setCurrentPage(1)
   }, [searchTerm, selectedCity, selectedLanguage, selectedGuide, selectedGuideType, showInactive, itemsPerPage])
 
-  // Filter guides based on form's city and language selection
+  // Filter the supplier-guides by city (the only attribute suppliers carries
+  // that the dropdown previously filtered on). Language-based filtering was
+  // dropped when the picker source switched from `guides` → `suppliers` —
+  // suppliers has no `languages` column; restoring this is part of the
+  // deferred G2 guide-model work.
   const filteredGuidesForDropdown = useMemo(() => {
     return guides.filter(guide => {
-      // Filter by city if one is selected in the form
       if (formData.city && guide.city && guide.city !== formData.city) {
         return false
       }
-      // Filter by language if one is selected in the form
-      if (formData.guide_language && guide.languages && Array.isArray(guide.languages)) {
-        const hasLanguage = guide.languages.some(
-          (lang: string) => lang.toLowerCase() === formData.guide_language.toLowerCase()
-        )
-        if (!hasLanguage) {
-          return false
-        }
-      }
       return true
     })
-  }, [guides, formData.city, formData.guide_language])
+  }, [guides, formData.city])
 
   // Handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1044,12 +1043,14 @@ export default function GuideRatesContent() {
                   {t('form.linkToGuide')}
                 </h3>
                 <select
+                  required
                   name="supplier_id"
                   value={formData.supplier_id}
                   onChange={(e) => handleGuideChange(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                 >
-                  <option value="">{t('form.selectGuide')} {filteredGuidesForDropdown.length < guides.length ? `(${filteredGuidesForDropdown.length} matching)` : ''}</option>
+                  <option value="" disabled>{t('form.selectGuide')} {filteredGuidesForDropdown.length < guides.length ? `(${filteredGuidesForDropdown.length} matching)` : ''}</option>
+                  <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
                   {filteredGuidesForDropdown.map(guide => (
                     <option key={guide.id} value={guide.id}>
                       {guide.name}

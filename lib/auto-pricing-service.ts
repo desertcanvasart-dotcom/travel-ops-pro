@@ -26,9 +26,11 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { debugLog } from '@/lib/debug-log'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
 import type { PricingHole } from '@/lib/pricing-types'
+import { priceAcrossPax } from '@/lib/pricing/pax-range'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -243,28 +245,32 @@ interface TransportRate {
 }
 
 // Cruise transport pricing rule from b2b_pricing_rules
-interface CruiseTransportPricingRule {
+// Cruise transport packages live in `b2b_transport_packages` — the SHARED
+// source of truth for cruise transport pricing (despite the "b2b_" prefix it
+// serves BOTH the B2C and B2B/"Guide" shapes; markup is a manual per-itinerary
+// operator input applied downstream, not a shape-branched calculation here).
+// This is the same table + extraction the calculate-price and pricing-grid
+// paths read. The engine previously (incorrectly) read b2b_pricing_rules
+// WHERE service_category='cruise_transport', which is permanently empty and
+// not even creatable from the UI — that dead read is removed.
+interface CruiseTransportPackage {
   id: string
-  service_name: string
-  service_category: string
-  pricing_model: string
-  unit_type: string | null
-  tier1_min_pax: number | null
-  tier1_max_pax: number | null
-  tier1_rate_eur: number | null
-  tier1_label: string | null
-  tier2_min_pax: number | null
-  tier2_max_pax: number | null
-  tier2_rate_eur: number | null
-  tier2_label: string | null
-  tier3_min_pax: number | null
-  tier3_max_pax: number | null
-  tier3_rate_eur: number | null
-  tier3_label: string | null
-  tier4_min_pax: number | null
-  tier4_max_pax: number | null
-  tier4_rate_eur: number | null
-  tier4_label: string | null
+  package_name: string
+  package_type: string | null
+  origin_city: string | null
+  destination_city: string | null
+  duration_days: number | null
+  sedan_rate: number | null
+  sedan_capacity: number | null
+  minivan_rate: number | null
+  minivan_capacity: number | null
+  van_rate: number | null
+  van_capacity: number | null
+  minibus_rate: number | null
+  minibus_capacity: number | null
+  bus_rate: number | null
+  bus_capacity: number | null
+  includes: string | null
   notes: string | null
   is_active: boolean
 }
@@ -1046,7 +1052,7 @@ export async function getCruiseRates(
     const { data: cruises, error } = await query.limit(1)
 
     if (error || !cruises || cruises.length === 0) {
-      console.log(`⚠️ No cruise rate for tier ${tier} — flagging hole (no fabrication)`)
+      debugLog(`⚠️ No cruise rate for tier ${tier} — flagging hole (no fabrication)`)
       return null
     }
 
@@ -1067,7 +1073,7 @@ export async function getCruiseRates(
     const ppdNight = ppdTrip / safeNights
     const singleSuppNight = singleSuppTrip / safeNights
 
-    console.log(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
+    debugLog(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
 
     return {
       shipName: cruise.ship_name,
@@ -1108,7 +1114,7 @@ export async function getHotelRates(
     if (error || !hotels || hotels.length === 0) {
       // Per the harness policy we do NOT substitute an adjacent tier (fuzzy) or a
       // hardcoded default — a missing exact city+tier rate is a hole the caller flags.
-      console.log(`⚠️ No ${tier} hotel rate for ${city} — flagging hole (no fabrication)`)
+      debugLog(`⚠️ No ${tier} hotel rate for ${city} — flagging hole (no fabrication)`)
       return null
     }
 
@@ -1120,7 +1126,7 @@ export async function getHotelRates(
       ? (hotel.single_supp_eur || 0)
       : (hotel.single_supp_non_eur || 0)
 
-    console.log(`✅ Hotel: ${hotel.property_name} | PPD/night: €${ppd.toFixed(2)} | SingleSupp/night: €${singleSupp.toFixed(2)} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
+    debugLog(`✅ Hotel: ${hotel.property_name} | PPD/night: €${ppd.toFixed(2)} | SingleSupp/night: €${singleSupp.toFixed(2)} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
 
     return {
       hotelName: hotel.property_name,
@@ -1175,7 +1181,7 @@ export async function getEntranceFee(
     }
 
     if (!fees || fees.length === 0) {
-      console.log(`⚠️ No entrance fee found for "${attractionName}"`)
+      debugLog(`⚠️ No entrance fee found for "${attractionName}"`)
       return null
     }
 
@@ -1184,7 +1190,7 @@ export async function getEntranceFee(
       ? (fee.eur_rate || 0) 
       : (fee.non_eur_rate || fee.eur_rate || 0)
 
-    console.log(`✅ Entrance: ${fee.attraction_name} | €${rate} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
+    debugLog(`✅ Entrance: ${fee.attraction_name} | €${rate} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
 
     return {
       id: fee.id,
@@ -1195,6 +1201,52 @@ export async function getEntranceFee(
     console.error('Error fetching entrance fee:', err)
     return null
   }
+}
+
+type EntranceFeeRow = { id: string; attraction_name: string; eur_rate: number | null; non_eur_rate: number | null }
+
+/**
+ * Fetch ALL active entrance fees once, for in-memory matching across a whole
+ * itinerary. The per-attraction getEntranceFee() above runs 1–2 queries each
+ * (and a full-table scan on every miss); building this cache once and matching
+ * with findEntranceFeeInList() collapses that N+1 to a single query.
+ */
+export async function buildEntranceFeeCache(): Promise<EntranceFeeRow[]> {
+  const { data } = await supabaseAdmin
+    .from('entrance_fees')
+    .select('id, attraction_name, eur_rate, non_eur_rate')
+    .eq('is_active', true)
+  return (data as EntranceFeeRow[]) || []
+}
+
+/**
+ * In-memory equivalent of getEntranceFee()'s matching, applied to the cache:
+ *   1. primary — a DB row whose name CONTAINS the attraction (the ilike '%x%'),
+ *   2. fallback — substantial (>50%) overlap, preferring longer/more specific names.
+ * Kept byte-identical in logic so pricing is unchanged (verified by golden master).
+ */
+export function findEntranceFeeInList(
+  allFees: EntranceFeeRow[],
+  attractionName: string,
+  isEurPassport: boolean
+): { id: string; name: string; rate: number } | null {
+  const searchName = attractionName.toLowerCase()
+
+  let match: EntranceFeeRow | null =
+    allFees.find(ef => (ef.attraction_name || '').toLowerCase().includes(searchName)) || null
+
+  if (!match) {
+    const sorted = [...allFees].sort((a, b) => (b.attraction_name?.length || 0) - (a.attraction_name?.length || 0))
+    match = sorted.find(ef => {
+      const dbName = (ef.attraction_name || '').toLowerCase()
+      const overlapRatio = Math.min(dbName.length, searchName.length) / Math.max(dbName.length, searchName.length)
+      return overlapRatio > 0.5 && (dbName.includes(searchName) || searchName.includes(dbName))
+    }) || null
+  }
+
+  if (!match) return null
+  const rate = isEurPassport ? (match.eur_rate || 0) : (match.non_eur_rate || match.eur_rate || 0)
+  return { id: match.id, name: match.attraction_name, rate }
 }
 
 /**
@@ -1217,7 +1269,7 @@ export async function getGuideRate(
     if (guideRate) {
       const dailyRate = guideRate.base_rate_eur || guideRate.rate_eur || 0
       if (dailyRate > 0) {
-        console.log(`✅ Guide (guide_rates): ${language} | €${dailyRate}/day`)
+        debugLog(`✅ Guide (guide_rates): ${language} | €${dailyRate}/day`)
         return {
           id: guideRate.id,
           name: `${language} Speaking Guide`,
@@ -1237,7 +1289,7 @@ export async function getGuideRate(
     if (!error && guides && guides.length > 0) {
       const selected = guides.find(g => g.tier === tier) || guides[0]
       if ((selected.daily_rate ?? 0) > 0) {
-        console.log(`✅ Guide (guides): ${selected.name} | €${selected.daily_rate}/day`)
+        debugLog(`✅ Guide (guides): ${selected.name} | €${selected.daily_rate}/day`)
         return {
           id: selected.id,
           name: selected.name,
@@ -1444,10 +1496,10 @@ export async function buildTransportCache(): Promise<Map<string, TransportRate>>
     }
   }
 
-  console.log(`📦 Built transport cache with ${cache.size} entries from ${allRates.length} DB records`)
+  debugLog(`📦 Built transport cache with ${cache.size} entries from ${allRates.length} DB records`)
   // Log cache keys for debugging
   const keys = Array.from(cache.keys()).filter(k => !k.startsWith('code:')).slice(0, 20)
-  console.log('📦 Sample cache keys:', keys)
+  debugLog('📦 Sample cache keys:', keys)
   return cache
 }
 
@@ -1478,7 +1530,7 @@ export function findTransportRate(
   const exactKey = [serviceType, cityLower, duration, area || ''].join('|')
   if (cache.has(exactKey)) {
     record = cache.get(exactKey)!
-    console.log(`✅ Transport exact match: ${exactKey}`)
+    debugLog(`✅ Transport exact match: ${exactKey}`)
   }
 
   // Priority 2: Match without area
@@ -1486,7 +1538,7 @@ export function findTransportRate(
     const noAreaKey = [serviceType, cityLower, duration, ''].join('|')
     if (cache.has(noAreaKey)) {
       record = cache.get(noAreaKey)!
-      console.log(`✅ Transport match (no area): ${noAreaKey}`)
+      debugLog(`✅ Transport match (no area): ${noAreaKey}`)
     }
   }
 
@@ -1495,7 +1547,7 @@ export function findTransportRate(
     const noDurationKey = [serviceType, cityLower, '', ''].join('|')
     if (cache.has(noDurationKey)) {
       record = cache.get(noDurationKey)!
-      console.log(`⚠️ Transport fallback (no duration): ${noDurationKey}`)
+      debugLog(`⚠️ Transport fallback (no duration): ${noDurationKey}`)
     }
   }
 
@@ -1507,7 +1559,7 @@ export function findTransportRate(
     const intercityKey = [serviceType, originCity.toLowerCase(), destinationCity.toLowerCase()].join('|')
     if (cache.has(intercityKey)) {
       record = cache.get(intercityKey)!
-      console.log(`✅ Transport intercity match: ${intercityKey}`)
+      debugLog(`✅ Transport intercity match: ${intercityKey}`)
     }
   }
 
@@ -1519,14 +1571,14 @@ export function findTransportRate(
       const fallbackKey = [serviceType, fallbackCity, duration, ''].join('|')
       if (cache.has(fallbackKey)) {
         record = cache.get(fallbackKey)!
-        console.log(`⚠️ Transport fallback city: ${fallbackCity} for ${city}`)
+        debugLog(`⚠️ Transport fallback city: ${fallbackCity} for ${city}`)
         break
       }
     }
   }
 
   if (!record) {
-    console.log(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | ${area} | pax=${pax}`)
+    debugLog(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | ${area} | pax=${pax}`)
     return null
   }
 
@@ -1550,125 +1602,94 @@ export function findTransportRate(
 }
 
 // ============================================
-// CRUISE TRANSPORT PRICING (via b2b_pricing_rules)
+// CRUISE TRANSPORT PRICING (via b2b_transport_packages — the shared source of truth)
 // ============================================
 
 /**
- * Fetch cruise transport pricing rules from b2b_pricing_rules
- * Looks for rules with service_category = 'cruise_transport'
+ * Fetch cruise transport packages from b2b_transport_packages (the shared
+ * source of truth — see CruiseTransportPackage). Mirrors the read used by
+ * app/api/b2b/calculate-price and the pricing-grid paths.
+ *
+ * NAME IS HISTORICAL: kept as fetchCruiseTransportPricingRules (4 call sites
+ * across generate-itinerary / service-creation / cruise-service-creation /
+ * the rate-resolution barrel import it) — it now reads b2b_transport_packages,
+ * NOT b2b_pricing_rules. The old b2b_pricing_rules.cruise_transport read was
+ * removed (table permanently empty, uncreatable from the UI).
  */
-export async function fetchCruiseTransportPricingRules(): Promise<CruiseTransportPricingRule[]> {
+export async function fetchCruiseTransportPricingRules(): Promise<CruiseTransportPackage[]> {
   const { data, error } = await supabaseAdmin
-    .from('b2b_pricing_rules')
+    .from('b2b_transport_packages')
     .select('*')
     .eq('is_active', true)
-    .eq('service_category', 'cruise_transport')
 
   if (error) {
-    console.error('Error fetching cruise transport pricing rules:', error)
+    console.error('Error fetching cruise transport packages:', error)
     return []
   }
 
-  console.log(`📦 Fetched ${data?.length || 0} cruise transport pricing rules`)
+  debugLog(`📦 Fetched ${data?.length || 0} cruise transport packages`)
   return data || []
 }
 
 /**
- * Find matching cruise transport pricing rule based on duration
- * Service names should follow pattern like "Nile Cruise 3D Transport", "Nile Cruise 4D Transport"
+ * Find the matching cruise transport package by duration. Matches against the
+ * `duration_days` int column (b2b_transport_packages), not a name-parse.
+ * Name kept as findCruiseTransportRule for call-site compatibility.
  */
 export function findCruiseTransportRule(
-  rules: CruiseTransportPricingRule[],
+  packages: CruiseTransportPackage[],
   durationDays: number
-): CruiseTransportPricingRule | null {
-  // Try to find exact match by looking for duration in service name
-  const exactMatch = rules.find(
-    r => r.service_name.toLowerCase().includes(`${durationDays}d`) ||
-         r.service_name.toLowerCase().includes(`${durationDays} day`)
-  )
+): CruiseTransportPackage | null {
+  if (packages.length === 0) {
+    debugLog(`❌ No cruise transport package found for ${durationDays}D`)
+    return null
+  }
 
+  // Exact duration match
+  const exactMatch = packages.find(p => p.duration_days === durationDays)
   if (exactMatch) {
-    console.log(`✅ Found cruise transport rule: ${exactMatch.service_name} (${durationDays}D)`)
+    debugLog(`✅ Found cruise transport package: ${exactMatch.package_name} (${durationDays}D)`)
     return exactMatch
   }
 
-  // Fallback: try to find any cruise transport rule and use it
-  if (rules.length > 0) {
-    // Sort by extracting duration from name if possible, find closest
-    const withDuration = rules.map(r => {
-      const match = r.service_name.match(/(\d+)d/i) || r.service_name.match(/(\d+)\s*day/i)
-      return {
-        rule: r,
-        duration: match ? parseInt(match[1]) : 0
-      }
-    }).filter(r => r.duration > 0)
-
-    if (withDuration.length > 0) {
-      const sorted = withDuration.sort((a, b) =>
-        Math.abs(a.duration - durationDays) - Math.abs(b.duration - durationDays)
-      )
-      console.log(`⚠️ Using fallback cruise transport rule: ${sorted[0].rule.service_name} for ${durationDays}D`)
-      return sorted[0].rule
-    }
-
-    // If no duration found in names, just use first rule
-    console.log(`⚠️ Using first available cruise transport rule: ${rules[0].service_name}`)
-    return rules[0]
+  // Closest by duration_days (packages with a duration set)
+  const withDuration = packages.filter(p => (p.duration_days ?? 0) > 0)
+  if (withDuration.length > 0) {
+    const sorted = [...withDuration].sort((a, b) =>
+      Math.abs((a.duration_days ?? 0) - durationDays) - Math.abs((b.duration_days ?? 0) - durationDays)
+    )
+    debugLog(`⚠️ Using closest cruise transport package: ${sorted[0].package_name} (${sorted[0].duration_days}D) for ${durationDays}D`)
+    return sorted[0]
   }
 
-  console.log(`❌ No cruise transport rule found for ${durationDays}D`)
-  return null
+  // No duration on any package — use the first.
+  debugLog(`⚠️ Using first available cruise transport package: ${packages[0].package_name}`)
+  return packages[0]
 }
 
 /**
- * Get cruise transport rate from pricing rule based on pax count
- * Uses tiered pricing: tier1 (1-2 pax), tier2 (3-7 pax), tier3 (8-14 pax), tier4 (15-20 pax)
+ * Select the vehicle + rate from a cruise transport package by group size:
+ * smallest vehicle whose capacity fits numPax. Byte-for-byte the same selection
+ * as app/api/b2b/calculate-price's selectVehicleFromPackage — so the two paths
+ * produce the same cruise-transport cost for the same itinerary/pax.
  */
 export function getCruiseTransportRate(
-  rule: CruiseTransportPricingRule,
+  pkg: CruiseTransportPackage,
   numPax: number
 ): { vehicleType: VehicleType; rate: number } {
-  // Check tier 1 (typically Sedan: 1-2 pax)
-  if (rule.tier1_min_pax !== null && rule.tier1_max_pax !== null && rule.tier1_rate_eur !== null) {
-    if (numPax >= rule.tier1_min_pax && numPax <= rule.tier1_max_pax) {
-      return { vehicleType: 'Sedan', rate: rule.tier1_rate_eur }
-    }
+  if (pkg.sedan_capacity != null && numPax <= pkg.sedan_capacity && pkg.sedan_rate) {
+    return { vehicleType: 'Sedan', rate: pkg.sedan_rate }
   }
-
-  // Check tier 2 (typically Minivan: 3-7 pax)
-  if (rule.tier2_min_pax !== null && rule.tier2_max_pax !== null && rule.tier2_rate_eur !== null) {
-    if (numPax >= rule.tier2_min_pax && numPax <= rule.tier2_max_pax) {
-      return { vehicleType: 'Minivan', rate: rule.tier2_rate_eur }
-    }
+  if (pkg.minivan_capacity != null && numPax <= pkg.minivan_capacity && pkg.minivan_rate) {
+    return { vehicleType: 'Minivan', rate: pkg.minivan_rate }
   }
-
-  // Check tier 3 (typically Van: 8-14 pax)
-  if (rule.tier3_min_pax !== null && rule.tier3_max_pax !== null && rule.tier3_rate_eur !== null) {
-    if (numPax >= rule.tier3_min_pax && numPax <= rule.tier3_max_pax) {
-      return { vehicleType: 'Van', rate: rule.tier3_rate_eur }
-    }
+  if (pkg.van_capacity != null && numPax <= pkg.van_capacity && pkg.van_rate) {
+    return { vehicleType: 'Van', rate: pkg.van_rate }
   }
-
-  // Check tier 4 (typically Minibus: 15-20 pax)
-  if (rule.tier4_min_pax !== null && rule.tier4_max_pax !== null && rule.tier4_rate_eur !== null) {
-    if (numPax >= rule.tier4_min_pax && numPax <= rule.tier4_max_pax) {
-      return { vehicleType: 'Minibus', rate: rule.tier4_rate_eur }
-    }
+  if (pkg.minibus_capacity != null && numPax <= pkg.minibus_capacity && pkg.minibus_rate) {
+    return { vehicleType: 'Minibus', rate: pkg.minibus_rate }
   }
-
-  // Fallback: if pax exceeds all tiers, use highest tier
-  if (rule.tier4_rate_eur !== null) {
-    return { vehicleType: 'Bus', rate: rule.tier4_rate_eur }
-  }
-  if (rule.tier3_rate_eur !== null) {
-    return { vehicleType: 'Minibus', rate: rule.tier3_rate_eur }
-  }
-  if (rule.tier2_rate_eur !== null) {
-    return { vehicleType: 'Van', rate: rule.tier2_rate_eur }
-  }
-
-  // Last fallback
-  return { vehicleType: 'Minivan', rate: rule.tier1_rate_eur || 0 }
+  return { vehicleType: 'Bus', rate: pkg.bus_rate ?? pkg.minibus_rate ?? 0 }
 }
 
 /**
@@ -1677,7 +1698,7 @@ export function getCruiseTransportRate(
  */
 export function calculateCruisePackageInfo(
   itinerary: ItineraryDay[],
-  pricingRules: CruiseTransportPricingRule[],
+  packages: CruiseTransportPackage[],
   numPax: number
 ): CruisePackageInfo | null {
   // Count cruise days (days marked with is_cruise_day)
@@ -1687,15 +1708,15 @@ export function calculateCruisePackageInfo(
     return null
   }
 
-  console.log(`🚢 Found ${cruiseDays.length} cruise days in itinerary`)
+  debugLog(`🚢 Found ${cruiseDays.length} cruise days in itinerary`)
 
-  // Find matching pricing rule
-  const rule = findCruiseTransportRule(pricingRules, cruiseDays.length)
+  // Find the matching cruise transport package (by duration_days)
+  const pkg = findCruiseTransportRule(packages, cruiseDays.length)
 
-  if (!rule) {
+  if (!pkg) {
     return {
       packageFound: false,
-      packageName: 'No pricing rule found',
+      packageName: 'No cruise transport package found',
       durationDays: cruiseDays.length,
       packageRate: 0,
       vehicleType: 'Minivan',
@@ -1703,15 +1724,15 @@ export function calculateCruisePackageInfo(
     }
   }
 
-  const { vehicleType, rate } = getCruiseTransportRate(rule, numPax)
+  const { vehicleType, rate } = getCruiseTransportRate(pkg, numPax)
 
   return {
     packageFound: true,
-    packageName: rule.service_name,
+    packageName: pkg.package_name,
     durationDays: cruiseDays.length,
     packageRate: rate,
     vehicleType,
-    includes: rule.notes // Using notes field for includes description
+    includes: pkg.includes ?? pkg.notes
   }
 }
 
@@ -1734,7 +1755,7 @@ export async function calculateDayBasedPricing(
     marginPercent = 25
   } = params
 
-  console.log('🚀 Starting day-based pricing calculation (v4):', { templateId, tier, isEurPassport })
+  debugLog('🚀 Starting day-based pricing calculation (v4):', { templateId, tier, isEurPassport })
 
   const warnings: string[] = []
   const services: PricedService[] = []
@@ -1785,7 +1806,7 @@ export async function calculateDayBasedPricing(
     }
   }
 
-  console.log('📋 Template found:', template.template_name)
+  debugLog('📋 Template found:', template.template_name)
 
   const itinerary = parseItinerary(template.itinerary)
   const totalDays = itinerary.length || template.duration_days || 1
@@ -1794,7 +1815,7 @@ export async function calculateDayBasedPricing(
     warnings.push('No itinerary data found - using defaults')
   }
 
-  console.log(`📅 Parsed ${itinerary.length} days from itinerary`)
+  debugLog(`📅 Parsed ${itinerary.length} days from itinerary`)
 
   // ============================================
   // STEP 2: Analyze accommodation types
@@ -1805,7 +1826,7 @@ export async function calculateDayBasedPricing(
   const hotelNights = hotelDays.length
   const cruiseNights = cruiseDays.length
 
-  console.log(`🏨 Hotel nights: ${hotelNights} | 🚢 Cruise nights: ${cruiseNights}`)
+  debugLog(`🏨 Hotel nights: ${hotelNights} | 🚢 Cruise nights: ${cruiseNights}`)
 
   // ============================================
   // STEP 3: Build transport cache & fetch cruise pricing rules
@@ -1813,7 +1834,7 @@ export async function calculateDayBasedPricing(
 
   const transportCache = await buildTransportCache()
 
-  // Fetch cruise transport pricing rules from b2b_pricing_rules
+  // Fetch cruise transport packages from b2b_transport_packages
   const cruiseTransportPricingRules = await fetchCruiseTransportPricingRules()
 
   // Count cruise package days (days marked as is_cruise_day for bundled transport)
@@ -1821,7 +1842,7 @@ export async function calculateDayBasedPricing(
   const hasCruisePackage = cruisePackageDays.length > 0
 
   if (hasCruisePackage) {
-    console.log(`🚢 Found ${cruisePackageDays.length} cruise package days - will use bundled transport pricing`)
+    debugLog(`🚢 Found ${cruisePackageDays.length} cruise package days - will use bundled transport pricing`)
   }
 
   // ============================================
@@ -1899,7 +1920,7 @@ export async function calculateDayBasedPricing(
     singleSupplement += cruiseRates.singleSuppNight * cruiseNights
   }
 
-  console.log(`💰 Total Single Supplement: €${singleSupplement.toFixed(2)}`)
+  debugLog(`💰 Total Single Supplement: €${singleSupplement.toFixed(2)}`)
 
   // ============================================
   // STEP 6: Calculate FIXED costs (don't scale with pax)
@@ -2150,12 +2171,16 @@ export async function calculateDayBasedPricing(
   let entranceFeesPerPax = 0
   const processedAttractions = new Set<string>()
 
+  // Fetch all entrance fees ONCE, then match in memory — was a per-attraction
+  // query (+ full-table scan on each miss) inside the loop below.
+  const entranceFeeCache = await buildEntranceFeeCache()
+
   for (const day of itinerary) {
     for (const attraction of day.attractions) {
       if (processedAttractions.has(attraction.toLowerCase())) continue
       processedAttractions.add(attraction.toLowerCase())
 
-      const fee = await getEntranceFee(attraction, isEurPassport)
+      const fee = findEntranceFeeInList(entranceFeeCache, attraction, isEurPassport)
       if (fee && fee.rate > 0) {
         entranceFeesPerPax += fee.rate
         services.push({
@@ -2241,7 +2266,7 @@ export async function calculateDayBasedPricing(
 
   const perPaxCosts = accommodationPPD + entranceFeesPerPax + externalMealsPerPax + waterPerPax
 
-  console.log(`📊 Fixed costs: €${fixedCosts.toFixed(2)} | Per-pax costs: €${perPaxCosts.toFixed(2)}`)
+  debugLog(`📊 Fixed costs: €${fixedCosts.toFixed(2)} | Per-pax costs: €${perPaxCosts.toFixed(2)}`)
 
   // ============================================
   // STEP 8: Analyze transport needs per day
@@ -2278,7 +2303,7 @@ export async function calculateDayBasedPricing(
       const label = isCruisePackageDay
         ? `🚢 Day ${day.day} (${day.city}): Cruise package day - bundled transport (no extras)`
         : `⏸️ Day ${day.day} (${day.city}): No transport required`
-      console.log(label)
+      debugLog(label)
       continue
     }
 
@@ -2296,7 +2321,7 @@ export async function calculateDayBasedPricing(
       })
       const suffix = needsList.length > 1 ? ` leg ${legIndex + 1}/${needsList.length}` : ''
       const cruiseTag = isCruisePackageDay ? ' [cruise day]' : ''
-      console.log(`🚗 Day ${day.day} (${legCity})${suffix}${cruiseTag}: ${needs.serviceType} | ${needs.duration} | area: ${needs.area || 'none'} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
+      debugLog(`🚗 Day ${day.day} (${legCity})${suffix}${cruiseTag}: ${needs.serviceType} | ${needs.duration} | area: ${needs.area || 'none'} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
     })
   }
 
@@ -2375,148 +2400,83 @@ export async function calculateDayBasedPricing(
         quantityMode: 'fixed',
         unitCost: cruisePackageInfo.packageRate,
         lineTotal: cruisePackageInfo.packageRate,
-        rateSource: 'b2b_pricing_rules',
+        rateSource: 'b2b_transport_packages',
         isPerPax: false,
         isOptional: false,
         notes: `${cruisePackageInfo.durationDays}D cruise transport package (${cruisePackageInfo.vehicleType}) - includes: ${cruisePackageInfo.includes || 'car, carriage, felucca, motorboat'}`
       })
-      console.log(`🚢 Cruise package cost (2 pax): €${baseCruisePackageCost.toFixed(2)} (${cruisePackageInfo.packageName})`)
+      debugLog(`🚢 Cruise package cost (2 pax): €${baseCruisePackageCost.toFixed(2)} (${cruisePackageInfo.packageName})`)
     } else {
       addHole({
         kind: 'transport',
         reason: 'missing',
-        lookupAttempted: `b2b_pricing_rules cruise_transport (${cruisePackageDays.length}D)`,
-        message: `No cruise transport package for a ${cruisePackageDays.length}D cruise. Add it in Rates → Pricing Rules.`,
+        lookupAttempted: `b2b_transport_packages cruise (${cruisePackageDays.length}D)`,
+        message: `No cruise transport package for a ${cruisePackageDays.length}D cruise. Add it in Rates → Transport Packages.`,
       })
       warnings.push(`No cruise transport package found for ${cruisePackageDays.length}D cruise`)
     }
   }
 
-  console.log(`🚗 Base transport cost (2 pax): €${baseTransportCost.toFixed(2)}${hasCruisePackage ? ` + €${baseCruisePackageCost.toFixed(2)} cruise package` : ''}`)
+  debugLog(`🚗 Base transport cost (2 pax): €${baseTransportCost.toFixed(2)}${hasCruisePackage ? ` + €${baseCruisePackageCost.toFixed(2)} cruise package` : ''}`)
 
   // ============================================
   // STEP 10: Calculate for each pax count
   // ============================================
 
-  const paxPricing: PaxPricingResult[] = []
-
-  for (const numPax of PAX_COUNTS) {
-    // ----- Regular transport cost (varies with vehicle size) -----
-    // Only for non-cruise-package days
-    let transportCost = 0
-
+  // Whole-trip transport cost at a given pax count — regular transport (vehicle
+  // re-selected by group size via findTransportRate) + cruise package. Missing
+  // rates were already flagged as holes in the base loop above; they add nothing
+  // here. This is the one non-linear term; the leader variant calls it at pax+1.
+  const transportAtPax = (pax: number): number => {
+    let total = 0
     for (const info of transportInfoByDay) {
       if (!info.requiresTransport) continue
-
       const { needs } = info
-
       const rate = findTransportRate(transportCache, {
         serviceType: needs.serviceType,
         city: info.city,
         duration: needs.duration,
         area: needs.area,
-        pax: numPax,
+        pax,
         vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
         originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
-        destinationCity: info.needs.destinationCity || info.city
+        destinationCity: info.needs.destinationCity || info.city,
       })
-
-      if (rate) {
-        transportCost += rate.base_rate_eur
-      }
-      // Missing rate flagged as a hole in the base loop above — add nothing here.
+      if (rate) total += rate.base_rate_eur
     }
-
-    // ----- Cruise transport package cost (varies with pax count / vehicle) -----
-    let cruisePackageCost = 0
     if (hasCruisePackage) {
-      const cruisePackageInfo = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, numPax)
-      if (cruisePackageInfo?.packageFound) {
-        cruisePackageCost = cruisePackageInfo.packageRate
-      }
+      const cp = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, pax)
+      if (cp?.packageFound) total += cp.packageRate
     }
-
-    // Total transport = regular transport + cruise package
-    const totalTransportCost = transportCost + cruisePackageCost
-
-    // ----- WITHOUT Tour Leader (+0) -----
-    const totalCostWithoutLeader = fixedCosts + totalTransportCost + (perPaxCosts * numPax)
-    const marginWithoutLeader = totalCostWithoutLeader * (marginPercent / 100)
-    const sellingWithoutLeader = totalCostWithoutLeader + marginWithoutLeader
-    const perPersonWithoutLeader = sellingWithoutLeader / numPax
-
-    // ----- WITH Tour Leader (+1) -----
-    let transportCostWithLeader = 0
-
-    for (const info of transportInfoByDay) {
-      if (!info.requiresTransport) continue
-
-      const { needs } = info
-
-      const rate = findTransportRate(transportCache, {
-        serviceType: needs.serviceType,
-        city: info.city,
-        duration: needs.duration,
-        area: needs.area,
-        pax: numPax + 1,  // +1 for tour leader
-        vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
-        originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
-        destinationCity: info.needs.destinationCity || info.city
-      })
-
-      if (rate) {
-        transportCostWithLeader += rate.base_rate_eur
-      }
-      // Missing rate flagged as a hole in the base loop above — add nothing here.
-    }
-
-    // ----- Cruise transport package cost for +1 (varies with pax count / vehicle) -----
-    let cruisePackageCostWithLeader = 0
-    if (hasCruisePackage) {
-      const cruisePackageInfo = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, numPax + 1)
-      if (cruisePackageInfo?.packageFound) {
-        cruisePackageCostWithLeader = cruisePackageInfo.packageRate
-      }
-    }
-
-    // Total transport with leader = regular transport + cruise package
-    const totalTransportCostWithLeader = transportCostWithLeader + cruisePackageCostWithLeader
-
-    // Tour leader costs: single room (PPD + single supplement) + their own per-pax costs
-    const tourLeaderCost = accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax
-
-    const totalCostWithLeader = fixedCosts + totalTransportCostWithLeader + (perPaxCosts * numPax) + tourLeaderCost
-    const marginWithLeader = totalCostWithLeader * (marginPercent / 100)
-    const sellingWithLeader = totalCostWithLeader + marginWithLeader
-    const perPersonWithLeader = sellingWithLeader / numPax
-
-    paxPricing.push({
-      numPax,
-      withoutLeader: {
-        totalCost: Math.round(totalCostWithoutLeader * 100) / 100,
-        marginAmount: Math.round(marginWithoutLeader * 100) / 100,
-        sellingPrice: Math.round(sellingWithoutLeader * 100) / 100,
-        pricePerPerson: Math.round(perPersonWithoutLeader * 100) / 100
-      },
-      withLeader: {
-        totalCost: Math.round(totalCostWithLeader * 100) / 100,
-        tourLeaderCost: Math.round(tourLeaderCost * 100) / 100,
-        marginAmount: Math.round(marginWithLeader * 100) / 100,
-        sellingPrice: Math.round(sellingWithLeader * 100) / 100,
-        pricePerPerson: Math.round(perPersonWithLeader * 100) / 100
-      }
-    })
+    return total
   }
+
+  // Multi-pax rate sheet now comes from the ONE shared core primitive
+  // (lib/pricing/pax-range.ts) — the same engine the pricing grid feeds. This is
+  // behavior-preserving: identical decomposition (fixedCosts + transport(pax) +
+  // perPaxCosts×pax), identical margin/rounding, and the same tour-leader cost
+  // (single room + own per-pax costs). The B2B template-day flow keeps its input
+  // and endpoint; only the math is unified. Live golden-master verified byte-
+  // identical on real templates (CAI-MUL-555/700). See [[grid-multipax-consolidation]].
+  const paxPricing: PaxPricingResult[] = priceAcrossPax({
+    groupFixed: fixedCosts,
+    perPerson: perPaxCosts,
+    marginPercent,
+    transportAt: transportAtPax,
+    tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax,
+    paxFrom: PAX_COUNTS[0],
+    paxTo: PAX_COUNTS[PAX_COUNTS.length - 1],
+  })
 
   // ============================================
   // STEP 11: Return result
   // ============================================
 
-  console.log('✅ Day-based pricing complete (v4)')
-  console.log(`   Template: ${template.template_name}`)
-  console.log(`   Single Supplement: €${singleSupplement.toFixed(2)}`)
-  console.log(`   Sample (2 pax +0): €${paxPricing[1]?.withoutLeader.pricePerPerson}/person`)
-  console.log(`   Sample (2 pax +1): €${paxPricing[1]?.withLeader.pricePerPerson}/person`)
+  debugLog('✅ Day-based pricing complete (v4)')
+  debugLog(`   Template: ${template.template_name}`)
+  debugLog(`   Single Supplement: €${singleSupplement.toFixed(2)}`)
+  debugLog(`   Sample (2 pax +0): €${paxPricing[1]?.withoutLeader.pricePerPerson}/person`)
+  debugLog(`   Sample (2 pax +1): €${paxPricing[1]?.withLeader.pricePerPerson}/person`)
 
   const complete = holes.length === 0
   if (!complete) {
@@ -2758,9 +2718,9 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     tourLeaderIncluded = false
   } = params
 
-  console.log('🔄 calculateAutoPricing called (v4 - smart transport)')
-  console.log(`   tourLeaderIncluded: ${tourLeaderIncluded}`)
-  console.log(`   numPax: ${numPax}`)
+  debugLog('🔄 calculateAutoPricing called (v4 - smart transport)')
+  debugLog(`   tourLeaderIncluded: ${tourLeaderIncluded}`)
+  debugLog(`   numPax: ${numPax}`)
 
   const dayResult = await calculateDayBasedPricing({
     templateId,
@@ -2809,11 +2769,11 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
 
   const pricing = tourLeaderIncluded ? paxResult.withLeader : paxResult.withoutLeader
   
-  console.log(`   Selected pricing: ${tourLeaderIncluded ? '+1 (withLeader)' : '+0 (withoutLeader)'}`)
-  console.log(`   totalCost: €${pricing.totalCost}`)
-  console.log(`   pricePerPerson: €${pricing.pricePerPerson}`)
+  debugLog(`   Selected pricing: ${tourLeaderIncluded ? '+1 (withLeader)' : '+0 (withoutLeader)'}`)
+  debugLog(`   totalCost: €${pricing.totalCost}`)
+  debugLog(`   pricePerPerson: €${pricing.pricePerPerson}`)
   if (tourLeaderIncluded) {
-    console.log(`   tourLeaderCost: €${paxResult.withLeader.tourLeaderCost}`)
+    debugLog(`   tourLeaderCost: €${paxResult.withLeader.tourLeaderCost}`)
   }
 
   const ratesUsed: PricingResult['ratesUsed'] = {}
@@ -2963,13 +2923,16 @@ export type MealPlan = 'none' | 'breakfast_only' | 'lunch_only' | 'dinner_only' 
  * - Children (4-12): 50% of adult rate (except flights = full)
  * - Infants (0-3): FREE (except flights = may apply infant fare)
  *
- * @param baseAdultRate - The full adult per-person rate (from standard pricing)
+ * @param baseAdultCost - The full adult per-person COST, BEFORE margin. This must
+ *   be a pre-margin cost (e.g. a pax-row `totalCost / pax`), NOT an already-margined
+ *   selling price — this function applies `marginPercent` itself, so passing a
+ *   post-margin price double-applies the margin and overcharges the customer.
  * @param passengers - Breakdown of adults, children, infants
  * @param marginPercent - Margin percentage (default 25%)
  * @param flightCostPerPerson - Optional flight cost per person (everyone pays full flight cost)
  */
 export function calculateAgeBasedPricing(
-  baseAdultRate: number,
+  baseAdultCost: number,
   passengers: PassengerBreakdown,
   marginPercent: number = 25,
   flightCostPerPerson: number = 0
@@ -2978,9 +2941,9 @@ export function calculateAgeBasedPricing(
   const totalPassengers = numAdults + numChildren + numInfants
 
   // Calculate rates
-  const adultRate = baseAdultRate
-  const childRate = baseAdultRate * (1 - CHILD_DISCOUNT_PERCENT / 100) // 50% discount
-  const infantRate = baseAdultRate * (INFANT_RATE_PERCENT / 100)        // FREE (0%)
+  const adultRate = baseAdultCost
+  const childRate = baseAdultCost * (1 - CHILD_DISCOUNT_PERCENT / 100) // 50% discount
+  const infantRate = baseAdultCost * (INFANT_RATE_PERCENT / 100)        // FREE (0%)
 
   // Calculate subtotals (tour costs)
   const adultsSubtotal = adultRate * numAdults
@@ -3065,6 +3028,59 @@ export function calculateAgeBasedPricing(
 }
 
 /**
+ * Compose age-discounted pricing from a multi-pax rate-sheet row, applying margin
+ * EXACTLY ONCE. The row's `totalCost` is the PRE-margin cost, so we derive the
+ * per-person cost from it (NOT the already-margined `pricePerPerson`) and let
+ * calculateAgeBasedPricing apply the discounts + the single margin.
+ *
+ * The tour leader, when included, is added ONCE — as the pre-margin cost delta
+ * between the +1 and +0 pax tables (their single room + own per-pax costs + the
+ * extra-seat transport-tier bump) — and margined once like everything else. The
+ * old code instead read `withLeader.pricePerPerson` (which already baked in both
+ * the leader cost AND the margin) and then ALSO added the leader again, so the
+ * leader was double-counted on top of the double margin.
+ *
+ * Pure + deterministic (no I/O) so the "effective markup === configured margin"
+ * invariant is unit-testable. See __tests__/lib/age-based-pricing.test.ts.
+ */
+export interface ComposedAgeBasedPricing {
+  ageBasedPricing: AgeBasedPricingResult
+  tourLeaderCost: number
+  subtotalCost: number
+  totalCost: number
+  marginAmount: number
+  sellingPrice: number
+  pricePerPerson: number
+}
+
+export function composeAgeBasedPricing(
+  paxRow: PaxPricingResult,
+  passengers: PassengerBreakdown,
+  marginPercent: number,
+  tourLeaderIncluded: boolean,
+  flightCostPerPerson: number = 0
+): ComposedAgeBasedPricing {
+  const refPax = paxRow.numPax || 2
+  // PRE-margin per-person cost from the reference pax row (no leader).
+  const baseAdultCost = paxRow.withoutLeader.totalCost / refPax
+  const ageBasedPricing = calculateAgeBasedPricing(baseAdultCost, passengers, marginPercent, flightCostPerPerson)
+
+  const leaderCost = tourLeaderIncluded
+    ? Math.max(0, paxRow.withLeader.totalCost - paxRow.withoutLeader.totalCost)
+    : 0
+  const leaderMargin = leaderCost * (marginPercent / 100)
+
+  const subtotalCost = ageBasedPricing.totalCost
+  const totalCost = subtotalCost + leaderCost
+  const marginAmount = ageBasedPricing.marginAmount + leaderMargin
+  const sellingPrice = ageBasedPricing.sellingPrice + leaderCost + leaderMargin
+  const payingPassengers = passengers.numAdults + passengers.numChildren
+  const pricePerPerson = payingPassengers > 0 ? sellingPrice / payingPassengers : 0
+
+  return { ageBasedPricing, tourLeaderCost: leaderCost, subtotalCost, totalCost, marginAmount, sellingPrice, pricePerPerson }
+}
+
+/**
  * Calculate full tour pricing with age-based discounts
  * Combines the day-based pricing with passenger breakdown
  */
@@ -3084,11 +3100,11 @@ export async function calculatePricingWithPassengerBreakdown(
 
   const totalPax = passengers.numAdults + passengers.numChildren + passengers.numInfants
 
-  console.log('🧒 Calculating with passenger breakdown:')
-  console.log(`   Adults: ${passengers.numAdults}`)
-  console.log(`   Children (4-12): ${passengers.numChildren}`)
-  console.log(`   Infants (0-3): ${passengers.numInfants}`)
-  console.log(`   Total: ${totalPax}`)
+  debugLog('🧒 Calculating with passenger breakdown:')
+  debugLog(`   Adults: ${passengers.numAdults}`)
+  debugLog(`   Children (4-12): ${passengers.numChildren}`)
+  debugLog(`   Infants (0-3): ${passengers.numInfants}`)
+  debugLog(`   Total: ${totalPax}`)
 
   // First get the day-based pricing to get the base adult rate
   const dayResult = await calculateDayBasedPricing({
@@ -3127,32 +3143,21 @@ export async function calculatePricingWithPassengerBreakdown(
     }
   }
 
-  // Get the base adult rate from 2-pax pricing (standard reference)
+  // Compose age-discounted pricing from the 2-pax reference row, applying margin
+  // EXACTLY ONCE (the previous code fed the already-margined pricePerPerson here
+  // and re-applied margin → customers overcharged by ~(1+margin)²).
   const basePaxResult = dayResult.paxPricing.find(p => p.numPax === 2) || dayResult.paxPricing[1]
-  const baseAdultRate = tourLeaderIncluded
-    ? basePaxResult.withLeader.pricePerPerson
-    : basePaxResult.withoutLeader.pricePerPerson
-
-  // Calculate age-based pricing
-  const ageBasedPricing = calculateAgeBasedPricing(
-    baseAdultRate,
+  const composed = composeAgeBasedPricing(
+    basePaxResult,
     passengers,
     marginPercent,
+    tourLeaderIncluded,
     flightCostPerPerson
   )
-
-  // Calculate tour leader cost if included
-  let tourLeaderCost = 0
-  if (tourLeaderIncluded) {
-    // Tour leader gets accommodation + single supplement + their own per-pax costs
-    tourLeaderCost = basePaxResult.withLeader.tourLeaderCost
-  }
-
-  // Calculate effective price per paying person
+  const ageBasedPricing = composed.ageBasedPricing
+  const tourLeaderCost = composed.tourLeaderCost
   const payingPassengers = passengers.numAdults + passengers.numChildren
-  const pricePerPerson = payingPassengers > 0
-    ? ageBasedPricing.sellingPrice / payingPassengers
-    : 0
+  const pricePerPerson = composed.pricePerPerson
 
   // Prepare ratesUsed
   const ratesUsed: PricingResult['ratesUsed'] = {}
@@ -3182,11 +3187,11 @@ export async function calculatePricingWithPassengerBreakdown(
     }
   }
 
-  console.log('✅ Age-based pricing calculated:')
-  console.log(`   Adult rate: €${ageBasedPricing.adultRate}`)
-  console.log(`   Child rate: €${ageBasedPricing.childRate} (${CHILD_DISCOUNT_PERCENT}% off)`)
-  console.log(`   Infant rate: FREE`)
-  console.log(`   Selling price: €${ageBasedPricing.sellingPrice}`)
+  debugLog('✅ Age-based pricing calculated:')
+  debugLog(`   Adult rate: €${ageBasedPricing.adultRate}`)
+  debugLog(`   Child rate: €${ageBasedPricing.childRate} (${CHILD_DISCOUNT_PERCENT}% off)`)
+  debugLog(`   Infant rate: FREE`)
+  debugLog(`   Selling price: €${ageBasedPricing.sellingPrice}`)
 
   return {
     success: true,
@@ -3199,13 +3204,13 @@ export async function calculatePricingWithPassengerBreakdown(
     totalDays: dayResult.totalDays,
     services: dayResult.services.filter(s => !s.notes?.includes('optional')),
     optionalServices: dayResult.services.filter(s => s.notes?.includes('optional')),
-    subtotalCost: ageBasedPricing.totalCost,
+    subtotalCost: composed.subtotalCost,
     optionalTotal: 0,
-    totalCost: ageBasedPricing.totalCost + tourLeaderCost,
-    tourLeaderCost,
+    totalCost: Math.round(composed.totalCost * 100) / 100,
+    tourLeaderCost: Math.round(tourLeaderCost * 100) / 100,
     marginPercent,
-    marginAmount: ageBasedPricing.marginAmount,
-    sellingPrice: ageBasedPricing.sellingPrice + (tourLeaderCost * (1 + marginPercent / 100)),
+    marginAmount: Math.round(composed.marginAmount * 100) / 100,
+    sellingPrice: Math.round(composed.sellingPrice * 100) / 100,
     pricePerPerson: Math.round(pricePerPerson * 100) / 100,
     currency: 'EUR',
     ratesUsed,

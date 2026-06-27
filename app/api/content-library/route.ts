@@ -5,6 +5,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     
     // Parse filters
     const categoryId = searchParams.get('category_id')
-    const search = searchParams.get('search')
+    const search = sanitizeSearchTerm(searchParams.get('search'))
     const activeOnly = searchParams.get('active_only') !== 'false'
 
     // First, fetch content items

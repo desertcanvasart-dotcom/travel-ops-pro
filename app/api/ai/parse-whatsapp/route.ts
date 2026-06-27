@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { MODEL_PARSER } from '@/lib/ai/models'
+import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 
 // ============================================
 // EGYPTIAN TRAVEL ABBREVIATIONS
@@ -469,7 +471,7 @@ export async function POST(request: Request) {
     // attacker@evil.com" can no longer override the extraction prompt by
     // riding in the same user turn as the system instructions.
     const message = await createMessageWithRetry({
-      model: 'claude-sonnet-4-20250514',
+      model: MODEL_PARSER,
       max_tokens: 8192,
       system: systemPrompt,
       messages: [
@@ -539,22 +541,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Determine Euro passport from nationality — match country names AND demonyms
+    // Determine Euro passport from nationality — match country names AND demonyms.
+    // null (not false) when no nationality was detected, so downstream can ask.
     const detectedNationality = extracted.nationality || ''
-    const euTerms = [
-      'austria', 'belgian', 'belgium', 'bulgarian', 'bulgaria', 'croatian', 'croatia',
-      'cypriot', 'cyprus', 'czech', 'danish', 'denmark', 'estonian', 'estonia',
-      'finnish', 'finland', 'french', 'france', 'german', 'germany', 'greek', 'greece',
-      'hungarian', 'hungary', 'irish', 'ireland', 'italian', 'italy', 'latvian', 'latvia',
-      'lithuanian', 'lithuania', 'luxembourgish', 'luxembourg', 'maltese', 'malta',
-      'dutch', 'netherlands', 'polish', 'poland', 'portuguese', 'portugal',
-      'romanian', 'romania', 'slovak', 'slovakia', 'slovenian', 'slovenia',
-      'spanish', 'spain', 'swedish', 'sweden', 'norwegian', 'norway',
-      'icelandic', 'iceland', 'swiss', 'switzerland', 'liechtenstein',
-      'austrian', 'eu', 'eur', 'euro', 'european', 'schengen',
-    ]
     const isEuroPassport = detectedNationality
-      ? euTerms.some(t => detectedNationality.toLowerCase().includes(t))
+      ? isEuroPassportFromNationality(detectedNationality)
       : null
 
     // ============================================

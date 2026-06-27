@@ -11,6 +11,7 @@ import {
   ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X
 } from 'lucide-react'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { ChannelBadge } from './ChannelBadge'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
 
@@ -1010,7 +1011,7 @@ export function UnifiedMessageThread({
                           {msg.isHtml ? (
                             <div
                               className="text-[13px] text-gray-800 leading-relaxed break-words overflow-hidden [overflow-wrap:anywhere] [word-break:break-word] [&_a]:text-blue-600 [&_a]:underline [&_img]:max-w-full [&_img]:h-auto [&_table]:w-full [&_td]:p-1"
-                              dangerouslySetInnerHTML={{ __html: mainContent }}
+                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(mainContent) }}
                             />
                           ) : (
                             <div className="text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed break-words overflow-hidden [overflow-wrap:anywhere] [word-break:break-word]">

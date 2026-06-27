@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     const minDays = searchParams.get('min_days')
     const maxDays = searchParams.get('max_days')
     const tier = searchParams.get('tier')
-    const search = searchParams.get('search')
+    const search = sanitizeSearchTerm(searchParams.get('search'))
 
     // Pagination
     const page = parseInt(searchParams.get('page') || '1')

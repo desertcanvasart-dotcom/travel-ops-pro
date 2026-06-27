@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import twilio from 'twilio'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 
 // Use service role key to bypass RLS — webhooks have no user session
@@ -16,10 +17,57 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// SECURITY: this endpoint is on the middleware self-auth allowlist (no session),
+// uses the RLS-bypassing service-role client, and creates clients/conversations/
+// Copilot inbox entries. Without verifying Twilio's HMAC signature, anyone on the
+// internet could forge inbound messages. Twilio signs the exact webhook URL it was
+// configured with; behind Railway/proxies the host can arrive via x-forwarded-*,
+// so we accept either the proxy-derived URL or the configured NEXT_PUBLIC_APP_URL.
+// Fails CLOSED: missing token/signature → rejected.
+export function verifyTwilioSignature(
+  request: Pick<NextRequest, 'headers' | 'url'>,
+  params: Record<string, string>
+): boolean {
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  if (!authToken) {
+    console.error('🚫 TWILIO_AUTH_TOKEN not set — rejecting WhatsApp webhook (fail closed)')
+    return false
+  }
+  const signature = request.headers.get('x-twilio-signature')
+  if (!signature) {
+    console.error('🚫 Missing X-Twilio-Signature header on WhatsApp webhook')
+    return false
+  }
+  const { pathname, search } = new URL(request.url)
+  const proto = request.headers.get('x-forwarded-proto') || 'https'
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host')
+  const candidateUrls = [
+    host ? `${proto}://${host}${pathname}${search}` : null,
+    process.env.NEXT_PUBLIC_APP_URL
+      ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}${pathname}${search}`
+      : null,
+  ].filter((u): u is string => !!u)
+
+  const ok = candidateUrls.some(url => twilio.validateRequest(authToken, signature, url, params))
+  if (!ok) {
+    console.error('🚫 Invalid Twilio signature on WhatsApp webhook', { triedUrls: candidateUrls })
+  }
+  return ok
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Parse Twilio webhook data (form-urlencoded)
     const formData = await request.formData()
+
+    // Build a plain params object for signature verification + field access.
+    const params: Record<string, string> = {}
+    formData.forEach((value, key) => { params[key] = typeof value === 'string' ? value : '' })
+
+    // SECURITY: verify the request genuinely came from Twilio BEFORE any DB writes.
+    if (!verifyTwilioSignature(request, params)) {
+      return NextResponse.json({ error: 'Invalid Twilio signature' }, { status: 403 })
+    }
 
     const from = formData.get('From') as string // e.g., "whatsapp:+201234567890"
     const to = formData.get('To') as string // Your WhatsApp number

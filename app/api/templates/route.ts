@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -12,7 +13,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
     const channel = searchParams.get('channel')
-    const search = searchParams.get('search')
+    const language = searchParams.get('language')
+    const search = sanitizeSearchTerm(searchParams.get('search'))
 
     let query = supabase
       .from('message_templates')
@@ -24,6 +26,10 @@ export async function GET(request: NextRequest) {
 
     if (category && category !== 'all') {
       query = query.eq('category', category)
+    }
+
+    if (language && language !== 'all') {
+      query = query.eq('language', language)
     }
 
     if (channel && channel !== 'all') {
@@ -54,7 +60,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, description, category, subcategory, channel, subject, body: templateBody } = body
+    const { name, description, category, subcategory, channel, subject, body: templateBody, language } = body
 
     if (!name || !templateBody) {
       return NextResponse.json({ success: false, error: 'Name and body are required' }, { status: 400 })
@@ -74,6 +80,7 @@ export async function POST(request: NextRequest) {
         channel: channel || 'email',
         subject,
         body: templateBody,
+        language: language === 'ja' ? 'ja' : 'en',
         placeholders,
         is_active: true,
       })

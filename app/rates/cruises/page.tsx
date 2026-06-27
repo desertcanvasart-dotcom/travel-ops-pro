@@ -10,6 +10,7 @@ import {
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
+import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 
 // ============================================
@@ -1123,11 +1124,13 @@ export default function CruisesPage() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.supplier')}</label>
                 <select
+                  required
                   value={formData.supplier_id}
                   onChange={(e) => handleSupplierChange(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                 >
-                  <option value="">{t('form.selectSupplier')}</option>
+                  <option value="" disabled>{t('form.selectSupplier')}</option>
+                  <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
                   {suppliers.map(supplier => (
                     <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                   ))}

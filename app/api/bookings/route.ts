@@ -3,6 +3,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const startDateFrom = searchParams.get('startDateFrom')
     const startDateTo = searchParams.get('startDateTo')
-    const search = searchParams.get('search')
+    const search = sanitizeSearchTerm(searchParams.get('search'))
     const assignedGuideId = searchParams.get('assignedGuideId')
 
     // Pagination

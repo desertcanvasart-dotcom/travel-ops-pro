@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
 
 // GET /api/whatsapp/conversations - List all conversations
@@ -7,7 +8,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active'
-    const search = searchParams.get('search') || ''
+    const search = sanitizeSearchTerm(searchParams.get('search')) || ''
     const includeHidden = searchParams.get('include_hidden') === 'true'
     const agentId = searchParams.get('agent_id')
     const unassignedOnly = searchParams.get('unassigned_only') === 'true'

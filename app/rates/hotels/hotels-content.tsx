@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import {
   Building2,
   Plus,
@@ -1312,11 +1313,13 @@ export default function HotelsContent() {
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('companySupplier')}</label>
                     <select
+                      required
                       value={formData.supplier_id}
                       onChange={(e) => handleSupplierSelect(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="">{t('selectCompanyOptional')}</option>
+                      <option value="" disabled>{t('selectCompanyOptional')}</option>
+                      <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
                       {suppliers.map(s => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}

@@ -8,6 +8,7 @@ import RichTextEditor from '@/components/email/RichTextEditor'
 import AttachmentList, { AttachmentIndicator } from '@/components/AttachmentList'
 import ClientLinkButton from '@/components/ClientLinkButton'
 import { useEmailPolling, useEmailCache } from '@/lib/use-email-polling'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import { replacePlaceholders, buildPlaceholderData, getPlaceholders } from '@/lib/template-placeholders'
 import { 
   Mail, 
@@ -379,7 +380,8 @@ export default function InboxPage() {
       
       // Update starred set
       const starred = new Set<string>()
-      data.messages.forEach((email: Email) => {
+      const messagesForStarred: Email[] = data.messages || []
+      messagesForStarred.forEach((email: Email) => {
         if (email.labelIds?.includes('STARRED')) {
           starred.add(email.id)
         }
@@ -447,7 +449,8 @@ export default function InboxPage() {
       })
       
       // Update starred set
-      data.messages.forEach((email: Email) => {
+      const messagesForStarred: Email[] = data.messages || []
+      messagesForStarred.forEach((email: Email) => {
         if (email.labelIds?.includes('STARRED')) {
           setStarredEmails(prev => new Set([...prev, email.id]))
         }
@@ -1339,7 +1342,7 @@ ${bodyText}`
 
               <div 
               className="email-body-content"
-              dangerouslySetInnerHTML={{ __html: formatEmailBody(selectedEmail.body) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(formatEmailBody(selectedEmail.body)) }}
             />
 
               {/* NEW: Attachment List */}
@@ -1438,7 +1441,7 @@ ${bodyText}`
           
           <div 
             className="prose prose-sm max-w-none text-gray-700"
-            dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedEmail.body) }}
           />
 
           {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (

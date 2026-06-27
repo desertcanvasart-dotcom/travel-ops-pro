@@ -258,7 +258,20 @@ export async function PUT(
         errors: results.filter(r => r.error).map(r => r.error)
       })
     } else {
-      // Default: Replace all services (delete existing, insert new)
+      // Default: Replace all services (delete existing, insert new).
+      // This delete+insert is NOT a DB transaction, so we snapshot the existing
+      // rows first and restore them if the insert fails — otherwise a failed
+      // insert (bad FK, constraint, transient error) would leave the variation
+      // with ZERO services and no rollback.
+      const { data: existingServices, error: snapshotError } = await supabaseAdmin
+        .from('tour_variation_services')
+        .select('*')
+        .eq('variation_id', id)
+
+      if (snapshotError) {
+        return NextResponse.json({ error: snapshotError.message }, { status: 500 })
+      }
+
       // Step 1: Delete all existing services for this variation
       const { error: deleteError } = await supabaseAdmin
         .from('tour_variation_services')
@@ -292,6 +305,15 @@ export async function PUT(
           .insert(servicesWithVariation)
 
         if (insertError) {
+          // Restore the snapshot so the variation isn't left empty.
+          if (existingServices && existingServices.length > 0) {
+            const { error: restoreError } = await supabaseAdmin
+              .from('tour_variation_services')
+              .insert(existingServices)
+            if (restoreError) {
+              console.error(`CRITICAL: failed to restore tour_variation_services for variation ${id} after a failed replace — services may be lost:`, restoreError)
+            }
+          }
           return NextResponse.json({ error: insertError.message }, { status: 500 })
         }
       }

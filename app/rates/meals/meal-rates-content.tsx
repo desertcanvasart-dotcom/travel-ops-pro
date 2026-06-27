@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import {
   Utensils,
   Plus,
@@ -1065,11 +1066,13 @@ export default function MealRatesContent() {
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('supplierRestaurant')}</label>
                     <select
+                      required
                       value={formData.supplier_id}
                       onChange={(e) => handleSupplierChange(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      <option value="">{t('selectSupplierOptional')}</option>
+                      <option value="" disabled>{t('selectSupplierOptional')}</option>
+                      <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
                       {suppliers.map(supplier => (
                         <option key={supplier.id} value={supplier.id}>
                           {supplier.name} {supplier.city && `(${supplier.city})`}

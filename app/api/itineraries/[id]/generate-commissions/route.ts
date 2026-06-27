@@ -79,10 +79,18 @@ export async function POST(
       other: 'other'
     }
 
-    // Generate commission records.
+    // Generate commission records as (sourceServiceId, commission) PAIRS.
     // Output gate (harness Layer 2): skip services with no real base amount —
     // never create a €0 (or negative/NaN) commission off an unpriced service.
-    const commissionsToCreate = eligibleServices
+    //
+    // Pairing each commission with its source service id is load-bearing: the
+    // claim + insert below filter BY ID, not by array position. The previous
+    // code built two arrays from DIFFERENT filter chains (one with the base>0
+    // gate, one without) and matched them positionally — so any service with
+    // base ≤ 0 desynced the arrays and commissions were attributed to the wrong
+    // service. Building one paired array keeps claim, insert, and rollback in
+    // lockstep on exactly the services that produce a commission.
+    const commissionPairs = eligibleServices
       .filter(s => s.supplier && (s.commission_rate || s.supplier.default_commission_rate))
       .filter(s => {
         const base = Number(s.selling_price || s.cost || 0)
@@ -94,25 +102,28 @@ export async function POST(
         const commissionAmount = (baseAmount * rate) / 100
 
         return {
-          org_id: orgId,
-          itinerary_id: itineraryId,
-          supplier_id: s.supplier_id,
-          client_id: itinerary.client?.id || null,
-          commission_type: s.supplier.commission_type || 'receivable',
-          category: typeToCategory[s.service_type] || 'other',
-          source_name: s.supplier.name,
-          description: `${s.description || s.service_type} - ${itinerary.itinerary_code}`,
-          base_amount: baseAmount,
-          commission_rate: rate,
-          commission_amount: commissionAmount,
-          currency: 'EUR',
-          status: 'pending',
-          transaction_date: itinerary.start_date || new Date().toISOString().split('T')[0],
-          notes: `Auto-generated from itinerary ${itinerary.itinerary_code}`
+          serviceId: s.id,
+          commission: {
+            org_id: orgId,
+            itinerary_id: itineraryId,
+            supplier_id: s.supplier_id,
+            client_id: itinerary.client?.id || null,
+            commission_type: s.supplier.commission_type || 'receivable',
+            category: typeToCategory[s.service_type] || 'other',
+            source_name: s.supplier.name,
+            description: `${s.description || s.service_type} - ${itinerary.itinerary_code}`,
+            base_amount: baseAmount,
+            commission_rate: rate,
+            commission_amount: commissionAmount,
+            currency: 'EUR',
+            status: 'pending',
+            transaction_date: itinerary.start_date || new Date().toISOString().split('T')[0],
+            notes: `Auto-generated from itinerary ${itinerary.itinerary_code}`
+          }
         }
       })
 
-    if (commissionsToCreate.length === 0) {
+    if (commissionPairs.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No services with commission rates found',
@@ -120,27 +131,22 @@ export async function POST(
       })
     }
 
-    // M16: claim the eligible services first via a CONDITIONAL update,
-    // then insert commissions ONLY for the rows we actually claimed.
+    // M16: claim the services first via a CONDITIONAL update, then insert
+    // commissions ONLY for the rows we actually claimed.
     //
-    // The original implementation inserted commissions, then ran a
-    // separate non-error-checked update to mark services 'generated'.
-    // Two concurrent requests on the same itinerary both passed the
-    // 'eligible' filter and each ran the insert — every commission was
-    // duplicated. A re-run after a partial failure (commissions inserted
-    // but the trailing update failed) did the same.
+    // The original implementation inserted commissions, then ran a separate
+    // non-error-checked update to mark services 'generated'. Two concurrent
+    // requests on the same itinerary both passed the 'eligible' filter and each
+    // ran the insert — every commission was duplicated. A re-run after a partial
+    // failure (commissions inserted but the trailing update failed) did the same.
     //
-    // Flipping the service rows from 'pending' → 'generated' with a
-    // WHERE clause turns the row state itself into the claim lock:
-    // PostgreSQL serializes the row update, the second writer's
-    // commission_status='pending' predicate matches 0 rows, RETURNING
-    // gives back just the rows THIS request won. We then insert
-    // commissions only for those. The error check that was missing
-    // before is now the very first thing we do.
-    const candidateServices = eligibleServices.filter(
-      s => s.supplier && (s.commission_rate || s.supplier.default_commission_rate)
-    )
-    const candidateIds = candidateServices.map(s => s.id)
+    // Flipping the service rows from 'pending' → 'generated' with a WHERE clause
+    // turns the row state itself into the claim lock: PostgreSQL serializes the
+    // row update, the second writer's commission_status='pending' predicate
+    // matches 0 rows, RETURNING gives back just the rows THIS request won. We
+    // claim exactly the services that produce a commission (so base ≤ 0 rows are
+    // never falsely marked 'generated').
+    const candidateIds = commissionPairs.map(p => p.serviceId)
 
     const { data: claimedRows, error: claimError } = await supabaseAdmin
       .from('itinerary_services')
@@ -164,7 +170,9 @@ export async function POST(
       })
     }
 
-    const commissionsForClaimed = commissionsToCreate.filter((_, i) => claimedIds.has(candidateServices[i].id))
+    const commissionsForClaimed = commissionPairs
+      .filter(p => claimedIds.has(p.serviceId))
+      .map(p => p.commission)
 
     // Insert commissions for the claimed rows.
     const { data: createdCommissions, error: createError } = await supabaseAdmin

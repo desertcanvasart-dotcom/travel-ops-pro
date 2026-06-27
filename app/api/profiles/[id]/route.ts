@@ -1,10 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// Fields only an admin may change — `role` is the column the middleware reads
+// for RBAC, so allowing self-service edits here is a privilege-escalation path.
+const PRIVILEGED_FIELDS = ['role', 'is_active'] as const
+// Fields a user may change on their OWN profile.
+const SELF_EDITABLE_FIELDS = ['full_name', 'phone', 'timezone'] as const
+
+// Resolve the authenticated caller (from the session cookie) and their RBAC role.
+// The middleware /api/* gate guarantees a session exists; this re-derives WHO it
+// is and WHAT role, since the routes below use the RLS-bypassing admin client.
+async function getCaller(): Promise<{ id: string; role: string } | null> {
+  const cookieStore = await cookies()
+  const userClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) { return cookieStore.get(name)?.value },
+        set() {}, remove() {},
+      },
+    }
+  )
+  const { data: { user } } = await userClient.auth.getUser()
+  if (!user) return null
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+  return { id: user.id, role: (profile as { role?: string } | null)?.role || 'viewer' }
+}
 
 // GET - Get single profile
 export async function GET(
@@ -42,10 +75,33 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+
+    // AUTHORIZATION: a user may edit only their own profile; only an admin may
+    // edit another user's profile or change privileged fields (role/is_active).
+    const caller = await getCaller()
+    if (!caller) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    const isAdmin = caller.role === 'admin'
+    const isSelf = caller.id === id
+    if (!isAdmin && !isSelf) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await request.json()
 
-    // Fields that can be updated
-    const allowedFields = ['full_name', 'phone', 'role', 'is_active', 'timezone']
+    // Block privilege escalation: only admins may set role / is_active.
+    if (!isAdmin && PRIVILEGED_FIELDS.some(f => body[f] !== undefined)) {
+      return NextResponse.json(
+        { success: false, error: 'Only admins can change role or active status' },
+        { status: 403 }
+      )
+    }
+
+    // Non-admins are restricted to their own non-privileged fields.
+    const allowedFields = isAdmin
+      ? [...SELF_EDITABLE_FIELDS, ...PRIVILEGED_FIELDS]
+      : [...SELF_EDITABLE_FIELDS]
     const updateData: Record<string, any> = {}
 
     for (const field of allowedFields) {
@@ -90,6 +146,15 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+
+    // AUTHORIZATION: only admins may delete users.
+    const caller = await getCaller()
+    if (!caller) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    if (caller.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
 
     // First check if the user exists and is not an admin (prevent deleting admins)
     const { data: profile, error: fetchError } = await supabase

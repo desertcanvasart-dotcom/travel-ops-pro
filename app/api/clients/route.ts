@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -10,8 +11,11 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const search = searchParams.get('search')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const search = sanitizeSearchTerm(searchParams.get('search'))
+    // Clamp the caller-supplied limit to a sane range so a huge `?limit=` can't
+    // be used to extract the whole table / exhaust memory. Default 50, max 200.
+    const requestedLimit = parseInt(searchParams.get('limit') || '50')
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 50
 
     let query = supabase
       .from('clients')

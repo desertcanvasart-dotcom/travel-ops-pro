@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -14,7 +15,7 @@ const supabaseAdmin = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const search = searchParams.get('search')
+    const search = sanitizeSearchTerm(searchParams.get('search'))
     const active_only = searchParams.get('active_only') !== 'false'
 
     let query = supabaseAdmin

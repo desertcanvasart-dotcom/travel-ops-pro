@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import {
   Search,
   Plus,
@@ -250,7 +251,7 @@ export default function TransportationContent() {
       if (response.ok) {
         const result = await response.json()
         const transportSuppliers = (result.data || []).filter((s: Supplier) =>
-          ['transport_company', 'transport', 'driver'].includes(s.type)
+          ['transport', 'local_operator', 'driver'].includes(s.type)
         )
         setSuppliers(transportSuppliers)
       }
@@ -1206,12 +1207,14 @@ export default function TransportationContent() {
                   Transport Company (Supplier)
                 </h3>
                 <select
+                  required
                   value={formData.supplier_id}
                   onChange={(e) => handleSupplierChange(e.target.value)}
                   title="Select supplier"
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                 >
-                  <option value="">Select supplier (optional)</option>
+                  <option value="" disabled>Select supplier…</option>
+                  <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
                   {suppliers.map(supplier => (
                     <option key={supplier.id} value={supplier.id}>
                       {supplier.name}{supplier.city ? ` (${supplier.city})` : ''}
