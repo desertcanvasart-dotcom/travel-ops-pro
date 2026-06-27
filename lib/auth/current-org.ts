@@ -79,3 +79,41 @@ export function noOrgResponse() {
     { status: 403 }
   )
 }
+
+// Resolve the current request's RBAC role from user_profiles. Returns null if
+// there's no session. The middleware role-gate only matches financial routes by
+// path PREFIX, so nested action routes it can't match (e.g.
+// /api/itineraries/[id]/generate-commissions) call this in-route instead.
+export async function getCurrentUserRole(): Promise<string | null> {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) { return cookieStore.get(name)?.value },
+        set() {}, remove() {},
+      },
+    }
+  )
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data: profile } = await getAdmin()
+    .from('user_profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+  return (profile as { role?: string } | null)?.role ?? null
+}
+
+// 403 helper for role-gated routes. Fails closed: a null/insufficient role is denied.
+export async function requireRole(allowed: string[]): Promise<NextResponse | null> {
+  const role = await getCurrentUserRole()
+  if (!role || !allowed.includes(role)) {
+    return NextResponse.json(
+      { success: false, error: 'Forbidden — insufficient role' },
+      { status: 403 }
+    )
+  }
+  return null
+}

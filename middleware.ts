@@ -53,7 +53,12 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/payments', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/commissions', roles: ['admin', 'manager'] },
   { prefix: '/api/supplier-invoices', roles: ['admin', 'manager'] },
+  { prefix: '/api/expenses', roles: ['admin', 'manager', 'agent'] },
 ]
+// NOTE: this gate matches by path PREFIX, so financial mutations on NESTED
+// action routes (e.g. /api/itineraries/[id]/generate-commissions, which creates
+// commission rows) are NOT covered here — those guard themselves in-route via
+// requireRole() from lib/auth/current-org.ts. Keep both in sync.
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 export async function middleware(request: NextRequest) {

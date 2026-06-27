@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +14,11 @@ export async function POST(
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // This POST generates commission rows (a privileged financial action) — gate
+    // it like the other commission generator; the middleware prefix can't match it.
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
 
     const { id: itineraryId } = await params
 
