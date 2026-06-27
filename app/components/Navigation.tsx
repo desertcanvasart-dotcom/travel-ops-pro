@@ -41,12 +41,6 @@ export default function Navigation() {
                 💬 {t('parseWhatsApp')}
               </Link>
               <Link
-                href="/tour-builder"
-                className={`px-4 py-2 rounded-lg transition-colors ${isActive('/tour-builder')}`}
-              >
-                🏗️ {t('tourBuilder')}
-              </Link>
-              <Link
                 href="/itineraries"
                 className={`px-4 py-2 rounded-lg transition-colors ${isActive('/itineraries')}`}
               >
