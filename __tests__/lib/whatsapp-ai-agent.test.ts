@@ -18,24 +18,31 @@ const ctx: ConversationContext = {
   recentMessages: [{ direction: 'inbound', content: 'Hi', timestamp: '2026-06-28T10:00:00Z' }],
 }
 
-// A supabase stub whose itinerary read returns an empty list (search tool path).
-const supabaseStub: any = {
-  from: () => ({
-    select: () => ({
-      eq: () => ({ order: () => ({ limit: () => ({ data: [], error: null }) }) }),
-    }),
-  }),
+// A thenable query-builder stub: every chained method returns the builder, and
+// awaiting it (or calling single/maybeSingle) resolves to { data, error }.
+// `dataByTable` lets a test return rows for a specific table.
+function makeSupabaseStub(dataByTable: Record<string, any[]> = {}): any {
+  const build = (data: any[]) => {
+    const b: any = {}
+    for (const m of ['select', 'eq', 'gte', 'lte', 'in', 'order', 'limit']) b[m] = () => b
+    b.single = () => Promise.resolve({ data: data[0] ?? null, error: null })
+    b.maybeSingle = () => Promise.resolve({ data: data[0] ?? null, error: null })
+    b.then = (resolve: any) => resolve({ data, error: null })
+    return b
+  }
+  return { from: (table: string) => build(dataByTable[table] ?? []) }
 }
+
+const supabaseStub: any = makeSupabaseStub()
 
 beforeEach(() => createMock.mockReset())
 
 describe('AGENT_TOOLS', () => {
   it('exposes only the read-only tool set (no send/create tools)', () => {
     const names = AGENT_TOOLS.map((t) => t.name).sort()
-    expect(names).toEqual(['escalate_to_human', 'lookup_itinerary', 'search_customer_trips'])
+    expect(names).toEqual(['check_availability', 'escalate_to_human', 'lookup_itinerary', 'search_customer_trips'])
     expect(names).not.toContain('send_quote_to_customer')
     expect(names).not.toContain('create_trip_inquiry')
-    expect(names).not.toContain('check_availability')
   })
 })
 
@@ -84,5 +91,29 @@ describe('WhatsAppAIAgent.generateResponse', () => {
     const res = await agent.generateResponse('Hi', ctx, supabaseStub)
     expect(res.success).toBe(false)
     expect(res.shouldRespond).toBe(false)
+  })
+
+  it('runs check_availability against operator_capacity and completes', async () => {
+    createMock
+      .mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [{ type: 'tool_use', id: 'tu1', name: 'check_availability', input: { start_date: '2026-07-01', group_size: 2 } }],
+      })
+      .mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'Those dates work — shall I hold them?' }],
+      })
+
+    // operator_capacity returns a blackout for the requested date.
+    const supa = makeSupabaseStub({
+      operator_capacity: [{ date: '2026-07-01', status: 'blackout', max_groups: 3, booked_groups: 0, reason: 'holiday' }],
+    })
+
+    const agent = new WhatsAppAIAgent()
+    const res = await agent.generateResponse('Are the 1st of July dates open?', ctx, supa)
+
+    expect(res.success).toBe(true)
+    expect(res.toolsUsed).toContain('check_availability')
+    expect(res.reply).toContain('hold them')
   })
 })
