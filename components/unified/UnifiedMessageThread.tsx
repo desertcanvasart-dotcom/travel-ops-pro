@@ -261,9 +261,18 @@ export function UnifiedMessageThread({
 
   const getLanguageInfo = (code: string) => QUICK_LANGUAGES.find(l => l.code === code) || { code, name: code, flag: '🌐' }
 
+  // In-flight messages request, so switching conversations (or unmounting) can
+  // cancel a slow response that would otherwise overwrite the current thread.
+  const messagesAbortRef = useRef<AbortController | null>(null)
+
   // Fetch messages based on channel
   const fetchMessages = useCallback(async (showLoader = true) => {
     if (!conversation) return
+    // Cancel any previous in-flight fetch — a stale response for a
+    // previously-selected conversation must not clobber the current one.
+    messagesAbortRef.current?.abort()
+    const controller = new AbortController()
+    messagesAbortRef.current = controller
     if (showLoader) setLoading(true)
     try {
       let url: string
@@ -273,9 +282,11 @@ export function UnifiedMessageThread({
         url = `/api/email/messages?conversation_id=${conversation.id}`
       }
 
-      const res = await fetch(url)
+      const res = await fetch(url, { signal: controller.signal })
       if (res.ok) {
         const data = await res.json()
+        // A newer request superseded this one mid-flight — discard its result.
+        if (controller.signal.aborted) return
         // Transform to unified format
         const msgs = (data.messages || data.data || []).map((msg: any) => ({
           id: msg.id,
@@ -298,10 +309,14 @@ export function UnifiedMessageThread({
         }))
         setMessages(msgs)
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Expected when a newer fetch (switch/unmount) aborted this one — not an error.
+      if (error?.name === 'AbortError') return
       console.error('Error fetching messages:', error)
     } finally {
-      if (showLoader) setLoading(false)
+      // Only the request that's still current should clear the loading flag, so an
+      // aborted older fetch doesn't turn off the spinner the newer fetch turned on.
+      if (showLoader && !controller.signal.aborted) setLoading(false)
     }
   }, [conversation])
 
@@ -317,6 +332,9 @@ export function UnifiedMessageThread({
       console.error('Error fetching agents:', error)
     }
   }, [])
+
+  // Abort any in-flight messages fetch on unmount.
+  useEffect(() => () => messagesAbortRef.current?.abort(), [])
 
   // Load messages when conversation changes
   useEffect(() => {

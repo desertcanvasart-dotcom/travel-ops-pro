@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -260,7 +260,14 @@ export default function TransportationContent() {
     }
   }, [])
 
+  const ratesAbortRef = useRef<AbortController | null>(null)
+
   const fetchRates = useCallback(async () => {
+    // Cancel any in-flight fetch so a slow response for a previous filter set
+    // can't overwrite results for the current filters.
+    ratesAbortRef.current?.abort()
+    const controller = new AbortController()
+    ratesAbortRef.current = controller
     try {
       const params = new URLSearchParams()
       if (cityFilter) params.append('city', cityFilter)
@@ -268,17 +275,22 @@ export default function TransportationContent() {
       if (supplierFilter) params.append('supplier_id', supplierFilter)
       if (!showInactive) params.append('activeOnly', 'true')
 
-      const response = await fetch(`/api/resources/transportation?${params}`)
+      const response = await fetch(`/api/resources/transportation?${params}`, { signal: controller.signal })
       if (response.ok) {
         const data = await response.json()
+        if (controller.signal.aborted) return
         setRates(data)
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error('Error fetching transportation rates:', error)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [cityFilter, serviceTypeFilter, supplierFilter, showInactive])
+
+  // Abort any in-flight rates fetch on unmount.
+  useEffect(() => () => ratesAbortRef.current?.abort(), [])
 
   useEffect(() => {
     fetchRates()
