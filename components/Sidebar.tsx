@@ -132,6 +132,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
       { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
+      { labelKey: 'copilotKnowledge', href: '/copilot-knowledge', icon: BookOpen },
     ]
   },
   {
