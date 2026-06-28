@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
         messageSubject: inboxMessage.subject,
         senderName: inboxMessage.sender_name,
         tone,
+        orgId: thread.org_id ?? null, // scope RAG retrieval to the thread's org
       },
       supabase
     )

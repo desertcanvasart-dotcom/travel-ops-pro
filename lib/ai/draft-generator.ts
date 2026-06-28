@@ -10,6 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { createMessageWithRetry } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
 import { buildCommunicationContext } from '@/lib/ai/communication-context-builder'
+import { retrieveKnowledge, formatRetrievalContext } from '@/lib/copilot-retrieval'
 import { localeFromPreferred, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 import {
   CopilotContext,
@@ -27,12 +28,18 @@ interface GenerateDraftParams {
   senderName?: string | null
   tone?: CopilotTone
   additionalInstructions?: string
+  // Org to scope RAG retrieval to. Optional — when omitted, generateDraft
+  // resolves it from the thread (communication_threads.org_id). When neither
+  // is available, retrieval is skipped and the draft is generated un-grounded.
+  orgId?: string | null
 }
 
 interface GenerateDraftResult {
   output: ClaudeDraftOutput
   context: CopilotContext
   generationTimeMs: number
+  // How many knowledge-base entries were retrieved and injected (0 = un-grounded).
+  knowledgeUsed: number
 }
 
 /**
@@ -57,8 +64,34 @@ export async function generateDraft(
   const clientLocale: RecipientLocale | null = pref && pref.trim() ? localeFromPreferred(pref) : null
 
   // Build prompts
-  const systemPrompt = buildSystemPrompt(params.channel, params.tone || 'professional', clientLocale)
+  let systemPrompt = buildSystemPrompt(params.channel, params.tone || 'professional', clientLocale)
   const userPrompt = buildUserPrompt(params, context)
+
+  // RAG grounding — retrieve org knowledge + similar past replies relevant to the
+  // inbound message and inject them into the system prompt. Strictly fault-
+  // tolerant: a retrieval failure (no OPENAI_API_KEY, migration not yet applied,
+  // no org on the thread) must NEVER block draft generation — we fall back to the
+  // un-grounded draft and just record knowledgeUsed = 0.
+  let knowledgeUsed = 0
+  try {
+    const orgId = params.orgId ?? (await resolveThreadOrgId(params.threadId, supabase))
+    const query = (params.messageBody || '').trim()
+    if (orgId && query) {
+      const items = await retrieveKnowledge(supabase, orgId, query, { limit: 6 })
+      const block = formatRetrievalContext(items)
+      if (block) {
+        knowledgeUsed = items.length
+        systemPrompt +=
+          `\n\n# RETRIEVED KNOWLEDGE BASE (RAG)\n` +
+          `Ground your reply in the material below. Treat "Relevant business knowledge" as ` +
+          `authoritative facts (prefer it over assumptions); treat "Similar past conversations" ` +
+          `as tone/style exemplars only. Never invent details that aren't in this block or the ` +
+          `conversation context.\n\n${block}`
+      }
+    }
+  } catch (err) {
+    console.warn('[draft-generator] RAG retrieval skipped:', (err as any)?.message || err)
+  }
 
   // Call Claude
   const message = await createMessageWithRetry({
@@ -85,6 +118,25 @@ export async function generateDraft(
     output,
     context,
     generationTimeMs,
+    knowledgeUsed,
+  }
+}
+
+/**
+ * Resolve the org that owns a copilot thread, for scoping RAG retrieval.
+ * Returns null on any error or when org_id isn't set on the thread (the column
+ * is nullable) — callers treat null as "skip retrieval".
+ */
+async function resolveThreadOrgId(threadId: string, supabase: SupabaseClient): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from('communication_threads')
+      .select('org_id')
+      .eq('id', threadId)
+      .single()
+    return (data as { org_id?: string | null } | null)?.org_id ?? null
+  } catch {
+    return null
   }
 }
 
