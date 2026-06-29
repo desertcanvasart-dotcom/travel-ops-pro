@@ -244,6 +244,17 @@ export async function POST(request: NextRequest) {
       if (versionError) {
         console.warn('Warning: Could not create English version:', versionError)
       }
+
+      // Initial revision snapshot (best-effort — never blocks creation).
+      try {
+        await supabaseAdmin.rpc('create_quote_revision', {
+          p_quote_id: quote.id,
+          p_changed_by: created_by ?? null,
+          p_change_reason: 'Quote created',
+        })
+      } catch (revErr) {
+        console.warn('create_quote_revision (initial) failed (non-fatal):', revErr)
+      }
     }
 
     console.log('✅ Quote created:', quote.quote_number)
