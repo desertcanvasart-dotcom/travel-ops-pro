@@ -55,10 +55,66 @@ export default function QuotesListPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState('')
 
   useEffect(() => {
     fetchQuotes()
   }, [statusFilter])
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const bulkDelete = async () => {
+    const ids = [...selected]
+    if (ids.length === 0 || !confirm(`Delete ${ids.length} selected quote(s)? This cannot be undone.`)) return
+    setBulkBusy(true)
+    try {
+      const res = await fetch('/api/b2b/quotes/bulk-delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quote_ids: ids }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSelected(new Set())
+        await fetchQuotes()
+      } else {
+        alert(data.error || 'Bulk delete failed')
+      }
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const bulkUpdateStatus = async () => {
+    const ids = [...selected]
+    if (ids.length === 0 || !bulkStatus) return
+    setBulkBusy(true)
+    try {
+      const res = await fetch('/api/b2b/quotes/bulk-update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quote_ids: ids, status: bulkStatus }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSelected(new Set())
+        setBulkStatus('')
+        await fetchQuotes()
+      } else {
+        alert(data.error || 'Bulk update failed')
+      }
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   const fetchQuotes = async () => {
     setLoading(true)
@@ -195,6 +251,27 @@ export default function QuotesListPage() {
         </select>
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="mb-3 flex items-center gap-3 bg-[#647C47]/5 border border-[#647C47]/20 rounded-lg px-4 py-2.5">
+          <span className="text-sm font-medium text-[#647C47]">{selected.size} selected</span>
+          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-700">Clear</button>
+          <div className="flex-1" />
+          <select value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)} className="px-3 py-1.5 text-sm border rounded-lg bg-white" disabled={bulkBusy}>
+            <option value="">Set status…</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="accepted">Accepted</option>
+            <option value="rejected">Rejected</option>
+            <option value="expired">Expired</option>
+          </select>
+          <button onClick={bulkUpdateStatus} disabled={bulkBusy || !bulkStatus} className="px-3 py-1.5 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#647C47]/10 disabled:opacity-50">Apply</button>
+          <button onClick={bulkDelete} disabled={bulkBusy} className="px-3 py-1.5 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-1">
+            {bulkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Delete
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-lg border overflow-hidden">
         {loading ? (
@@ -210,6 +287,14 @@ export default function QuotesListPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={filteredQuotes.length > 0 && filteredQuotes.every((q) => selected.has(q.id))}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(filteredQuotes.map((q) => q.id)) : new Set())}
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableQuote')}</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableTour')}</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableClientPartner')}</th>
@@ -223,7 +308,10 @@ export default function QuotesListPage() {
             </thead>
             <tbody className="divide-y">
               {filteredQuotes.map((quote) => (
-                <tr key={quote.id} className="hover:bg-gray-50">
+                <tr key={quote.id} className={`hover:bg-gray-50 ${selected.has(quote.id) ? 'bg-[#647C47]/5' : ''}`}>
+                  <td className="px-4 py-3">
+                    <input type="checkbox" aria-label={`Select ${quote.quote_number}`} checked={selected.has(quote.id)} onChange={() => toggleSelect(quote.id)} />
+                  </td>
                   <td className="px-4 py-3">
                     <p className="font-mono text-sm font-medium text-[#647C47]">{quote.quote_number}</p>
                     <p className="text-xs text-gray-500">{formatDate(quote.created_at)}</p>
