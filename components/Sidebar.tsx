@@ -143,6 +143,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'suppliers', href: '/suppliers', icon: Building },
       { labelKey: 'itineraries', href: '/itineraries', icon: Route },
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase },
+      { labelKey: 'departures', href: '/departures', icon: Calendar },
       { labelKey: 'documents', href: '/documents', icon: FileText },
       { labelKey: 'teamMembers', href: '/team-members', icon: Users },
       { labelKey: 'tasks', href: '/tasks', icon: CheckSquare },
