@@ -11,9 +11,9 @@
 //     this org's rows only).
 //   • Read-only tools only — search_customer_trips, lookup_itinerary,
 //     escalate_to_human. The sibling's send_quote_to_customer /
-//     request_quote_for_trip / create_trip_inquiry (mutating/sending) and
-//     check_availability (depends on tour_departures, which this app doesn't
-//     have) are intentionally omitted.
+//     request_quote_for_trip / create_trip_inquiry (mutating/sending) are
+//     intentionally omitted (draft-gated). check_availability is included now
+//     that operator_capacity / tour_departures exist.
 //   • Uses this app's Anthropic client + MODEL_DRAFT.
 // ============================================================
 
@@ -21,6 +21,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAnthropicClient } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
+import { determineCapacityResult, type CapacityDayDetail } from '@/lib/capacity-availability'
 
 // ============================================================
 // TYPES
@@ -98,6 +99,21 @@ const AGENT_TOOLS: Anthropic.Messages.Tool[] = [
     },
   },
   {
+    name: 'check_availability',
+    description:
+      "Check whether the operator has capacity for travel dates (and optionally scheduled group departures). Use when the customer asks if specific dates work or about joining a group tour. Returns an availability verdict and a customer-friendly message — relay its meaning, don't promise beyond it.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'First travel date, YYYY-MM-DD.' },
+        end_date: { type: 'string', description: 'Last travel date, YYYY-MM-DD. Omit for a single day.' },
+        group_size: { type: 'number', description: 'Number of travellers (defaults to 1).' },
+        check_departures: { type: 'boolean', description: 'If true, also look for scheduled group tour departures in the range.' },
+      },
+      required: ['start_date'],
+    },
+  },
+  {
     name: 'escalate_to_human',
     description:
       'Flag this conversation for a human operator. Use for complaints, cancellations, refunds, urgent/same-day matters, anything involving money you are unsure about, or when the customer explicitly asks for a person.',
@@ -130,6 +146,8 @@ class ToolExecutor {
         return this.searchCustomerTrips(toolInput)
       case 'lookup_itinerary':
         return this.lookupItinerary(toolInput)
+      case 'check_availability':
+        return this.checkAvailability(toolInput)
       case 'escalate_to_human':
         return this.escalateToHuman(toolInput)
       default:
@@ -169,6 +187,68 @@ class ToolExecutor {
       return { success: true, data }
     } catch (err: any) {
       return { success: false, error: err?.message || 'lookup failed' }
+    }
+  }
+
+  private async checkAvailability(input: {
+    start_date: string
+    end_date?: string
+    group_size?: number
+    check_departures?: boolean
+  }): Promise<ToolResult> {
+    const start = (input?.start_date || '').trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) {
+      return { success: false, error: 'start_date must be YYYY-MM-DD' }
+    }
+    const end = input?.end_date && /^\d{4}-\d{2}-\d{2}$/.test(input.end_date) ? input.end_date : start
+    const groupSize = Math.max(1, Number(input?.group_size) || 1)
+
+    try {
+      // Capacity rows for the range (RLS scopes operator_capacity to the org).
+      const { data: rows } = await this.supabase
+        .from('operator_capacity')
+        .select('date, status, max_groups, booked_groups, reason')
+        .gte('date', start)
+        .lte('date', end)
+        .order('date', { ascending: true })
+
+      const byDate = new Map<string, any>()
+      for (const r of rows || []) byDate.set(r.date, r)
+
+      // Expand the range; a date with no row defaults to available (3 groups).
+      const details: CapacityDayDetail[] = []
+      const cur = new Date(start)
+      const endD = new Date(end)
+      while (cur <= endD) {
+        const d = cur.toISOString().split('T')[0]
+        const row = byDate.get(d)
+        details.push(
+          row
+            ? { date: d, status: row.status, available_slots: row.max_groups - row.booked_groups, reason: row.reason }
+            : { date: d, status: 'available', available_slots: 3 - groupSize }
+        )
+        cur.setDate(cur.getDate() + 1)
+      }
+
+      const availability = determineCapacityResult(details, groupSize)
+
+      // Optionally surface bookable scheduled departures in the range.
+      let departures: any[] = []
+      if (input?.check_departures) {
+        const { data: deps } = await this.supabase
+          .from('tour_departures')
+          .select('id, tour_name, tour_code, start_date, end_date, max_pax, booked_pax, min_pax, status, is_guaranteed, price_per_person, currency')
+          .gte('start_date', start)
+          .lte('start_date', end)
+          .in('status', ['open', 'limited', 'guaranteed'])
+          .order('start_date', { ascending: true })
+          .limit(5)
+        departures = (deps || []).filter((dp: any) => dp.max_pax - dp.booked_pax >= groupSize)
+      }
+
+      return { success: true, data: { availability, departures }, message: availability.message }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'availability check failed' }
     }
   }
 
@@ -291,6 +371,7 @@ YOUR ROLE:
 TOOLS (read-only):
 - search_customer_trips — find the customer's existing itineraries/bookings.
 - lookup_itinerary — get the details of one specific itinerary.
+- check_availability — check if travel dates work (and optionally group departures). Use before answering "are these dates available?".
 - escalate_to_human — flag for a human. Use for complaints, cancellations, refunds, urgent/same-day matters, anything money-related you're unsure about, or an explicit request for a person.
 
 GUIDELINES:
