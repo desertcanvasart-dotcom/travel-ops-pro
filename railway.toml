@@ -1,0 +1,15 @@
+# Railway configuration — adds the agent-memory feedback-loop cron job.
+#
+# Build & deploy are intentionally OMITTED so your existing Railway (dashboard)
+# settings keep applying unchanged — this file only adds the scheduled job.
+# If your deploy is fully dashboard-managed and you'd rather not introduce a
+# railway.toml, add the same cron via Railway → service → Settings → Cron and
+# delete this file.
+#
+# Requires two service env vars: APP_URL (your public service URL) and
+# CRON_SECRET (the same value the app verifies). The endpoint is a GET that
+# checks `Authorization: Bearer $CRON_SECRET`.
+
+[[cron]]
+schedule = "0 2 * * *"   # nightly at 02:00 UTC
+command = "curl -fsS -X GET \"$APP_URL/api/cron/process-agent-memory\" -H \"Authorization: Bearer $CRON_SECRET\""
