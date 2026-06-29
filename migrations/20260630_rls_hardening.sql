@@ -75,3 +75,38 @@ CREATE POLICY organization_members_owner_write ON organization_members
   USING (public.user_is_org_owner(org_id))
   WITH CHECK (public.user_is_org_owner(org_id));
 -- organization_members_self_select stays (uses the now-SECURITY DEFINER user_is_in_org).
+
+-- ── Stage 4: prophylactic hardening of EMPTY tables (no data yet, so the
+--    anon-count probe couldn't confirm their state). These already have correct
+--    scoped policies (org/role) OR no policy at all; ensure RLS is ON so the
+--    policies apply, and give the browser-read no-policy tables an
+--    authenticated-only policy. Idempotent; per-table guard skips views/missing.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'clients','bookings','invoices','booking_payments','supplier_invoices',
+    'supplier_invoice_expenses','commissions','client_followups','communication_history',
+    'client_notes','accounting_sync_log','template_send_log','copilot_knowledge',
+    'itinerary_service_versions','tour_variation_versions'
+  ] LOOP
+    BEGIN EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXCEPTION WHEN others THEN RAISE NOTICE 'skip ENABLE RLS %: %', t, SQLERRM; END;
+  END LOOP;
+END $$;
+
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['client_followups','communication_history','client_notes','itinerary_service_versions']
+  LOOP
+    BEGIN
+      EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+      EXECUTE format('DROP POLICY IF EXISTS %I_authenticated_all ON %I', t, t);
+      EXECUTE format('CREATE POLICY %I_authenticated_all ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true)', t, t);
+    EXCEPTION WHEN others THEN RAISE NOTICE 'skip policy %: %', t, SQLERRM; END;
+  END LOOP;
+END $$;
+-- Note: client_summary is a VIEW — if so, ALTER VIEW client_summary SET (security_invoker = true).
+-- Note: booking_payments has only an {authenticated} USING(true) policy (no org scope) — not an
+--   anon leak, but a candidate for future org-scoping.
