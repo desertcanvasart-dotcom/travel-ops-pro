@@ -160,6 +160,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
       { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
       { labelKey: 'quotes', href: '/b2b/quotes', icon: FileText },
+      { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText },
       { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },
