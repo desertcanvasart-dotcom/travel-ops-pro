@@ -6,10 +6,11 @@
 # railway.toml, add the same cron via Railway → service → Settings → Cron and
 # delete this file.
 #
-# Requires two service env vars: APP_URL (your public service URL) and
-# CRON_SECRET (the same value the app verifies). The endpoint is a GET that
-# checks `Authorization: Bearer $CRON_SECRET`.
+# Uses the service's existing NEXT_PUBLIC_APP_URL (full https URL of the app)
+# and CRON_SECRET. The endpoint is a GET that checks
+# `Authorization: Bearer $CRON_SECRET` — note the route only ENFORCES that
+# header when CRON_SECRET is set; if it's unset the endpoint is unauthenticated.
 
 [[cron]]
 schedule = "0 2 * * *"   # nightly at 02:00 UTC
-command = "curl -fsS -X GET \"$APP_URL/api/cron/process-agent-memory\" -H \"Authorization: Bearer $CRON_SECRET\""
+command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/process-agent-memory\" -H \"Authorization: Bearer $CRON_SECRET\""
