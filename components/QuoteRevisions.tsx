@@ -25,7 +25,7 @@ const fmt = (v: any) => {
   return String(v)
 }
 
-export default function QuoteRevisions({ quoteId }: { quoteId: string }) {
+export default function QuoteRevisions({ quoteId, basePath = '/api/b2b/quotes' }: { quoteId: string; basePath?: string }) {
   const [revisions, setRevisions] = useState<Revision[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<number | null>(null)
@@ -36,7 +36,7 @@ export default function QuoteRevisions({ quoteId }: { quoteId: string }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/b2b/quotes/${quoteId}/revisions`)
+      const res = await fetch(`${basePath}/${quoteId}/revisions`)
       const json = await res.json()
       if (json.success) setRevisions(json.revisions)
     } catch {
@@ -44,7 +44,7 @@ export default function QuoteRevisions({ quoteId }: { quoteId: string }) {
     } finally {
       setLoading(false)
     }
-  }, [quoteId])
+  }, [quoteId, basePath])
 
   useEffect(() => {
     load()
@@ -58,7 +58,7 @@ export default function QuoteRevisions({ quoteId }: { quoteId: string }) {
     setDiffFor(v)
     setDiff(null)
     try {
-      const res = await fetch(`/api/b2b/quotes/${quoteId}/revisions/compare?from=${v}&to=${current.version_number}`)
+      const res = await fetch(`${basePath}/${quoteId}/revisions/compare?from=${v}&to=${current.version_number}`)
       const json = await res.json()
       if (json.success) setDiff(json.comparison.differences)
     } catch {
@@ -71,7 +71,7 @@ export default function QuoteRevisions({ quoteId }: { quoteId: string }) {
     setBusy(v)
     setError(null)
     try {
-      const res = await fetch(`/api/b2b/quotes/${quoteId}/revisions/revert`, {
+      const res = await fetch(`${basePath}/${quoteId}/revisions/revert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ version_number: v }),
