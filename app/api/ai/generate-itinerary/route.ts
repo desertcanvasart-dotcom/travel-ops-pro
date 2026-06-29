@@ -46,6 +46,7 @@ import { createLanguageVersions } from '@/lib/ai/language-versions'
 import { getUserPreferences } from '@/lib/ai/user-preferences'
 import { applyDayRules } from '@/lib/ai/day-rules-engine'
 import { reconcileWithParserData } from '@/lib/ai/reconciliation'
+import { getMemoriesForPrompt, logAgentRun } from '@/lib/agent-memory'
 
 
 // Admin client for bypassing RLS on content library
@@ -555,6 +556,20 @@ export async function POST(request: NextRequest) {
         const cruiseTripName = cruiseContent.variation.title || cruiseContent.content.name
         await createLanguageVersions(supabase, itinerary.id, cruiseTripName, contentLanguage, createdCruiseDays)
 
+        // Record this run for the agent-memory feedback loop (best-effort).
+        // Cruise generation doesn't inject memories (no creative prompt), but the
+        // resulting itinerary still feeds learning (margin/client/supplier patterns).
+        await logAgentRun({
+          supabase: supabaseAdmin,
+          org_id: orgId,
+          agent_type: 'itinerary',
+          triggered_by: null,
+          itinerary_id: itinerary.id,
+          input_summary: `cruise ${tier} ${cruiseTripName || ''}`.trim(),
+          output_summary: `Created cruise itinerary`,
+          memories_injected: 0,
+        })
+
         return NextResponse.json({
           success: true,
           data: {
@@ -635,9 +650,16 @@ export async function POST(request: NextRequest) {
 
     let itineraryData: any
 
+    // Agent-memory personalisation: learned client/pricing/inquiry/supplier
+    // patterns for this org, injected into the CREATIVE generator's prompt only
+    // (the structured converter must transcribe the given itinerary verbatim).
+    // getMemoriesForPrompt is fully fault-tolerant — if the migration isn't
+    // applied it returns an empty block and generation is unaffected.
+    let agentMemory = { prompt_block: '', count: 0 }
+
     if (inputMode === 'structured' && raw_itinerary) {
       debugLog('📋 Using STRUCTURED mode - following provided itinerary')
-      
+
       itineraryData = await generateFromStructuredInput(
         extracted_days || [],
         raw_itinerary,
@@ -654,7 +676,11 @@ export async function POST(request: NextRequest) {
       )
     } else {
       debugLog('🎨 Using CREATIVE mode - AI generating itinerary')
-      
+
+      // Pull learned personalisation context for this org (+ client when known).
+      agentMemory = await getMemoriesForPrompt({ supabase, org_id: orgId, client_id })
+      if (agentMemory.count > 0) debugLog(`🧠 Injecting ${agentMemory.count} agent memories into the prompt`)
+
       itineraryData = await generateCreativeItinerary({
         clientName: client_name,
         tourName: finalTourName,
@@ -675,7 +701,8 @@ export async function POST(request: NextRequest) {
         writingContext,
         includeLunch: include_lunch,
         includeDinner: include_dinner,
-        includeAccommodation: includeAccommodationFinal
+        includeAccommodation: includeAccommodationFinal,
+        memoryContext: agentMemory.prompt_block,
       })
     }
 
@@ -959,6 +986,19 @@ export async function POST(request: NextRequest) {
       ...attractionValidationWarnings,
       ...(pricingWarnings || []),
     ]
+
+    // Record this run for the agent-memory feedback loop (best-effort — the
+    // nightly cron later turns it into learned memories).
+    await logAgentRun({
+      supabase: supabaseAdmin,
+      org_id: orgId,
+      agent_type: 'itinerary',
+      triggered_by: null,
+      itinerary_id: itinerary.id,
+      input_summary: `${duration_days}-day ${tier} ${finalTourName || ''}`.trim(),
+      output_summary: `Created ${createdDays.length} day(s)`,
+      memories_injected: agentMemory.count,
+    })
 
     return NextResponse.json({
       success: true,

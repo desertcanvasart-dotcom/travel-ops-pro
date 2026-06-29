@@ -517,16 +517,20 @@ export async function generateCreativeItinerary(
     includeLunch: boolean
     includeDinner: boolean
     includeAccommodation: boolean
+    // Optional agent-memory personalisation block (learned client/pricing/
+    // inquiry/supplier patterns). Empty string when there's nothing learned yet.
+    memoryContext?: string
   }
 ): Promise<any> {
   const {
     clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
     language, cities, interests, specialRequests, startDate, effectiveCity,
-    attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation
+    attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation,
+    memoryContext,
   } = params
 
   const prompt = `Create a ${durationDays}-day Egypt itinerary.
-
+${memoryContext ? `\n${memoryContext}\n` : ''}
 ${EGYPT_TRAVEL_GLOSSARY}
 
 CLIENT: ${clientName}
