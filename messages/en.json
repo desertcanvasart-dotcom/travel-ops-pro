@@ -199,6 +199,7 @@
     "aiCopilot": "AI Copilot",
     "copilotKnowledge": "Copilot Knowledge",
     "conciergeLeads": "Concierge Leads",
+    "copilotAnalytics": "Copilot Analytics",
     "operations": "Operations",
     "itineraries": "Itineraries",
     "departures": "Departures",
@@ -5961,6 +5962,7 @@
       "overview": "Overview",
       "suppliers": "Suppliers",
       "payments": "Payments",
+      "passengers": "Passengers",
       "notes": "Notes"
     },
     "fields": {

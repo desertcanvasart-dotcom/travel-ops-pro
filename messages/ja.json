@@ -201,6 +201,7 @@
     "aiCopilot": "AI コパイロット",
     "copilotKnowledge": "コパイロット ナレッジ",
     "conciergeLeads": "コンシェルジュ リード",
+    "copilotAnalytics": "コパイロット アナリティクス",
     "operations": "オペレーション",
     "itineraries": "旅程",
     "departures": "出発スケジュール",
@@ -6680,6 +6681,7 @@
       "overview": "概要",
       "suppliers": "サプライヤー",
       "payments": "支払い",
+      "passengers": "搭乗者",
       "notes": "メモ"
     },
     "fields": {
