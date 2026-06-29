@@ -2284,6 +2284,7 @@
     "languageDescription": "Select your preferred language for the interface",
     "timezone": "Timezone",
     "integrations": "Integrations",
+    "organization": "Organization",
     "whatsappSettings": "WhatsApp Settings",
     "gmailSettings": "Gmail Settings",
     "security": "Security",
