@@ -3123,6 +3123,7 @@
     "languageDescription": "インターフェースの言語を選択してください",
     "timezone": "タイムゾーン",
     "integrations": "連携",
+    "organization": "組織",
     "whatsappSettings": "WhatsApp設定",
     "gmailSettings": "Gmail設定",
     "security": "セキュリティ",
