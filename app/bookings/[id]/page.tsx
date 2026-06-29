@@ -42,8 +42,10 @@ import {
 } from '@/types/bookings'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
+import PassengerManifest from '@/components/PassengerManifest'
+import SendConfirmationButton from '@/components/SendConfirmationButton'
 
-type TabType = 'overview' | 'suppliers' | 'payments' | 'notes'
+type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
 export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
@@ -339,6 +341,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
               <FileText className="w-4 h-4" />
               {t('actions.viewItinerary')}
             </Link>
+
+            <SendConfirmationButton bookingId={resolvedParams.id} />
           </div>
         )}
       </div>
@@ -346,7 +350,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow-sm border mb-6">
         <div className="border-b flex">
-          {(['overview', 'suppliers', 'payments', 'notes'] as TabType[]).map((tab) => (
+          {(['overview', 'suppliers', 'payments', 'passengers', 'notes'] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -694,6 +698,10 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           )}
 
           {/* Notes Tab */}
+          {activeTab === 'passengers' && (
+            <PassengerManifest bookingId={resolvedParams.id} />
+          )}
+
           {activeTab === 'notes' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div>
