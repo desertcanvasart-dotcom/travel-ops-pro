@@ -133,6 +133,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
       { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
       { labelKey: 'copilotKnowledge', href: '/copilot-knowledge', icon: BookOpen },
+      { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell },
     ]
   },
   {
