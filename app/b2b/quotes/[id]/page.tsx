@@ -10,6 +10,7 @@ import {
   XCircle, TrendingUp, Eye, ArrowRightCircle
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import QuoteRevisions from '@/components/QuoteRevisions'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 
@@ -561,6 +562,9 @@ export default function QuoteDetailPage() {
               {formatDate(quote.valid_until, 'long')}
             </p>
           </div>
+
+          {/* Revision history */}
+          <QuoteRevisions quoteId={quoteId} />
         </div>
       </div>
     </div>

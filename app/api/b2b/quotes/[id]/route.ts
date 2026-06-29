@@ -136,6 +136,18 @@ export async function PUT(
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
+    // Snapshot the updated state as a new revision (best-effort — never blocks
+    // the save). Reason can be supplied by the caller.
+    try {
+      await supabaseAdmin.rpc('create_quote_revision', {
+        p_quote_id: id,
+        p_changed_by: body.changed_by ?? null,
+        p_change_reason: body.change_reason ?? 'Quote updated',
+      })
+    } catch (revErr) {
+      console.warn('create_quote_revision failed (non-fatal):', revErr)
+    }
+
     return NextResponse.json({ success: true, data })
 
   } catch (error: any) {
