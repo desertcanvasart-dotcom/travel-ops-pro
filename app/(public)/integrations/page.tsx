@@ -10,7 +10,6 @@ import {
   Sparkles,
   Globe,
   Clock,
-  Zap,
   Menu,
   X as XIcon,
   BookOpen,
@@ -152,13 +151,6 @@ const comingSoonIntegrations = [
     icon: MessageSquare,
     region: "China",
     eta: "Q2 2026"
-  },
-  {
-    name: "Stripe",
-    description: "Accept credit card payments online. Clients can pay deposits and balances directly from their quote.",
-    icon: Zap,
-    region: "Global",
-    eta: "Q3 2026"
   }
 ]
 

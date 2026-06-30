@@ -34,6 +34,12 @@ import {
   Truck,
   BarChart,
   FileInput,
+  Sparkles,
+  Bot,
+  ConciergeBell,
+  GitBranch,
+  Gauge,
+  Tag,
 } from 'lucide-react'
 
 interface DocItem {
@@ -61,6 +67,9 @@ const CATEGORIES: DocCategory[] = [
     label: 'Communication & CRM',
     items: [
       { href: '/docs/communication', icon: MessageCircle, title: 'Communication', description: 'WhatsApp inbox, AI parser, and email management.' },
+      { href: '/docs/whatsapp-agent', icon: Bot, title: 'WhatsApp AI Agent', description: 'Draft-gated AI agent that reads the thread, checks live availability, and suggests a reply for you to approve — it never auto-sends.' },
+      { href: '/docs/copilot', icon: Sparkles, title: 'AI Copilot & Knowledge Base', description: 'Ask questions and draft replies grounded in your own knowledge base (RAG). Agent memory learns your style over time.' },
+      { href: '/docs/concierge', icon: ConciergeBell, title: 'Concierge Briefs', description: 'Receive partner concierge briefs, triage them with SLA timers, and promote them into itineraries or threads.' },
       { href: '/docs/clients', icon: Users, title: 'Clients (CRM)', description: 'Add, search, and manage client profiles, notes, and follow-ups.' },
       { href: '/docs/notifications', icon: BellRing, title: 'Notifications', description: 'In-app notifications for tasks, payments, bookings, and team activity.' },
     ],
@@ -71,6 +80,7 @@ const CATEGORIES: DocCategory[] = [
       { href: '/docs/itinerary-creation', icon: Wand2, title: 'Itinerary Creation', description: 'AI-powered itinerary generation from WhatsApp conversations and emails.' },
       { href: '/docs/itineraries', icon: Map, title: 'Itineraries', description: 'Build day-by-day trip plans with drag-and-drop reordering, pricing, services, and PDF export.' },
       { href: '/docs/b2c-pricing', icon: Calculator, title: 'B2C Pricing', description: 'Calculate itinerary pricing with automatic rate lookup and service costing.' },
+      { href: '/docs/b2c-quotes', icon: Tag, title: 'B2C Quotes', description: 'Priced offer-wrapper over an itinerary for direct selling, with revision history and a send flow.' },
       { href: '/docs/pricing-grid', icon: BarChart3, title: 'Pricing Grid', description: 'Interactive pricing calculator for comparing rates across tiers, dates, and group sizes.' },
       { href: '/docs/multi-language', icon: Languages, title: 'Multi-Language', description: 'Copy and translate itineraries and B2B quotes between English and Japanese with one click.' },
     ],
@@ -82,6 +92,7 @@ const CATEGORIES: DocCategory[] = [
       { href: '/docs/b2b-pricing-rules', icon: PackageSearch, title: 'B2B Pricing Rules', description: 'Partner-specific margin rules, volume discounts, and date-based pricing overrides.' },
       { href: '/docs/tour-programs', icon: ClipboardList, title: 'Tour Programs Manager', description: 'Create and manage tour templates, variations, and the template-to-pricing flow.' },
       { href: '/docs/b2b-quotes', icon: FileCheck, title: 'B2B Quotes', description: 'Save, manage, and export B2B quotes with PDF generation.' },
+      { href: '/docs/quote-revisions', icon: GitBranch, title: 'Quote Revisions', description: 'Versioned B2B quotes — snapshot, compare side-by-side, revert, plus bulk status operations.' },
       { href: '/docs/b2b-import', icon: FileInput, title: 'B2B Import', description: 'Convert standard itineraries into B2B packages for partner distribution.' },
     ],
   },
@@ -92,6 +103,7 @@ const CATEGORIES: DocCategory[] = [
       { href: '/docs/calendar', icon: Calendar, title: 'Calendar', description: 'Month, week, and timeline views of all tours. Drag-to-reschedule, resource conflict detection, and team-wide visibility.' },
       { href: '/docs/tasks', icon: CheckSquare, title: 'Tasks', description: 'Kanban board, table, and list views for managing operational tasks with priorities and assignments.' },
       { href: '/docs/suppliers', icon: Building2, title: 'Suppliers', description: 'Manage supplier profiles, contact details, commission rates, and type-specific fields for guides, hotels, and transport.' },
+      { href: '/docs/capacity-departures', icon: Gauge, title: 'Capacity & Departures', description: 'Define operator capacity and scheduled departures; live availability prevents overbooking.' },
     ],
   },
   {
@@ -103,8 +115,7 @@ const CATEGORIES: DocCategory[] = [
       { href: '/docs/accounts-receivable', icon: Wallet, title: 'Accounts Receivable', description: 'Client-level aging analysis (current, 30, 60, 90+ days), outstanding balances, and payment reminder triggers.' },
       { href: '/docs/accounts-payable', icon: CreditCard, title: 'Accounts Payable', description: 'Supplier-level aging reports, expense grouping by supplier, and payment approval workflows.' },
       { href: '/docs/supplier-invoices', icon: FileCheck, title: 'Supplier Invoices', description: 'Three-way matching: supplier invoice \u2192 expense \u2192 payment. Upload documents, match, approve, pay, or dispute.' },
-      { href: '/docs/expenses', icon: Wallet, title: 'Expenses', description: 'Track expenses by category with supplier linking, receipt uploads, and approval workflows.' },
-      { href: '/docs/commissions', icon: Truck, title: 'Commissions', description: 'Track receivable and payable commissions by category. Auto-generate from itineraries.' },
+      { href: '/docs/expenses-commissions', icon: Wallet, title: 'Expenses & Commissions', description: 'Track expenses by category with supplier linking and receipt uploads, plus receivable/payable commissions auto-generated from itineraries.' },
       { href: '/docs/profit-loss', icon: TrendingUp, title: 'Profit & Loss', description: 'Per-trip and aggregate P&L reports with supplier cost vs. client revenue analysis.' },
       { href: '/docs/financial-reports', icon: BarChart3, title: 'Financial Reports', description: 'Monthly and quarterly revenue, cash flow analysis, tax summaries, commission reports, and year-over-year comparisons.' },
     ],
