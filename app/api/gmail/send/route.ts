@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
       emailAddress = auth.emailAddress
     } catch (err) {
       if (err instanceof GmailAuthError) {
-        return NextResponse.json({ error: err.message }, { status: 401 })
+        return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 401 })
       }
       throw err
     }
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, messageId: sentMessageId, threadId: sentThreadId })
   } catch (err: any) {
     console.error('Send email error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }
 

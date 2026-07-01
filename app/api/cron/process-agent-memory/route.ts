@@ -18,6 +18,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { processRunForMemory } from '@/lib/agent-memory'
 
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
 
   if (fetchError) {
     console.error('🧠 Memory cron: failed to fetch runs:', fetchError)
-    return NextResponse.json({ success: false, error: fetchError.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(fetchError, 'Internal server error') }, { status: 500 })
   }
 
   const runs = (runsToProcess || []) as unknown as AgentRun[]

@@ -6,6 +6,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole } from '@/lib/auth/current-org'
 
@@ -38,7 +39,7 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       console.error('Error bulk updating quotes:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Snapshot each updated quote so revision history captures the bulk change.
@@ -59,6 +60,6 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Bulk update error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

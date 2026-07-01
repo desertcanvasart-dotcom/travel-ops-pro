@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
 
 // ============================================
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
       console.error('Error fetching departure:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -166,7 +167,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (error) {
       console.error('Error updating departure:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -238,7 +239,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     if (error) {
       console.error('Error deleting departure:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }

@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createClient } from '@supabase/supabase-js'
 
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('[Attractions API] Error fetching:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Check for language parameter to merge versions
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
     
   } catch (error: any) {
     console.error('[Attractions API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -212,7 +213,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[Attractions API] Error creating:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // If creating/updating in non-English, also create a language version
@@ -247,6 +248,6 @@ export async function POST(request: NextRequest) {
     
   } catch (error: any) {
     console.error('[Attractions API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

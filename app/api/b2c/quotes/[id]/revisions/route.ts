@@ -1,5 +1,6 @@
 // GET /api/b2c/quotes/[id]/revisions — revision history of a B2C offer.
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -20,7 +21,7 @@ export async function GET(
       .eq('quote_id', id)
       .order('version_number', { ascending: false })
 
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
     const userIds = [...new Set((revisions || []).map((r: any) => r.changed_by).filter(Boolean))]
     let emails: Record<string, string> = {}
@@ -39,6 +40,6 @@ export async function GET(
 
     return NextResponse.json({ success: true, revisions: withEditor, total_revisions: withEditor.length })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

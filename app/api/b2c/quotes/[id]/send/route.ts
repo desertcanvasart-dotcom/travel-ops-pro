@@ -5,6 +5,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole } from '@/lib/auth/current-org'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
@@ -105,6 +106,6 @@ export async function POST(
     return NextResponse.json({ success: true, channel: sendVia })
   } catch (error: any) {
     console.error('Error sending B2C quote:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

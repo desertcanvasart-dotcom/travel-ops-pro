@@ -5,6 +5,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { generateDraft } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
           .from('communication_inbox')
           .update({
             status: 'draft_failed',
-            last_error: aiError.message,
+            last_error: clientMessage(aiError, 'Internal server error'),
             processed_at: new Date().toISOString(),
           })
           .eq('id', inboxMessageIdForFailure)
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: false, error: aiError.message },
+      { success: false, error: clientMessage(aiError, 'Internal server error') },
       { status: aiError.status }
     )
   }

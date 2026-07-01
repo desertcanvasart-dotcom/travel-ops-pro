@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Error fetching templates:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -212,7 +213,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Browse error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch tours' },
+      { success: false, error: clientMessage(error, 'Failed to fetch tours') },
       { status: 500 }
     )
   }

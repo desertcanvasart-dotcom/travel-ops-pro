@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { google } from 'googleapis'
 import { refreshAccessToken } from '@/lib/gmail'
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ labels })
   } catch (err: any) {
     console.error('Get labels error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ label: response.data })
   } catch (err: any) {
     console.error('Create label error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -152,6 +153,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('Delete label error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }

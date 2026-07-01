@@ -6,6 +6,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { getAuthenticatedGmail } from '@/lib/gmail'
@@ -197,7 +198,7 @@ export async function POST(
           })
         }
       } catch (emailError: any) {
-        sendResult = { success: false, error: emailError.message }
+        sendResult = { success: false, error: clientMessage(emailError, 'Internal server error') }
       }
     } else {
       return NextResponse.json(
@@ -255,12 +256,12 @@ export async function POST(
     if (claimedForSend && draftId) {
       await supabase
         .from('communication_drafts')
-        .update({ sent_at: null, send_error: error.message })
+        .update({ sent_at: null, send_error: clientMessage(error, 'Internal server error') })
         .eq('id', draftId)
         .eq('status', 'approved')
     }
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

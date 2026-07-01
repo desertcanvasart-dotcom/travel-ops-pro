@@ -7,6 +7,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -31,11 +32,11 @@ export async function GET(request: NextRequest) {
     if (itineraryId) query = query.eq('itinerary_id', itineraryId)
 
     const { data, error } = await query
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
     return NextResponse.json({ success: true, data: data || [] })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating B2C quote:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Initial revision snapshot (best-effort).
@@ -123,6 +124,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: quote })
   } catch (error: any) {
     console.error('Error in POST /api/b2c/quotes:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

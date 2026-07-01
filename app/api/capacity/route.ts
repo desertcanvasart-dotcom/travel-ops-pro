@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
 
 // ============================================
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Error fetching capacity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error saving capacity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -244,7 +245,7 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       console.error('Error deleting capacity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }

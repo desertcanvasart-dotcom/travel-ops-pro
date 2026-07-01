@@ -2,6 +2,7 @@
 // Updated to handle transport-specific fields
 
 import { createClient } from '@/lib/supabase/server'
+import { clientMessage } from '@/lib/api-errors'
 import { NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -73,7 +74,7 @@ export async function PUT(
     if (error) {
       console.error('Error updating service:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 400 }
       )
     }
@@ -122,7 +123,7 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting service:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 400 }
       )
     }
@@ -183,7 +184,7 @@ export async function GET(
     if (error) {
       console.error('Error fetching service:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 400 }
       )
     }

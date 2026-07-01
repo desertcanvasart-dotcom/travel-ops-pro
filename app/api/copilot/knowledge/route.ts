@@ -6,6 +6,7 @@
 // multi-tenancy: org-scoped via createServerClient() (RLS) + getCurrentOrgId().
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { chunkText, embedBatch, EMBEDDING_MODEL, toPgVector } from '@/lib/embeddings'
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
   }
 
   const { data, error } = await q
-  if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
   return NextResponse.json({ success: true, entries: data || [] })
 }

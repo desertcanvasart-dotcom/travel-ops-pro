@@ -1,5 +1,6 @@
 // app/api/rates/hotel-services/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createClient } from '@/lib/supabase'
 
@@ -16,7 +17,7 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -82,6 +83,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -32,7 +33,7 @@ export async function GET(
 
     if (error) {
       console.error('[Attraction API] Error fetching:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     if (!data) {
@@ -85,7 +86,7 @@ export async function GET(
 
   } catch (error: any) {
     console.error('[Attraction API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -154,7 +155,7 @@ export async function PUT(
 
       if (error) {
         console.error('[Attraction API] Error updating base:', error)
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+        return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
       }
 
       // Upsert language version for translatable fields
@@ -224,7 +225,7 @@ export async function PUT(
 
     if (error) {
       console.error('[Attraction API] Error updating:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -235,7 +236,7 @@ export async function PUT(
 
   } catch (error: any) {
     console.error('[Attraction API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -279,7 +280,7 @@ export async function DELETE(
     
     if (error) {
       console.error('[Attraction API] Error deleting:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
     
     return NextResponse.json({ 
@@ -289,6 +290,6 @@ export async function DELETE(
     
   } catch (error: any) {
     console.error('[Attraction API] Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

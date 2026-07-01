@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { success: false, error: templateError.message },
+        { success: false, error: clientMessage(templateError, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -231,7 +232,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error creating template from itinerary:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

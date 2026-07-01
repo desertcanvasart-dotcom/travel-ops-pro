@@ -3,6 +3,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching bookings:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Get summary counts
@@ -188,7 +189,7 @@ export async function POST(request: NextRequest) {
 
     if (createError) {
       console.error('Error creating booking:', createError)
-      return NextResponse.json({ success: false, error: createError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(createError, 'Internal server error') }, { status: 500 })
     }
 
     // Populate suppliers from itinerary services

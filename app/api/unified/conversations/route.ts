@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
@@ -191,6 +192,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error fetching unified conversations:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error'), success: false }, { status: 500 })
   }
 }

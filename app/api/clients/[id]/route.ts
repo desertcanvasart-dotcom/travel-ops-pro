@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Admin client that bypasses RLS
@@ -23,7 +24,7 @@ export async function GET(
 
     if (error) {
       console.error('Error fetching client:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     if (!data) {
@@ -58,7 +59,7 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating client:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -89,7 +90,7 @@ export async function PATCH(
 
     if (error) {
       console.error('Error updating client:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -265,7 +266,7 @@ export async function DELETE(
         )
       }
 
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Client deleted successfully' })

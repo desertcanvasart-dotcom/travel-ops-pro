@@ -1,5 +1,6 @@
 // GET /api/b2c/quotes/[id]/revisions/compare?from=1&to=2 — field diff between B2C revisions.
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -55,7 +56,7 @@ export async function GET(
       .in('version_number', [fromVersion, toVersion])
       .order('version_number', { ascending: true })
 
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     if (!revisions || revisions.length !== 2) {
       return NextResponse.json({ success: false, error: 'One or both revisions not found' }, { status: 404 })
     }
@@ -68,6 +69,6 @@ export async function GET(
       comparison: { from_version: fromVersion, to_version: toVersion, from_data: oldRev, to_data: newRev, differences, total_changes: differences.length },
     })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

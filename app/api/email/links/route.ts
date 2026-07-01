@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error fetching email link:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error creating email link:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -162,7 +163,7 @@ export async function DELETE(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error deleting email link:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -253,6 +254,6 @@ export async function PUT(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error auto-linking emails:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

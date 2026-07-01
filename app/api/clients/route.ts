@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error fetching clients:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     if (clientError) {
       console.error('❌ Client insert error:', clientError)
       return NextResponse.json(
-        { success: false, error: clientError.message, details: clientError },
+        { success: false, error: clientMessage(clientError, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to create client' },
+      { success: false, error: clientMessage(error, 'Failed to create client') },
       { status: 500 }
     )
   }

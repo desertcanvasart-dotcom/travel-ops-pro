@@ -11,6 +11,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { commitBriefToItinerary } from '@/lib/concierge/commit-brief-to-itinerary'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -39,7 +40,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext) {
     if (error) {
       console.error('[commit-itinerary GET] lookup failed:', error.message)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }

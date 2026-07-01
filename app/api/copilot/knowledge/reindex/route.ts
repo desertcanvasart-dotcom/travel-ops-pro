@@ -9,6 +9,7 @@
 // returns an error rather than indexing (no other feature is affected).
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { embedBatch, EMBEDDING_MODEL, toPgVector } from '@/lib/embeddings'
@@ -28,7 +29,7 @@ export async function POST(_request: NextRequest) {
     .order('sent_at', { ascending: false })
     .limit(MAX_MESSAGES_PER_RUN)
 
-  if (outErr) return NextResponse.json({ success: false, error: outErr.message }, { status: 500 })
+  if (outErr) return NextResponse.json({ success: false, error: clientMessage(outErr, 'Internal server error') }, { status: 500 })
 
   const candidates = (outbounds || []).filter((m: any) => {
     const text = (m.message_body || m.message_text || '').trim()
@@ -114,7 +115,7 @@ export async function POST(_request: NextRequest) {
     .insert(rows, { count: 'exact' })
 
   if (insertErr) {
-    return NextResponse.json({ success: false, error: insertErr.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(insertErr, 'Internal server error') }, { status: 500 })
   }
 
   return NextResponse.json({

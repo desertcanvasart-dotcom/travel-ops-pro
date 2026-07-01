@@ -1,5 +1,6 @@
 // POST /api/b2c/quotes/[id]/revisions/revert — revert a B2C offer to a prior revision. Manager+.
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole } from '@/lib/auth/current-org'
 
@@ -39,12 +40,12 @@ export async function POST(
       p_revert_reason: body.revert_reason || 'Reverted to previous version',
     })
 
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
     const { data: updatedQuote } = await supabaseAdmin.from('b2c_quotes').select('*').eq('id', id).single()
 
     return NextResponse.json({ success: true, message: `Quote reverted to version ${versionNumber}`, new_revision_id: newRevisionId, updated_quote: updatedQuote })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@
 // Location: /app/api/tours/save/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     if (tourError) {
       console.error('Error saving tour:', tourError)
       return NextResponse.json(
-        { success: false, error: tourError.message },
+        { success: false, error: clientMessage(tourError, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         // Rollback: delete the tour
         await supabase.from('tours').delete().eq('id', savedTourId)
         return NextResponse.json(
-          { success: false, error: daysError.message },
+          { success: false, error: clientMessage(daysError, 'Internal server error') },
           { status: 500 }
         )
       }

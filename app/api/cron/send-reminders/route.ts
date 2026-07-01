@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 
 // Verify cron secret for security
@@ -24,12 +25,12 @@ async function sendReminderEmail(params: {
 
     if (!response.ok) {
       const error = await response.json()
-      return { success: false, error: error.message || 'Failed to send' }
+      return { success: false, error: clientMessage(error, 'Failed to send') }
     }
 
     return { success: true }
   } catch (error: any) {
-    return { success: false, error: error.message }
+    return { success: false, error: clientMessage(error, 'Internal server error') }
   }
 }
 
@@ -212,7 +213,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Cron error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

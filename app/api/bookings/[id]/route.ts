@@ -3,6 +3,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -144,7 +145,7 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating booking:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: booking })
@@ -197,7 +198,7 @@ export async function DELETE(
 
     if (deleteError) {
       console.error('Error deleting booking:', deleteError)
-      return NextResponse.json({ success: false, error: deleteError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(deleteError, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({

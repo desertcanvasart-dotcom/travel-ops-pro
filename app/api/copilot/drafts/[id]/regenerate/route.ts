@@ -6,6 +6,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { generateDraft } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
@@ -133,7 +134,7 @@ export async function POST(
     console.error('Error regenerating draft:', error)
     const aiError = getUserFriendlyError(error)
     return NextResponse.json(
-      { success: false, error: aiError.message },
+      { success: false, error: clientMessage(aiError, 'Internal server error') },
       { status: aiError.status }
     )
   }

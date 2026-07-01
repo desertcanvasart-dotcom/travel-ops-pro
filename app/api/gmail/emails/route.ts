@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { fetchEmails, getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 
 export async function GET(request: NextRequest) {
@@ -26,9 +27,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ messages, nextPageToken })
   } catch (err: any) {
     if (err instanceof GmailAuthError) {
-      return NextResponse.json({ error: err.message }, { status: 401 })
+      return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 401 })
     }
     console.error('Fetch emails error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }

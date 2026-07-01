@@ -5,6 +5,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -55,7 +56,7 @@ export async function GET(
         return NextResponse.json({ error: 'Content not found' }, { status: 404 })
       }
       console.error('Error fetching content:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Calculate missing tiers
@@ -127,7 +128,7 @@ export async function PUT(
 
     if (contentError) {
       console.error('Error updating content:', contentError)
-      return NextResponse.json({ error: contentError.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(contentError, 'Internal server error') }, { status: 500 })
     }
 
     // Update variations if provided
@@ -241,7 +242,7 @@ export async function PATCH(
 
     if (error) {
       console.error('Error updating content:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -277,7 +278,7 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting content:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

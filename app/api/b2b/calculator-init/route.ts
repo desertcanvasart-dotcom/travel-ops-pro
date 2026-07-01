@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error('[calculator-init] Error:', err)
     return NextResponse.json(
-      { success: false, error: err.message || 'Internal server error' },
+      { success: false, error: clientMessage(err, 'Internal server error') },
       { status: 500 }
     )
   }

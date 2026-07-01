@@ -8,6 +8,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { 
   calculateDayBasedPricing, 
   calculateAutoPricing,
@@ -184,8 +185,7 @@ export async function GET(request: NextRequest) {
     console.error('❌ Test pricing error:', error)
     return NextResponse.json({ 
       success: false, 
-      error: error.message,
-      stack: error.stack 
+      error: clientMessage(error, 'Internal server error') 
     }, { status: 500 })
   }
 }

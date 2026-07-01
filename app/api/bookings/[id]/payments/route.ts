@@ -3,6 +3,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -45,7 +46,7 @@ export async function GET(
 
     if (error) {
       console.error('Error fetching payments:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // M21: aggregate per-currency. Summing 1000 USD + 1000 EUR into 2000
@@ -150,7 +151,7 @@ export async function POST(
 
     if (rpcError) {
       console.error('Error recording booking payment:', rpcError)
-      return NextResponse.json({ success: false, error: rpcError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(rpcError, 'Internal server error') }, { status: 500 })
     }
 
     const rpcResult = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows

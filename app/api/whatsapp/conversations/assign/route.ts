@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 
 // POST /api/whatsapp/conversations/assign - Assign or claim a conversation
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error assigning conversation:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -241,6 +242,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error fetching assignment:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

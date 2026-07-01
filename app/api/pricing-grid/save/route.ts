@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { randomBytes } from 'crypto'
 import { createServerClient } from '@/lib/supabase-server'
 import { gridCompleteness } from '@/app/pricing-grid/lib/grid-completeness'
@@ -416,7 +417,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Save pricing grid error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

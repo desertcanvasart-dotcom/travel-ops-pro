@@ -5,6 +5,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { MODEL_DEFAULT } from '@/lib/ai/models'
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching prompt templates:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -174,7 +175,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating prompt template:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data, { status: 201 })
@@ -270,7 +271,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       console.error('Error updating prompt template:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -325,7 +326,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting prompt template:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

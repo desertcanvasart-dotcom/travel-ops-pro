@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 // Admin client for all operations (bypasses RLS)
@@ -28,7 +29,7 @@ export async function GET(
     if (templateError) {
       console.error('Error fetching template:', templateError)
       return NextResponse.json(
-        { success: false, error: templateError.message },
+        { success: false, error: clientMessage(templateError, 'Internal server error') },
         { status: 404 }
       )
     }
@@ -150,7 +151,7 @@ export async function PUT(
     if (error) {
       console.error('Error updating template:', error)
       return NextResponse.json(
-        { success: false, error: error.message || 'Failed to update template' },
+        { success: false, error: clientMessage(error, 'Failed to update template') },
         { status: 500 }
       )
     }

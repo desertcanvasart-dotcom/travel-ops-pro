@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching tasks:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Calculate summary from all tasks for accurate counts
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating task:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })

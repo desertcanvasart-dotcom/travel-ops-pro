@@ -11,6 +11,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
@@ -56,7 +57,7 @@ async function run() {
     .limit(BATCH)
 
   if (error) {
-    return { success: false, error: error.message, processed: 0, sent: 0, failed: 0 }
+    return { success: false, error: clientMessage(error, 'Internal server error'), processed: 0, sent: 0, failed: 0 }
   }
 
   let sent = 0

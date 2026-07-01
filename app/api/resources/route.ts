@@ -34,8 +34,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Supabase error:', error)
       return NextResponse.json({ 
-        error: 'Failed to fetch transportation rates', 
-        details: error.message,
+        error: 'Failed to fetch transportation rates',
         code: error.code 
       }, { status: 500 })
     }
@@ -50,8 +49,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Catch error:', error)
     return NextResponse.json({ 
-      error: 'Internal server error', 
-      details: error.message 
+      error: 'Internal server error' 
     }, { status: 500 })
   }
 }
@@ -115,6 +113,6 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
   } catch (error: any) {
     console.error('Error in POST:', error)
-    return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

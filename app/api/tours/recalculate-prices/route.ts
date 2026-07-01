@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
 
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error fetching templates:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
             name: template.template_name,
             price: null,
             tier: null,
-            error: updateError.message
+            error: clientMessage(updateError, 'Internal server error')
           })
         } else {
           console.log(`✅ Updated ${template.template_name}: €${startingPrice} (${startingTier})`)
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
           name: template.template_name,
           price: null,
           tier: null,
-          error: err.message
+          error: clientMessage(err, 'Internal server error')
         })
       }
     }
@@ -181,7 +182,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Recalculation error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to recalculate prices' },
+      { success: false, error: clientMessage(error, 'Failed to recalculate prices') },
       { status: 500 }
     )
   }
@@ -197,7 +198,7 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
 
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     const withPrice = templates?.filter(t => t.cached_starting_price !== null) || []
@@ -224,7 +225,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

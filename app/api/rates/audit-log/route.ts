@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@/lib/supabase'
 
 /**
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error in audit log API:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

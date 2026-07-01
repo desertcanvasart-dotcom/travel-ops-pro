@@ -5,6 +5,7 @@
 // Ported from the sibling app (autoura-saas), adapted to ORG multi-tenancy.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { chunkText, embedBatch, EMBEDDING_MODEL, toPgVector } from '@/lib/embeddings'
@@ -56,7 +57,7 @@ export async function PATCH(
       .eq('id', id)
       .select('id, is_active, metadata')
       .single()
-    if (updErr) return NextResponse.json({ success: false, error: updErr.message }, { status: 500 })
+    if (updErr) return NextResponse.json({ success: false, error: clientMessage(updErr, 'Internal server error') }, { status: 500 })
     return NextResponse.json({ success: true, entry: updated })
   }
 
@@ -154,7 +155,7 @@ export async function DELETE(
   }
 
   const { error } = await supabase.from('copilot_knowledge').delete().eq('id', id)
-  if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
   return NextResponse.json({ success: true })
 }
