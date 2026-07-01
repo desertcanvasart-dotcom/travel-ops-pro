@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendEmailInternal } from '@/lib/email-send'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -216,20 +217,17 @@ async function sendEmailNotification(
     </html>
   `
 
-  // Send via Gmail API
-  const response = await fetch(`${baseUrl}/api/gmail/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: toEmail,
-      subject: `[Autoura] ${subject}`,
-      html: htmlContent
-    })
+  // Send via the shared in-process helper. (A server-to-server fetch to
+  // /api/send-email would be rejected by the /api/* auth gate — no session.)
+  const result = await sendEmailInternal({
+    to: toEmail,
+    subject: `[Autoura] ${subject}`,
+    html: htmlContent,
   })
 
-  if (!response.ok) {
-    throw new Error('Failed to send email via Gmail API')
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to send email')
   }
 
-  return response.json()
+  return result
 }

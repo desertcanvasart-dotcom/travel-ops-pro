@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
 const supabaseAdmin = createClient(
@@ -101,14 +102,9 @@ export async function POST(
       messageText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     }</div>`
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/send-email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: booking.client_email, subject, html, type: 'booking_confirmation' }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      return NextResponse.json({ success: false, error: err.error || err.message || 'Email send failed' }, { status: 502 })
+    const result = await sendEmailInternal({ to: booking.client_email, subject, html })
+    if (!result.success) {
+      return NextResponse.json({ success: false, error: result.error || 'Email send failed' }, { status: 502 })
     }
 
     return NextResponse.json({ success: true, channel: 'email', to: booking.client_email })

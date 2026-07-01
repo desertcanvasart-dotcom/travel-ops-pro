@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
+import { sendEmailInternal } from '@/lib/email-send'
 
 const CRON_SECRET = process.env.CRON_SECRET
 const supabaseAdmin = createClient(
@@ -32,14 +33,9 @@ async function dispatchOne(row: any): Promise<{ ok: boolean; error?: string }> {
     const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;line-height:1.6">${
       String(row.body).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     }</div>`
-    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/send-email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: row.recipient_contact, subject, html, type: 'scheduled_send' }),
-    })
-    if (res.ok) return { ok: true }
-    const err = await res.json().catch(() => ({}))
-    return { ok: false, error: err.error || err.message || `send-email ${res.status}` }
+    const result = await sendEmailInternal({ to: row.recipient_contact, subject, html })
+    if (result.success) return { ok: true }
+    return { ok: false, error: result.error || 'send-email failed' }
   }
   // No SMS provider wired — fail explicitly rather than silently drop.
   return { ok: false, error: `Unsupported channel: ${row.channel}` }
