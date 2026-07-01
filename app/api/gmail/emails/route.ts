@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchEmails, getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
-  const userId = searchParams.get('userId')
+  // Derive the user from the session, never a client-supplied userId (IDOR).
+  const userId = await getCurrentUserId()
   const query = searchParams.get('query') || ''
   const pageToken = searchParams.get('pageToken') || undefined
   const maxResults = parseInt(searchParams.get('maxResults') || '20')
 
   if (!userId) {
-    return NextResponse.json({ error: 'User ID required' }, { status: 400 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {

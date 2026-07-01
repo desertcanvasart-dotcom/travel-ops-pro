@@ -61,6 +61,34 @@ export async function getCurrentOrgId(): Promise<string | null> {
   return (membership as { org_id?: string } | null)?.org_id ?? null
 }
 
+// Resolve the current request's authenticated user id from the session cookie.
+// Returns null if there's no valid session.
+//
+// Use this instead of trusting a client-supplied userId (query param or request
+// body): a logged-in user could otherwise pass someone else's id and act on
+// their data (IDOR). The /api/* middleware guarantees *a* session exists, but
+// not that a supplied userId matches it.
+export async function getCurrentUserId(): Promise<string | null> {
+  const cookieStore = await cookies()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set() {},
+        remove() {},
+      },
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
+  return user?.id ?? null
+}
+
 // Convenience: same as getCurrentOrgId but throws on missing. Use when
 // you'd rather a route 500 than silently bypass scoping — useful in
 // background workers where there's no client to return a 403 to.
