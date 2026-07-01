@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { google } from 'googleapis'
 import { refreshAccessToken } from '@/lib/gmail'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,10 +19,11 @@ const oauth2Client = new google.auth.OAuth2(
 // GET - Fetch all labels
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get('userId')
-    
+    // Derive the user from the session, never a client-supplied userId (IDOR).
+    const userId = await getCurrentUserId()
+
     if (!userId) {
-      return NextResponse.json({ error: 'User ID required' }, { status: 400 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { data: tokenData, error: tokenError } = await supabase

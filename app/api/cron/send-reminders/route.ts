@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { sendEmailInternal } from '@/lib/email-send'
 
 // Verify cron secret for security
 const CRON_SECRET = process.env.CRON_SECRET
@@ -11,27 +12,12 @@ async function sendReminderEmail(params: {
   subject: string
   html: string
 }): Promise<{ success: boolean; error?: string }> {
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/send-email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-        type: 'payment_reminder'
-      })
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      return { success: false, error: clientMessage(error, 'Failed to send') }
-    }
-
-    return { success: true }
-  } catch (error: any) {
-    return { success: false, error: clientMessage(error, 'Internal server error') }
-  }
+  const result = await sendEmailInternal({
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+  })
+  return { success: result.success, error: result.error }
 }
 
 function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {

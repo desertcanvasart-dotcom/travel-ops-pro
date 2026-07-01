@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole } from '@/lib/auth/current-org'
+import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
 const supabaseAdmin = createClient(
@@ -79,14 +80,9 @@ export async function POST(
       const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;line-height:1.6">${
         messageText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       }</div>`
-      const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/send-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: clientEmail, subject, html, type: 'b2c_quote' }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        return NextResponse.json({ success: false, error: err.error || err.message || 'Email send failed' }, { status: 502 })
+      const result = await sendEmailInternal({ to: clientEmail, subject, html })
+      if (!result.success) {
+        return NextResponse.json({ success: false, error: result.error || 'Email send failed' }, { status: 502 })
       }
     }
 

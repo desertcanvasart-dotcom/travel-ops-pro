@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { sendEmailInternal } from '@/lib/email-send'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -275,21 +276,18 @@ async function sendReminderEmail(
     </html>
   `
 
-  const response = await fetch(`${baseUrl}/api/gmail/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: toEmail,
-      subject: `[Autoura] ${subject}`,
-      html: htmlContent
-    })
+  // In-process send (a fetch to /api/send-email would hit the /api/* auth gate).
+  const result = await sendEmailInternal({
+    to: toEmail,
+    subject: `[Autoura] ${subject}`,
+    html: htmlContent,
   })
 
-  if (!response.ok) {
-    throw new Error('Failed to send email')
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to send email')
   }
 
-  return response.json()
+  return result
 }
 
 // Format date helper

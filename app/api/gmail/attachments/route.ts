@@ -2,22 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/gmail/attachments?userId=xxx&messageId=xxx&attachmentId=xxx&filename=xxx
+// GET /api/gmail/attachments?messageId=xxx&attachmentId=xxx&filename=xxx
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    // Derive the user from the session, never a client-supplied userId (IDOR).
+    const userId = await getCurrentUserId()
     const messageId = searchParams.get('messageId')
     const attachmentId = searchParams.get('attachmentId')
     const filename = searchParams.get('filename') || 'attachment'
 
-    if (!userId || !messageId || !attachmentId) {
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!messageId || !attachmentId) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
