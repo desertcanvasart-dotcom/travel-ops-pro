@@ -39,6 +39,14 @@ export function mapInvoiceToPayload(invoice: Record<string, unknown>): InvoicePa
 
 // Map Autoura expense DB record to provider-agnostic BillPayload
 export function mapExpenseToBillPayload(expense: Record<string, unknown>): BillPayload {
+  // `expense.amount` is the gross total. Carry any recorded tax (H9) instead of
+  // hardcoding 0; the line amount is the net (gross − tax) so line + tax = total.
+  // The expenses table has no tax column today, so tax is 0 until one is added —
+  // reading it optionally means the sync is already correct when that happens.
+  const total = Number(expense.amount || 0)
+  const taxAmount = Number(expense.tax_amount || 0)
+  const net = Math.round((total - taxAmount) * 100) / 100
+
   return {
     bill_number: String(expense.expense_number || ''),
     vendor_name: String(expense.supplier_name || 'Unknown Supplier'),
@@ -46,11 +54,11 @@ export function mapExpenseToBillPayload(expense: Record<string, unknown>): BillP
     line_items: [{
       description: String(expense.description || expense.category || 'Expense'),
       quantity: 1,
-      unit_price: Number(expense.amount || 0),
-      amount: Number(expense.amount || 0),
+      unit_price: net,
+      amount: net,
     }],
-    total_amount: Number(expense.amount || 0),
-    tax_amount: 0,
+    total_amount: total,
+    tax_amount: taxAmount,
     currency: String(expense.currency || 'EUR'),
     date: String(expense.expense_date || new Date().toISOString().split('T')[0]),
     due_date: undefined,

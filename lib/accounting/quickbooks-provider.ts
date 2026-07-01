@@ -9,6 +9,7 @@ import {
   AccountingAuthError,
   AccountingSyncError,
 } from './types'
+import { resolveTaxTreatment, round2 } from './tax'
 
 const QB_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2'
 const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
@@ -283,6 +284,7 @@ export class QuickBooksProvider implements AccountingProvider {
   }
 
   private mapToQBInvoice(invoice: InvoicePayload) {
+    const taxMode = resolveTaxTreatment(invoice.subtotal, invoice.tax_amount, invoice.total_amount)
     return {
       DocNumber: invoice.invoice_number,
       CustomerRef: invoice.contactExternalId
@@ -291,6 +293,17 @@ export class QuickBooksProvider implements AccountingProvider {
       TxnDate: invoice.issue_date,
       DueDate: invoice.due_date || undefined,
       CurrencyRef: { value: invoice.currency },
+      // H9: carry the invoice tax so QB's total matches the Autoura total.
+      // GlobalTaxCalculation tells QB whether the line amounts include the tax;
+      // TxnTaxDetail.TotalTax supplies the amount (manual-tax companies). Note:
+      // QB companies on Automated Sales Tax may recompute from per-line tax
+      // codes — validate against the connected company before go-live.
+      ...(taxMode !== 'none'
+        ? {
+            GlobalTaxCalculation: taxMode === 'inclusive' ? 'TaxInclusive' : 'TaxExcluded',
+            TxnTaxDetail: { TotalTax: round2(invoice.tax_amount) },
+          }
+        : {}),
       Line: [
         ...invoice.line_items.map(li => ({
           DetailType: 'SalesItemLineDetail',
@@ -307,6 +320,8 @@ export class QuickBooksProvider implements AccountingProvider {
   }
 
   private mapToQBBill(bill: BillPayload) {
+    // Bill line amounts are net (gross − tax), so tax is charged on top.
+    const hasTax = bill.tax_amount > 0
     return {
       DocNumber: bill.bill_number,
       VendorRef: bill.vendorExternalId
@@ -315,6 +330,13 @@ export class QuickBooksProvider implements AccountingProvider {
       TxnDate: bill.date,
       DueDate: bill.due_date || undefined,
       CurrencyRef: { value: bill.currency },
+      // H9: carry the bill tax so QB's total matches the Autoura total.
+      ...(hasTax
+        ? {
+            GlobalTaxCalculation: 'TaxExcluded',
+            TxnTaxDetail: { TotalTax: round2(bill.tax_amount) },
+          }
+        : {}),
       Line: bill.line_items.map(li => ({
         DetailType: 'AccountBasedExpenseLineDetail',
         Amount: li.amount,

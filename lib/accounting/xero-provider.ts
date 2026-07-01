@@ -9,6 +9,7 @@ import {
   AccountingAuthError,
   AccountingSyncError,
 } from './types'
+import { resolveTaxTreatment, allocateLineTax } from './tax'
 
 const XERO_AUTH_URL = 'https://login.xero.com/identity/connect/authorize'
 const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
@@ -252,6 +253,17 @@ export class XeroProvider implements AccountingProvider {
   }
 
   private mapToXeroInvoice(invoice: InvoicePayload, type: 'ACCREC' | 'ACCPAY') {
+    // H9: carry the invoice tax so Xero's total matches the Autoura total.
+    // Without an explicit per-line TaxAmount, Xero adds 0 tax (LineAmountTypes
+    // 'Exclusive' with no tax rate) and its total falls short by tax_amount.
+    // We detect whether tax is on-top (Exclusive) or already inside the line
+    // amounts (Inclusive) and distribute the tax across the lines. Note: Xero
+    // honours an explicit line TaxAmount, but the org's TaxType/tax rate config
+    // can still override it — validate against the connected org before go-live.
+    const taxMode = resolveTaxTreatment(invoice.subtotal, invoice.tax_amount, invoice.total_amount)
+    const lineTax = taxMode !== 'none'
+      ? allocateLineTax(invoice.line_items.map(li => li.amount), invoice.tax_amount)
+      : null
     return {
       Type: type,
       InvoiceNumber: invoice.invoice_number,
@@ -262,18 +274,23 @@ export class XeroProvider implements AccountingProvider {
       DueDateString: invoice.due_date || undefined,
       Status: this.mapInvoiceStatus(invoice.status),
       CurrencyCode: invoice.currency,
-      LineAmountTypes: 'Exclusive',
-      LineItems: invoice.line_items.map(li => ({
+      LineAmountTypes: taxMode === 'inclusive' ? 'Inclusive' : 'Exclusive',
+      LineItems: invoice.line_items.map((li, i) => ({
         Description: li.description,
         Quantity: li.quantity,
         UnitAmount: li.unit_price,
         AccountCode: li.account_code || '200', // Default revenue account
+        ...(lineTax ? { TaxAmount: lineTax[i] } : {}),
       })),
       Reference: invoice.notes || undefined,
     }
   }
 
   private mapToXeroBill(bill: BillPayload) {
+    // H9: bill line amounts are net (gross − tax), so tax is charged on top.
+    const lineTax = bill.tax_amount > 0
+      ? allocateLineTax(bill.line_items.map(li => li.amount), bill.tax_amount)
+      : null
     return {
       Type: 'ACCPAY' as const,
       InvoiceNumber: bill.bill_number,
@@ -285,11 +302,12 @@ export class XeroProvider implements AccountingProvider {
       Status: 'AUTHORISED',
       CurrencyCode: bill.currency,
       LineAmountTypes: 'Exclusive',
-      LineItems: bill.line_items.map(li => ({
+      LineItems: bill.line_items.map((li, i) => ({
         Description: li.description,
         Quantity: li.quantity,
         UnitAmount: li.unit_price,
         AccountCode: li.account_code || '400', // Default expense account
+        ...(lineTax ? { TaxAmount: lineTax[i] } : {}),
       })),
       Reference: bill.description || undefined,
     }
