@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { google } from 'googleapis'
 import { refreshAccessToken } from '@/lib/gmail'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,9 +17,15 @@ const oauth2Client = new google.auth.OAuth2(
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, messageIds, action, labelId } = await request.json()
+    const { messageIds, action, labelId } = await request.json()
 
-    if (!userId || !messageIds || !action) {
+    // Derive the user from the session, never a client-supplied userId (IDOR).
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!messageIds || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 

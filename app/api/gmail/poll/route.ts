@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,11 +13,12 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    // Derive the user from the session, never a client-supplied userId (IDOR).
+    const userId = await getCurrentUserId()
     const historyId = searchParams.get('historyId')
 
     if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get authenticated Gmail client (handles token fetch + refresh)
