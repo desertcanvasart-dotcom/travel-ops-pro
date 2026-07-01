@@ -5,6 +5,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -27,7 +28,7 @@ export async function GET(
       .order('version_number', { ascending: false })
 
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Resolve editor emails (auth.users isn't directly joinable under RLS).
@@ -49,6 +50,6 @@ export async function GET(
     return NextResponse.json({ success: true, revisions: withEditor, total_revisions: withEditor.length })
   } catch (error: any) {
     console.error('Quote revisions list error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

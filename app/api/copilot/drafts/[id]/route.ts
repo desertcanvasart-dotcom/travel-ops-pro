@@ -6,6 +6,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import type { ApproveDraftRequest } from '@/types/copilot'
 
@@ -57,7 +58,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching draft:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -124,7 +125,7 @@ export async function PUT(
   } catch (error: any) {
     console.error('Error reviewing draft:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

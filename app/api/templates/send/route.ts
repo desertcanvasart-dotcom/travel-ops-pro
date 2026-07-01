@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, sendEmail as gmailSendEmail } from '@/lib/gmail'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
@@ -148,10 +149,10 @@ async function sendEmail(
     return { success: true }
   } catch (error: any) {
     if (error instanceof GmailAuthError) {
-      return { success: false, error: error.message }
+      return { success: false, error: clientMessage(error, 'Internal server error') }
     }
     console.error('Email send error:', error)
-    return { success: false, error: error.message || 'Failed to send email' }
+    return { success: false, error: clientMessage(error, 'Failed to send email') }
   }
 }
 
@@ -168,6 +169,6 @@ async function sendWhatsApp(
     return { success: result.success, error: result.error }
   } catch (error: any) {
     console.error('WhatsApp send error:', error)
-    return { success: false, error: error.message || 'Failed to send WhatsApp message' }
+    return { success: false, error: clientMessage(error, 'Failed to send WhatsApp message') }
   }
 }

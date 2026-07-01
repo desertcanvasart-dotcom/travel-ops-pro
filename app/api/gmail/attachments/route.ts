@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUserId } from '@/lib/auth/current-org'
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error downloading attachment:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to download attachment' },
+      { error: clientMessage(error, 'Failed to download attachment') },
       { status: 500 }
     )
   }

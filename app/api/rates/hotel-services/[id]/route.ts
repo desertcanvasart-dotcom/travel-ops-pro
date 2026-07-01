@@ -1,5 +1,6 @@
 // app/api/rates/hotel-services/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@/lib/supabase'
 
 export async function PUT(
@@ -22,7 +23,7 @@ export async function PUT(
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -43,6 +44,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

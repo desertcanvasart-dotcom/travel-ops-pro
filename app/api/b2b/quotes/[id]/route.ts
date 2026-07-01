@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -107,7 +108,7 @@ export async function GET(
 
   } catch (error: any) {
     console.error('Error in GET /api/b2b/quotes/[id]:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -133,7 +134,7 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating quote:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Snapshot the updated state as a new revision (best-effort — never blocks
@@ -152,7 +153,7 @@ export async function PUT(
 
   } catch (error: any) {
     console.error('Error in PUT /api/b2b/quotes/[id]:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -171,13 +172,13 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting quote:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
 
   } catch (error: any) {
     console.error('Error in DELETE /api/b2b/quotes/[id]:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

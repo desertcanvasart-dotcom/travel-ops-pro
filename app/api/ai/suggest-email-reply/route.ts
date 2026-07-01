@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { generateReplyOptions } from '@/lib/ai/reply-suggestions'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
@@ -97,7 +98,7 @@ export async function GET(request: NextRequest) {
       .eq('thread_id', threadId)
       .in('status', ['pending', 'approved'])
       .order('created_at', { ascending: false })
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
     return NextResponse.json({ success: true, drafts: data ?? [] })
   } catch (error) {

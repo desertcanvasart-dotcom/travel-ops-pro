@@ -3,6 +3,7 @@
 // Used by Suppliers page "Rates" tab
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching supplier rates:', error)
     return NextResponse.json({ 
       success: false, 
-      error: error.message 
+      error: clientMessage(error, 'Internal server error') 
     }, { status: 500 })
   }
 }

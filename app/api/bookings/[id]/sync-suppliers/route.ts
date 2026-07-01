@@ -3,6 +3,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -220,7 +221,7 @@ export async function POST(
 
     if (insertError) {
       console.error('Error inserting supplier statuses:', insertError)
-      return NextResponse.json({ success: false, error: insertError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(insertError, 'Internal server error') }, { status: 500 })
     }
 
     console.log(`✅ Synced ${inserted?.length || 0} suppliers to booking ${booking.booking_code}`)

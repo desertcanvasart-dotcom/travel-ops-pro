@@ -4,6 +4,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -72,7 +73,7 @@ export async function GET(
       .order('version_number', { ascending: true })
 
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
     if (!revisions || revisions.length !== 2) {
       return NextResponse.json({ success: false, error: 'One or both revisions not found' }, { status: 404 })
@@ -94,6 +95,6 @@ export async function GET(
     })
   } catch (error: any) {
     console.error('Quote revision compare error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

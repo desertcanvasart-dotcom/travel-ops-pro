@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -32,7 +33,7 @@ export async function GET(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     if (!data) {
@@ -41,7 +42,7 @@ export async function GET(
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -62,12 +63,12 @@ export async function PUT(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -96,11 +97,11 @@ export async function DELETE(
     const { error } = await supabaseAdmin.from('b2b_partners').delete().eq('id', id)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Partner deleted' })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

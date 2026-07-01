@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('GET /api/payments error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('POST /api/payments error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

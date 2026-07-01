@@ -3,6 +3,7 @@
 // structured by grid slot for dropdown population.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
@@ -245,7 +246,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: rates })
   } catch (error: any) {
     console.error('Failed to fetch grid rates:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 

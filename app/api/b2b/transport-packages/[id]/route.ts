@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -50,13 +51,13 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating transport package:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -74,12 +75,12 @@ export async function DELETE(
 
     if (error) {
       console.error('Error deleting transport package:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

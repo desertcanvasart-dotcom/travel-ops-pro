@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@/lib/supabase/server'
 import { locales, type Locale } from '@/i18n/config'
 
@@ -65,7 +66,7 @@ export async function PATCH(request: Request) {
 
     if (error) {
       console.error('Error updating user preferences:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, ...updateData })

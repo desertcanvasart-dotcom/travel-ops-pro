@@ -5,6 +5,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('Error fetching categories:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // If counts requested, fetch them
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
         )
       }
       console.error('Error creating category:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data, { status: 201 })
@@ -172,7 +173,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       console.error('Error updating category:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -226,7 +227,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting category:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

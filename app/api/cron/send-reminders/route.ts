@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { sendEmailInternal } from '@/lib/email-send'
 
@@ -198,7 +199,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Cron error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

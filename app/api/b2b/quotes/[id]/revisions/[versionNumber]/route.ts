@@ -4,6 +4,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -34,12 +35,12 @@ export async function GET(
       if (error.code === 'PGRST116') {
         return NextResponse.json({ success: false, error: 'Revision not found' }, { status: 404 })
       }
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, revision })
   } catch (error: any) {
     console.error('Quote revision detail error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

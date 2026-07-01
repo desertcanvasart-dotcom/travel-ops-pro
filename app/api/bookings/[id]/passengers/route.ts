@@ -122,7 +122,7 @@ export async function POST(
 
     if (error) {
       console.error('Error creating passenger:', error)
-      return NextResponse.json({ success: false, error: 'Failed to create passenger', details: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: 'Failed to create passenger' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Passenger added successfully', data: passenger })

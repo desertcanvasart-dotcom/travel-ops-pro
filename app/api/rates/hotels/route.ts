@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createClient } from '@supabase/supabase-js'
@@ -33,13 +34,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('GET accommodation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: data || [] })
   } catch (error: any) {
     console.error('GET accommodation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -162,12 +163,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('POST accommodation_rates error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST accommodation_rates catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

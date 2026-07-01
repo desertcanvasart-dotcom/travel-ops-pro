@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -82,7 +83,7 @@ export async function PATCH(request: NextRequest) {
   } catch (err: any) {
     console.error('[update-template-itinerary] Error:', err)
     return NextResponse.json(
-      { success: false, error: err.message || 'Internal server error' },
+      { success: false, error: clientMessage(err, 'Internal server error') },
       { status: 500 }
     )
   }

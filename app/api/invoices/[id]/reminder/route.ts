@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
@@ -232,7 +233,7 @@ export async function POST(
   } catch (error: any) {
     console.error('Error sending reminder:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -281,7 +282,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching reminders:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

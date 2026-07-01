@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -111,7 +112,7 @@ export async function PUT(request: NextRequest) {
   } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

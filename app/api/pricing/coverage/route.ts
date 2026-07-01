@@ -11,6 +11,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { calculateDayBasedPricing, type ServiceTier } from '@/lib/auto-pricing-service'
 import { computeCoverage } from '@/lib/pricing-coverage'
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
 
     const { data: templatesData, error } = await query
     if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     const all = (templatesData || []).map((t: any) => ({ id: t.id, name: t.template_name }))
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
   } catch (e: any) {
     console.error('Pricing coverage error:', e)
     return NextResponse.json(
-      { success: false, error: e.message || 'Coverage report failed' },
+      { success: false, error: clientMessage(e, 'Coverage report failed') },
       { status: 500 }
     )
   }

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -144,7 +145,7 @@ export async function GET(
       .order('sequence_order')
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     const enrichedServices = await Promise.all((data || []).map(async (service) => {
@@ -157,7 +158,7 @@ export async function GET(
 
     return NextResponse.json({ success: true, data: enrichedServices })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -200,12 +201,12 @@ export async function POST(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -269,7 +270,7 @@ export async function PUT(
         .eq('variation_id', id)
 
       if (snapshotError) {
-        return NextResponse.json({ error: snapshotError.message }, { status: 500 })
+        return NextResponse.json({ error: clientMessage(snapshotError, 'Internal server error') }, { status: 500 })
       }
 
       // Step 1: Delete all existing services for this variation
@@ -279,7 +280,7 @@ export async function PUT(
         .eq('variation_id', id)
 
       if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 })
+        return NextResponse.json({ error: clientMessage(deleteError, 'Internal server error') }, { status: 500 })
       }
 
       // Step 2: Insert all new services
@@ -314,7 +315,7 @@ export async function PUT(
               console.error(`CRITICAL: failed to restore tour_variation_services for variation ${id} after a failed replace — services may be lost:`, restoreError)
             }
           }
-          return NextResponse.json({ error: insertError.message }, { status: 500 })
+          return NextResponse.json({ error: clientMessage(insertError, 'Internal server error') }, { status: 500 })
         }
       }
 
@@ -326,7 +327,7 @@ export async function PUT(
         .order('sequence_order')
 
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
       }
 
       return NextResponse.json({
@@ -336,7 +337,7 @@ export async function PUT(
       })
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -360,11 +361,11 @@ export async function DELETE(
       .eq('variation_id', id)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, message: 'Service deleted' })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { determineCapacityResult } from '@/lib/capacity-availability'
 
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error checking capacity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }

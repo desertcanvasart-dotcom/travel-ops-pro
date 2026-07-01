@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('GET error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Map accommodation_rates fields to Resource interface expected by ResourceAssignmentV2
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: mappedData })
   } catch (error: any) {
     console.error('GET catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -83,8 +84,7 @@ export async function POST(request: NextRequest) {
       console.error('Supabase insert error:', insertError)
       return NextResponse.json({ 
         success: false, 
-        error: insertError.message,
-        details: insertError,
+        error: clientMessage(insertError, 'Internal server error'),
         hint: 'Check if RLS is blocking the insert'
       }, { status: 500 })
     }
@@ -107,8 +107,7 @@ export async function POST(request: NextRequest) {
     console.error('Error:', error)
     return NextResponse.json({ 
       success: false, 
-      error: error.message,
-      stack: error.stack 
+      error: clientMessage(error, 'Internal server error') 
     }, { status: 500 })
   }
 }

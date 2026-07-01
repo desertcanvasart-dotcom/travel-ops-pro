@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -28,7 +29,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Error fetching activity rate:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -61,7 +62,7 @@ export async function PUT(
   } catch (error: any) {
     console.error('Error updating activity rate:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -85,7 +86,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Error deleting activity rate:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

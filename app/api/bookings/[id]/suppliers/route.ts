@@ -3,6 +3,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -43,7 +44,7 @@ export async function GET(
 
     if (error) {
       console.error('Error fetching suppliers:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: suppliers })
@@ -104,7 +105,7 @@ export async function POST(
 
       if (error) {
         console.error('Error updating supplier:', error)
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+        return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
       }
 
       // Check if all suppliers are confirmed and update booking status
@@ -143,7 +144,7 @@ export async function POST(
 
     if (error) {
       console.error('Error creating supplier:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data: supplier }, { status: 201 })

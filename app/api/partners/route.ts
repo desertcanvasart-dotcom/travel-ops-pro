@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -142,6 +143,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Error fetching partners:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

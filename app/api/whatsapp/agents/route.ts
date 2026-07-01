@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 
 // GET /api/whatsapp/agents - List all team members (for WhatsApp assignment)
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error fetching agents:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error creating agent:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -121,7 +122,7 @@ export async function PATCH(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error updating agent:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -164,6 +165,6 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error deactivating agent:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

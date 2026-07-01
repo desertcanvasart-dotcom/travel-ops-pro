@@ -4,6 +4,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole } from '@/lib/auth/current-org'
 
@@ -33,7 +34,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error bulk deleting quotes:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -43,6 +44,6 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Bulk delete error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

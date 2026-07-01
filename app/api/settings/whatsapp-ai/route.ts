@@ -6,6 +6,7 @@
 // WhatsApp reply drafts. Nothing is ever sent automatically.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 
@@ -23,7 +24,7 @@ export async function GET(_request: NextRequest) {
     .eq('id', orgId)
     .single()
 
-  if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   return NextResponse.json({ success: true, enabled: (data as any)?.whatsapp_ai_enabled ?? false })
 }
 
@@ -45,6 +46,6 @@ export async function PUT(request: NextRequest) {
     .update({ whatsapp_ai_enabled: body.enabled })
     .eq('id', orgId)
 
-  if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   return NextResponse.json({ success: true, enabled: body.enabled })
 }

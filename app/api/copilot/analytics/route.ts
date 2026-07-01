@@ -9,6 +9,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { requireRole } from '@/lib/auth/current-org'
 
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
   if (startIso) draftsQuery = draftsQuery.gte('created_at', startIso)
 
   const { data: drafts, error: draftsErr } = await draftsQuery
-  if (draftsErr) return NextResponse.json({ success: false, error: draftsErr.message }, { status: 500 })
+  if (draftsErr) return NextResponse.json({ success: false, error: clientMessage(draftsErr, 'Internal server error') }, { status: 500 })
 
   const rows = (drafts || []) as any[]
   const total = rows.length

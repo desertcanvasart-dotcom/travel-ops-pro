@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
@@ -92,6 +93,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('❌ Send receipt error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

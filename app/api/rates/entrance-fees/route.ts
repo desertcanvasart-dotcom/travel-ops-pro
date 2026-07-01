@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createClient } from '@supabase/supabase-js'
 
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('GET entrance_fees error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     // Merge language versions for non-English
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('GET entrance_fees catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
@@ -170,12 +171,12 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('POST entrance_fees error:', error)
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data, updated: !!existing?.length })
   } catch (error: any) {
     console.error('POST entrance_fees catch error:', error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }

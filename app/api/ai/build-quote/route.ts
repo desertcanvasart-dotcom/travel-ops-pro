@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
@@ -283,7 +284,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to build quote'
+        error: clientMessage(error, 'Failed to build quote')
       },
       { status: 500 }
     )

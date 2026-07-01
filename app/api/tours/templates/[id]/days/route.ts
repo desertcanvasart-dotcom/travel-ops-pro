@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -81,7 +82,7 @@ export async function GET(
     if (activitiesError) {
       console.error('Error fetching activities:', activitiesError)
       return NextResponse.json(
-        { success: false, error: activitiesError.message },
+        { success: false, error: clientMessage(activitiesError, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -120,7 +121,7 @@ export async function GET(
   } catch (error: any) {
     console.error('❌ Error fetching days:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -182,7 +183,7 @@ export async function POST(
       if (error) {
         console.error('Error batch inserting activities:', error)
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: clientMessage(error, 'Internal server error') },
           { status: 500 }
         )
       }
@@ -266,7 +267,7 @@ export async function POST(
     if (error) {
       console.error('Error inserting activity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -285,7 +286,7 @@ export async function POST(
   } catch (error: any) {
     console.error('❌ Error adding activity:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -358,7 +359,7 @@ export async function PATCH(
     if (error) {
       console.error('Error updating activity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -371,7 +372,7 @@ export async function PATCH(
   } catch (error: any) {
     console.error('❌ Error updating activity:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }
@@ -402,7 +403,7 @@ export async function DELETE(
 
       if (error) {
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: clientMessage(error, 'Internal server error') },
           { status: 500 }
         )
       }
@@ -429,7 +430,7 @@ export async function DELETE(
 
       if (error) {
         return NextResponse.json(
-          { success: false, error: error.message },
+          { success: false, error: clientMessage(error, 'Internal server error') },
           { status: 500 }
         )
       }
@@ -457,7 +458,7 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting activity:', error)
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: clientMessage(error, 'Internal server error') },
         { status: 500 }
       )
     }
@@ -484,7 +485,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('❌ Error deleting activity:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }
     )
   }

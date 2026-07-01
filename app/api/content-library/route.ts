@@ -5,6 +5,7 @@
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     if (contentError) {
       console.error('Error fetching content:', contentError)
-      return NextResponse.json({ error: contentError.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(contentError, 'Internal server error') }, { status: 500 })
     }
 
     if (!contentItems || contentItems.length === 0) {
@@ -199,7 +200,7 @@ export async function POST(request: NextRequest) {
         )
       }
       console.error('Error creating content:', contentError)
-      return NextResponse.json({ error: contentError.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(contentError, 'Internal server error') }, { status: 500 })
     }
 
     // Create variations if provided
@@ -286,7 +287,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       console.error('Error updating content:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -328,7 +329,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error('Error deleting content:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })

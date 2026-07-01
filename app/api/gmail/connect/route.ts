@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { getAuthUrl } from '@/lib/gmail'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
 import { signState } from '@/lib/oauth-state'
@@ -17,6 +18,6 @@ export async function POST() {
     return NextResponse.json({ authUrl })
   } catch (err: any) {
     console.error('Gmail connect error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }

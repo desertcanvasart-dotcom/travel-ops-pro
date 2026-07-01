@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Error fetching sync state:', error)
-    return NextResponse.json({ error: error.message, success: false }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error'), success: false }, { status: 500 })
   }
 }
 
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (err) {
       if (err instanceof GmailAuthError) {
-        return NextResponse.json({ error: err.message, success: false }, { status: 401 })
+        return NextResponse.json({ error: clientMessage(err, 'Internal server error'), success: false }, { status: 401 })
       }
       throw err
     }
@@ -426,7 +427,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      error: error.message,
+      error: clientMessage(error, 'Internal server error'),
       success: false
     }, { status: 500 })
   }

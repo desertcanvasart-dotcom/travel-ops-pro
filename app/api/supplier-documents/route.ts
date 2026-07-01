@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase'
+import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
   
   if (error) {
     console.error('Error fetching supplier documents:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
   
   // Calculate summary stats
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
     
     if (error) {
       console.error('Error creating supplier document:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
     
     return NextResponse.json({
