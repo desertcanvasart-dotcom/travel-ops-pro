@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { sendEmailInternal } from '@/lib/email-send'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -363,19 +364,16 @@ async function sendInvitationEmail(
     </html>
   `
 
-  const response = await fetch(`${baseUrl}/api/gmail/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: toEmail,
-      subject: `You're invited to join Autoura`,
-      html: htmlContent
-    })
+  // In-process send (a fetch to /api/send-email would hit the /api/* auth gate).
+  const result = await sendEmailInternal({
+    to: toEmail,
+    subject: `You're invited to join Autoura`,
+    html: htmlContent,
   })
 
-  if (!response.ok) {
-    throw new Error('Failed to send invitation email')
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to send invitation email')
   }
 
-  return response.json()
+  return result
 }
