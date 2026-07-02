@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -99,7 +99,14 @@ export default function ProfitLossPage() {
   const [sortField, setSortField] = useState<'profit_margin' | 'gross_profit' | 'start_date'>('start_date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
+  const fetchAbortRef = useRef<AbortController | null>(null)
+
   const fetchData = useCallback(async () => {
+    // Cancel any in-flight fetch so a slow response for a previous filter set
+    // can't overwrite results for the current filters.
+    fetchAbortRef.current?.abort()
+    const controller = new AbortController()
+    fetchAbortRef.current = controller
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -107,24 +114,29 @@ export default function ProfitLossPage() {
       if (startDate) params.append('startDate', startDate)
       if (endDate) params.append('endDate', endDate)
 
-      const response = await fetch(`/api/profit-loss?${params}`)
+      const response = await fetch(`/api/profit-loss?${params}`, { signal: controller.signal })
       if (response.ok) {
         const result = await response.json()
+        if (controller.signal.aborted) return
         if (result.success) {
           setData(result.data)
           setSummary(result.summary)
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error('Error fetching P&L data:', error)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [statusFilter, startDate, endDate])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Abort any in-flight fetch on unmount.
+  useEffect(() => () => fetchAbortRef.current?.abort(), [])
 
   useEffect(() => {
     setCurrentPage(1)

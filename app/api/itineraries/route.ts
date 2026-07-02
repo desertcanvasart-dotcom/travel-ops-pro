@@ -31,18 +31,32 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const includeB2B = searchParams.get('include_b2b') === 'true'
 
+    // Clamp the caller-supplied limit to a sane range so a huge `?limit=` can't
+    // be used to extract the whole table / exhaust memory. Default 100, max 1000.
+    const requestedLimit = parseInt(searchParams.get('limit') || '100')
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 1000) : 100
+    const requestedPage = parseInt(searchParams.get('page') || '1')
+    const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
+    const from = (page - 1) * limit
+
+    // Only the scalar columns the list/picker consumers actually render —
+    // deliberately excludes the wide JSONB payloads (parsed data, generation
+    // warnings, cabin allocation, ...) that made select('*') expensive here.
+    const LIST_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, created_at, assigned_guide_id, assigned_vehicle_id'
+
     let query = supabase
       .from('itineraries')
-      .select('*')
+      .select(LIST_COLUMNS, { count: 'exact' })
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
+      .range(from, from + limit - 1)
 
     // By default, exclude B2B itineraries from the list
     if (!includeB2B) {
       query = query.not('source', 'eq', 'b2b_custom')
     }
 
-    const { data: itineraries, error } = await query
+    const { data: itineraries, error, count } = await query
 
     if (error) {
       console.error('❌ Database error:', error)
@@ -82,7 +96,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: dataWithLanguages
+      data: dataWithLanguages,
+      count: count ?? dataWithLanguages.length,
+      page,
+      limit
     })
   } catch (error: any) {
     console.error('❌ API error:', error)

@@ -90,8 +90,9 @@ export default function DashboardPage() {
         new Date(f.due_date) < new Date()
       ).length || 0
 
-      // Get itinerary/quote stats (B2C)
-      const quotesRes = await fetch('/api/itineraries')
+      // Get itinerary/quote stats (B2C). High explicit limit — the API now
+      // defaults to 100 rows and the upcoming-trips stat scans all quotes.
+      const quotesRes = await fetch('/api/itineraries?limit=1000')
       const quotesData = await quotesRes.json()
       const quotes = quotesData.data || []
 
@@ -140,7 +141,7 @@ export default function DashboardPage() {
         activeClients,
         pendingFollowups,
         overdueFollowups,
-        totalQuotes: quotes.length,
+        totalQuotes: quotesData.count ?? quotes.length,
         quotesSent: quotes.filter((q: any) => q.status === 'sent' || q.status === 'confirmed').length,
         quotesConfirmed: quotes.filter((q: any) => q.status === 'confirmed').length,
         upcomingTrips,

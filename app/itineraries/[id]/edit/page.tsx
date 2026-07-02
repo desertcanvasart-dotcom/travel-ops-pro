@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import Link from 'next/link'
@@ -509,6 +509,24 @@ export default function ItineraryEditorPage() {
     return suppliers.filter(s => relevantTypes.includes(s.type))
   }
 
+  // Memoized per-service-type supplier split for the dropdown. The unmemoized
+  // version filtered the full supplier list four times per service row on every
+  // render (O(suppliers²) per keystroke while editing a service).
+  const supplierOptionsByType = useMemo(() => {
+    const cache = new Map<string, { recommended: Supplier[]; others: Supplier[] }>()
+    return (serviceType: string) => {
+      let entry = cache.get(serviceType)
+      if (!entry) {
+        const recommended = getSuppliersForServiceType(serviceType)
+        const recommendedIds = new Set(recommended.map(s => s.id))
+        entry = { recommended, others: suppliers.filter(s => !recommendedIds.has(s.id)) }
+        cache.set(serviceType, entry)
+      }
+      return entry
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suppliers])
+
   const checkExistingInvoice = async () => {
     try {
       const response = await fetch(`/api/invoices?itineraryId=${itineraryId}`)
@@ -982,30 +1000,38 @@ export default function ItineraryEditorPage() {
   // COMPUTED VALUES
   // ============================================
 
-  const citiesBreakdown = days.reduce((acc, day) => {
+  // Memoized: this 2000+ line component re-renders on every keystroke in any
+  // service field, so unmemoized derived values were recomputed each time.
+  const citiesBreakdown = useMemo(() => days.reduce((acc, day) => {
     acc[day.city] = (acc[day.city] || 0) + 1
     return acc
-  }, {} as Record<string, number>)
+  }, {} as Record<string, number>), [days])
 
-  const totalAttractions = days.reduce((sum, day) => sum + day.attractions.length, 0)
-  const totalLunches = days.filter(d => d.services.lunch).length
-  const totalDinners = days.filter(d => d.services.dinner).length
-  const totalHotelNights = days.filter(d => d.services.hotel && d.overnight_city).length
+  const totalAttractions = useMemo(() => days.reduce((sum, day) => sum + day.attractions.length, 0), [days])
+  const totalLunches = useMemo(() => days.filter(d => d.services.lunch).length, [days])
+  const totalDinners = useMemo(() => days.filter(d => d.services.dinner).length, [days])
+  const totalHotelNights = useMemo(() => days.filter(d => d.services.hotel && d.overnight_city).length, [days])
 
-  const filteredAttractions = attractions.filter(a => {
+  const filteredAttractions = useMemo(() => attractions.filter(a => {
     const matchesSearch = !attractionSearch || a.activity_name.toLowerCase().includes(attractionSearch.toLowerCase())
     const matchesCity = !attractionCityFilter || a.city === attractionCityFilter
     return matchesSearch && matchesCity
-  })
+  }), [attractions, attractionSearch, attractionCityFilter])
 
-  const servicesByDay = days.map(day => ({
-    day,
-    services: services.filter(s => s.itinerary_day_id === day.id && !s.isDeleted)
-  }))
+  const servicesByDay = useMemo(() => {
+    const byDayId = new Map<string, ItineraryService[]>()
+    for (const s of services) {
+      if (s.isDeleted) continue
+      const list = byDayId.get(s.itinerary_day_id)
+      if (list) list.push(s)
+      else byDayId.set(s.itinerary_day_id, [s])
+    }
+    return days.map(day => ({ day, services: byDayId.get(day.id) || [] }))
+  }, [days, services])
 
-  const totalServicesCost = services
+  const totalServicesCost = useMemo(() => services
     .filter(s => !s.isDeleted)
-    .reduce((sum, s) => sum + (s.total_cost || 0), 0)
+    .reduce((sum, s) => sum + (s.total_cost || 0), 0), [services])
 
   // ============================================
   // RENDER
@@ -1761,18 +1787,18 @@ export default function ItineraryEditorPage() {
                                             className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47] bg-white"
                                           >
                                             <option value="">{t('noSupplierOptional')}</option>
-                                            {getSuppliersForServiceType(service.service_type).length > 0 && (
+                                            {supplierOptionsByType(service.service_type).recommended.length > 0 && (
                                               <optgroup label={t('recommendedFor', { type: service.service_type })}>
-                                                {getSuppliersForServiceType(service.service_type).map(s => (
+                                                {supplierOptionsByType(service.service_type).recommended.map(s => (
                                                   <option key={s.id} value={s.id}>
                                                     {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
                                                   </option>
                                                 ))}
                                               </optgroup>
                                             )}
-                                            {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).length > 0 && (
+                                            {supplierOptionsByType(service.service_type).others.length > 0 && (
                                               <optgroup label={t('allOtherSuppliers')}>
-                                                {suppliers.filter(s => !getSuppliersForServiceType(service.service_type).find(r => r.id === s.id)).map(s => (
+                                                {supplierOptionsByType(service.service_type).others.map(s => (
                                                   <option key={s.id} value={s.id}>
                                                     {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
                                                   </option>

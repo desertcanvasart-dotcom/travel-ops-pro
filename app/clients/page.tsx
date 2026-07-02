@@ -6,9 +6,10 @@ import {
   Trash2, SlidersHorizontal, X, Globe, Smartphone
 } from 'lucide-react'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import Link from 'next/link'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -86,21 +87,55 @@ export default function ClientsPage() {
 
   const supabase = createClient()
 
+  // Debounced copy of the search text so typing doesn't fire a query per
+  // keystroke; other filter changes (dropdowns/toggles) still apply instantly.
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search)
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(filters.search), 300)
+    return () => clearTimeout(handle)
+  }, [filters.search])
+
+  // Monotonic request sequence so a slow, out-of-order response can't
+  // overwrite the results of a newer fetch.
+  const fetchSeqRef = useRef(0)
+
   useEffect(() => {
     fetchClients()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    debouncedSearch,
+    filters.status,
+    filters.clientType,
+    filters.leadSource,
+    filters.vipOnly,
+    filters.sortBy,
+    filters.dateFrom,
+    filters.dateTo
+  ])
+
+  // Stats are independent of the list filters — fetch once on mount and
+  // re-fetch explicitly after mutations (e.g. delete) that change them.
+  useEffect(() => {
     fetchStats()
-  }, [filters])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const fetchClients = async () => {
+    const seq = ++fetchSeqRef.current
     try {
       setLoading(true)
       let query = supabase
         .from('client_summary')
         .select('*')
+        .limit(200)
 
-      // Apply search filter
-      if (filters.search) {
-        query = query.or(`first_name.ilike.%${filters.search}%,last_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%,client_code.ilike.%${filters.search}%`)
+      // Apply search filter — sanitize before interpolating into the PostgREST
+      // .or() filter string (same fix as the API routes; raw input can inject
+      // arbitrary OR conditions)
+      const search = sanitizeSearchTerm(debouncedSearch)
+      if (search) {
+        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,client_code.ilike.%${search}%`)
       }
 
       // Apply status filter
@@ -160,12 +195,17 @@ export default function ClientsPage() {
 
       const { data, error } = await query
 
+      // A newer fetch started while this one was in flight — drop this
+      // response so it can't overwrite fresher results.
+      if (seq !== fetchSeqRef.current) return
+
       if (error) throw error
       setClients(data || [])
     } catch (error) {
+      if (seq !== fetchSeqRef.current) return
       console.error('Error fetching clients:', error)
     } finally {
-      setLoading(false)
+      if (seq === fetchSeqRef.current) setLoading(false)
     }
   }
 
@@ -213,6 +253,7 @@ export default function ClientsPage() {
 
       closeDeleteModal()
       fetchClients()
+      fetchStats() // deletion changes totals/active/VIP/revenue
     } catch (error: any) {
       console.error('Error deleting client:', error)
       await dialog.alert(t('error'), error.message || t('failedToDelete'), 'warning')

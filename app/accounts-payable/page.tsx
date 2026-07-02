@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   Search,
@@ -125,7 +125,14 @@ export default function AccountsPayablePage() {
   const [expandedSupplier, setExpandedSupplier] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
 
+  const fetchAbortRef = useRef<AbortController | null>(null)
+
   const fetchData = useCallback(async () => {
+    // Cancel any in-flight fetch so a slow response for a previous filter set
+    // can't overwrite results for the current filters.
+    fetchAbortRef.current?.abort()
+    const controller = new AbortController()
+    fetchAbortRef.current = controller
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -133,9 +140,10 @@ export default function AccountsPayablePage() {
       if (supplierTypeFilter) params.append('supplierType', supplierTypeFilter)
       if (statusFilter) params.append('status', statusFilter)
 
-      const response = await fetch(`/api/accounts-payable?${params}`)
+      const response = await fetch(`/api/accounts-payable?${params}`, { signal: controller.signal })
       if (response.ok) {
         const result = await response.json()
+        if (controller.signal.aborted) return
         if (result.success) {
           setSuppliers(result.data)
           setExpenses(result.expenses)
@@ -145,16 +153,20 @@ export default function AccountsPayablePage() {
           setSupplierTypeBreakdown(result.supplierTypeBreakdown || {})
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error('Error fetching AP data:', error)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [agingFilter, supplierTypeFilter, statusFilter])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Abort any in-flight fetch on unmount.
+  useEffect(() => () => fetchAbortRef.current?.abort(), [])
 
   useEffect(() => {
     setCurrentPage(1)

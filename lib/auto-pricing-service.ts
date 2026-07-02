@@ -1057,10 +1057,11 @@ export async function getCruiseRates(
     }
 
     const cruise = cruises[0]
-    // rate_double_eur is already per-person (double occupancy).
-    // M23: guard against bad/missing data — duration_nights of 0 or null
-    // would otherwise propagate Infinity/NaN through the entire pricing
-    // tree. Same for missing per-trip rates.
+    // rate_double_eur is per-person PER-NIGHT (double occupancy): the cruise
+    // rates UI keeps it in sync with rate_low_double_eur, the seasonal pppn
+    // rate (see app/rates/cruises/page.tsx and lib/ai/cruise-pricing.ts).
+    // Do NOT divide by duration_nights — callers already multiply by the
+    // itinerary's cruise nights.
     const safeNights = cruise.duration_nights && cruise.duration_nights > 0
       ? cruise.duration_nights
       : null
@@ -1068,10 +1069,8 @@ export async function getCruiseRates(
       console.warn(`⚠️ Cruise ${cruise.ship_name} has invalid duration_nights (${cruise.duration_nights}) — flagging hole (no fabrication)`)
       return null
     }
-    const ppdTrip = cruise.rate_double_eur ?? 0
-    const singleSuppTrip = (cruise.rate_single_eur ?? 0) - (cruise.rate_double_eur ?? 0)
-    const ppdNight = ppdTrip / safeNights
-    const singleSuppNight = singleSuppTrip / safeNights
+    const ppdNight = cruise.rate_double_eur ?? 0
+    const singleSuppNight = (cruise.rate_single_eur ?? 0) - (cruise.rate_double_eur ?? 0)
 
     debugLog(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
 
@@ -1327,22 +1326,44 @@ export async function getMealRates(
   tier: ServiceTier
 ): Promise<{ lunch: number; dinner: number } | null> {
   try {
-    const { data: mealRate } = await supabaseAdmin
+    // The meals rates UI (app/rates/meals) writes rows shaped
+    // { meal_type, base_rate_eur, tier } — it never populates the legacy
+    // lunch_rate_eur/dinner_rate_eur columns, so reading only those priced
+    // UI-managed rows at €0 without flagging a hole. Resolve via
+    // meal_type/base_rate_eur (same as the land path in lib/ai/service-creation),
+    // falling back to the legacy columns for pre-UI rows.
+    const { data: mealRows } = await supabaseAdmin
       .from('meal_rates')
-      .select('lunch_rate_eur, dinner_rate_eur')
+      .select('*')
       .eq('is_active', true)
       .eq('tier', tier)
-      .limit(1)
-      .single()
 
-    if (!mealRate) {
+    if (!mealRows || mealRows.length === 0) {
       return null
     }
 
-    return {
-      lunch: mealRate.lunch_rate_eur || 0,
-      dinner: mealRate.dinner_rate_eur || 0,
+    const rateFor = (mealType: string): number => {
+      const typed = mealRows.filter(
+        (r: any) => r.meal_type?.toLowerCase() === mealType && (r.base_rate_eur || 0) > 0
+      )
+      if (typed.length > 0) {
+        return typed.reduce((sum: number, r: any) => sum + (r.base_rate_eur || 0), 0) / typed.length
+      }
+      // Legacy rows: per-meal columns on a single row
+      const legacyCol = mealType === 'lunch' ? 'lunch_rate_eur' : 'dinner_rate_eur'
+      const legacy = mealRows.find((r: any) => (r[legacyCol] || 0) > 0)
+      return legacy ? legacy[legacyCol] : 0
     }
+
+    const lunch = rateFor('lunch')
+    const dinner = rateFor('dinner')
+
+    // No usable rate on any row → hole (caller flags it) instead of silent €0
+    if (!lunch && !dinner) {
+      return null
+    }
+
+    return { lunch, dinner }
   } catch (err) {
     return null
   }
@@ -1832,11 +1853,6 @@ export async function calculateDayBasedPricing(
   // STEP 3: Build transport cache & fetch cruise pricing rules
   // ============================================
 
-  const transportCache = await buildTransportCache()
-
-  // Fetch cruise transport packages from b2b_transport_packages
-  const cruiseTransportPricingRules = await fetchCruiseTransportPricingRules()
-
   // Count cruise package days (days marked as is_cruise_day for bundled transport)
   const cruisePackageDays = itinerary.filter(d => d.is_cruise_day === true)
   const hasCruisePackage = cruisePackageDays.length > 0
@@ -1848,34 +1864,103 @@ export async function calculateDayBasedPricing(
   // ============================================
   // STEP 4: Fetch all required rates
   // ============================================
+  // All of these lookups are mutually independent, so they run in one
+  // parallel batch instead of sequential awaits (I/O scheduling only —
+  // results and downstream logic are identical).
 
-  let cruiseRates: Awaited<ReturnType<typeof getCruiseRates>> = null
-  if (cruiseNights > 0) {
-    const firstCruiseDay = cruiseDays[0]
-    cruiseRates = await getCruiseRates(tier, firstCruiseDay?.city)
-    if (!cruiseRates) {
-      addHole({
-        kind: 'cruise',
-        reason: 'missing',
-        city: firstCruiseDay?.city,
-        lookupAttempted: `nile_cruises tier=${tier} embark~${firstCruiseDay?.city ?? 'any'}`,
-        message: `No ${tier} cruise rate found. Add it in Rates → Cruises.`,
-      })
-    }
+  const firstCruiseDay = cruiseDays[0]
+  const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
+
+  const [
+    transportCache,
+    cruiseTransportPricingRules,
+    cruiseRates,
+    hotelRatesList,
+    guideRate,
+    mealRates,
+    tippingRates,
+    fixedDailyCosts,
+    entranceFeeCache,
+    airportStaffRows,
+    hotelStaffRows,
+  ] = await Promise.all([
+    buildTransportCache(),
+    // Fetch cruise transport packages from b2b_transport_packages
+    fetchCruiseTransportPricingRules(),
+    // Cruise rates only apply when the itinerary has cruise nights
+    cruiseNights > 0
+      ? getCruiseRates(tier, firstCruiseDay?.city)
+      : Promise.resolve(null as Awaited<ReturnType<typeof getCruiseRates>>),
+    Promise.all(hotelCities.map(city => getHotelRates(city, tier, isEurPassport))),
+    getGuideRate(language, tier),
+    getMealRates(tier),
+    getItemizedTips(tier),
+    // Water cost from DB (fixed_daily_costs table) instead of hardcoding
+    import('@/lib/fixed-costs').then(m => m.getFixedDailyCosts()),
+    // Entrance fees fetched ONCE here, matched in memory later (Step 7)
+    buildEntranceFeeCache(),
+    // Tiny tables prefetched whole so the day loop below resolves
+    // airport/hotel staff rates in memory instead of one query per day
+    supabaseAdmin
+      .from('airport_staff_rates')
+      .select('*')
+      .eq('is_active', true)
+      .then(({ data }) => data || []),
+    supabaseAdmin
+      .from('hotel_staff_rates')
+      .select('*')
+      .eq('is_active', true)
+      .then(({ data }) => data || []),
+  ])
+
+  if (cruiseNights > 0 && !cruiseRates) {
+    addHole({
+      kind: 'cruise',
+      reason: 'missing',
+      city: firstCruiseDay?.city,
+      lookupAttempted: `nile_cruises tier=${tier} embark~${firstCruiseDay?.city ?? 'any'}`,
+      message: `No ${tier} cruise rate found. Add it in Rates → Cruises.`,
+    })
   }
 
-  const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
   const hotelRatesMap = new Map<string, Awaited<ReturnType<typeof getHotelRates>>>()
-  for (const city of hotelCities) {
-    const rates = await getHotelRates(city, tier, isEurPassport)
+  hotelCities.forEach((city, idx) => {
+    const rates = hotelRatesList[idx]
     if (rates) {
       hotelRatesMap.set(city, rates)
     }
-  }
+  })
 
-  const guideRate = await getGuideRate(language, tier)
-  const mealRates = await getMealRates(tier)
-  const tippingRates = await getItemizedTips(tier)
+  // In-memory resolvers that replicate getAirportServiceRate/getHotelServiceRate
+  // EXACTLY (same filters incl. direction/category "both"/"all" fallbacks, same
+  // first-matching-row-in-fetch-order semantics, same rate>0-else-null result).
+  // The exported helpers remain for other callers.
+  const resolveAirportServiceRate = (
+    airportCode: string,
+    direction: 'arrival' | 'departure'
+  ): number | null => {
+    const row = airportStaffRows.find(
+      (r: any) =>
+        r.airport_code === airportCode &&
+        (r.direction === direction || r.direction === 'both')
+    )
+    if (!row) return null
+    const rate = row.rate_eur
+    return rate && rate > 0 ? rate : null
+  }
+  const resolveHotelServiceRate = (
+    serviceType: 'checkin_assist' | 'porter' | 'full_service'
+  ): number | null => {
+    const category = getTierCategory(tier)
+    const row = hotelStaffRows.find(
+      (r: any) =>
+        r.service_type === serviceType &&
+        (r.hotel_category === category || r.hotel_category === 'all')
+    )
+    if (!row) return null
+    const rate = row.rate_eur
+    return rate && rate > 0 ? rate : null
+  }
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
   const needsGuide = itinerary.some(d => d.services.guide_required || d.attractions.length > 0)
@@ -1897,9 +1982,7 @@ export async function calculateDayBasedPricing(
     })
   }
 
-  // Fetch water cost from DB (fixed_daily_costs table) instead of hardcoding
-  const { getFixedDailyCosts } = await import('@/lib/fixed-costs')
-  const fixedDailyCosts = await getFixedDailyCosts()
+  // Water cost comes from fixedDailyCosts (fetched in the Step 4 batch above)
   const waterCostPerPax = fixedDailyCosts.waterPerPersonPerDay
 
   // ============================================
@@ -1992,7 +2075,7 @@ export async function calculateDayBasedPricing(
     // ----- AIRPORT SERVICES (fixed per service) -----
     if (day.services.airport_arrival) {
       const airportCode = getAirportCode(day.city)
-      const rate = await getAirportServiceRate(airportCode, 'arrival', tier)
+      const rate = resolveAirportServiceRate(airportCode, 'arrival')
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2022,7 +2105,7 @@ export async function calculateDayBasedPricing(
 
     if (day.services.airport_departure) {
       const airportCode = getAirportCode(day.city)
-      const rate = await getAirportServiceRate(airportCode, 'departure', tier)
+      const rate = resolveAirportServiceRate(airportCode, 'departure')
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2052,7 +2135,7 @@ export async function calculateDayBasedPricing(
 
     // ----- HOTEL SERVICES (fixed per service) -----
     if (day.services.hotel_checkin) {
-      const rate = await getHotelServiceRate('checkin_assist', tier)
+      const rate = resolveHotelServiceRate('checkin_assist')
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2081,7 +2164,7 @@ export async function calculateDayBasedPricing(
     }
 
     if (day.services.hotel_checkout) {
-      const rate = await getHotelServiceRate('porter', tier)
+      const rate = resolveHotelServiceRate('porter')
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2171,9 +2254,9 @@ export async function calculateDayBasedPricing(
   let entranceFeesPerPax = 0
   const processedAttractions = new Set<string>()
 
-  // Fetch all entrance fees ONCE, then match in memory — was a per-attraction
-  // query (+ full-table scan on each miss) inside the loop below.
-  const entranceFeeCache = await buildEntranceFeeCache()
+  // entranceFeeCache was fetched ONCE in the Step 4 parallel batch above;
+  // attractions are matched in memory here — was a per-attraction query
+  // (+ full-table scan on each miss) inside the loop below.
 
   for (const day of itinerary) {
     for (const attraction of day.attractions) {
@@ -2860,16 +2943,23 @@ export async function calculateMultiTierPricing(
 ): Promise<Map<ServiceTier, PricingResult>> {
   const results = new Map<ServiceTier, PricingResult>()
 
-  for (const tier of tiers) {
-    const result = await calculateAutoPricing({
-      templateId,
-      tier,
-      numPax,
-      isEurPassport,
-      ...options
-    })
-    results.set(tier, result)
-  }
+  // Tiers are independent calculations — run them in parallel, then insert
+  // into the map in the original tier order (I/O scheduling change only).
+  const tierResults = await Promise.all(
+    tiers.map(tier =>
+      calculateAutoPricing({
+        templateId,
+        tier,
+        numPax,
+        isEurPassport,
+        ...options
+      })
+    )
+  )
+
+  tiers.forEach((tier, idx) => {
+    results.set(tier, tierResults[idx])
+  })
 
   return results
 }
@@ -3143,10 +3233,19 @@ export async function calculatePricingWithPassengerBreakdown(
     }
   }
 
-  // Compose age-discounted pricing from the 2-pax reference row, applying margin
-  // EXACTLY ONCE (the previous code fed the already-margined pricePerPerson here
-  // and re-applied margin → customers overcharged by ~(1+margin)²).
-  const basePaxResult = dayResult.paxPricing.find(p => p.numPax === 2) || dayResult.paxPricing[1]
+  // Compose age-discounted pricing from the pax row matching the group's PAYING
+  // headcount (adults + children), applying margin EXACTLY ONCE (the previous
+  // code fed the already-margined pricePerPerson here and re-applied margin →
+  // customers overcharged by ~(1+margin)²). Using the matching row matters:
+  // group-fixed costs (guide, vehicle tier, tips) are amortized per pax inside
+  // the row, so deriving from a hardcoded 2-pax row billed a 6-adult group's
+  // fixed costs ~3× and priced the vehicle at the Sedan tier.
+  const payingPax = passengers.numAdults + passengers.numChildren
+  const basePaxResult =
+    dayResult.paxPricing.find(p => p.numPax === payingPax) ||
+    dayResult.paxPricing.reduce((prev, curr) =>
+      Math.abs(curr.numPax - payingPax) < Math.abs(prev.numPax - payingPax) ? curr : prev
+    )
   const composed = composeAgeBasedPricing(
     basePaxResult,
     passengers,

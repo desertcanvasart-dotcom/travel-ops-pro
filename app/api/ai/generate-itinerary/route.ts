@@ -394,9 +394,15 @@ export async function POST(request: NextRequest) {
       if (cruiseContent.found && cruiseContent.dayByDay.length > 0) {
         debugLog(`📚 Using Content Library cruise: ${cruiseContent.content.name}`)
         
-        // Use Content Library duration if available
+        // Use Content Library duration if available — and recompute end_date,
+        // which was derived from the requested duration BEFORE this override
+        // (the land path does the same via finalEndDate). Otherwise a 5-day
+        // request matched to an 8-day library cruise saves an end_date 3 days
+        // short of the actual day records.
         if (cruiseContent.content.duration_days) {
           duration_days = cruiseContent.content.duration_days
+          endDate.setTime(startDateObj.getTime())
+          endDate.setDate(startDateObj.getDate() + duration_days - 1)
         }
         
         const nights = duration_days - 1
@@ -609,16 +615,24 @@ export async function POST(request: NextRequest) {
     // ============================================
     debugLog(`🏛️ Processing as ${effectivePackageType} itinerary (${inputMode} mode)...`)
 
-    // Fetch rates and content
+    // Fetch rates and content — these five lookups are independent of each
+    // other, so run them in parallel (I/O scheduling only, same results)
     const searchCities = cities.length > 0 ? cities : [effectiveCity]
-    const contentLibrary = await fetchContentLibrary(supabaseAdmin, tier, searchCities, interests)
-    const writingRules = await fetchWritingRules(supabaseAdmin)
-    const attractionNames = await fetchAttractionsList(supabase)
-    const attractionsWithCity = await fetchAttractionsWithCity(supabase)
+    const [
+      contentLibrary,
+      writingRules,
+      attractionNames,
+      attractionsWithCity,
+      { aliasToCanonical },
+    ] = await Promise.all([
+      fetchContentLibrary(supabaseAdmin, tier, searchCities, interests),
+      fetchWritingRules(supabaseAdmin),
+      fetchAttractionsList(supabase),
+      fetchAttractionsWithCity(supabase),
+      // DB aliases for service-creation matching
+      fetchAttractionAliases(supabase),
+    ])
     const attractionMenu = formatAttractionMenuForPrompt(attractionsWithCity)
-
-    // Fetch DB aliases and set cache for service-creation matching
-    const { aliasToCanonical } = await fetchAttractionAliases(supabase)
     setAliasCache(aliasToCanonical)
 
     // Build rich content map (full descriptions, not truncated) and format for prompts

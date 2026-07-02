@@ -145,9 +145,29 @@ export async function createCruiseItineraryServices(
 
   const warnings: string[] = []
 
+  // The cruise accommodation block below is skipped entirely when no rate was
+  // found — that's the itinerary's largest cost component, so surface it as a
+  // warning (the land path does; this was lost in the cruise copy).
+  if (!skipPricing && !cruiseRate.found) {
+    warnings.push(`No cruise rate found (${tier} tier) — cruise accommodation will be €0. Add it in Rates → Cruises.`)
+  }
+
   // Margin helper
   const marginMultiplier = 1 + (marginPercent / 100)
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
+
+  // Insert helper: a failed service insert must NOT count toward totals —
+  // previously all six insert sites ignored the returned error, so saved
+  // itinerary totals could exceed the sum of the stored services.
+  const insertService = async (dayNumber: number, payload: Record<string, unknown>): Promise<boolean> => {
+    const { error } = await supabase.from('itinerary_services').insert(payload)
+    if (error) {
+      console.error(`❌ Error creating ${payload.service_type} service on day ${dayNumber}:`, error)
+      warnings.push(`Day ${dayNumber}: failed to save ${payload.service_name} — excluded from totals`)
+      return false
+    }
+    return true
+  }
 
   // ============================================
   // FETCH ALL REQUIRED RATES
@@ -242,6 +262,7 @@ export async function createCruiseItineraryServices(
 
     if (dayError) {
       console.error(`❌ Error creating day ${dayData.day_number}:`, dayError)
+      warnings.push(`Day ${dayData.day_number} could not be saved — it is missing from the itinerary`)
       continue
     }
 
@@ -254,7 +275,7 @@ export async function createCruiseItineraryServices(
       const nightCost = cruiseRate.totalPerNight
       const cabinDesc = cruiseRate.cabinAllocation.map(a => `${a.count}×${a.type}`).join(' + ')
 
-      await supabase.from('itinerary_services').insert({
+      if (await insertService(dayData.day_number, {
         itinerary_day_id: day.id,
         service_type: 'cruise',
         service_code: cruiseRate.supplierId || 'CRUISE',
@@ -273,15 +294,15 @@ export async function createCruiseItineraryServices(
         supplier_currency: 'EUR',
         supplier_cost_original: nightCost,
         exchange_rate_used: 1,
-      })
-
-      totalSupplierCost += nightCost
-      totalClientPrice += withMargin(nightCost)
+      })) {
+        totalSupplierCost += nightCost
+        totalClientPrice += withMargin(nightCost)
+      }
     }
 
     // --- SERVICE 2: Bundled Cruise Transport (flat rate, added once on day 1) ---
     if (!transportAdded && cruiseTransportRate > 0) {
-      await supabase.from('itinerary_services').insert({
+      if (await insertService(dayData.day_number, {
         itinerary_day_id: day.id,
         service_type: 'transportation',
         service_code: cruiseTransportRule?.id || 'CRUISE-TRANSPORT',
@@ -296,16 +317,16 @@ export async function createCruiseItineraryServices(
         supplier_currency: 'EUR',
         supplier_cost_original: cruiseTransportRate,
         exchange_rate_used: 1,
-      })
-
-      totalSupplierCost += cruiseTransportRate
-      totalClientPrice += withMargin(cruiseTransportRate)
-      transportAdded = true
+      })) {
+        totalSupplierCost += cruiseTransportRate
+        totalClientPrice += withMargin(cruiseTransportRate)
+        transportAdded = true
+      }
     }
 
     // --- SERVICE 3: Guide (on touring days, not sailing days) ---
     if (dayNeedsGuide && guideResult.guidePerDay > 0) {
-      await supabase.from('itinerary_services').insert({
+      if (await insertService(dayData.day_number, {
         itinerary_day_id: day.id,
         service_type: 'guide',
         service_code: guideResult.guideId || 'GUIDE',
@@ -323,10 +344,10 @@ export async function createCruiseItineraryServices(
         supplier_currency: 'EUR',
         supplier_cost_original: guideResult.guidePerDay,
         exchange_rate_used: 1,
-      })
-
-      totalSupplierCost += guideResult.guidePerDay
-      totalClientPrice += withMargin(guideResult.guidePerDay)
+      })) {
+        totalSupplierCost += guideResult.guidePerDay
+        totalClientPrice += withMargin(guideResult.guidePerDay)
+      }
     }
 
     // --- SERVICE 4: Context-aware tips ---
@@ -344,7 +365,7 @@ export async function createCruiseItineraryServices(
       const tipRate = cruiseTippingRates.getRate(tipRole.role, tipRole.context)
       if (tipRate > 0) {
         const totalTipCost = tipRate * tipRole.quantity
-        await supabase.from('itinerary_services').insert({
+        if (await insertService(dayData.day_number, {
           itinerary_day_id: day.id,
           service_type: 'tips',
           service_code: `TIPS-${tipRole.role.toUpperCase()}`,
@@ -358,9 +379,10 @@ export async function createCruiseItineraryServices(
           supplier_currency: 'EUR',
           supplier_cost_original: totalTipCost,
           exchange_rate_used: 1,
-        })
-        totalSupplierCost += totalTipCost
-        totalClientPrice += withMargin(totalTipCost)
+        })) {
+          totalSupplierCost += totalTipCost
+          totalClientPrice += withMargin(totalTipCost)
+        }
       }
     }
 
@@ -430,7 +452,7 @@ export async function createCruiseItineraryServices(
       }
 
       if (dayEntranceTotal > 0) {
-        await supabase.from('itinerary_services').insert({
+        if (await insertService(dayData.day_number, {
           itinerary_day_id: day.id,
           service_type: 'entrance',
           service_code: 'ENTRANCE',
@@ -445,17 +467,17 @@ export async function createCruiseItineraryServices(
           supplier_currency: 'EUR',
           supplier_cost_original: dayEntranceTotal,
           exchange_rate_used: 1,
-        })
-
-        totalSupplierCost += dayEntranceTotal
-        totalClientPrice += withMargin(dayEntranceTotal)
+        })) {
+          totalSupplierCost += dayEntranceTotal
+          totalClientPrice += withMargin(dayEntranceTotal)
+        }
       }
     }
 
     // --- SERVICE 6: Water (on touring days, not sailing days) ---
     if (!isSailingDay) {
       const waterCost = waterRatePerPerson * totalPax
-      await supabase.from('itinerary_services').insert({
+      if (await insertService(dayData.day_number, {
         itinerary_day_id: day.id,
         service_type: 'supplies',
         service_code: 'WATER',
@@ -469,10 +491,10 @@ export async function createCruiseItineraryServices(
         supplier_currency: 'EUR',
         supplier_cost_original: waterCost,
         exchange_rate_used: 1,
-      })
-
-      totalSupplierCost += waterCost
-      totalClientPrice += withMargin(waterCost)
+      })) {
+        totalSupplierCost += waterCost
+        totalClientPrice += withMargin(waterCost)
+      }
     }
   }
 

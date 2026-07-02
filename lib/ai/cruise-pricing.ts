@@ -28,16 +28,15 @@ export interface CruiseRate {
  * Detect which season a date falls in for a given cruise ship record
  */
 export function detectCruiseSeason(ship: any, startDate: string): string {
-  const date = new Date(startDate)
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  const mmdd = month * 100 + day  // e.g., March 20 = 320
-
+  // 'YYYY-MM-DD' strings parse as UTC midnight, so read the parts back in UTC
+  // too — local-time getters shift boundary dates back a day on any server
+  // west of UTC, mis-assigning low/high/peak on season edges.
   const toMmdd = (dateStr: string | null): number => {
     if (!dateStr) return 0
     const d = new Date(dateStr)
-    return (d.getMonth() + 1) * 100 + d.getDate()
+    return (d.getUTCMonth() + 1) * 100 + d.getUTCDate()
   }
+  const mmdd = toMmdd(startDate)  // e.g., March 20 = 320
 
   // Check peak season first (2 possible periods)
   if (ship.peak_season_1_start && ship.peak_season_1_end) {

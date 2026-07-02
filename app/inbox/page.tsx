@@ -305,10 +305,18 @@ export default function InboxPage() {
     }
   }
 
+  // Identifies the latest email-list request (folder switch, search, refresh,
+  // background revalidate). Every response re-checks it before touching list
+  // state, so a slow or stale response — e.g. the background refresh fired
+  // for the PREVIOUS folder from the cache path — can't clobber the list the
+  // user is currently looking at.
+  const latestRequestRef = useRef(0)
+
   // UPDATED: fetchEmails with caching and attachment parsing - RESET pagination
   const fetchEmails = async (query?: string, targetFolder?: FolderType) => {
     if (!user) return
-    
+
+    const requestSeq = ++latestRequestRef.current
     setRefreshing(true)
     // Reset pagination when fetching fresh
     setNextPageToken(null)
@@ -319,27 +327,32 @@ export default function InboxPage() {
       // TRY CACHE FIRST (if no search query)
       if (!query && isCacheReady) {
         const cached = await getCached(currentFolder, { limit: 25 })
+        if (requestSeq !== latestRequestRef.current) return // superseded while reading cache
         if (cached.fromCache && !cached.isStale) {
           console.log('Using cached emails for', currentFolder)
           setEmails(cached.emails as Email[])
           setRefreshing(false)
-          // Still fetch fresh in background
-          fetchFreshEmails(query, currentFolder, true)
+          // Still fetch fresh in background (same requestSeq: a later folder
+          // switch/search bumps the ref and this background result is dropped)
+          fetchFreshEmails(query, currentFolder, true, undefined, requestSeq)
           return
         }
       }
-      
-      await fetchFreshEmails(query, currentFolder, false)
+
+      await fetchFreshEmails(query, currentFolder, false, undefined, requestSeq)
     } catch (err: any) {
+      if (requestSeq !== latestRequestRef.current) return
       setError(err.message)
       setRefreshing(false)
     }
   }
 
   // UPDATED: Helper function to fetch fresh emails from API with pagination support
-  const fetchFreshEmails = async (query?: string, currentFolder?: FolderType, isBackground = false, pageToken?: string) => {
+  const fetchFreshEmails = async (query?: string, currentFolder?: FolderType, isBackground = false, pageToken?: string, seq?: number) => {
     if (!user) return
-    
+
+    const requestSeq = seq ?? ++latestRequestRef.current
+
     try {
       const params = new URLSearchParams({
         userId: user.id,
@@ -367,6 +380,10 @@ export default function InboxPage() {
       const response = await fetch(`/api/gmail/emails?${params}`)
       const data = await response.json()
 
+      // A newer request (folder switch, search, refresh) started while this
+      // one was in flight — drop this response, foreground or background.
+      if (requestSeq !== latestRequestRef.current) return
+
       if (data.error) {
         throw new Error(data.error)
       }
@@ -377,7 +394,7 @@ export default function InboxPage() {
 
       // PARSE ATTACHMENTS from each email
       setEmails(data.messages || [])
-      
+
       // Update starred set
       const starred = new Set<string>()
       const messagesForStarred: Email[] = data.messages || []
@@ -387,7 +404,7 @@ export default function InboxPage() {
         }
       })
       setStarredEmails(starred)
-      
+
       // CACHE THE RESULTS
       if (isCacheReady && !query && !pageToken) {
         await cache(folderToUse, data.messages, historyId || undefined)
@@ -395,11 +412,12 @@ export default function InboxPage() {
 
       setError(null)
     } catch (err: any) {
+      if (requestSeq !== latestRequestRef.current) return
       if (!isBackground) {
         setError(err.message)
       }
     } finally {
-      if (!isBackground) {
+      if (!isBackground && requestSeq === latestRequestRef.current) {
         setRefreshing(false)
       }
     }
@@ -408,9 +426,12 @@ export default function InboxPage() {
   // NEW: Load more emails function for pagination
   const loadMoreEmails = async () => {
     if (!user || !nextPageToken || loadingMore) return
-    
+
+    // Snapshot the current request id — if a folder switch/search happens
+    // while this page loads, drop the append instead of mixing folders.
+    const requestSeq = latestRequestRef.current
     setLoadingMore(true)
-    
+
     try {
       const params = new URLSearchParams({
         userId: user.id,
@@ -432,6 +453,9 @@ export default function InboxPage() {
 
       const response = await fetch(`/api/gmail/emails?${params}`)
       const data = await response.json()
+
+      // A newer list request replaced this page's context — drop the append
+      if (requestSeq !== latestRequestRef.current) return
 
       if (data.error) {
         throw new Error(data.error)
@@ -458,7 +482,9 @@ export default function InboxPage() {
 
       setError(null)
     } catch (err: any) {
-      setError(err.message)
+      if (requestSeq === latestRequestRef.current) {
+        setError(err.message)
+      }
     } finally {
       setLoadingMore(false)
     }

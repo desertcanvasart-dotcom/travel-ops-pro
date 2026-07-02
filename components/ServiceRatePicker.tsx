@@ -142,28 +142,41 @@ export default function ServiceRatePicker({
   const dropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Fetch rates when service type changes
+  // Fetch rates when service type changes. The abort ref cancels any
+  // in-flight fetch, so quickly toggling the service type can't leave rates
+  // normalized against a stale serviceType (old closure) in state.
+  const ratesAbortRef = useRef<AbortController | null>(null)
+
   const fetchRates = useCallback(async () => {
+    ratesAbortRef.current?.abort()
+    const controller = new AbortController()
+    ratesAbortRef.current = controller
+
     const url = getApiUrl(serviceType)
     if (!url) return
 
     setLoading(true)
     try {
-      const response = await fetch(url)
+      const response = await fetch(url, { signal: controller.signal })
       const result = await response.json()
+      if (controller.signal.aborted) return
       const data = result.data || (Array.isArray(result) ? result : [])
       setRates(normalizeRates(serviceType, data, paxCount))
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error(`Error fetching ${serviceType} rates:`, err)
       setRates([])
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [serviceType, paxCount])
 
   useEffect(() => {
     fetchRates()
   }, [fetchRates])
+
+  // Abort any in-flight rates fetch on unmount.
+  useEffect(() => () => ratesAbortRef.current?.abort(), [])
 
   // Reset city filter when defaultCity changes
   useEffect(() => {

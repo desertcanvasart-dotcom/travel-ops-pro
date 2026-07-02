@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   Search,
@@ -89,31 +89,43 @@ export default function AccountsReceivablePage() {
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
   const [sendingReminder, setSendingReminder] = useState<string | null>(null)
 
+  const fetchAbortRef = useRef<AbortController | null>(null)
+
   const fetchData = useCallback(async () => {
+    // Cancel any in-flight fetch so a slow response for a previous filter set
+    // can't overwrite results for the current filters.
+    fetchAbortRef.current?.abort()
+    const controller = new AbortController()
+    fetchAbortRef.current = controller
     setLoading(true)
     try {
       const params = new URLSearchParams()
       if (agingFilter) params.append('aging', agingFilter)
 
-      const response = await fetch(`/api/accounts-receivable?${params}`)
+      const response = await fetch(`/api/accounts-receivable?${params}`, { signal: controller.signal })
       if (response.ok) {
         const result = await response.json()
+        if (controller.signal.aborted) return
         if (result.success) {
           setClients(result.data)
           setInvoices(result.invoices)
           setSummary(result.summary)
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error('Error fetching AR data:', error)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [agingFilter])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Abort any in-flight fetch on unmount.
+  useEffect(() => () => fetchAbortRef.current?.abort(), [])
 
   useEffect(() => {
     setCurrentPage(1)

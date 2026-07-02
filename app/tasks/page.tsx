@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import Link from 'next/link'
@@ -172,7 +172,14 @@ export default function TasksPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [archiving, setArchiving] = useState<string | null>(null)
 
+  const tasksAbortRef = useRef<AbortController | null>(null)
+
   const fetchTasks = useCallback(async () => {
+    // Cancel any in-flight fetch so a slow response for a previous filter set
+    // can't overwrite results for the current filters.
+    tasksAbortRef.current?.abort()
+    const controller = new AbortController()
+    tasksAbortRef.current = controller
     try {
       const params = new URLSearchParams()
       if (statusFilter) params.append('status', statusFilter)
@@ -182,20 +189,25 @@ export default function TasksPage() {
       if (departmentFilter) params.append('departmentId', departmentFilter)
       params.append('includeArchived', showArchived ? 'true' : 'false')
 
-      const response = await fetch(`/api/tasks?${params}`)
+      const response = await fetch(`/api/tasks?${params}`, { signal: controller.signal })
       if (response.ok) {
         const result = await response.json()
+        if (controller.signal.aborted) return
         if (result.success) {
           setTasks(result.data)
           setSummary(result.summary)
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error('Error fetching tasks:', error)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [statusFilter, priorityFilter, assigneeFilter, dueDateFilter, departmentFilter, showArchived])
+
+  // Abort any in-flight tasks fetch on unmount.
+  useEffect(() => () => tasksAbortRef.current?.abort(), [])
 
   const fetchTeamMembers = async () => {
     try {

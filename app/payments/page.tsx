@@ -68,10 +68,14 @@ export default function PaymentsPage() {
   const fetchAllPayments = async () => {
     setLoading(true)
     try {
-      // Fetch from both sources in parallel
+      // Fetch from both sources in parallel. High explicit limits: the stats
+      // cards (total received / pending / overdue) sum across all rows, so we
+      // request the API's max rather than the default page of 100. Invoices
+      // come with their payments embedded (?include=payments) to avoid a
+      // per-invoice request waterfall.
       const [itineraryPaymentsRes, invoicesRes] = await Promise.all([
-        fetch('/api/payments'),
-        fetch('/api/invoices')
+        fetch('/api/payments?limit=1000'),
+        fetch('/api/invoices?include=payments&limit=1000')
       ])
 
       const allPayments: UnifiedPayment[] = []
@@ -109,7 +113,6 @@ export default function PaymentsPage() {
         const invoices = await invoicesRes.json()
         const now = new Date()
 
-        // For each invoice, fetch its payments
         for (const invoice of invoices) {
           // Track pending and overdue from invoices
           if (['sent', 'partial', 'viewed'].includes(invoice.status)) {
@@ -123,35 +126,28 @@ export default function PaymentsPage() {
             }
           }
 
-          // Fetch payments for this invoice
-          try {
-            const paymentsRes = await fetch(`/api/invoices/${invoice.id}/payments`)
-            if (paymentsRes.ok) {
-              const invoicePayments = await paymentsRes.json()
-
-              if (Array.isArray(invoicePayments)) {
-                invoicePayments.forEach((p: any) => {
-                  allPayments.push({
-                    id: p.id,
-                    source: 'invoice',
-                    source_id: invoice.id,
-                    source_reference: invoice.invoice_number,
-                    client_name: invoice.client_name || 'Unknown',
-                    client_email: invoice.client_email,
-                    amount: Number(p.amount) || 0,
-                    currency: p.currency || invoice.currency || 'EUR',
-                    payment_method: p.payment_method || 'unknown',
-                    payment_date: p.payment_date,
-                    transaction_reference: p.transaction_reference,
-                    notes: p.notes,
-                    created_at: p.created_at
-                  })
-                  totalReceived += Number(p.amount) || 0
-                })
-              }
-            }
-          } catch (err) {
-            console.error(`Error fetching payments for invoice ${invoice.id}:`, err)
+          // Payments come embedded on the invoice (?include=payments) — no
+          // per-invoice fetch needed
+          const invoicePayments = invoice.invoice_payments
+          if (Array.isArray(invoicePayments)) {
+            invoicePayments.forEach((p: any) => {
+              allPayments.push({
+                id: p.id,
+                source: 'invoice',
+                source_id: invoice.id,
+                source_reference: invoice.invoice_number,
+                client_name: invoice.client_name || 'Unknown',
+                client_email: invoice.client_email,
+                amount: Number(p.amount) || 0,
+                currency: p.currency || invoice.currency || 'EUR',
+                payment_method: p.payment_method || 'unknown',
+                payment_date: p.payment_date,
+                transaction_reference: p.transaction_reference,
+                notes: p.notes,
+                created_at: p.created_at
+              })
+              totalReceived += Number(p.amount) || 0
+            })
           }
         }
       }

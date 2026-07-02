@@ -30,11 +30,16 @@ interface Toast {
   message: string
 }
 
+const PAGE_SIZE = 100
+
 export default function ItinerariesPage() {
   const t = useTranslations('itineraries')
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [filteredItineraries, setFilteredItineraries] = useState<Itinerary[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [totalCount, setTotalCount] = useState(0)
+  const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -62,17 +67,30 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     filterItineraries()
   }, [itineraries, searchQuery, statusFilter])
 
-  const fetchItineraries = async () => {
+  const fetchItineraries = async (pageToLoad = 1) => {
+    if (pageToLoad > 1) setLoadingMore(true)
     try {
-      const response = await fetch('/api/itineraries')
+      const response = await fetch(`/api/itineraries?page=${pageToLoad}&limit=${PAGE_SIZE}`)
       const data = await response.json()
       if (data.success) {
-        setItineraries(data.data)
+        setTotalCount(data.count ?? data.data.length)
+        setPage(pageToLoad)
+        if (pageToLoad === 1) {
+          setItineraries(data.data)
+        } else {
+          // Append the next page, de-duping by id in case rows shifted
+          // between pages (e.g. a new itinerary was created meanwhile)
+          setItineraries(prev => {
+            const seen = new Set(prev.map(it => it.id))
+            return [...prev, ...data.data.filter((it: Itinerary) => !seen.has(it.id))]
+          })
+        }
       }
     } catch (error) {
       console.error('Error fetching itineraries:', error)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
@@ -110,6 +128,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
 
       if (data.success) {
         setItineraries(itineraries.filter(it => it.id !== id))
+        setTotalCount(prev => Math.max(0, prev - 1))
         setDeleteConfirm(null)
       } else {
         showToast('error', data.error || t('errorDeleteFailed'))
@@ -432,6 +451,21 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
           </div>
         )}
       </div>
+
+      {/* Load more (server-side pagination) */}
+      {itineraries.length < totalCount && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => fetchItineraries(page + 1)}
+            disabled={loadingMore}
+            className="px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors disabled:opacity-50"
+          >
+            {loadingMore
+              ? t('loadingItineraries')
+              : `${t('loadMore')} (${itineraries.length}/${totalCount})`}
+          </button>
+        </div>
+      )}
 {/* Toast Notifications */}
 {toasts.length > 0 && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 space-y-2">

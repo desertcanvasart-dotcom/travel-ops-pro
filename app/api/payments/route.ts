@@ -9,6 +9,16 @@ export async function GET(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const supabase = createServerClient()
+
+    // Clamp the caller-supplied limit to a sane range so a huge `?limit=` can't
+    // be used to extract the whole table / exhaust memory. Default 100, max 1000.
+    const { searchParams } = new URL(request.url)
+    const requestedLimit = parseInt(searchParams.get('limit') || '100')
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 1000) : 100
+    const requestedPage = parseInt(searchParams.get('page') || '1')
+    const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
+    const from = (page - 1) * limit
+
     const { data: payments, error } = await supabase
       .from('payments')
       .select(`
@@ -23,6 +33,7 @@ export async function GET(request: NextRequest) {
       `)
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
+      .range(from, from + limit - 1)
 
     if (error) throw error
 

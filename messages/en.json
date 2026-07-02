@@ -1026,6 +1026,7 @@
     "sent": "Sent",
     "searchPlaceholder": "Search by client name, trip name, or code...",
     "showingOf": "Showing {count} of {total} itineraries",
+    "loadMore": "Load more",
     "code": "Code",
     "created": "Created",
     "client": "Client",

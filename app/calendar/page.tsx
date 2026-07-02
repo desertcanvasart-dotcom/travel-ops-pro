@@ -180,7 +180,9 @@ export default function CalendarPage() {
 
   const fetchData = async () => {
     try {
-      const bookingsResponse = await fetch('/api/itineraries')
+      // High explicit limit — the API now defaults to 100 rows and the
+      // calendar needs every date-ranged trip, not just the newest page
+      const bookingsResponse = await fetch('/api/itineraries?limit=1000')
       const bookingsData = await bookingsResponse.json()
       
       if (bookingsData.success) {

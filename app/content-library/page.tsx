@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
@@ -98,10 +98,25 @@ export default function ContentLibraryPage() {
     fetchCategories()
   }, [])
 
-  // Fetch content when category or search changes
+  // Debounce the search text (~300ms) so typing doesn't hit the API per
+  // keystroke; category clicks still refetch immediately.
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery)
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(searchQuery), 300)
+    return () => clearTimeout(handle)
+  }, [searchQuery])
+
+  // Abort any in-flight content fetch when a newer one starts (or on unmount)
+  // so an out-of-order response can't overwrite fresher results.
+  const contentAbortRef = useRef<AbortController | null>(null)
+  useEffect(() => () => contentAbortRef.current?.abort(), [])
+
+  // Fetch content when category or (debounced) search changes
   useEffect(() => {
     fetchContent()
-  }, [selectedCategory, searchQuery])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, debouncedSearch])
 
   async function fetchCategories() {
     try {
@@ -116,21 +131,26 @@ export default function ContentLibraryPage() {
   }
 
   async function fetchContent() {
+    contentAbortRef.current?.abort()
+    const controller = new AbortController()
+    contentAbortRef.current = controller
     setLoading(true)
     try {
       let url = '/api/content-library?'
       if (selectedCategory) url += `category_id=${selectedCategory}&`
-      if (searchQuery) url += `search=${encodeURIComponent(searchQuery)}&`
-      
-      const response = await fetch(url)
+      if (debouncedSearch) url += `search=${encodeURIComponent(debouncedSearch)}&`
+
+      const response = await fetch(url, { signal: controller.signal })
       if (!response.ok) throw new Error('Failed to fetch content')
       const data = await response.json()
+      if (controller.signal.aborted) return
       setContent(data.data || [])
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error('Error fetching content:', err)
       setError('Failed to load content')
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }
 

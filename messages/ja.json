@@ -1449,6 +1449,7 @@
     "sent": "送信済み",
     "searchPlaceholder": "顧客名、旅行名、コードで検索...",
     "showingOf": "{total}件中{count}件を表示",
+    "loadMore": "さらに読み込む",
     "code": "コード",
     "created": "作成日",
     "client": "顧客",

@@ -217,16 +217,58 @@ export async function fetchAllPricingRates(
 ): Promise<PricingRates> {
   const { tier, effectiveCity, totalPax, isEuroPassport, language, hotelName, includeAccommodation } = params
 
-  // Transportation: query transportation_rates (tiered vehicle structure)
-  const { data: transportRates } = await supabase
-    .from('transportation_rates')
-    .select('*')
-    .eq('is_active', true)
-    .eq('service_type', 'day_tour')
-    .ilike('city', effectiveCity)
-    .limit(1)
+  // All of these top-level lookups are mutually independent — run them in one
+  // parallel batch (I/O scheduling only; downstream logic/warnings unchanged).
+  const [
+    { data: transportRates },
+    { data: transferRates },
+    { data: guideRates },
+    { data: allEntranceFees },
+    { data: allActivityRates },
+    { data: allMealRates },
+    { data: airportServicesData },
+    { data: hotelServicesData },
+    tippingRates,
+    { getTransportRateForPax },
+  ] = await Promise.all([
+    // Transportation: query transportation_rates (tiered vehicle structure)
+    supabase
+      .from('transportation_rates')
+      .select('*')
+      .eq('is_active', true)
+      .eq('service_type', 'day_tour')
+      .ilike('city', effectiveCity)
+      .limit(1),
+    // Transfer rate: transportation_rates for airport_transfer service type
+    supabase
+      .from('transportation_rates')
+      .select('*')
+      .eq('is_active', true)
+      .eq('service_type', 'airport_transfer')
+      .ilike('city', effectiveCity)
+      .limit(1),
+    // Guides PRIORITY 1: guide_rates table (managed via Rates > Tour Guides UI)
+    supabase
+      .from('guide_rates')
+      .select('*')
+      .eq('is_active', true)
+      .eq('guide_language', language)
+      .limit(1),
+    // Entrance fees + activity rates (sea trips, boat rides, etc.)
+    supabase.from('entrance_fees').select('*').eq('is_active', true),
+    supabase.from('activity_rates').select('*').eq('is_active', true),
+    // Meal rates — fetch ALL active rates for per-city lookup
+    supabase.from('meal_rates').select('*').eq('is_active', true),
+    // Airport services (airport_staff_rates table — managed via Rates > Airport Services UI)
+    // Fetch ALL active rows — per-airport rates are looked up dynamically via getAirportServiceRate()
+    supabase.from('airport_staff_rates').select('*').eq('is_active', true),
+    // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
+    supabase.from('hotel_staff_rates').select('*').eq('is_active', true),
+    // Tipping rates (from tipping_rates table, tier-adjusted, per-role)
+    getItemizedTippingRates(supabase, tier),
+    import('@/lib/transport-rate-utils'),
+  ])
 
-  const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
   const transportResult = transportRates?.length ? getTransportRateForPax(transportRates[0], totalPax, isEuroPassport) : null
   if (!transportResult) {
     console.warn(`⚠️ No transportation rate found for ${effectiveCity}, ${totalPax} pax — transport will be €0`)
@@ -237,14 +279,7 @@ export async function fetchAllPricingRates(
   const vehicleSupplierName = transportRates?.[0]?.supplier_name || null
   const vehicleSupplierId = transportRates?.[0]?.supplier_id || null
 
-  // Transfer rate: query transportation_rates for airport_transfer service type
-  const { data: transferRates } = await supabase
-    .from('transportation_rates')
-    .select('*')
-    .eq('is_active', true)
-    .eq('service_type', 'airport_transfer')
-    .ilike('city', effectiveCity)
-    .limit(1)
+  // Transfer rate (query batched above)
   const transferResult = transferRates?.length ? getTransportRateForPax(transferRates[0], totalPax, isEuroPassport) : null
   const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
   if (!transferResult) {
@@ -256,14 +291,7 @@ export async function fetchAllPricingRates(
   let guidePerDay = 0
   let selectedGuide: any = null
 
-  // PRIORITY 1: Check guide_rates table (managed via Rates > Tour Guides UI)
-  const { data: guideRates } = await supabase
-    .from('guide_rates')
-    .select('*')
-    .eq('is_active', true)
-    .eq('guide_language', language)
-    .limit(1)
-
+  // PRIORITY 1: guide_rates table (query batched above)
   if (guideRates?.length) {
     guidePerDay = toNumber(guideRates[0].base_rate_eur, 0)
     selectedGuide = {
@@ -301,14 +329,7 @@ export async function fetchAllPricingRates(
 
   if (!guidePerDay) console.warn(`⚠️ No guide rate found at all — guide will be €0`)
 
-  // Entrance fees + activity rates (sea trips, boat rides, etc.)
-  const [{ data: allEntranceFees }, { data: allActivityRates }] = await Promise.all([
-    supabase.from('entrance_fees').select('*').eq('is_active', true),
-    supabase.from('activity_rates').select('*').eq('is_active', true)
-  ])
-
-  // Meal rates — fetch ALL active rates for per-city lookup
-  const { data: allMealRates } = await supabase.from('meal_rates').select('*').eq('is_active', true)
+  // Meal rates (fetched in the batch above) — per-city lookup uses all rows
   const lunchRates = (allMealRates || []).filter((r: any) => r.meal_type?.toLowerCase() === 'lunch')
   const dinnerRates = (allMealRates || []).filter((r: any) => r.meal_type?.toLowerCase() === 'dinner')
   // Flat fallback rate: average of all lunch/dinner rates, or hardcoded if none
@@ -320,16 +341,19 @@ export async function fetchAllPricingRates(
     : 0
   if (!allMealRates?.length) console.warn('⚠️ No meal rates found in meal_rates table')
 
-  // Airport services (airport_staff_rates table — managed via Rates > Airport Services UI)
-  // Fetch ALL active rows — per-airport rates are looked up dynamically via getAirportServiceRate()
-  const { data: airportServicesData } = await supabase.from('airport_staff_rates').select('*').eq('is_active', true)
+  // Airport services (airport_staff_rates rows fetched in the batch above)
   if (!airportServicesData?.length) console.warn('⚠️ No airport service rates found in airport_staff_rates — airport service will be €0')
   // Legacy: compute a fallback rate from the first row (NOT the sum of all rows)
   const airportServiceRate = airportServicesData?.length ? toNumber(airportServicesData[0].rate_eur, 0) : 0
 
-  // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
-  const { data: hotelServicesData } = await supabase.from('hotel_staff_rates').select('*').eq('is_active', true)
-  const hotelServiceRate = hotelServicesData?.reduce((sum: number, s: any) => sum + toNumber(s.rate_eur, 0), 0) || 0
+  // Hotel services (hotel_staff_rates rows fetched in the batch above)
+  // Use ONE row's rate (prefer checkin_assist, the service these lines represent),
+  // NOT the sum of all rows — same principle as the airport rate above. Summing
+  // charged every check-in/check-out line the combined rate of all service types
+  // and hotel categories.
+  const hotelSvcRows = (hotelServicesData || []).filter((s: any) => toNumber(s.rate_eur, 0) > 0)
+  const hotelSvcRow = hotelSvcRows.find((s: any) => s.service_type === 'checkin_assist') || hotelSvcRows[0]
+  const hotelServiceRate = toNumber(hotelSvcRow?.rate_eur, 0)
   if (!hotelServiceRate) console.warn('⚠️ No hotel service rates found in hotel_staff_rates — hotel service will be €0')
 
   // Accommodation
@@ -400,8 +424,7 @@ export async function fetchAllPricingRates(
     }
   }
 
-  // Tipping rates (from tipping_rates table, tier-adjusted, per-role)
-  const tippingRates = await getItemizedTippingRates(supabase, tier)
+  // tippingRates fetched in the batch above
 
   return {
     vehiclePerDay,
@@ -1052,21 +1075,29 @@ export async function createLandItineraryServices(
 
       // Insert all departure services (with multi-currency tracking)
       console.log(`📦 Day ${dayNumber} (departure): inserting ${departureServices.length} services for day_id=${day.id}`)
-      for (const svc of departureServices) {
-        const { error: depSvcError } = await supabase.from('itinerary_services').insert({
-          itinerary_day_id: day.id,
-          ...svc,
-          // Multi-currency: all rates are EUR-based; store original cost + exchange rate
-          supplier_currency: 'EUR',
-          supplier_cost_original: svc.total_cost,
-          exchange_rate_used: eurToTargetRate || 1,
-          // Convert client-facing prices to target currency
-          total_cost: toTargetCurrency(svc.total_cost),
-          client_price: toTargetCurrency(svc.client_price),
-        })
-        if (depSvcError) {
-          console.error(`❌ Day ${dayNumber} (departure): Failed to insert "${svc.service_name}":`, depSvcError)
-          warnings.push(`Day ${dayNumber}: Failed to save service "${svc.service_name}" — ${depSvcError.message}`)
+      const departureRows = departureServices.map(svc => ({
+        itinerary_day_id: day.id,
+        ...svc,
+        // Multi-currency: all rates are EUR-based; store original cost + exchange rate
+        supplier_currency: 'EUR',
+        supplier_cost_original: svc.total_cost,
+        exchange_rate_used: eurToTargetRate || 1,
+        // Convert client-facing prices to target currency
+        total_cost: toTargetCurrency(svc.total_cost),
+        client_price: toTargetCurrency(svc.client_price),
+      }))
+      if (departureRows.length > 0) {
+        // ONE batched insert (identical payloads); on batch failure fall back
+        // to row-by-row to preserve per-row error logging + warnings.
+        const { error: batchDepError } = await supabase.from('itinerary_services').insert(departureRows)
+        if (batchDepError) {
+          for (let si = 0; si < departureRows.length; si++) {
+            const { error: depSvcError } = await supabase.from('itinerary_services').insert(departureRows[si])
+            if (depSvcError) {
+              console.error(`❌ Day ${dayNumber} (departure): Failed to insert "${departureServices[si].service_name}":`, depSvcError)
+              warnings.push(`Day ${dayNumber}: Failed to save service "${departureServices[si].service_name}" — ${depSvcError.message}`)
+            }
+          }
         }
       }
       continue
@@ -1417,7 +1448,7 @@ export async function createLandItineraryServices(
         .in('service_type', ['intercity_with_sightseeing', 'intercity'])
         .ilike('origin_city', overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1))
         .ilike('destination_city', dayTripCity)
-        .order('service_type', { ascending: true }) // 'intercity_with_sightseeing' < 'intercity' lexicographically — sightseeing variant preferred
+        .order('service_type', { ascending: false }) // descending: 'intercity_with_sightseeing' > 'intercity' lexicographically — sightseeing variant preferred
         .limit(1)
 
       let dayTripRate = 0
@@ -1977,23 +2008,35 @@ export async function createLandItineraryServices(
     // Insert all services (with multi-currency tracking + currency conversion)
     console.log(`📦 Day ${dayNumber}: inserting ${services.length} services for day_id=${day.id}`)
     let insertedCount = 0
-    for (const svc of services) {
-      const { error: svcError } = await supabase.from('itinerary_services').insert({
-        itinerary_day_id: day.id,
-        ...svc,
-        // Multi-currency: all rates are EUR-based; store original cost + exchange rate
-        supplier_currency: 'EUR',
-        supplier_cost_original: svc.total_cost,
-        exchange_rate_used: eurToTargetRate || 1,
-        // Convert client-facing prices to target currency; rate_eur/rate_non_eur stay in EUR
-        total_cost: toTargetCurrency(svc.total_cost),
-        client_price: toTargetCurrency(svc.client_price),
-      })
-      if (svcError) {
-        console.error(`❌ Day ${dayNumber}: Failed to insert service "${svc.service_name}":`, svcError)
-        warnings.push(`Day ${dayNumber}: Failed to save service "${svc.service_name}" — ${svcError.message}`)
+    const serviceRows = services.map(svc => ({
+      itinerary_day_id: day.id,
+      ...svc,
+      // Multi-currency: all rates are EUR-based; store original cost + exchange rate
+      supplier_currency: 'EUR',
+      supplier_cost_original: svc.total_cost,
+      exchange_rate_used: eurToTargetRate || 1,
+      // Convert client-facing prices to target currency; rate_eur/rate_non_eur stay in EUR
+      total_cost: toTargetCurrency(svc.total_cost),
+      client_price: toTargetCurrency(svc.client_price),
+    }))
+    if (serviceRows.length > 0) {
+      // ONE batched insert per day (identical row payloads to the old per-row
+      // path). On batch failure, retry row-by-row so a single bad row doesn't
+      // drop the whole day — that fallback preserves the original per-row
+      // error logging + warnings.
+      const { error: batchSvcError } = await supabase.from('itinerary_services').insert(serviceRows)
+      if (!batchSvcError) {
+        insertedCount = serviceRows.length
       } else {
-        insertedCount++
+        for (let si = 0; si < serviceRows.length; si++) {
+          const { error: svcError } = await supabase.from('itinerary_services').insert(serviceRows[si])
+          if (svcError) {
+            console.error(`❌ Day ${dayNumber}: Failed to insert service "${services[si].service_name}":`, svcError)
+            warnings.push(`Day ${dayNumber}: Failed to save service "${services[si].service_name}" — ${svcError.message}`)
+          } else {
+            insertedCount++
+          }
+        }
       }
     }
     console.log(`✅ Day ${dayNumber}: ${insertedCount}/${services.length} services inserted successfully`)

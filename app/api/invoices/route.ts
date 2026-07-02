@@ -19,6 +19,17 @@ export async function GET(request: NextRequest) {
     const clientId = searchParams.get('clientId')
     const itineraryId = searchParams.get('itineraryId')
     const invoiceType = searchParams.get('type')
+    // ?include=payments embeds each invoice's invoice_payments rows so
+    // consumers (payments/receipts pages) don't need a per-invoice fetch.
+    const includePayments = searchParams.get('include') === 'payments'
+
+    // Clamp the caller-supplied limit to a sane range so a huge `?limit=` can't
+    // be used to extract the whole table / exhaust memory. Default 100, max 1000.
+    const requestedLimit = parseInt(searchParams.get('limit') || '100')
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 1000) : 100
+    const requestedPage = parseInt(searchParams.get('page') || '1')
+    const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
+    const from = (page - 1) * limit
 
     let query = supabaseAdmin
       .from('invoices')
@@ -26,10 +37,11 @@ export async function GET(request: NextRequest) {
         *,
         itineraries (
           client_phone
-        )
+        )${includePayments ? ',\n        invoice_payments (*)' : ''}
       `)
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
+      .range(from, from + limit - 1)
 
     if (status) {
       query = query.eq('status', status)
