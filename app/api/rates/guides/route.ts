@@ -85,6 +85,11 @@ export async function POST(request: NextRequest) {
     } else {
       existingQuery = existingQuery.is('city', null)
     }
+    if (newRate.supplier_id) {
+      existingQuery = existingQuery.eq('supplier_id', newRate.supplier_id)
+    } else {
+      existingQuery = existingQuery.is('supplier_id', null)
+    }
     const { data: existing } = await existingQuery.limit(1)
 
     let data, error
