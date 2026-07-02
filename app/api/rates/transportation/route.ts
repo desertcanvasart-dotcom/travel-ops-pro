@@ -211,6 +211,11 @@ export async function POST(request: NextRequest) {
       if (newRate.duration) existingQuery = existingQuery.eq('duration', newRate.duration)
       if (newRate.area) existingQuery = existingQuery.eq('area', newRate.area)
     }
+    if (newRate.supplier_id) {
+      existingQuery = existingQuery.eq('supplier_id', newRate.supplier_id)
+    } else {
+      existingQuery = existingQuery.is('supplier_id', null)
+    }
 
     const { data: existing } = await existingQuery.limit(1)
 
