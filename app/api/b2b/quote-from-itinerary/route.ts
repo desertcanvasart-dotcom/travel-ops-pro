@@ -344,6 +344,25 @@ export async function POST(request: NextRequest) {
     console.log('📊 Pricing context:', { tier, numPax, season, effectiveMargin })
 
     // 4. Re-price each service using B2B rate tables
+    // Meal rates fetched ONCE here (was a query per meal service inside the
+    // loop) and resolved by meal_type/base_rate_eur — the shape the meals
+    // rates UI writes — with the legacy lunch/dinner columns as fallback.
+    const { data: allMealRates } = await supabaseAdmin
+      .from('meal_rates')
+      .select('*')
+      .eq('is_active', true)
+    const mealRateFor = (mealType: 'lunch' | 'dinner'): number => {
+      const typed = (allMealRates || []).filter(
+        (r: any) => r.meal_type?.toLowerCase() === mealType && (r.base_rate_eur || 0) > 0
+      )
+      if (typed.length > 0) {
+        return typed.reduce((sum: number, r: any) => sum + (r.base_rate_eur || 0), 0) / typed.length
+      }
+      const legacyCol = mealType === 'lunch' ? 'lunch_rate_eur' : 'dinner_rate_eur'
+      const legacy = (allMealRates || []).find((r: any) => (r[legacyCol] || 0) > 0)
+      return legacy ? legacy[legacyCol] : 0
+    }
+
     const servicesSnapshot: any[] = []
     let subtotalCost = 0
 
@@ -351,8 +370,20 @@ export async function POST(request: NextRequest) {
       const dayServices = day.itinerary_services || []
 
       for (const svc of dayServices) {
-        let unitCost = svc.rate_eur || svc.total_cost || 0
-        let lineTotal = svc.total_cost || 0
+        // Every re-priced line below is EUR (B2B rate tables are EUR), so
+        // lines KEPT from the itinerary must be normalized to EUR too —
+        // itinerary_services.total_cost is stored in the itinerary's display
+        // currency (e.g. JPY). service-creation stamps supplier_currency /
+        // supplier_cost_original (EUR) / exchange_rate_used for exactly this.
+        const eurLineTotal =
+          svc.supplier_currency === 'EUR' && svc.supplier_cost_original != null
+            ? Number(svc.supplier_cost_original) || 0
+            : Number(svc.exchange_rate_used) > 0
+              ? (Number(svc.total_cost) || 0) / Number(svc.exchange_rate_used)
+              : Number(svc.total_cost) || 0
+
+        let unitCost = svc.rate_eur || eurLineTotal
+        let lineTotal = eurLineTotal
         let rateSource = 'itinerary'
         let quantityMode = svc.quantity > 1 ? 'per_pax' : 'fixed'
         let pricingNote = ''
@@ -384,15 +415,26 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Transportation
+        // Transportation — re-price ONLY generic day-tour vehicles. Airport
+        // transfers and the bundled cruise transport package have their own
+        // (very different) pricing; flattening a €25 transfer or a multi-day
+        // €500 cruise bundle to one vehicle day-rate mispriced both. Those
+        // keep their stored (EUR-normalized) cost.
         if (serviceType === 'transportation') {
-          const vehicle = await selectVehicleFromB2CTable(numPax, tier)
-          if (vehicle) {
-            unitCost = vehicle.rate
-            lineTotal = vehicle.rate
-            quantityMode = 'fixed'
-            pricingNote = `${vehicle.vehicle}: €${vehicle.rate}/day`
-            rateSource = 'vehicles'
+          const isTransferOrBundle =
+            svc.service_code === 'CRUISE-TRANSPORT' ||
+            /transfer|cruise transport|airport/i.test(serviceName)
+          if (isTransferOrBundle) {
+            pricingNote = `Kept itinerary rate (transfer/bundled transport): €${Math.round(eurLineTotal * 100) / 100}`
+          } else {
+            const vehicle = await selectVehicleFromB2CTable(numPax, tier)
+            if (vehicle) {
+              unitCost = vehicle.rate
+              lineTotal = vehicle.rate
+              quantityMode = 'fixed'
+              pricingNote = `${vehicle.vehicle}: €${vehicle.rate}/day`
+              rateSource = 'vehicles'
+            }
           }
         }
 
@@ -423,22 +465,12 @@ export async function POST(request: NextRequest) {
 
         // Meals
         if (serviceType === 'meal') {
-          const { data: mealRate } = await supabaseAdmin
-            .from('meal_rates')
-            .select('*')
-            .eq('is_active', true)
-            .limit(1)
-            .single()
-
-          if (mealRate) {
-            if (serviceName.toLowerCase().includes('dinner')) {
-              unitCost = mealRate.dinner_rate_eur || mealRate.base_rate_eur || 0
-            } else {
-              unitCost = mealRate.lunch_rate_eur || mealRate.base_rate_eur || 0
-            }
+          const mealRate = mealRateFor(serviceName.toLowerCase().includes('dinner') ? 'dinner' : 'lunch')
+          if (mealRate > 0) {
+            unitCost = mealRate
             lineTotal = unitCost * numPax
             quantityMode = 'per_pax'
-            pricingNote = `€${unitCost}/pax`
+            pricingNote = `€${Math.round(unitCost * 100) / 100}/pax`
             rateSource = 'meal_rates'
           }
         }
@@ -546,7 +578,10 @@ export async function POST(request: NextRequest) {
         single_supplement: singleSupplement,
         is_eur_passport,
         season,
-        currency: itinerary.currency || 'EUR',
+        // Every line in services_snapshot is EUR (B2B rate tables + the
+        // EUR-normalized kept lines above) — saving the itinerary's display
+        // currency here mislabeled the amounts whenever it wasn't EUR.
+        currency: 'EUR',
         status: 'draft',
         valid_until: validUntil.toISOString().split('T')[0],
         notes: `Created from WhatsApp-parsed itinerary ${itinerary.itinerary_code}`,

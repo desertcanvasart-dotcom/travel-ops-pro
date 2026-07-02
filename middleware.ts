@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { VERIFIED_USER_HEADER, signVerifiedUserHeader } from '@/lib/auth/verified-user-header'
 
 // Define route permissions - which roles can access which routes
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
@@ -62,6 +63,12 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 export async function middleware(request: NextRequest) {
+  // NEVER trust a client-supplied copy of the internal verified-user header —
+  // strip it from every forwarded request. Middleware re-adds it (HMAC-signed)
+  // below only after the session is actually verified.
+  const strippedHeaders = new Headers(request.headers)
+  strippedHeaders.delete(VERIFIED_USER_HEADER)
+
   // ============================================
   // MACHINE-TO-MACHINE WEBHOOK ALLOWLIST
   // ============================================
@@ -70,12 +77,12 @@ export async function middleware(request: NextRequest) {
   // Supabase session lookup entirely so we don't waste a round-trip or
   // touch auth cookies on every delivery.
   if (request.nextUrl.pathname.startsWith('/api/webhooks/')) {
-    return NextResponse.next()
+    return NextResponse.next({ request: { headers: strippedHeaders } })
   }
 
   let response = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: strippedHeaders,
     },
   })
 
@@ -95,7 +102,7 @@ export async function middleware(request: NextRequest) {
           })
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: strippedHeaders,
             },
           })
           response.cookies.set({
@@ -112,7 +119,7 @@ export async function middleware(request: NextRequest) {
           })
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: strippedHeaders,
             },
           })
           response.cookies.set({
@@ -226,6 +233,23 @@ export async function middleware(request: NextRequest) {
         // User doesn't have permission - redirect to dashboard with error
         return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url))
       }
+    }
+  }
+
+  // Session verified — forward the user id to route handlers via the signed
+  // internal header so getCurrentOrgId()/getCurrentUserId() can skip their own
+  // auth.getUser() network round-trip (they verify the HMAC and fall back to
+  // getUser() if the header is absent/invalid). Rebuild the forwarded request
+  // with the header and carry over any cookies the Supabase client set during
+  // token refresh — those live on `response` and must not be dropped.
+  if (user) {
+    const signed = await signVerifiedUserHeader(user.id)
+    if (signed) {
+      const forwardedHeaders = new Headers(strippedHeaders)
+      forwardedHeaders.set(VERIFIED_USER_HEADER, signed)
+      const finalResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
+      response.cookies.getAll().forEach(cookie => finalResponse.cookies.set(cookie))
+      return finalResponse
     }
   }
 

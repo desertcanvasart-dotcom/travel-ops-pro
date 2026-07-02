@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     // The itinerary is the source of truth for cost + org + client.
     const { data: itinerary, error: itinErr } = await supabaseAdmin
       .from('itineraries')
-      .select('id, org_id, total_cost, currency, client_name, client_email')
+      .select('id, org_id, total_cost, supplier_cost, currency, client_name, client_email')
       .eq('id', itinerary_id)
       .single()
 
@@ -72,7 +72,12 @@ export async function POST(request: NextRequest) {
     }
 
     const travelers = Math.max(1, Number(num_travelers) || 1)
-    const totalCost = Number(itinerary.total_cost) || 0
+    // Margin must be applied to the SUPPLIER cost. itineraries.total_cost is
+    // the CLIENT price (margin already included — both generate-itinerary and
+    // the editor save write it that way), so margining total_cost here
+    // compounded margins (~(1+m)² at equal rates). Fall back to total_cost
+    // only for legacy rows that never had supplier_cost populated.
+    const totalCost = Number(itinerary.supplier_cost) || Number(itinerary.total_cost) || 0
     const marginPct = Number(margin_percent) || 0
     const marginAmount = totalCost * (marginPct / 100)
     const sellingPrice = totalCost + marginAmount

@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { VERIFIED_USER_HEADER, verifyVerifiedUserHeader } from '@/lib/auth/verified-user-header'
 
 // M3 Phase 2A — resolve the current request's org_id.
 //
@@ -30,9 +31,23 @@ function getAdmin() {
   return cachedAdmin
 }
 
-export async function getCurrentOrgId(): Promise<string | null> {
-  const cookieStore = await cookies()
+// Resolve the authenticated user id WITHOUT a network round-trip when
+// possible: middleware already verified the session via auth.getUser() and
+// forwarded the user id in an HMAC-signed internal header (see
+// lib/auth/verified-user-header.ts). Verify the signature locally; on any
+// miss (no request context, header absent, bad signature) fall back to the
+// full auth.getUser() network call — correctness never depends on middleware.
+async function resolveVerifiedUserId(): Promise<string | null> {
+  try {
+    const headerStore = await headers()
+    const verified = await verifyVerifiedUserHeader(headerStore.get(VERIFIED_USER_HEADER))
+    if (verified) return verified
+  } catch {
+    // headers() throws outside a request context (e.g. background workers) —
+    // fall through to the cookie-based lookup below.
+  }
 
+  const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -46,14 +61,18 @@ export async function getCurrentOrgId(): Promise<string | null> {
       },
     }
   )
-
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  return user?.id ?? null
+}
+
+export async function getCurrentOrgId(): Promise<string | null> {
+  const userId = await resolveVerifiedUserId()
+  if (!userId) return null
 
   const { data: membership } = await getAdmin()
     .from('organization_members')
     .select('org_id')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -69,24 +88,7 @@ export async function getCurrentOrgId(): Promise<string | null> {
 // their data (IDOR). The /api/* middleware guarantees *a* session exists, but
 // not that a supplied userId matches it.
 export async function getCurrentUserId(): Promise<string | null> {
-  const cookieStore = await cookies()
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-        set() {},
-        remove() {},
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-  return user?.id ?? null
+  return resolveVerifiedUserId()
 }
 
 // Convenience: same as getCurrentOrgId but throws on missing. Use when
@@ -113,23 +115,12 @@ export function noOrgResponse() {
 // path PREFIX, so nested action routes it can't match (e.g.
 // /api/itineraries/[id]/generate-commissions) call this in-route instead.
 export async function getCurrentUserRole(): Promise<string | null> {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) { return cookieStore.get(name)?.value },
-        set() {}, remove() {},
-      },
-    }
-  )
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+  const userId = await resolveVerifiedUserId()
+  if (!userId) return null
   const { data: profile } = await getAdmin()
     .from('user_profiles')
     .select('role')
-    .eq('id', user.id)
+    .eq('id', userId)
     .maybeSingle()
   return (profile as { role?: string } | null)?.role ?? null
 }

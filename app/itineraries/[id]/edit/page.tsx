@@ -124,6 +124,8 @@ interface Itinerary {
   package_type: string
   status: string
   total_cost: number
+  supplier_cost?: number | null
+  margin_percent?: number | null
   notes: string
   cabin_allocation?: CabinAllocationItem[] | null
   // Provenance: when set, this itinerary was spun from a Copilot thread
@@ -699,15 +701,6 @@ export default function ItineraryEditorPage() {
     return service.quantity * rate
   }
 
-  const recalculateTotalCost = () => {
-    const total = services
-      .filter(s => !s.isDeleted)
-      .reduce((sum, s) => sum + (s.total_cost || 0), 0)
-    if (itinerary) {
-      setItinerary({ ...itinerary, total_cost: total })
-    }
-  }
-
   // ============================================
   // DRAG AND DROP
   // ============================================
@@ -741,10 +734,18 @@ export default function ItineraryEditorPage() {
     try {
       console.log('💾 Saving draft...')
 
-      // 1. Update itinerary metadata
-      const totalCost = services
+      // 1. Update itinerary metadata.
+      // Column semantics (must match generate-itinerary): supplier_cost =
+      // what we pay suppliers (Σ service total_cost); total_cost = the
+      // CLIENT price (supplier + margin). This save previously wrote the
+      // supplier sum into total_cost, so a B2C quote or invoice created
+      // after an edit-save either double-margined or billed cost with no
+      // margin depending on which writer ran last.
+      const supplierCost = services
         .filter(s => !s.isDeleted)
         .reduce((sum, s) => sum + (s.total_cost || 0), 0)
+      const marginPct = Number(itinerary.margin_percent) || 0
+      const clientTotal = Math.round(supplierCost * (1 + marginPct / 100) * 100) / 100
 
       const { error: itinError } = await supabase
         .from('itineraries')
@@ -753,7 +754,9 @@ export default function ItineraryEditorPage() {
           tier: itinerary.tier,
           package_type: itinerary.package_type,
           total_days: days.length,
-          total_cost: totalCost,
+          total_cost: clientTotal,
+          supplier_cost: supplierCost,
+          profit: clientTotal - supplierCost,
           status: itinerary.status, // Preserve the current status
           cabin_allocation: itinerary.cabin_allocation || null,
           updated_at: new Date().toISOString()
@@ -761,6 +764,8 @@ export default function ItineraryEditorPage() {
         .eq('id', itineraryId)
 
       if (itinError) throw itinError
+      // Keep local state in sync so the invoice button bills the fresh client total
+      setItinerary(prev => prev ? { ...prev, total_cost: clientTotal, supplier_cost: supplierCost } : prev)
       console.log('✅ Itinerary updated')
 
       // 2. Update each day
