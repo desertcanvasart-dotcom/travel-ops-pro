@@ -471,10 +471,12 @@ interface CityTransportRates {
   transferSupplierId: string | null
 }
 
-// Cache to avoid re-fetching for the same city
-const _cityTransportCache = new Map<string, CityTransportRates>()
-
+// Per-generation cache to avoid re-fetching for the same city. Created fresh
+// inside createLandItineraryServices and passed in — deliberately NOT module
+// state, so concurrent generations can't interfere and every generation reads
+// current rates while staying internally consistent.
 async function getTransportRatesForCity(
+  cache: Map<string, CityTransportRates>,
   supabase: any,
   city: string,
   totalPax: number,
@@ -482,7 +484,8 @@ async function getTransportRatesForCity(
   primaryRates: PricingRates
 ): Promise<CityTransportRates> {
   const cacheKey = `${city.toLowerCase()}-${totalPax}-${isEuroPassport}`
-  if (_cityTransportCache.has(cacheKey)) return _cityTransportCache.get(cacheKey)!
+  const cached = cache.get(cacheKey)
+  if (cached) return cached
 
   const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
 
@@ -528,7 +531,7 @@ async function getTransportRatesForCity(
     transferSupplierName,
     transferSupplierId,
   }
-  _cityTransportCache.set(cacheKey, result)
+  cache.set(cacheKey, result)
   return result
 }
 
@@ -545,9 +548,9 @@ interface CityHotelRates {
   warning?: string  // Warning if fallback was used (wrong city hotel)
 }
 
-const _cityHotelCache = new Map<string, CityHotelRates>()
-
+// Per-generation cache, passed in — see getTransportRatesForCity note.
 async function getHotelRatesForCity(
+  cache: Map<string, CityHotelRates>,
   supabase: any,
   city: string,
   tier: string,
@@ -555,7 +558,8 @@ async function getHotelRatesForCity(
   primaryRates: PricingRates
 ): Promise<CityHotelRates> {
   const cacheKey = `${city.toLowerCase()}-${tier}-${isEuroPassport}`
-  if (_cityHotelCache.has(cacheKey)) return _cityHotelCache.get(cacheKey)!
+  const cached = cache.get(cacheKey)
+  if (cached) return cached
 
   const { data: hotels } = await supabase
     .from('accommodation_rates')
@@ -589,7 +593,7 @@ async function getHotelRatesForCity(
     }
     console.warn(`⚠️ No hotel found for ${city}/${tier} — will show warning (not using wrong-city hotel)`)
   }
-  _cityHotelCache.set(cacheKey, result)
+  cache.set(cacheKey, result)
   return result
 }
 
@@ -763,9 +767,10 @@ export async function createLandItineraryServices(
     }
   }
 
-  // Clear per-city caches for fresh lookups each generation
-  _cityTransportCache.clear()
-  _cityHotelCache.clear()
+  // Fresh per-city caches for this generation only (no module state — see
+  // the note on getTransportRatesForCity)
+  const cityTransportCache = new Map<string, CityTransportRates>()
+  const cityHotelCache = new Map<string, CityHotelRates>()
 
   let totalSupplierCost = 0
   let totalClientPrice = 0
@@ -1025,7 +1030,7 @@ export async function createLandItineraryServices(
 
       // Transfer to airport — use per-city rate for departure city
       const departureCity = dayData.city || effectiveCity
-      const depTransport = await getTransportRatesForCity(supabase, departureCity, totalPax, isEuroPassport, rates)
+      const depTransport = await getTransportRatesForCity(cityTransportCache, supabase, departureCity, totalPax, isEuroPassport, rates)
       departureServices.push({
         service_type: 'transportation',
         service_code: depTransport.transferServiceCode,
@@ -1185,8 +1190,8 @@ export async function createLandItineraryServices(
         // Arrival: where they're going (current overnight city or day destination)
         const flightDepCity = previousDayData?.overnight_city || previousDayData?.city || effectiveCity
         const flightArrCity = dayData.overnight_city || dayData.city || effectiveCity
-        const flightDepTransport = await getTransportRatesForCity(supabase, flightDepCity, totalPax, isEuroPassport, rates)
-        const flightArrTransport = await getTransportRatesForCity(supabase, flightArrCity, totalPax, isEuroPassport, rates)
+        const flightDepTransport = await getTransportRatesForCity(cityTransportCache, supabase, flightDepCity, totalPax, isEuroPassport, rates)
+        const flightArrTransport = await getTransportRatesForCity(cityTransportCache, supabase, flightArrCity, totalPax, isEuroPassport, rates)
 
         services.push({
           service_type: 'transportation',
@@ -1222,7 +1227,7 @@ export async function createLandItineraryServices(
 
         // HYBRID departure: also need transfer to final international departure airport
         if (isHybridDomesticDeparture) {
-          const hybridDepTransport = await getTransportRatesForCity(supabase, flightArrCity, totalPax, isEuroPassport, rates)
+          const hybridDepTransport = await getTransportRatesForCity(cityTransportCache, supabase, flightArrCity, totalPax, isEuroPassport, rates)
           services.push({
             service_type: 'transportation',
             service_code: hybridDepTransport.transferServiceCode,
@@ -1403,7 +1408,7 @@ export async function createLandItineraryServices(
     // Domestic flights already have their transfers added above.
     if (hasAirportOnThisDay && hasSightseeingOnThisDay && !isDomesticFlight) {
       const airportCity = dayData.city || effectiveCity
-      const airportCityTransport = await getTransportRatesForCity(supabase, airportCity, totalPax, isEuroPassport, rates)
+      const airportCityTransport = await getTransportRatesForCity(cityTransportCache, supabase, airportCity, totalPax, isEuroPassport, rates)
       services.push({
         service_type: 'transportation',
         service_code: airportCityTransport.transferServiceCode,
@@ -1827,7 +1832,7 @@ export async function createLandItineraryServices(
     // Fetch the hotel's board_basis from the DB (cached, so no extra DB call on the hotel section below)
     const overnightForMealCheck = dayData.overnight_city || dayData.city || effectiveCity
     const hotelForMealCheck = includesHotelForDay
-      ? await getHotelRatesForCity(supabase, overnightForMealCheck, tier, isEuroPassport, rates)
+      ? await getHotelRatesForCity(cityHotelCache, supabase, overnightForMealCheck, tier, isEuroPassport, rates)
       : null
     const hotelBoardBasis = hotelForMealCheck?.boardBasis?.toUpperCase().trim() || ''
     const isHotelAllInclusive = hotelBoardBasis === 'AI'
@@ -1910,7 +1915,7 @@ export async function createLandItineraryServices(
     if (includesHotelForDay) {
       // Use per-city hotel rate — overnight city determines which hotel to use
       const overnightForHotel = dayData.overnight_city || dayData.city || effectiveCity
-      const cityHotel = await getHotelRatesForCity(supabase, overnightForHotel, tier, isEuroPassport, rates)
+      const cityHotel = await getHotelRatesForCity(cityHotelCache, supabase, overnightForHotel, tier, isEuroPassport, rates)
       // Propagate hotel lookup warning (e.g., no hotel found for this city)
       if (cityHotel.warning) {
         warnings.push(`Day ${dayNumber}: ${cityHotel.warning}`)
