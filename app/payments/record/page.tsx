@@ -58,7 +58,8 @@ export default function RecordPaymentPage() {
 
   const fetchItineraries = async () => {
     try {
-      const response = await fetch('/api/itineraries')
+      // Dropdown picker: request the API's max page (1000; default is 100)
+      const response = await fetch('/api/itineraries?limit=1000')
       const data = await response.json()
       
       if (data.success) {

@@ -193,7 +193,8 @@ export default function ExpensesPage() {
 
   const fetchItineraries = async () => {
     try {
-      const response = await fetch('/api/itineraries')
+      // Dropdown picker: request the API's max page (1000; default is 100)
+      const response = await fetch('/api/itineraries?limit=1000')
       if (response.ok) {
         const data = await response.json()
         const itinerariesData = data.success ? data.data : (Array.isArray(data) ? data : [])

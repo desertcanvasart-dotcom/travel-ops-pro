@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Search,
   Plus,
@@ -173,12 +174,11 @@ export default function InvoicesContent() {
       const params = new URLSearchParams()
       if (statusFilter) params.append('status', statusFilter)
       if (typeFilter) params.append('type', typeFilter)
-      
-      const response = await fetch(`/api/invoices?${params}`)
-      if (response.ok) {
-        const data = await response.json()
-        setInvoices(data)
-      }
+
+      // Walk every page — this IS the invoices list, and a one-shot request
+      // silently truncates to the API's newest page (default 100 rows).
+      const data = await fetchAllPages<any>(`/api/invoices?${params}`)
+      setInvoices(data)
     } catch (error) {
       console.error('Error fetching invoices:', error)
     } finally {
@@ -188,7 +188,9 @@ export default function InvoicesContent() {
 
   const fetchClients = async () => {
     try {
-      const response = await fetch('/api/clients')
+      // Dropdown picker: request the API's max page (200) rather than the
+      // default 50 so existing clients stay selectable.
+      const response = await fetch('/api/clients?limit=200')
       if (response.ok) {
         const data = await response.json()
         
@@ -229,7 +231,9 @@ export default function InvoicesContent() {
 
   const fetchItineraries = async () => {
     try {
-      const response = await fetch('/api/itineraries')
+      // Dropdown picker: request the API's max page (1000) rather than the
+      // default 100 so older itineraries stay selectable.
+      const response = await fetch('/api/itineraries?limit=1000')
       if (response.ok) {
         const data = await response.json()
         const itinerariesData = data.success ? data.data : (Array.isArray(data) ? data : [])
