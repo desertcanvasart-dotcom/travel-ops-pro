@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   Receipt,
   Download,
@@ -59,22 +60,19 @@ export default function ReceiptsPage() {
   const fetchAllPayments = async () => {
     setLoading(true)
     try {
-      // Fetch from both sources in parallel (same as Payments page).
-      // High explicit limits (the APIs now default to 100 rows) and
-      // ?include=payments so invoices arrive with their payments embedded
-      // instead of one fetch per invoice.
-      const [itineraryPaymentsRes, invoicesRes] = await Promise.all([
-        fetch('/api/payments?limit=1000'),
-        fetch('/api/invoices?include=payments&limit=1000')
+      // Fetch from both sources in parallel (same as Payments page), walking
+      // every page — a one-shot capped request would silently truncate past
+      // the API's 1000-row page cap. ?include=payments so invoices arrive
+      // with their payments embedded instead of one fetch per invoice.
+      const [itineraryPayments, invoices] = await Promise.all([
+        fetchAllPages<any>('/api/payments'),
+        fetchAllPages<any>('/api/invoices?include=payments')
       ])
 
       const allPayments: UnifiedPayment[] = []
 
       // Process itinerary payments
-      if (itineraryPaymentsRes.ok) {
-        const itineraryData = await itineraryPaymentsRes.json()
-        const itineraryPayments = itineraryData.success ? itineraryData.data : (Array.isArray(itineraryData) ? itineraryData : [])
-        
+      {
         itineraryPayments.forEach((p: any) => {
           allPayments.push({
             id: p.id,
@@ -96,9 +94,7 @@ export default function ReceiptsPage() {
       }
 
       // Process invoice payments
-      if (invoicesRes.ok) {
-        const invoices = await invoicesRes.json()
-        
+      {
         for (const invoice of invoices) {
           // Payments come embedded on the invoice (?include=payments) — no
           // per-invoice fetch needed

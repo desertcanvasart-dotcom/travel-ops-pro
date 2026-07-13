@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   ChevronLeft,
   ChevronRight,
@@ -180,15 +181,11 @@ export default function CalendarPage() {
 
   const fetchData = async () => {
     try {
-      // High explicit limit — the API now defaults to 100 rows and the
-      // calendar needs every date-ranged trip, not just the newest page
-      const bookingsResponse = await fetch('/api/itineraries?limit=1000')
-      const bookingsData = await bookingsResponse.json()
-      
-      if (bookingsData.success) {
-        const validBookings = bookingsData.data.filter((b: Booking) => b.start_date && b.end_date)
-        setBookings(validBookings)
-      }
+      // Walk every page — the calendar needs every date-ranged trip, and a
+      // one-shot request silently truncates past the API's 1000-row page cap
+      const allBookings = await fetchAllPages<Booking>('/api/itineraries')
+      const validBookings = allBookings.filter((b: Booking) => b.start_date && b.end_date)
+      setBookings(validBookings)
 
       const guidesResponse = await fetch('/api/guides?is_active=true')
       const guidesData = await guidesResponse.json()

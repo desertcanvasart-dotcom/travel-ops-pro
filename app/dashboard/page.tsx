@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/app/contexts/AuthContext'
 import {
@@ -90,11 +91,10 @@ export default function DashboardPage() {
         new Date(f.due_date) < new Date()
       ).length || 0
 
-      // Get itinerary/quote stats (B2C). High explicit limit — the API now
-      // defaults to 100 rows and the upcoming-trips stat scans all quotes.
-      const quotesRes = await fetch('/api/itineraries?limit=1000')
-      const quotesData = await quotesRes.json()
-      const quotes = quotesData.data || []
+      // Get itinerary/quote stats (B2C). Walk every page — the upcoming-trips
+      // stat scans all quotes, and a one-shot request silently truncates past
+      // the API's 1000-row page cap.
+      const quotes = await fetchAllPages<any>('/api/itineraries')
 
       // Get upcoming trips (next 30 days)
       const today = new Date()
@@ -141,7 +141,8 @@ export default function DashboardPage() {
         activeClients,
         pendingFollowups,
         overdueFollowups,
-        totalQuotes: quotesData.count ?? quotes.length,
+        // quotes now holds every row (full page walk), so length IS the count
+        totalQuotes: quotes.length,
         quotesSent: quotes.filter((q: any) => q.status === 'sent' || q.status === 'confirmed').length,
         quotesConfirmed: quotes.filter((q: any) => q.status === 'confirmed').length,
         upcomingTrips,

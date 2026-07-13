@@ -31,14 +31,15 @@ export async function GET(request: NextRequest) {
     const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
     const from = (page - 1) * limit
 
-    let query = supabaseAdmin
-      .from('invoices')
-      .select(`
-        *,
-        itineraries (
-          client_phone
-        )${includePayments ? ',\n        invoice_payments (*)' : ''}
-      `)
+    // Two static select strings (not one interpolated template) so supabase-js's
+    // type-level parser can parse the query; interpolation breaks it.
+    let query = (includePayments
+      ? supabaseAdmin
+          .from('invoices')
+          .select('*, itineraries ( client_phone ), invoice_payments (*)')
+      : supabaseAdmin
+          .from('invoices')
+          .select('*, itineraries ( client_phone )'))
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .range(from, from + limit - 1)

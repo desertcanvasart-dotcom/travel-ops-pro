@@ -199,7 +199,8 @@ export default function CommissionsPage() {
 
   const fetchItineraries = async () => {
     try {
-      const response = await fetch('/api/itineraries')
+      // Dropdown picker: request the API's max page (1000; default is 100)
+      const response = await fetch('/api/itineraries?limit=1000')
       if (response.ok) {
         const result = await response.json()
         setItineraries(result.data || result || [])

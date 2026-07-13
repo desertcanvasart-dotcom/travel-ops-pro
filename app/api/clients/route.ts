@@ -8,21 +8,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/clients?userId=xxx&search=xxx&limit=100
+// GET /api/clients?userId=xxx&search=xxx&limit=100&page=1
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const search = sanitizeSearchTerm(searchParams.get('search'))
     // Clamp the caller-supplied limit to a sane range so a huge `?limit=` can't
     // be used to extract the whole table / exhaust memory. Default 50, max 200.
+    // Callers that need the full set walk `?page=` (lib/fetch-all-pages.ts).
     const requestedLimit = parseInt(searchParams.get('limit') || '50')
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 50
+    const requestedPage = parseInt(searchParams.get('page') || '1')
+    const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
+    const from = (page - 1) * limit
 
     let query = supabase
       .from('clients')
-      .select('id, first_name, last_name, email, phone, status')
+      .select('id, first_name, last_name, email, phone, status, nationality, preferred_language, internal_notes')
+      // Secondary sort on id keeps page boundaries stable when names tie.
       .order('first_name', { ascending: true })
-      .limit(limit)
+      .order('id', { ascending: true })
+      .range(from, from + limit - 1)
 
     if (search) {
       query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`)
@@ -40,7 +46,10 @@ export async function GET(request: NextRequest) {
       name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
       email: client.email,
       phone: client.phone,
-      status: client.status
+      status: client.status,
+      nationality: client.nationality,
+      preferred_language: client.preferred_language,
+      internal_notes: client.internal_notes
     }))
 
     return NextResponse.json({ clients: transformedClients })

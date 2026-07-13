@@ -159,7 +159,8 @@ export default function SupplierInvoicesPage() {
           .catch(() => {})
       }
       if (itineraries.length === 0) {
-        fetch('/api/itineraries')
+        // Dropdown picker: request the API's max page (1000; default is 100)
+        fetch('/api/itineraries?limit=1000')
           .then(r => r.json())
           .then(res => {
             const arr = Array.isArray(res) ? res : (res.data || [])
@@ -172,7 +173,8 @@ export default function SupplierInvoicesPage() {
           .catch(() => {})
       }
       if (clientInvoices.length === 0) {
-        fetch('/api/invoices')
+        // Dropdown picker: request the API's max page (1000; default is 100)
+        fetch('/api/invoices?limit=1000')
           .then(r => r.json())
           .then(res => {
             const arr = Array.isArray(res) ? res : (res.data || [])

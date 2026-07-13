@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { 
   Search, Plus, MoreHorizontal, Users, UserCog, X, Edit, Trash2, Eye, 
   Loader2, AlertCircle, Phone, Mail, MessageCircle, MapPin, Globe,
@@ -145,15 +146,14 @@ export default function ContactsContent() {
     try {
       const allContacts: Contact[] = []
 
-      // Fetch clients
-      const clientsRes = await fetch('/api/clients')
-      if (clientsRes.ok) {
-        const result = await clientsRes.json()
-        const clients = result.data || []
+      // Fetch clients — walk every page (the API returns `{ clients }` capped
+      // at 200/page; this is the full contacts directory, not a picker)
+      {
+        const clients = await fetchAllPages<any>('/api/clients', { pageSize: 200 })
         allContacts.push(...clients.map((c: any) => ({
           id: c.id,
           type: 'client' as const,
-          name: `${c.first_name || ''} ${c.last_name || ''}`.trim(),
+          name: c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim(),
           subtype: c.status,
           email: c.email,
           phone: c.phone,

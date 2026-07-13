@@ -93,7 +93,8 @@ export default function ComposeEmailModal({
         const [sigRes, tempRes, clientsRes] = await Promise.all([
           fetch(`/api/email/signatures?userId=${userId}`),
           fetch(`/api/email/templates?userId=${userId}`),
-          fetch('/api/clients?limit=500'),
+          // Recipient picker: the clients API clamps to max 200 per page
+          fetch('/api/clients?limit=200'),
         ])
 
         const sigData = await sigRes.json()

@@ -239,7 +239,8 @@ export default function TasksPage() {
 
   const fetchClients = async () => {
     try {
-      const response = await fetch('/api/clients')
+      // Dropdown picker: request the API's max page (200; default is 50)
+      const response = await fetch('/api/clients?limit=200')
       if (response.ok) {
         const result = await response.json()
         const data = result.clients || result.data || (Array.isArray(result) ? result : [])
@@ -252,7 +253,8 @@ export default function TasksPage() {
 
   const fetchItineraries = async () => {
     try {
-      const response = await fetch('/api/itineraries')
+      // Dropdown picker: request the API's max page (1000; default is 100)
+      const response = await fetch('/api/itineraries?limit=1000')
       if (response.ok) {
         const result = await response.json()
         const data = result.success ? result.data : (Array.isArray(result) ? result : [])

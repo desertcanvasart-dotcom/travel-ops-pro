@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   DollarSign,
   TrendingUp,
@@ -68,14 +69,14 @@ export default function PaymentsPage() {
   const fetchAllPayments = async () => {
     setLoading(true)
     try {
-      // Fetch from both sources in parallel. High explicit limits: the stats
-      // cards (total received / pending / overdue) sum across all rows, so we
-      // request the API's max rather than the default page of 100. Invoices
-      // come with their payments embedded (?include=payments) to avoid a
-      // per-invoice request waterfall.
-      const [itineraryPaymentsRes, invoicesRes] = await Promise.all([
-        fetch('/api/payments?limit=1000'),
-        fetch('/api/invoices?include=payments&limit=1000')
+      // Fetch from both sources in parallel, walking every page: the stats
+      // cards (total received / pending / overdue) sum across ALL rows, and a
+      // one-shot capped request would silently truncate past the API's 1000-row
+      // page cap. Invoices come with their payments embedded
+      // (?include=payments) to avoid a per-invoice request waterfall.
+      const [itineraryPayments, invoices] = await Promise.all([
+        fetchAllPages<any>('/api/payments'),
+        fetchAllPages<any>('/api/invoices?include=payments')
       ])
 
       const allPayments: UnifiedPayment[] = []
@@ -84,10 +85,7 @@ export default function PaymentsPage() {
       let overduePayments = 0
 
       // Process itinerary payments
-      if (itineraryPaymentsRes.ok) {
-        const itineraryData = await itineraryPaymentsRes.json()
-        const itineraryPayments = itineraryData.success ? itineraryData.data : (Array.isArray(itineraryData) ? itineraryData : [])
-
+      {
         itineraryPayments.forEach((p: any) => {
           allPayments.push({
             id: p.id,
@@ -109,8 +107,7 @@ export default function PaymentsPage() {
       }
 
       // Process invoice payments
-      if (invoicesRes.ok) {
-        const invoices = await invoicesRes.json()
+      {
         const now = new Date()
 
         for (const invoice of invoices) {
