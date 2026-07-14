@@ -117,6 +117,7 @@ _New: `lib/rate-validation.ts` (port) + `lib/pricing-coverage.ts` (port) + `app/
 ### Layer 5 — CI + drift guard
 - **New:** `.github/workflows/ci.yml` (port) — `npm test` + scoped `tsc` on PRs/pushes to `main`, Puppeteer download skipped.
 - **New:** `tsconfig.ci.json` (port) — type-checks the harness lib files only (full app tsc needs `.next/` from a build).
+  _(Superseded 2026-07-14: CI now runs `next typegen` + FULL `tsc --noEmit`; tsconfig.ci.json was removed — the scoped check had let an app-code type error merge with green CI.)_
 - **New:** golden-basket drift guard — inline-snapshot of per-person prices for all tiers × passport types.
 
 ---
