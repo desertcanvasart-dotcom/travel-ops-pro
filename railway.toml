@@ -14,3 +14,13 @@
 [[cron]]
 schedule = "0 2 * * *"   # nightly at 02:00 UTC
 command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/process-agent-memory\" -H \"Authorization: Bearer $CRON_SECRET\""
+
+# Nightly data-integrity sweep (see app/api/cron/data-invariants/route.ts):
+# 12 invariant checks over itineraries/invoices/rates; violations alert
+# BUSINESS_EMAIL. Curl's -f makes a non-2xx exit non-zero for Railway's cron
+# logs, but note the endpoint intentionally returns 200 with ok:false for
+# DATA violations (email is the alert channel) — -f only catches infra
+# failures (500s / unreachable).
+[[cron]]
+schedule = "15 3 * * *"  # nightly at 03:15 UTC
+command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/data-invariants\" -H \"Authorization: Bearer $CRON_SECRET\""

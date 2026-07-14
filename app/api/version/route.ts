@@ -23,8 +23,13 @@ export const dynamic = 'force-dynamic'
 
 const startedAt = new Date().toISOString()
 
-function resolveSha(): { sha: string; shaSource: 'env' | 'git' | 'unknown' } {
+function resolveSha(): { sha: string; shaSource: 'env' | 'railway' | 'git' | 'unknown' } {
   if (process.env.GIT_SHA) return { sha: process.env.GIT_SHA, shaSource: 'env' }
+  // Prod deploys on Railway (dashboard-managed build, no Dockerfile) —
+  // Railway injects the deployed commit for GitHub-linked services.
+  if (process.env.RAILWAY_GIT_COMMIT_SHA) {
+    return { sha: process.env.RAILWAY_GIT_COMMIT_SHA, shaSource: 'railway' }
+  }
   try {
     const sha = execSync('git rev-parse HEAD', {
       cwd: process.cwd(),
