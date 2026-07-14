@@ -51,9 +51,8 @@ function transportRateKey(r: any): string {
     : [String(r.city ?? '').toLowerCase(), r.duration ?? '', r.area ?? '']
   // service_code IS part of the real identity: live data legitimately holds
   // many rows per city/service_type distinguished only by service_code
-  // (e.g. 15 named Aswan city-tour routes). NOTE: the POST
-  // /api/rates/transportation dedup key OMITS service_code and would update
-  // an arbitrary one of those rows — tracked as a separate bug.
+  // (e.g. 15 named Aswan city-tour routes). The POST /api/rates/transportation
+  // dedup key uses this same shape — keep the two in sync.
   return [r.supplier_id ?? 'null', r.service_type, String(r.service_code ?? '').toLowerCase(), ...scope].join('|')
 }
 

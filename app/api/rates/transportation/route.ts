@@ -196,10 +196,14 @@ export async function POST(request: NextRequest) {
     }
 
 
-    // Check for existing rate with same natural key
+    // Check for existing rate with same natural key. service_code is part of
+    // the key: live data legitimately holds many rows per coarse scope that
+    // differ only by service_code (e.g. 15 named Aswan city_tour routes), so
+    // matching without it would update an arbitrary named route. Keep this key
+    // in sync with transportRateKey() in app/api/cron/data-invariants/route.ts.
     let existingQuery = supabaseAdmin
       .from('transportation_rates')
-      .select('id')
+      .select('id, service_code')
       .eq('service_type', newRate.service_type)
 
     if (isIntercityType(newRate.service_type)) {
@@ -217,7 +221,14 @@ export async function POST(request: NextRequest) {
       existingQuery = existingQuery.is('supplier_id', null)
     }
 
-    const { data: existing } = await existingQuery.limit(1)
+    const { data: coarseMatches } = await existingQuery
+
+    // service_code compares in JS — case-insensitive, null/'' as one identity —
+    // because .ilike would treat %/_ inside a code as wildcards and over-match.
+    const codeKey = String(newRate.service_code ?? '').toLowerCase()
+    const existing = (coarseMatches ?? []).filter(
+      (r: any) => String(r.service_code ?? '').toLowerCase() === codeKey
+    )
 
     let data, error
     if (existing?.length) {
