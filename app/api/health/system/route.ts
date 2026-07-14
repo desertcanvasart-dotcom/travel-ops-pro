@@ -66,6 +66,9 @@ const MUST_BE_LOCKED = [
   'hotel_staff_rates',
   'tipping_rates',
   'guides',
+  // Audit trail of rate changes (full before/after records) — authenticated
+  // read-only per 20260226_rate_audit_trail.sql (applied 2026-07-14).
+  'rate_audit_log',
 ]
 
 // Tables that are anon-readable on purpose. Empty since the 20260714
