@@ -53,12 +53,9 @@ const MUST_BE_LOCKED = [
   'client_notes',
   'client_followups',
   'entrance_fees',
-]
-
-// Anon-readable today BY DESIGN (content/rate data; tightening tracked as a
-// follow-up — includes the known `guides` view leak). Counts are reported for
-// visibility, never failed on.
-const OPEN_BY_DESIGN = [
+  // Rate/content tables + the guides view — locked by the 20260714
+  // rate-table tightening migration (authenticated-only + view
+  // security_invoker). Previously listed as OPEN_BY_DESIGN.
   'transportation_rates',
   'accommodation_rates',
   'guide_rates',
@@ -70,6 +67,11 @@ const OPEN_BY_DESIGN = [
   'tipping_rates',
   'guides',
 ]
+
+// Tables that are anon-readable on purpose. Empty since the 20260714
+// tightening; keep the mechanism so a future deliberate exception is
+// declared here instead of weakening MUST_BE_LOCKED.
+const OPEN_BY_DESIGN: string[] = []
 
 async function anonCount(
   // Loose generics on purpose: version-specific SupabaseClient generic

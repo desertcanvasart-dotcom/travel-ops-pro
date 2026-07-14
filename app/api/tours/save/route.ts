@@ -3,11 +3,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@/lib/supabase-server'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
+// Service-role client (route is session-gated by middleware). Previously used
+// the raw anon key inline — its WRITES to tours/tour_days/tour_pricing only
+// worked because those tables were anon-writable.
+const supabase = createServerClient()
 
 export async function POST(request: NextRequest) {
   try {

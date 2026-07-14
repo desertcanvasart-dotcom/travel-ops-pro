@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@/lib/supabase-server'
 
 // ============================================
 // TOUR DETAIL API - WITH VARIATION_ID
 // File: app/api/tours/[code]/route.ts
 // ============================================
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
+// Service-role client (route is session-gated by middleware). This route
+// previously used the raw anon key inline — it only worked because
+// tour_templates/tour_variations were anon-readable, which the 20260714
+// rate-table RLS tightening closes.
+const supabase = createServerClient()
 
 export async function GET(
   request: NextRequest,
