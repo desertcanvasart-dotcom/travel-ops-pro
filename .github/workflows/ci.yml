@@ -45,3 +45,59 @@ jobs:
         # with green CI while `tsc --noEmit` was broken on main — this closes
         # that class permanently.
         run: NODE_OPTIONS=--max-old-space-size=4096 npx tsc --noEmit
+
+  e2e:
+    name: E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Secrets are absent on fork PRs — skip cleanly instead of failing on a
+      # server that can't boot. The gate step decides once; later steps honor it.
+      - name: Check secrets availability
+        id: gate
+        run: |
+          if [ -n "$NEXT_PUBLIC_SUPABASE_URL" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::E2E skipped — Supabase secrets unavailable (fork PR?)"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        if: steps.gate.outputs.run == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E smoke suite
+        if: steps.gate.outputs.run == 'true'
+        # Boots its own next dev on :3100 (playwright.config.ts webServer) and
+        # runs both tiers against the live Supabase project: 13 journeys incl.
+        # the Edit-page regression test and the RLS exposure probe. Reads-only
+        # against the seeded E2E org (npm run seed:e2e fixtures).
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: steps.gate.outputs.run == 'true' && failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
