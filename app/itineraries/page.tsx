@@ -421,7 +421,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                       <button
                         onClick={() => router.push(`/itineraries/${itinerary.id}/edit`)}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
-                        title={t('edit')}
+                        title={t('editAction')}
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>

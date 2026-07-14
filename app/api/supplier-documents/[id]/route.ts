@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -6,7 +6,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient()
+  const supabase = createServerClient()
   const { id } = await params
 
   try {
@@ -35,7 +35,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient()
+  const supabase = createServerClient()
   const { id } = await params
 
   try {
@@ -105,7 +105,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient()
+  const supabase = createServerClient()
   const { id } = await params
 
   try {

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
@@ -121,7 +121,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = createClient()
+  const supabase = createServerClient()
   const { id: itineraryId } = await params
 
   // Reset offsets for each request

@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { NextRequest, NextResponse } from 'next/server'
@@ -38,7 +39,7 @@ async function generateDocumentNumber(supabase: any, docType: string): Promise<s
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = createClient()
+  const supabase = createServerClient()
   const { searchParams } = new URL(request.url)
   
   // Filter parameters
@@ -120,9 +121,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createClient()
-  
+  const supabase = createServerClient()
+
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     
     // Generate document number if not provided
@@ -154,6 +158,7 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .select('client_name, num_adults, num_children')
         .eq('id', body.itinerary_id)
+        .eq('org_id', orgId)
         .single()
       
       if (itinerary) {

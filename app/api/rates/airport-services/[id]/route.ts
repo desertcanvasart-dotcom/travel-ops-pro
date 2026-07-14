@@ -1,7 +1,7 @@
 // app/api/rates/airport-services/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 export async function PUT(
   request: NextRequest,
@@ -9,7 +9,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     const { data, error } = await supabase
@@ -33,7 +33,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     const { error } = await supabase
       .from('airport_staff_rates')

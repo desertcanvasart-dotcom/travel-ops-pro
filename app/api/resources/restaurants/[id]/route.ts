@@ -5,7 +5,8 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // GET - Get single restaurant
 export async function GET(
@@ -13,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { id } = await params
 
     const { data, error } = await supabase
@@ -49,7 +50,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { id } = await params
     const body = await request.json()
 
@@ -139,7 +140,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const supabase = createServerClient()
     const { id } = await params
 
     // Check if restaurant has assigned itineraries
@@ -147,6 +151,7 @@ export async function DELETE(
       .from('itineraries')
       .select('id')
       .eq('assigned_restaurant_id', id)
+      .eq('org_id', orgId)
       .limit(1)
 
     if (checkError) {

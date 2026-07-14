@@ -1,11 +1,11 @@
 // app/api/itinerary-resources/conflicts/route.ts
 
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     
     const itineraryId = searchParams.get('itinerary_id')

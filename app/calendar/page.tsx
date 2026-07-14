@@ -188,15 +188,19 @@ export default function CalendarPage() {
       setBookings(validBookings)
 
       const guidesResponse = await fetch('/api/guides?is_active=true')
-      const guidesData = await guidesResponse.json()
-      if (guidesData.success) {
-        setGuides(guidesData.data)
+      if (guidesResponse.ok) {
+        const guidesData = await guidesResponse.json()
+        if (guidesData.success) {
+          setGuides(guidesData.data)
+        }
       }
 
       const vehiclesResponse = await fetch('/api/vehicles?is_active=true')
-      const vehiclesData = await vehiclesResponse.json()
-      if (vehiclesData.success) {
-        setVehicles(vehiclesData.data)
+      if (vehiclesResponse.ok) {
+        const vehiclesData = await vehiclesResponse.json()
+        if (vehiclesData.success) {
+          setVehicles(vehiclesData.data)
+        }
       }
     } catch (error) {
       console.error('Error fetching data:', error)

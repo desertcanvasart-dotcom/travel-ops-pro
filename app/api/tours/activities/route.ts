@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // ============================================
 // ACTIVITIES COLLECTION ROUTE
@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase'
 // GET - List all activities (optionally filter by tour_day_id)
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     const { searchParams } = new URL(request.url)
     const dayId = searchParams.get('tour_day_id')
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 // POST - Create new activity
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     if (!body.tour_day_id || body.activity_order === undefined) {

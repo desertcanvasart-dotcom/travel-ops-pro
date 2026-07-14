@@ -8,34 +8,39 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const supabase = createServerClient()
     const { id } = await params
-    
+
     const { data: guide, error } = await supabase
       .from('guides')
       .select('*')
       .eq('id', id)
       .single()
-    
+
     if (error || !guide) {
       return NextResponse.json(
         { success: false, error: 'Guide not found' },
         { status: 404 }
       )
     }
-    
+
     // Get associated bookings
     const { data: bookings } = await supabase
       .from('itineraries')
       .select('id, itinerary_code, client_name, start_date, end_date, total_cost')
       .eq('assigned_guide_id', id)
+      .eq('org_id', orgId)
       .order('start_date', { ascending: true })
     
     return NextResponse.json({
@@ -60,7 +65,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { id } = await params
     const body = await request.json()
     
@@ -146,14 +151,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const supabase = createServerClient()
     const { id } = await params
-    
+
     // Check if guide has any assigned bookings
     const { data: bookings, error: bookingsError } = await supabase
       .from('itineraries')
       .select('id')
       .eq('assigned_guide_id', id)
+      .eq('org_id', orgId)
       .limit(1)
     
     if (bookingsError) {

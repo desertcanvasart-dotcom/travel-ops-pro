@@ -6,7 +6,7 @@
 // 4. Returns grid days with slots pre-filled and matched to real rates
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
 import { enrichSlots } from '@/app/pricing-grid/lib/enrich-slots'
@@ -508,7 +508,7 @@ Output ONLY valid JSON, no other text.`
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { text, tier, pax } = await request.json()
 
     if (!text || typeof text !== 'string') {

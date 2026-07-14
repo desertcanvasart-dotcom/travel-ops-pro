@@ -5,12 +5,12 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 // GET - List all hotel staff with hotel info
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     const { searchParams } = new URL(request.url)
     const hotelId = searchParams.get('hotel_id')
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 // POST - Create new hotel staff
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     if (!body.name || !body.phone) {

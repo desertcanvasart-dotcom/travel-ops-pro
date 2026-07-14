@@ -1,8 +1,5 @@
-import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
+import { type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createSharedBrowserClient } from '@/app/supabase'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 // In the browser, ALWAYS return the shared cookie-based @supabase/ssr client
 // (app/supabase.ts) — the one the login flow authenticates. A plain
@@ -12,15 +9,32 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 // itinerary edit page ("Itinerary not found") and every other direct
 // browser read of an org-scoped table once RLS went live.
 //
-// On the server (API routes importing this module) there are no request
-// cookies to read here, so keep the historical anon client — unchanged
-// behavior. Those routes only work against anon-readable tables and should
-// migrate to an org-scoped admin client (tracked separately).
+// On the server there is intentionally NO working client anymore. The API
+// routes that used to import the historical anon client here have all been
+// migrated to the service-role client (lib/supabase-server.ts) with
+// getCurrentOrgId() scoping where the table has org_id. Constructing this
+// module during SSR is still harmless (client components that import
+// `supabase` evaluate it on the server), so the server branch returns a
+// proxy that only throws on first actual use — loudly, instead of silently
+// querying as `anon` and getting zero rows under RLS.
 export const createClient = (): SupabaseClient => {
   if (typeof window !== 'undefined') {
     return createSharedBrowserClient() as unknown as SupabaseClient
   }
-  return createSupabaseClient(supabaseUrl, supabaseAnonKey)
+  return new Proxy({} as SupabaseClient, {
+    get(_target, prop) {
+      // Benign introspection (await-ability checks, serialization, node
+      // inspect) must not blow up SSR — only real API usage should throw.
+      if (typeof prop === 'symbol' || prop === 'then' || prop === 'toJSON') {
+        return undefined
+      }
+      throw new Error(
+        `lib/supabase: server-side use of the anon client is not supported (accessed '${String(prop)}'). ` +
+        `In API routes use createServerClient() from '@/lib/supabase-server' (service role), ` +
+        `scoped with getCurrentOrgId() from '@/lib/auth/current-org' on tables that have org_id.`
+      )
+    },
+  })
 }
 
 export const supabase = createClient()
