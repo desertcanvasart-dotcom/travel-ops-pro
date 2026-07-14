@@ -31,11 +31,43 @@ function applyOr(rows: Row[], expr: string): Row[] {
   )
 }
 
-function makeQuery(rows: Row[]) {
+let idCounter = 0
+
+function makeQuery(rows: Row[], table?: string) {
   let filtered = [...rows]
+  // Set by .update(patch); applied to the filtered rows at terminal time
+  // (PostgREST semantics: filters compose before the write executes).
+  let pendingPatch: Row | null = null
+
+  function applyPendingPatch() {
+    if (pendingPatch) {
+      // `filtered` holds references to the live table rows, so assigning
+      // mutates the stored data — matching a real UPDATE.
+      for (const row of filtered) Object.assign(row, pendingPatch)
+      pendingPatch = null
+    }
+  }
 
   const builder: any = {
     select() {
+      return builder
+    },
+    insert(payload: Row | Row[]) {
+      if (!table) throw new Error('mock insert: table name not provided')
+      const inserted = (Array.isArray(payload) ? payload : [payload]).map((r) => ({
+        id: r.id ?? `mock-${table}-${++idCounter}`,
+        ...r,
+      }))
+      if (!currentTables[table]) currentTables[table] = []
+      currentTables[table].push(...inserted)
+      // After insert, the builder's result set IS the inserted rows, so the
+      // real-client chains `.insert(x).select().single()` and plain
+      // `await .insert(rows)` both behave correctly.
+      filtered = inserted
+      return builder
+    },
+    update(patch: Row) {
+      pendingPatch = { ...patch }
       return builder
     },
     eq(col: string, val: any) {
@@ -79,6 +111,7 @@ function makeQuery(rows: Row[]) {
       return builder
     },
     single() {
+      applyPendingPatch()
       return Promise.resolve(
         filtered.length
           ? { data: filtered[0], error: null }
@@ -86,10 +119,12 @@ function makeQuery(rows: Row[]) {
       )
     },
     maybeSingle() {
+      applyPendingPatch()
       return Promise.resolve({ data: filtered[0] ?? null, error: null })
     },
     // Make the builder awaitable: `await query` -> { data: rows[], error: null }
     then(onFulfilled: any, onRejected: any) {
+      applyPendingPatch()
       return Promise.resolve({ data: filtered, error: null }).then(
         onFulfilled,
         onRejected
@@ -103,6 +138,6 @@ function makeQuery(rows: Row[]) {
 /** Drop-in replacement for supabase-js `createClient`. */
 export function createMockClient() {
   return {
-    from: (table: string) => makeQuery(currentTables[table] ?? []),
+    from: (table: string) => makeQuery(currentTables[table] ?? [], table),
   }
 }
