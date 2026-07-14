@@ -22,9 +22,25 @@ test.describe('unauthenticated smoke', () => {
   })
 
   test('API auth gate returns 401 for anonymous requests', async ({ request }) => {
-    for (const endpoint of ['/api/itineraries', '/api/invoices', '/api/payments', '/api/clients']) {
+    // /api/health/system is included deliberately: it describes security
+    // posture and must never be readable without a session.
+    for (const endpoint of [
+      '/api/itineraries',
+      '/api/invoices',
+      '/api/payments',
+      '/api/clients',
+      '/api/health/system',
+    ]) {
       const res = await request.get(endpoint)
       expect(res.status(), `${endpoint} must not serve data anonymously`).toBe(401)
     }
+  })
+
+  test('version endpoint is public and reports a commit', async ({ request }) => {
+    const res = await request.get('/api/version')
+    expect(res.status()).toBe(200)
+    const v = await res.json()
+    expect(typeof v.sha).toBe('string')
+    expect(v.sha.length).toBeGreaterThan(0)
   })
 })
