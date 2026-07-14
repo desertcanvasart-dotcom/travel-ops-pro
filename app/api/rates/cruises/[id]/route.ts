@@ -1,7 +1,7 @@
 // app/api/rates/cruises/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 
 export async function PUT(
@@ -10,7 +10,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     // Validate supplier_id only when the client touched the field (PUT can patch).
@@ -44,7 +44,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
 
     const { error } = await supabase
       .from('nile_cruises')

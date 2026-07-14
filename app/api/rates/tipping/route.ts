@@ -2,11 +2,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 
 export async function GET() {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { data, error } = await supabase
       .from('tipping_rates')
       .select('*')
@@ -23,7 +23,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)

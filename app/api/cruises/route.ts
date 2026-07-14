@@ -1,11 +1,11 @@
 // app/api/cruises/route.ts
 
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     
     const isActive = searchParams.get('is_active')
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = await createServerClient()
     const body = await request.json()
     
     const { data, error } = await supabase

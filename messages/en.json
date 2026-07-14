@@ -1276,7 +1276,8 @@
       "paymentDueWithin14Days": "Payment due within 14 days",
       "tripDatesNote": "Trip dates: {startDate} – {endDate}",
       "failedToCreateInvoice": "Failed to create invoice"
-    }
+    },
+    "editAction": "Edit"
   },
   "payments": {
     "loadingPayments": "Loading payments...",

@@ -1714,7 +1714,8 @@
       "unassigned": "未割り当て",
       "noMembersInDept": "この部門にメンバーがいません",
       "generate": "タスクを生成"
-    }
+    },
+    "editAction": "編集"
   },
   "payments": {
     "loadingPayments": "支払を読み込み中...",

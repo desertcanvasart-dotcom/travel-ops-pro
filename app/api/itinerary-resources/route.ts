@@ -1,11 +1,11 @@
 // app/api/itinerary-resources/route.ts
 
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     
     const itineraryId = searchParams.get('itinerary_id')
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
     
     const {
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     

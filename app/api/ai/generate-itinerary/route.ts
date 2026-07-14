@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { debugLog } from '@/lib/debug-log'
-import { createClient } from '@/lib/supabase'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'

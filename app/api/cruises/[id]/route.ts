@@ -1,6 +1,6 @@
 // app/api/cruises/[id]/route.ts
 
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
     
     const { data, error } = await supabase
       .from('cruise_contacts')
@@ -35,7 +35,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
     const body = await request.json()
     
     const { data, error } = await supabase
@@ -66,7 +66,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = createServerClient()
     
     const { error } = await supabase
       .from('cruise_contacts')
