@@ -87,6 +87,20 @@ test('calendar renders the seeded booking window', async ({ page }) => {
   expect(errorsOf()).toEqual([])
 })
 
+test('system health: DB reachable, no RLS exposure', async ({ page }) => {
+  // page.request shares the authed cookie session. This makes every E2E run
+  // an automated RLS audit: any anon-visible row on a locked table fails CI.
+  const res = await page.request.get('/api/health/system')
+  expect(res.status(), 'health endpoint should answer 200 when healthy').toBe(200)
+  const health = await res.json()
+  expect(health.database.ok, 'database reachable via service role').toBe(true)
+  expect(
+    health.rls.exposed,
+    `tables exposed to the anonymous internet: ${JSON.stringify(health.rls.exposed)}`
+  ).toEqual([])
+  expect(health.overall).toBe('ok')
+})
+
 test('dashboard loads its stat cards', async ({ page }) => {
   const errorsOf = watchConsole(page)
   await page.goto('/dashboard')
