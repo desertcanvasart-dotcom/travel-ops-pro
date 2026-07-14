@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "seed:e2e": "node scripts/seed-e2e.mjs"
+    "seed:e2e": "node scripts/seed-e2e.mjs",
+    "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

@@ -157,6 +157,10 @@ export async function middleware(request: NextRequest) {
     '/api/whatsapp/status',
     '/api/auth/google/callback',
     '/api/auth/accounting/callback',
+    // Deploy-verification probe: public by design, returns only the build
+    // SHA + uptime (no data, no secrets). scripts/verify-deploy.mjs hits it
+    // unauthenticated to confirm WHICH commit a deployment is serving.
+    '/api/version',
   ]
   const isSelfAuthApi = apiSelfAuthPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
 
