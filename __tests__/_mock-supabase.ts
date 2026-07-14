@@ -74,6 +74,11 @@ function makeQuery(rows: Row[], table?: string) {
       filtered = filtered.filter((r) => r[col] === val)
       return builder
     },
+    is(col: string, val: any) {
+      // PostgREST .is(): used by the rate routes as .is('col', null) -> SQL IS NULL.
+      filtered = filtered.filter((r) => (val === null ? r[col] == null : r[col] === val))
+      return builder
+    },
     ilike(col: string, pattern: string) {
       const needle = String(pattern).replace(/%/g, '').toLowerCase()
       filtered = filtered.filter((r) =>
