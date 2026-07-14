@@ -34,8 +34,14 @@ jobs:
       - name: Unit tests (Vitest)
         run: npm test
 
-      - name: Type-check pricing harness (scoped)
-        # Full-app type-check needs Next's generated types (.next/types) from a
-        # build, which a fresh checkout lacks. CI type-checks the harness's own
-        # TypeScript (tsconfig.ci.json); full type-check runs in the deploy build.
-        run: NODE_OPTIONS=--max-old-space-size=4096 npx tsc --noEmit -p tsconfig.ci.json
+      - name: Generate Next route types
+        # `next typegen` produces .next/types without a build (no env vars, no
+        # prerender), which is all the full type-check needs on a fresh checkout.
+        run: npx next typegen
+
+      - name: Type-check (full app)
+        # FULL tsc, not a scoped subset. The previous scoped check
+        # (tsconfig.ci.json, 8 pricing files) let an app-code type error merge
+        # with green CI while `tsc --noEmit` was broken on main — this closes
+        # that class permanently.
+        run: NODE_OPTIONS=--max-old-space-size=4096 npx tsc --noEmit
