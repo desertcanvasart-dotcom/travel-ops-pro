@@ -7,6 +7,11 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import {
+  buildBookingRow,
+  populateSuppliersFromItinerary,
+  DEFAULT_DEPOSIT_PERCENT,
+} from '@/lib/booking-creation'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -153,37 +158,24 @@ export async function POST(request: NextRequest) {
     const { data: codeData } = await supabaseAdmin.rpc('generate_booking_code')
     const bookingCode = codeData || `BKG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
 
-    // Calculate balance due
-    const depositAmount = itinerary.total_cost * 0.3 // 30% deposit default
-    const balanceDue = itinerary.total_cost - depositAmount
-
-    // Create booking with B2B partner info if linked
+    // Row shape (and the deposit/balance arithmetic) is shared with
+    // /api/bookings/from-quote so the two entry points cannot drift.
+    //
+    // NOTE: balance_due is now the FULL total, not total - deposit. It has to be:
+    // record_booking_payment() recomputes it as greatest(0, total_cost -
+    // total_paid), so the old value showed 70% owed on a booking where nothing
+    // had been paid, then jumped up on the first payment.
     const { data: booking, error: createError } = await supabaseAdmin
       .from('bookings')
-      .insert({
-        org_id: orgId,
-        booking_code: bookingCode,
-        itinerary_id: itinerary_id,
-        client_name: itinerary.client_name,
-        client_email: itinerary.client_email,
-        client_phone: itinerary.client_phone,
-        trip_name: itinerary.trip_name,
-        start_date: itinerary.start_date,
-        end_date: itinerary.end_date,
-        num_adults: itinerary.num_adults || 1,
-        num_children: itinerary.num_children || 0,
-        total_cost: itinerary.total_cost || 0,
-        currency: itinerary.currency || 'EUR',
-        tier: itinerary.tier,
-        status: 'pending',
-        deposit_amount: depositAmount,
-        balance_due: balanceDue,
-        assigned_guide_id: itinerary.assigned_guide_id,
-        assigned_vehicle_id: itinerary.assigned_vehicle_id,
-        // B2B Partner info (copied from itinerary)
-        partner_id: itinerary.partner_id || null,
-        partner_name: partnerInfo?.company_name || null,
-      })
+      .insert(
+        buildBookingRow({
+          orgId,
+          bookingCode,
+          itinerary,
+          depositPercent: DEFAULT_DEPOSIT_PERCENT,
+          partnerName: partnerInfo?.company_name ?? null,
+        })
+      )
       .select()
       .single()
 
@@ -192,39 +184,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(createError, 'Internal server error') }, { status: 500 })
     }
 
-    // Populate suppliers from itinerary services
-    const { data: days } = await supabaseAdmin
-      .from('itinerary_days')
-      .select('id, date, day_number')
-      .eq('itinerary_id', itinerary_id)
-      .order('day_number', { ascending: true })
-
-    if (days && days.length > 0) {
-      const dayIds = days.map(d => d.id)
-
-      const { data: services } = await supabaseAdmin
-        .from('itinerary_services')
-        .select('*, itinerary_day_id')
-        .in('itinerary_day_id', dayIds)
-
-      if (services && services.length > 0) {
-        const supplierStatuses = services.map(service => {
-          const day = days.find(d => d.id === service.itinerary_day_id)
-          return {
-            booking_id: booking.id,
-            supplier_type: service.service_type || 'other',
-            supplier_name: service.service_name || service.supplier_name || 'Unknown',
-            service_description: service.notes,
-            service_date: day?.date,
-            quoted_cost: service.total_cost,
-            status: 'pending'
-          }
-        })
-
-        await supabaseAdmin
-          .from('booking_supplier_status')
-          .insert(supplierStatuses)
-      }
+    // Populate suppliers from itinerary services (shared with from-quote)
+    const suppliers = await populateSuppliersFromItinerary(supabaseAdmin, booking.id, itinerary_id)
+    if (suppliers.error) {
+      console.error('Booking created but supplier manifest failed:', suppliers.error)
     }
 
     return NextResponse.json({ success: true, data: booking }, { status: 201 })

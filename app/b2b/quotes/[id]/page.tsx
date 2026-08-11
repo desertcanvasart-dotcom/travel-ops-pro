@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import QuoteRevisions from '@/components/QuoteRevisions'
+import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 
@@ -536,6 +537,18 @@ export default function QuoteDetailPage() {
                 )}
               </button>
             </div>
+          )}
+
+          {/* Convert to Booking — available once accepted, and still available
+              after convert-to-itinerary (status 'converted'), which is the point
+              in the flow where an operator most often wants to book. */}
+          {(quote.status === 'accepted' || quote.status === 'converted') && (
+            <ConvertToBookingCard
+              quoteId={quoteId}
+              quoteType="b2b"
+              sellingPrice={quote.selling_price}
+              currency={quote.currency}
+            />
           )}
 
           {/* Converted — show link to itinerary */}

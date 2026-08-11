@@ -6042,6 +6042,16 @@
       "invoiceRequiredTitle": "Invoice Required",
       "invoiceRequiredDescription": "To record payments, you must first create an invoice for this booking. Payments are tracked against invoices for proper financial records.",
       "paymentsLinkedToInvoice": "Payments are recorded via the invoice page"
+    },
+    "fromQuote": {
+      "title": "Ready to book",
+      "description": "Create a booking from this accepted quote, with a deposit due up front.",
+      "depositPercent": "Deposit %",
+      "depositPreview": "{deposit} deposit of {total} total",
+      "convert": "Convert to booking",
+      "converting": "Creating booking…",
+      "alreadyBooked": "This quote is already booked",
+      "failed": "Could not create the booking."
     }
   },
   "supplierDocuments": {

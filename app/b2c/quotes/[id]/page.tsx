@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Send, CheckCircle2, XCircle, Eye, Save, MessageCircle, Mail } from 'lucide-react'
 import QuoteRevisions from '@/components/QuoteRevisions'
+import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
 
 interface B2CQuote {
   id: string
@@ -170,6 +171,15 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
             <p className="font-medium">{quote.valid_until || '—'}</p>
             {quote.sent_at && <p className="text-xs text-gray-400 mt-2">Sent via {quote.sent_via} on {new Date(quote.sent_at).toLocaleDateString()}</p>}
           </div>
+
+          {quote.status === 'accepted' && (
+            <ConvertToBookingCard
+              quoteId={quote.id}
+              quoteType="b2c"
+              sellingPrice={quote.selling_price}
+              currency={quote.currency}
+            />
+          )}
 
           <QuoteRevisions quoteId={quote.id} basePath="/api/b2c/quotes" />
         </div>
