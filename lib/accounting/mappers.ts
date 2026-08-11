@@ -41,8 +41,14 @@ export function mapInvoiceToPayload(invoice: Record<string, unknown>): InvoicePa
 export function mapExpenseToBillPayload(expense: Record<string, unknown>): BillPayload {
   // `expense.amount` is the gross total. Carry any recorded tax (H9) instead of
   // hardcoding 0; the line amount is the net (gross − tax) so line + tax = total.
-  // The expenses table has no tax column today, so tax is 0 until one is added —
-  // reading it optionally means the sync is already correct when that happens.
+  //
+  // expenses.tax_amount EXISTS but nothing in the app writes it — there is no UI
+  // field and no API path that sets it, so every row is 0 and this arithmetic is
+  // a no-op today (net === total). It becomes live the moment expense tax is
+  // captured, and the assumption it encodes is that `amount` is GROSS (tax
+  // included). Whoever wires up expense tax must either honour that or change
+  // this line — if `amount` is ever stored NET, this would subtract the tax
+  // twice and under-report the bill.
   const total = Number(expense.amount || 0)
   const taxAmount = Number(expense.tax_amount || 0)
   const net = Math.round((total - taxAmount) * 100) / 100
