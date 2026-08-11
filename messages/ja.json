@@ -6761,6 +6761,16 @@
       "invoiceRequiredTitle": "請求書が必要です",
       "invoiceRequiredDescription": "支払いを記録するには、まずこの予約の請求書を作成する必要があります。支払いは適切な財務記録のために請求書に対して追跡されます。",
       "paymentsLinkedToInvoice": "支払いは請求書ページから記録されます"
+    },
+    "fromQuote": {
+      "title": "予約作成の準備完了",
+      "description": "承認済みの見積から予約を作成します（頭金の請求を含む）。",
+      "depositPercent": "頭金 %",
+      "depositPreview": "合計 {total} のうち頭金 {deposit}",
+      "convert": "予約に変換",
+      "converting": "予約を作成中…",
+      "alreadyBooked": "この見積はすでに予約済みです",
+      "failed": "予約を作成できませんでした。"
     }
   },
   "supplierDocuments": {
