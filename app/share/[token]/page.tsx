@@ -16,6 +16,8 @@
 // Deliberately outside the app shell: no sidebar, no locale switcher, no auth
 // chrome. A client should not see the operator's tooling.
 
+import { cache } from 'react'
+import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import {
@@ -47,7 +49,12 @@ interface Operator {
 /** The app green, used when an org has set no brand colour. */
 const DEFAULT_BRAND = '#647C47'
 
-async function loadShare(
+/**
+ * Wrapped in React's cache() so generateMetadata and the page body share ONE
+ * call per request. Without it both would run, and the view counter inside would
+ * tick twice for a single visit.
+ */
+const loadShare = cache(async function loadShare(
   token: string
 ): Promise<{ itinerary: ClientItinerary; operator: Operator } | null> {
   if (!isValidShareToken(token)) return null
@@ -94,7 +101,7 @@ async function loadShare(
       website: org?.company_website || null,
     },
   }
-}
+})
 
 function fmtDate(d: string | null): string {
   if (!d) return ''
@@ -133,6 +140,32 @@ const DAY_TYPE_BADGE: Record<ShareDayType, string> = {
   departure: '✈️ Departure',
 }
 
+/**
+ * Browser-tab title and link preview. Kept to the trip name and operator — no
+ * price, and `robots: noindex` so a shared link cannot end up in a search
+ * index just because a client forwarded it.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>
+}): Promise<Metadata> {
+  const { token } = await params
+  const data = await loadShare(token)
+  if (!data) return { title: 'Itinerary', robots: { index: false, follow: false } }
+
+  const { itinerary: it, operator: op } = data
+  return {
+    title: op.name ? `${it.tripName} · ${op.name}` : it.tripName,
+    description: it.startDate
+      ? `Your itinerary${it.totalDays ? ` — ${it.totalDays} days` : ''}, ${fmtDate(it.startDate)}${
+          it.endDate ? ` to ${fmtDate(it.endDate)}` : ''
+        }.`
+      : 'Your itinerary.',
+    robots: { index: false, follow: false },
+  }
+}
+
 export default async function SharedItineraryPage({
   params,
 }: {
@@ -155,7 +188,10 @@ export default async function SharedItineraryPage({
             <img src={op.logoUrl} alt={op.name} className="h-12 mb-4 rounded bg-white/90 p-1" />
           )}
           {op.name && <p className="text-sm uppercase tracking-widest opacity-80">{op.name}</p>}
-          <h1 className="text-3xl sm:text-4xl font-bold mt-1">{it.tripName}</h1>
+          {/* text-white must be on the h1 itself: globals.css sets a color on
+              h1–h6, and an element rule beats the inherited white from the
+              header. Without it the title renders near-black on the brand colour. */}
+          <h1 className="text-3xl sm:text-4xl font-bold mt-1 text-white">{it.tripName}</h1>
           <p className="mt-3 text-sm opacity-90">
             {fmtDate(it.startDate)}
             {it.endDate ? ` – ${fmtDate(it.endDate)}` : ''}
