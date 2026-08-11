@@ -1277,7 +1277,20 @@
       "tripDatesNote": "Trip dates: {startDate} – {endDate}",
       "failedToCreateInvoice": "Failed to create invoice"
     },
-    "editAction": "Edit"
+    "editAction": "Edit",
+    "share": {
+      "title": "Share link",
+      "subtitle": "Give the client a live link instead of a PDF",
+      "create": "Create share link",
+      "copy": "Copy",
+      "copied": "Copied",
+      "revoke": "Revoke link",
+      "viewCount": "Viewed {count} times",
+      "notViewedYet": "Not opened yet",
+      "createFailed": "Could not create the share link.",
+      "revokeFailed": "Could not revoke the share link.",
+      "copyFailed": "Could not copy — select the link and copy it manually."
+    }
   },
   "payments": {
     "loadingPayments": "Loading payments...",

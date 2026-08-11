@@ -1715,7 +1715,20 @@
       "noMembersInDept": "この部門にメンバーがいません",
       "generate": "タスクを生成"
     },
-    "editAction": "編集"
+    "editAction": "編集",
+    "share": {
+      "title": "共有リンク",
+      "subtitle": "PDFの代わりに最新版のリンクをお客様に共有",
+      "create": "共有リンクを作成",
+      "copy": "コピー",
+      "copied": "コピーしました",
+      "revoke": "リンクを無効化",
+      "viewCount": "閲覧 {count} 回",
+      "notViewedYet": "未閲覧",
+      "createFailed": "共有リンクを作成できませんでした。",
+      "revokeFailed": "共有リンクを無効化できませんでした。",
+      "copyFailed": "コピーできませんでした。リンクを選択して手動でコピーしてください。"
+    }
   },
   "payments": {
     "loadingPayments": "支払を読み込み中...",

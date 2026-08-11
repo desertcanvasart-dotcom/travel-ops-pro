@@ -10,8 +10,9 @@ export interface ExchangeRates {
   rates: Record<string, number>
 }
 
-// Supported currencies
-export const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'GBP', 'EGP'] as const
+// Supported currencies (JPY added 2026-08-11 — keep in sync with
+// lib/exchange-rate-api.ts, which is the list the refresh job fetches)
+export const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'GBP', 'EGP', 'JPY'] as const
 export type SupportedCurrency = typeof SUPPORTED_CURRENCIES[number]
 
 // Currency symbols
@@ -19,8 +20,12 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$',
   EUR: '€',
   GBP: '£',
-  EGP: 'E£'
+  EGP: 'E£',
+  JPY: '¥'
 }
+
+/** Currencies with no minor unit — ¥1,200.00 is wrong, not just unusual. */
+const ZERO_DECIMAL_CURRENCIES = new Set(['JPY'])
 
 // Cache for exchange rates (in-memory, refreshes on server restart)
 let cachedRates: ExchangeRates | null = null
@@ -95,7 +100,8 @@ export function getFallbackRates(baseCurrency: string): ExchangeRates {
     EUR: 1,
     USD: 1.1782,
     GBP: 0.8737,
-    EGP: 56.00
+    EGP: 56.00,
+    JPY: 178.50
   }
 
   if (baseCurrency === 'EUR') {
@@ -122,14 +128,21 @@ export function getFallbackRates(baseCurrency: string): ExchangeRates {
 }
 
 /**
- * Convert amount from one currency to another
+ * Convert amount from one currency to another.
+ *
+ * Returns null when no rate is available. It must NEVER return the
+ * unconverted amount: passing 1,000 EGP through as "1,000 EUR" is a ~56x
+ * overstatement that silently inflates margin, and it reads as a real number
+ * to every caller. Callers must handle null — either show the amount in its
+ * ORIGINAL currency, or exclude it and flag the total as incomplete (which is
+ * what lib/fx-conversion.ts does for reports).
  */
 export function convertCurrency(
   amount: number,
   fromCurrency: string,
   toCurrency: string,
   rates: ExchangeRates
-): number {
+): number | null {
   if (fromCurrency === toCurrency) {
     return amount
   }
@@ -160,9 +173,9 @@ export function convertCurrency(
     return amountInBase * toRate
   }
 
-  // Return original amount if conversion not possible
-  console.warn(`Could not convert ${fromCurrency} to ${toCurrency}`)
-  return amount
+  // No rate anywhere. Do not guess, and do not pass the raw amount through.
+  console.warn(`Could not convert ${fromCurrency} to ${toCurrency} — no rate available`)
+  return null
 }
 
 /**
@@ -176,7 +189,10 @@ export function formatCurrency(
     decimals?: number
   }
 ): string {
-  const { showSymbol = true, decimals = 2 } = options || {}
+  // JPY has no minor unit, so its default precision is 0 — an explicit
+  // `decimals` option still wins.
+  const defaultDecimals = ZERO_DECIMAL_CURRENCIES.has((currency || '').toUpperCase()) ? 0 : 2
+  const { showSymbol = true, decimals = defaultDecimals } = options || {}
 
   const formatted = amount.toLocaleString('en-US', {
     minimumFractionDigits: decimals,
@@ -201,6 +217,49 @@ export function getCurrencySymbol(currency: string): string {
 // ============================================
 // EXCHANGE RATE PERSISTENCE
 // ============================================
+
+export interface ExchangeRateSnapshotRow {
+  base_currency: string
+  target_currency: string
+  rate: number
+  source: string
+  captured_at: string
+}
+
+/**
+ * Turn fetched rates into snapshot rows for one batch insert.
+ *
+ * Deduplicates by pair: the insert targets
+ * UNIQUE(base_currency, target_currency, captured_at), so two rows for the
+ * same pair at the same instant would collide and fail the whole statement.
+ * Invalid rates are dropped rather than stored — a zero or negative rate in
+ * the history poisons every future conversion of that pair.
+ */
+export function buildSnapshotRows(
+  rates: Array<{ base_currency: string; target_currency: string; rate: number }>,
+  capturedAt: string,
+  source: string = 'er-api'
+): ExchangeRateSnapshotRow[] {
+  const seen = new Set<string>()
+  const rows: ExchangeRateSnapshotRow[] = []
+
+  for (const entry of rates || []) {
+    const base = String(entry?.base_currency || '').trim().toUpperCase()
+    const target = String(entry?.target_currency || '').trim().toUpperCase()
+    const rate = Number(entry?.rate)
+
+    if (!base || !target || base === target) continue
+    if (!Number.isFinite(rate) || rate <= 0) continue
+
+    const key = `${base}>${target}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    rows.push({ base_currency: base, target_currency: target, rate, source, captured_at: capturedAt })
+  }
+
+  return rows
+}
 
 /**
  * Persist an exchange rate snapshot to the database.

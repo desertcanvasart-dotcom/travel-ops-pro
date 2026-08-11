@@ -21,7 +21,12 @@ export default function RootLayout({
   
   // Pages that should NOT show the sidebar (public pages)
   const publicPages = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/terms', '/privacy', '/contact', '/integrations', '/about']
-  const isPublicPage = publicPages.includes(pathname)
+  // Prefixed public sections, matched by prefix because their paths are dynamic.
+  // /share/[token] is a CLIENT-facing page: a traveller must never be shown the
+  // operator's sidebar and navigation.
+  const publicPrefixes = ['/share/']
+  const isPublicPage =
+    publicPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p))
 
   return (
     <html lang="en" suppressHydrationWarning>
