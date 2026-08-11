@@ -39,6 +39,20 @@ export function mapInvoiceToPayload(invoice: Record<string, unknown>): InvoicePa
 
 // Map Autoura expense DB record to provider-agnostic BillPayload
 export function mapExpenseToBillPayload(expense: Record<string, unknown>): BillPayload {
+  // `expense.amount` is the gross total. Carry any recorded tax (H9) instead of
+  // hardcoding 0; the line amount is the net (gross − tax) so line + tax = total.
+  //
+  // expenses.tax_amount EXISTS but nothing in the app writes it — there is no UI
+  // field and no API path that sets it, so every row is 0 and this arithmetic is
+  // a no-op today (net === total). It becomes live the moment expense tax is
+  // captured, and the assumption it encodes is that `amount` is GROSS (tax
+  // included). Whoever wires up expense tax must either honour that or change
+  // this line — if `amount` is ever stored NET, this would subtract the tax
+  // twice and under-report the bill.
+  const total = Number(expense.amount || 0)
+  const taxAmount = Number(expense.tax_amount || 0)
+  const net = Math.round((total - taxAmount) * 100) / 100
+
   return {
     bill_number: String(expense.expense_number || ''),
     vendor_name: String(expense.supplier_name || 'Unknown Supplier'),
@@ -46,11 +60,11 @@ export function mapExpenseToBillPayload(expense: Record<string, unknown>): BillP
     line_items: [{
       description: String(expense.description || expense.category || 'Expense'),
       quantity: 1,
-      unit_price: Number(expense.amount || 0),
-      amount: Number(expense.amount || 0),
+      unit_price: net,
+      amount: net,
     }],
-    total_amount: Number(expense.amount || 0),
-    tax_amount: 0,
+    total_amount: total,
+    tax_amount: taxAmount,
     currency: String(expense.currency || 'EUR'),
     date: String(expense.expense_date || new Date().toISOString().split('T')[0]),
     due_date: undefined,
