@@ -11,6 +11,7 @@ import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
+import ShareLinkCard from '@/app/components/ShareLinkCard'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ItineraryPL from '@/app/components/ItineraryPL'
@@ -1443,6 +1444,9 @@ export default function ViewItineraryPage() {
           refreshTrigger={expenseRefreshTrigger}
           onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
         />
+
+        {/* SHARE LINK — the client-facing live itinerary page */}
+        <ShareLinkCard itineraryId={itinerary.id} />
 
         {/* WHATSAPP ACTIONS */}
         <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">

@@ -1,5 +1,19 @@
+// ============================================
+// API: /api/financial-reports — monthly/quarterly P&L, cashflow, tax, commission
+// ============================================
+// FX POLICY (added 2026-08-11): this report is org-wide, so it has no single
+// natural currency — it converts every invoice, expense and trip into ONE
+// reporting currency (EUR by default, ?currency= to override) at the rate on
+// each line's own date. A line with no usable rate is EXCLUDED from every total
+// and listed in `fx_holes`, with `complete:false` on the response, rather than
+// being summed at face value (adding 1,000 EGP to a EUR total as "1,000" is a
+// ~56x overstatement).
+// ============================================
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
+import { SUPPORTED_CURRENCIES } from '@/lib/exchange-rate-api'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,6 +68,14 @@ export async function GET(request: NextRequest) {
     const quarter = searchParams.get('quarter') // Q1, Q2, Q3, Q4
     const month = searchParams.get('month') // 1-12
 
+    // Every figure in this response is stated in ONE currency. EUR is the
+    // default because rates are stored EUR-based, so most lines need no
+    // conversion at all.
+    const requestedCurrency = (searchParams.get('currency') || 'EUR').toUpperCase()
+    const reportingCurrency = (SUPPORTED_CURRENCIES as readonly string[]).includes(requestedCurrency)
+      ? requestedCurrency
+      : 'EUR'
+
     // M2: push the year range down to the queries instead of pulling every
     // row of these tables on every report request. The route needs THIS year
     // and the prior year (for YoY), so the bounded window is
@@ -68,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     const { data: invoices, error: invError } = await supabaseAdmin
       .from('invoices')
-      .select('issue_date, total_amount, amount_paid, balance_due')
+      .select('invoice_number, issue_date, total_amount, amount_paid, balance_due, currency')
       .gte('issue_date', rangeStart)
       .lte('issue_date', rangeEnd)
       .order('issue_date', { ascending: true })
@@ -79,7 +101,7 @@ export async function GET(request: NextRequest) {
 
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
-      .select('expense_date, amount, status, category, supplier_name')
+      .select('expense_number, expense_date, amount, status, category, supplier_name, currency')
       .gte('expense_date', rangeStart)
       .lte('expense_date', rangeEnd)
       .order('expense_date', { ascending: true })
@@ -90,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     const { data: itineraries, error: itinError } = await supabaseAdmin
       .from('itineraries')
-      .select('id, start_date, status, total_cost')
+      .select('id, start_date, status, total_cost, currency')
       .gte('start_date', rangeStart)
       .lte('start_date', rangeEnd)
 
@@ -98,9 +120,85 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching itineraries:', itinError)
     }
 
-    const allInvoices = invoices || []
-    const allExpenses = expenses || []
-    const allItineraries = itineraries || []
+    // ---------- FX normalisation ----------
+    // This report is org-wide, so unlike the per-trip P&L it has no single
+    // "natural" currency: it must pick one and convert everything into it, or
+    // else it is adding EGP to EUR. Each line converts at the rate on its OWN
+    // date; a line with no usable rate is dropped from every total below and
+    // reported as a hole, so a shortfall is visible instead of silently
+    // flattering the margin.
+    const fxIndex = await loadFxIndex(supabaseAdmin)
+    const fx = emptyFxSummary()
+    const fxHoles: FxHole[] = []
+
+    const allInvoices = (invoices || [])
+      .map(inv => {
+        const total = convertLine(fxIndex, fx, {
+          amount: inv.total_amount,
+          fromCurrency: inv.currency,
+          toCurrency: reportingCurrency,
+          date: inv.issue_date,
+          kind: 'invoice',
+          reference: inv.invoice_number || 'invoice',
+        })
+        if (total.hole) {
+          fxHoles.push(total.hole)
+          return null
+        }
+        // amount_paid shares the invoice's currency and issue date; a paid
+        // figure converted at a different rate than its own invoice would make
+        // collected > invoiced on the same document.
+        const paid = convertLine(fxIndex, fx, {
+          amount: inv.amount_paid,
+          fromCurrency: inv.currency,
+          toCurrency: reportingCurrency,
+          date: inv.issue_date,
+          kind: 'invoice',
+          reference: inv.invoice_number || 'invoice',
+        })
+        return {
+          ...inv,
+          total_amount: total.amount ?? 0,
+          amount_paid: paid.amount ?? 0,
+        }
+      })
+      .filter((inv): inv is NonNullable<typeof inv> => inv !== null)
+
+    const allExpenses = (expenses || [])
+      .map(exp => {
+        const converted = convertLine(fxIndex, fx, {
+          amount: exp.amount,
+          fromCurrency: exp.currency,
+          toCurrency: reportingCurrency,
+          date: exp.expense_date,
+          kind: 'expense',
+          reference: exp.expense_number || exp.category || 'expense',
+        })
+        if (converted.hole) {
+          fxHoles.push(converted.hole)
+          return null
+        }
+        return { ...exp, amount: converted.amount ?? 0 }
+      })
+      .filter((exp): exp is NonNullable<typeof exp> => exp !== null)
+
+    const allItineraries = (itineraries || [])
+      .map(itin => {
+        const converted = convertLine(fxIndex, fx, {
+          amount: itin.total_cost,
+          fromCurrency: itin.currency,
+          toCurrency: reportingCurrency,
+          date: itin.start_date,
+          kind: 'trip',
+          reference: itin.id,
+        })
+        if (converted.hole) {
+          fxHoles.push(converted.hole)
+          return null
+        }
+        return { ...itin, total_cost: converted.amount ?? 0 }
+      })
+      .filter((itin): itin is NonNullable<typeof itin> => itin !== null)
 
     // Cheap min/max probe — replaces the full-table scan that produced
     // availableYears in the old code. Two tiny queries per table.
@@ -370,6 +468,10 @@ export async function GET(request: NextRequest) {
       commissionSummary,
       yearOverYear,
       availableYears,
+      // Which currency every figure above is stated in, and how much of it
+      // rests on exact rates. complete:false means at least one line was
+      // excluded or approximated — see fx_holes for exactly which.
+      ...buildFxMeta(reportingCurrency, fx, fxHoles),
     })
   } catch (error) {
     console.error('Error in Financial Reports GET:', error)

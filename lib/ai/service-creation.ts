@@ -706,10 +706,22 @@ export async function createLandItineraryServices(
     }
   }
 
-  // Convert EUR amount to target currency
+  // Convert EUR amount to target currency.
+  //
+  // On an unresolvable pair the amount stays in EUR — the same fallback as the
+  // "no rates at all" branch above, whose catch already logs "prices will remain
+  // in EUR". That keeps the numbers real rather than scaling them by a guessed
+  // rate, but it does mean the row is labelled `currency` while holding EUR, so
+  // the failure is recorded and surfaced as a generation warning below.
+  let currencyConversionFailed = false
   const toTargetCurrency = (eurAmount: number): number => {
     if (!needsConversion || !exchangeRates) return eurAmount
-    return Math.round(convertCurrency(eurAmount, 'EUR', currency, exchangeRates) * 100) / 100
+    const converted = convertCurrency(eurAmount, 'EUR', currency, exchangeRates)
+    if (converted === null) {
+      currencyConversionFailed = true
+      return eurAmount
+    }
+    return Math.round(converted * 100) / 100
   }
 
   // Fetch configurable fixed daily costs (water, tips)
@@ -2048,6 +2060,16 @@ export async function createLandItineraryServices(
 
     // Track for next iteration (intercity detection)
     previousDayData = dayData
+  }
+
+  // Checked here, not at the top: the flag is only set once toTargetCurrency has
+  // actually run over the days above.
+  if (currencyConversionFailed) {
+    warnings.push(
+      `No EUR → ${currency} exchange rate was available, so service costs are still in EUR ` +
+      `even though this itinerary is marked ${currency}. Refresh exchange rates and re-price ` +
+      `before sending it to a client.`
+    )
   }
 
   // Log any warnings

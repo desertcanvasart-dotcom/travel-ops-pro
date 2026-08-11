@@ -1,5 +1,19 @@
+// ============================================
+// API: /api/profit-loss — per-trip and aggregate P&L
+// ============================================
+// FX POLICY (added 2026-08-11): an expense carries its OWN currency and its own
+// expense_date, and a trip carries its own currency. Summing an EGP expense
+// into a EUR trip as a raw number overstates cost ~56x; converting it at
+// today's rate reports a margin the operator never earned. So each expense is
+// converted at the rate on ITS date (lib/fx-report.ts), and an expense with no
+// usable rate is EXCLUDED and reported as an FX hole with the trip marked
+// incomplete — never summed at face value.
+// ============================================
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
+import { mergeFxSummary } from '@/lib/fx-conversion'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,6 +42,10 @@ interface TripPnL {
   expense_breakdown: Record<string, number>
   invoice_count: number
   expense_count: number
+  /** Expenses excluded from this trip's totals for want of a rate. */
+  fx_holes: FxHole[]
+  /** False when at least one cost is missing or approximated. */
+  fx_complete: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -80,14 +98,22 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching invoices:', invError)
     }
 
-    // Fetch all expenses
+    // Fetch all expenses. currency + expense_date are load-bearing: they decide
+    // WHICH rate converts this line, so a missing date means no historical rate.
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
-      .select('itinerary_id, amount, category, status')
+      .select('itinerary_id, amount, category, status, currency, expense_date, expense_number')
 
     if (expError) {
       console.error('Error fetching expenses:', expError)
     }
+
+    // Rate history, loaded once for every trip in this response.
+    const fxIndex = await loadFxIndex(supabaseAdmin)
+
+    // Accuracy tally across every trip, folded into the response-level meta.
+    const overallFx = emptyFxSummary()
+    const allHoles: FxHole[] = []
 
     // Build P&L for each itinerary
     const pnlData: TripPnL[] = itineraries.map(itinerary => {
@@ -98,29 +124,55 @@ export async function GET(request: NextRequest) {
 
       // Get manual expenses for this itinerary (additional costs beyond services)
       const itinExpenses = (expenses || []).filter(exp => exp.itinerary_id === itinerary.id)
-      const manualExpenses = itinExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
-      const expensesPaid = itinExpenses
-        .filter(exp => exp.status === 'paid')
-        .reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
-      const expensesPending = itinExpenses
-        .filter(exp => exp.status !== 'paid' && exp.status !== 'rejected')
-        .reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
 
-      // Total expenses = supplier_cost (from itinerary services) + manual expenses
+      // Convert every expense into the TRIP's currency at the rate on its own
+      // expense_date. An expense we cannot convert is excluded from all four
+      // sums below and recorded as a hole — never added at face value.
+      const tripCurrency = (itinerary.currency || 'EUR').toUpperCase()
+      const tripFx = emptyFxSummary()
+      const tripHoles: FxHole[] = []
+
+      let manualExpenses = 0
+      let expensesPaid = 0
+      let expensesPending = 0
+      const expenseBreakdown: Record<string, number> = {}
+
+      for (const exp of itinExpenses) {
+        const { amount, hole } = convertLine(fxIndex, tripFx, {
+          amount: exp.amount,
+          fromCurrency: exp.currency,
+          toCurrency: tripCurrency,
+          date: exp.expense_date,
+          kind: 'expense',
+          reference: exp.expense_number || exp.category || 'expense',
+        })
+
+        if (hole) {
+          tripHoles.push(hole)
+          continue
+        }
+
+        const value = amount ?? 0
+        manualExpenses += value
+        if (exp.status === 'paid') expensesPaid += value
+        if (exp.status !== 'paid' && exp.status !== 'rejected') expensesPending += value
+
+        const cat = exp.category || 'other'
+        expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + value
+      }
+
+      // supplier_cost is stored in the itinerary's own currency, so it needs no
+      // conversion — it is already the trip currency by construction.
       const supplierCost = Number(itinerary.supplier_cost || 0)
       const totalExpenses = supplierCost + manualExpenses
 
-      // Calculate expense breakdown by category
-      const expenseBreakdown: Record<string, number> = {}
-      // Add supplier cost as a category
       if (supplierCost > 0) {
         expenseBreakdown['supplier_services'] = supplierCost
       }
-      // Add manual expenses by category
-      itinExpenses.forEach(exp => {
-        const cat = exp.category || 'other'
-        expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + Number(exp.amount || 0)
-      })
+
+      // Fold this trip's accuracy into the response-level tally.
+      mergeFxSummary(overallFx, tripFx)
+      allHoles.push(...tripHoles)
 
       // Calculate profit
       // Use totalRevenue if invoices exist, otherwise use quoted amount
@@ -149,7 +201,9 @@ export async function GET(request: NextRequest) {
         profit_margin: profitMargin,
         expense_breakdown: expenseBreakdown,
         invoice_count: itinInvoices.length,
-        expense_count: itinExpenses.length
+        expense_count: itinExpenses.length,
+        fx_holes: tripHoles,
+        fx_complete: tripHoles.length === 0 && tripFx.unconverted === 0,
       }
     })
 
@@ -193,7 +247,11 @@ export async function GET(request: NextRequest) {
       total_profit: totalProfit,
       average_margin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
       profitable_trips: pnlData.filter(p => p.gross_profit > 0).length,
-      loss_trips: pnlData.filter(p => p.gross_profit < 0).length
+      loss_trips: pnlData.filter(p => p.gross_profit < 0).length,
+      // How much of the arithmetic above rests on exact rates. `complete:false`
+      // means at least one cost is excluded or approximated, so the margin is a
+      // floor on cost (and a ceiling on profit), not a settled figure.
+      ...buildFxMeta(mixedCurrency ? 'mixed' : (currencies[0] || 'EUR'), overallFx, allHoles),
     }
 
     return NextResponse.json({

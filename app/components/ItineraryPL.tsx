@@ -121,13 +121,27 @@ export default function ItineraryPL({
     if (extraExpenses.length > 0) {
       const fallbackRates = getFallbackRates(currency)
       let extraTotal = 0
+      // Expenses whose currency could not be converted. They are LEFT OUT of
+      // the margin rather than added at face value (1,000 EGP is not €1,000),
+      // and counted so the panel can say the figure is short.
+      let unconvertedCount = 0
 
       extraExpenses.forEach(exp => {
         const converted = exp.currency === currency
           ? Number(exp.amount)
           : convertCurrency(Number(exp.amount), exp.currency, currency, fallbackRates)
+        if (converted === null) {
+          unconvertedCount += 1
+          return
+        }
         extraTotal += converted
       })
+
+      if (unconvertedCount > 0) {
+        console.warn(
+          `${unconvertedCount} expense(s) excluded from this P&L — no rate to ${currency}`
+        )
+      }
 
       if (extraTotal > 0) {
         byType['extra_expenses'] = {

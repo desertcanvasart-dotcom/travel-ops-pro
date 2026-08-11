@@ -92,6 +92,16 @@ export async function POST(request: NextRequest) {
     // produce NaN. The reported rate is always 1 unit of `from` in `to`.
     const rate = convertCurrency(1, from, to, rates)
 
+    // convertCurrency returns null when the pair cannot be resolved. Both codes
+    // were validated above, so this needs an exhausted rate table to happen —
+    // but 422 with no number beats returning a fabricated one.
+    if (convertedAmount === null || rate === null) {
+      return NextResponse.json(
+        { success: false, error: `No exchange rate available for ${from} to ${to}` },
+        { status: 422 }
+      )
+    }
+
     return NextResponse.json({
       success: true,
       data: {
