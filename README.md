@@ -2,7 +2,7 @@
 
 Travel2Egypt Operations Management System - from WhatsApp to invoice.
 
-Built with Next.js, TypeScript, Supabase, and deployed on Vercel.
+Built with Next.js, TypeScript, and Supabase.
 
-## Live Demo
-https://travel-ops-pro.vercel.app# Force rebuild Fri Dec  5 00:51:36 EET 2025
+## Live App
+https://autoura.net
