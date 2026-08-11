@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { AccountingProvider, AccountingAuthError, AccountingSyncError, SyncEntityType, AccountingProviderType } from './types'
+import { AccountingProvider, AccountingAuthError, AccountingSyncError, AccountingConfigError, SyncEntityType, AccountingProviderType } from './types'
 import { XeroProvider } from './xero-provider'
 import { QuickBooksProvider } from './quickbooks-provider'
 import {
@@ -247,6 +247,22 @@ async function getOrgIdForEntity(entityType: SyncEntityType, entityId: string): 
   return null
 }
 
+/**
+ * Is this failure worth trying again?
+ *
+ * AccountingSyncError and AccountingConfigError (audit M4) both declare an
+ * explicit `retryable`; anything else is assumed transient. Callers max out
+ * retry_count on a non-retryable failure so `retrySyncErrors`'
+ * `.lt('retry_count', 5)` filter skips it — re-posting a bill to an
+ * unconfigured ledger account fails identically every time, and the retry
+ * queue is not where an operator should discover an env var is missing.
+ */
+function isRetryable(err: unknown): boolean {
+  if (err instanceof AccountingSyncError) return err.retryable
+  if (err instanceof AccountingConfigError) return err.retryable
+  return true
+}
+
 // Helper: upsert sync log entry. orgId scopes both the lookup (so two
 // orgs syncing the same entity_id don't collide on the unique check)
 // and the INSERT (so new rows are stamped with the right tenant).
@@ -382,13 +398,12 @@ export async function syncInvoice(invoiceId: string): Promise<void> {
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    const retryable = err instanceof AccountingSyncError ? err.retryable : true
     const isAuthError = err instanceof AccountingAuthError
 
     await upsertSyncLog(providerType, 'invoice', invoiceId, orgId, {
       sync_status: isAuthError ? 'skipped' : 'failed',
       last_error: message,
-      retry_count: retryable ? undefined : 5, // Max out retries for non-retryable
+      retry_count: isRetryable(err) ? undefined : 5, // Max out retries for non-retryable
     })
 
     throw err
@@ -471,6 +486,7 @@ export async function syncExpense(expenseId: string): Promise<void> {
     await upsertSyncLog(providerType, 'expense', expenseId, orgId, {
       sync_status: 'failed',
       last_error: message,
+      retry_count: isRetryable(err) ? undefined : 5,
     })
     throw err
   }
@@ -562,6 +578,7 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
     await upsertSyncLog(providerType, 'invoice_payment', paymentId, orgId, {
       sync_status: 'failed',
       last_error: message,
+      retry_count: isRetryable(err) ? undefined : 5,
     })
     throw err
   }
@@ -633,7 +650,13 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
       }
       billExternalId = reSync.external_id
     }
-    const payload = mapExpensePaymentToPayload(expense, billExternalId)
+    // M4: the AP payment names the VENDOR, not the bill. syncExpense already
+    // upserted this contact (it had to, to create the bill), so the cache is
+    // populated by the time we get here — via syncExpense above if it wasn't.
+    const vendorKey = expense.supplier_id || expense.supplier_name || 'unknown'
+    const vendorExternalId = await getCachedContactId(providerType, orgId, vendorKey)
+
+    const payload = mapExpensePaymentToPayload(expense, billExternalId, vendorExternalId || undefined)
     const ref = await provider.createPayment(payload)
 
     await upsertSyncLog(providerType, 'expense_payment', expenseId, orgId, {
@@ -648,6 +671,7 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
     await upsertSyncLog(providerType, 'expense_payment', expenseId, orgId, {
       sync_status: 'failed',
       last_error: message,
+      retry_count: isRetryable(err) ? undefined : 5,
     })
     throw err
   }

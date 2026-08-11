@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { resolveTaxTreatment, allocateLineTax, round2 } from '@/lib/accounting/tax'
 import { mapExpenseToBillPayload } from '@/lib/accounting/mappers'
 import { QuickBooksProvider } from '@/lib/accounting/quickbooks-provider'
@@ -8,6 +8,18 @@ import type { InvoicePayload } from '@/lib/accounting/types'
 // H9 regression: the QB/Xero mappers used to emit NO tax, so a taxable invoice
 // synced with a total short by the tax amount. These tests lock in that the
 // tax is now represented and the external document reconciles to total_amount.
+
+// M4: the mappers now refuse to run without a configured ledger account, which
+// is a different concern from tax — see accounting-account-config.test.ts for
+// that behaviour. Configure it here so these tests exercise the tax path.
+beforeAll(() => {
+  vi.stubEnv('QUICKBOOKS_EXPENSE_ACCOUNT_ID', '64')
+  vi.stubEnv('XERO_REVENUE_ACCOUNT_CODE', '200')
+  vi.stubEnv('XERO_EXPENSE_ACCOUNT_CODE', '400')
+})
+afterAll(() => {
+  vi.unstubAllEnvs()
+})
 
 const invoice = (over: Partial<InvoicePayload> = {}): InvoicePayload => ({
   invoice_number: 'INV-1',

@@ -10,6 +10,8 @@ import {
   AccountingSyncError,
 } from './types'
 import { resolveTaxTreatment, allocateLineTax } from './tax'
+import { requireAccountRef } from './account-config'
+import type { AccountSummary } from './types'
 
 const XERO_AUTH_URL = 'https://login.xero.com/identity/connect/authorize'
 const XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
@@ -149,6 +151,26 @@ export class XeroProvider implements AccountingProvider {
     return response.json()
   }
 
+  /**
+   * The organisation's chart of accounts (M4 discovery). Read-only.
+   *
+   * Xero addresses accounts by CODE (e.g. "090"), not by AccountID — the code is
+   * what XERO_*_ACCOUNT_CODE must hold and what line items reference.
+   */
+  async listAccounts(): Promise<AccountSummary[]> {
+    const data = await this.apiRequest('GET', '/Accounts')
+    const rows: Array<Record<string, unknown>> = data.Accounts || []
+
+    return rows.map(a => ({
+      id: String(a.AccountID ?? ''),
+      ref: String(a.Code ?? ''),
+      name: String(a.Name ?? ''),
+      type: String(a.Type ?? ''),
+      subType: a.Class ? String(a.Class) : undefined,
+      active: a.Status !== 'ARCHIVED',
+    }))
+  }
+
   async upsertContact(contact: ContactPayload): Promise<ExternalRef> {
     const xeroContact = {
       Name: contact.name,
@@ -232,7 +254,9 @@ export class XeroProvider implements AccountingProvider {
       Amount: payment.amount,
       Date: payment.date,
       Reference: payment.reference || '',
-      Account: { Code: '090' }, // Default bank account — configurable later
+      // M4: was hardcoded '090' ("configurable later" — this is later). Throws
+      // if unconfigured rather than paying from a guessed account.
+      Account: { Code: requireAccountRef('xero', 'bank') },
     }
 
     if (payment.invoice_external_id) {
@@ -253,6 +277,13 @@ export class XeroProvider implements AccountingProvider {
   }
 
   private mapToXeroInvoice(invoice: InvoicePayload, type: 'ACCREC' | 'ACCPAY') {
+    // M4: resolved once up front so a missing config fails before any partial
+    // payload is built — but only if some line actually needs the fallback. A
+    // caller that codes every line explicitly shouldn't be blocked on an env
+    // var it never reads.
+    const revenueAccountCode = invoice.line_items.every(li => li.account_code)
+      ? ''
+      : requireAccountRef('xero', 'revenue')
     // H9: carry the invoice tax so Xero's total matches the Autoura total.
     // Without an explicit per-line TaxAmount, Xero adds 0 tax (LineAmountTypes
     // 'Exclusive' with no tax rate) and its total falls short by tax_amount.
@@ -279,7 +310,10 @@ export class XeroProvider implements AccountingProvider {
         Description: li.description,
         Quantity: li.quantity,
         UnitAmount: li.unit_price,
-        AccountCode: li.account_code || '200', // Default revenue account
+        // M4: was '200' — a Xero DEMO-COMPANY code, not a real chart of
+        // accounts. A per-line account_code still wins; otherwise the
+        // configured revenue account, or a clear error.
+        AccountCode: li.account_code || revenueAccountCode,
         ...(lineTax ? { TaxAmount: lineTax[i] } : {}),
       })),
       Reference: invoice.notes || undefined,
@@ -287,6 +321,10 @@ export class XeroProvider implements AccountingProvider {
   }
 
   private mapToXeroBill(bill: BillPayload) {
+    // M4: see mapToXeroInvoice — only required when a line lacks its own code.
+    const expenseAccountCode = bill.line_items.every(li => li.account_code)
+      ? ''
+      : requireAccountRef('xero', 'expense')
     // H9: bill line amounts are net (gross − tax), so tax is charged on top.
     const lineTax = bill.tax_amount > 0
       ? allocateLineTax(bill.line_items.map(li => li.amount), bill.tax_amount)
@@ -306,7 +344,8 @@ export class XeroProvider implements AccountingProvider {
         Description: li.description,
         Quantity: li.quantity,
         UnitAmount: li.unit_price,
-        AccountCode: li.account_code || '400', // Default expense account
+        // M4: was '400' — a Xero DEMO-COMPANY code. See mapToXeroInvoice.
+        AccountCode: li.account_code || expenseAccountCode,
         ...(lineTax ? { TaxAmount: lineTax[i] } : {}),
       })),
       Reference: bill.description || undefined,

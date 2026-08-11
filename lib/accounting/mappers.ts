@@ -91,7 +91,8 @@ export function mapInvoicePaymentToPayload(
 // Map Autoura expense payment (status=paid) to provider-agnostic PaymentPayload
 export function mapExpensePaymentToPayload(
   expense: Record<string, unknown>,
-  billExternalId?: string
+  billExternalId?: string,
+  vendorExternalId?: string
 ): PaymentPayload {
   return {
     amount: Number(expense.amount || 0),
@@ -99,6 +100,8 @@ export function mapExpensePaymentToPayload(
     date: String(expense.payment_date || new Date().toISOString().split('T')[0]),
     reference: expense.payment_reference as string | undefined,
     bill_external_id: billExternalId,
+    // M4: the vendor, not the bill — QuickBooks' VendorRef needs a Vendor id.
+    vendor_external_id: vendorExternalId,
     internalId: String(expense.id || ''),
   }
 }

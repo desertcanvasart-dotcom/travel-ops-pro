@@ -71,6 +71,14 @@ export interface PaymentPayload {
   reference?: string
   invoice_external_id?: string  // For AR payments
   bill_external_id?: string     // For AP payments
+  /**
+   * The VENDOR's id in the accounting system, for AP payments (audit M4).
+   * QuickBooks' BillPayment.VendorRef must name a Vendor — the code used to send
+   * the Bill's transaction id, which QuickBooks either rejects or mis-associates.
+   * A Bill id and a Vendor id are both opaque numbers, so nothing catches the
+   * swap downstream; it has to be carried explicitly.
+   */
+  vendor_external_id?: string
   // Internal reference
   internalId: string
 }
@@ -80,8 +88,29 @@ export interface ExternalRef {
   number?: string
 }
 
+/**
+ * One entry in a connected company's chart of accounts (M4 discovery).
+ *
+ * `ref` is the value the sync must send and the env var must hold, and the two
+ * providers disagree on what that is: QuickBooks addresses accounts by numeric
+ * Id, Xero by Code (e.g. "090"). Keeping `ref` separate from `id` means callers
+ * never have to know which.
+ */
+export interface AccountSummary {
+  id: string
+  /** The value to put in the env var — QB Id, Xero Code. */
+  ref: string
+  name: string
+  type: string
+  subType?: string
+  active: boolean
+}
+
 export interface AccountingProvider {
   readonly providerName: AccountingProviderType
+
+  /** Chart of accounts, for configuring the M4 account references. */
+  listAccounts(): Promise<AccountSummary[]>
 
   // OAuth
   getAuthUrl(state: string): string
@@ -134,5 +163,21 @@ export class AccountingSyncError extends Error {
   constructor(message: string, public readonly retryable: boolean = true) {
     super(message)
     this.name = 'AccountingSyncError'
+  }
+}
+
+/**
+ * The integration is misconfigured — a required ledger account reference is
+ * missing (audit M4). Deliberately NOT retryable: no number of retries sets an
+ * environment variable, so this must fail loudly for an operator instead of
+ * sitting in the retry queue burning attempts. `retryable` mirrors
+ * AccountingSyncError's shape so sync-service's `isRetryable` treats both the
+ * same way.
+ */
+export class AccountingConfigError extends Error {
+  readonly retryable = false
+  constructor(message: string) {
+    super(message)
+    this.name = 'AccountingConfigError'
   }
 }

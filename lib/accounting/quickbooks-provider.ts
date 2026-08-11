@@ -10,6 +10,8 @@ import {
   AccountingSyncError,
 } from './types'
 import { resolveTaxTreatment, round2 } from './tax'
+import { requireAccountRef } from './account-config'
+import type { AccountSummary } from './types'
 
 const QB_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2'
 const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
@@ -158,6 +160,30 @@ export class QuickBooksProvider implements AccountingProvider {
     return response.json()
   }
 
+  /**
+   * The company's chart of accounts (M4 discovery).
+   *
+   * Configuring QUICKBOOKS_BANK_ACCOUNT_ID / QUICKBOOKS_EXPENSE_ACCOUNT_ID is
+   * guesswork without seeing the real ids, so this exposes them. Read-only.
+   */
+  async listAccounts(): Promise<AccountSummary[]> {
+    const query = encodeURIComponent(
+      "select Id, Name, AccountType, AccountSubType, Active from Account maxresults 500"
+    )
+    const data = await this.apiRequest('GET', `/query?query=${query}`)
+    const rows: Array<Record<string, unknown>> = data.QueryResponse?.Account || []
+
+    return rows.map(a => ({
+      id: String(a.Id ?? ''),
+      // QuickBooks addresses accounts by Id, so that is what the env var wants.
+      ref: String(a.Id ?? ''),
+      name: String(a.Name ?? ''),
+      type: String(a.AccountType ?? ''),
+      subType: a.AccountSubType ? String(a.AccountSubType) : undefined,
+      active: a.Active !== false,
+    }))
+  }
+
   async upsertContact(contact: ContactPayload): Promise<ExternalRef> {
     const endpoint = contact.type === 'customer' ? '/customer' : '/vendor'
 
@@ -257,13 +283,30 @@ export class QuickBooksProvider implements AccountingProvider {
       }
     } else if (payment.bill_external_id) {
       // AP payment (bill payment)
+      //
+      // M4: VendorRef used to be handed payment.bill_external_id — the Bill's
+      // transaction id. QuickBooks requires a Vendor id here, so it either
+      // rejects the BillPayment or attaches it to whichever vendor happens to
+      // carry that id. Both are opaque numbers, so nothing downstream notices;
+      // refuse rather than send a reference we know is the wrong kind.
+      if (!payment.vendor_external_id) {
+        throw new AccountingSyncError(
+          'Cannot record a bill payment without the vendor’s QuickBooks id — ' +
+            'VendorRef must name a Vendor, not the Bill. Sync the expense (which ' +
+            'upserts the vendor) before its payment.',
+          false
+        )
+      }
       const qbBillPayment = {
         TotalAmt: payment.amount,
         TxnDate: payment.date,
-        VendorRef: { value: payment.bill_external_id },
+        VendorRef: { value: payment.vendor_external_id },
         PayType: 'Check',
         CheckPayment: {
-          BankAccountRef: { value: '35' }, // Default checking account
+          // M4: was hardcoded '35' — a sandbox id that means something else
+          // entirely in a real chart of accounts. Throws if unconfigured rather
+          // than paying from a guessed account.
+          BankAccountRef: { value: requireAccountRef('quickbooks', 'bank') },
         },
         Line: [{
           Amount: payment.amount,
@@ -322,6 +365,9 @@ export class QuickBooksProvider implements AccountingProvider {
   private mapToQBBill(bill: BillPayload) {
     // Bill line amounts are net (gross − tax), so tax is charged on top.
     const hasTax = bill.tax_amount > 0
+    // M4: resolved once per bill, before building any lines — every line codes
+    // to the same expense account, and a missing config should raise up front.
+    const expenseAccountRef = requireAccountRef('quickbooks', 'expense')
     return {
       DocNumber: bill.bill_number,
       VendorRef: bill.vendorExternalId
@@ -342,7 +388,7 @@ export class QuickBooksProvider implements AccountingProvider {
         Amount: li.amount,
         Description: li.description,
         AccountBasedExpenseLineDetail: {
-          AccountRef: { value: '7' }, // Default expense account
+          AccountRef: { value: expenseAccountRef },
         },
       })),
     }
