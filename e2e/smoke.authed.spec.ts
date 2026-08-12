@@ -171,6 +171,17 @@ test('P&L returns ONLY the caller\'s own org (regression: no org filter)', async
   expect(codes, `foreign trips leaked into the P&L: ${JSON.stringify(codes)}`).toEqual(['E2E-SMOKE-001'])
 })
 
+test('capacity page renders the month grid', async ({ page }) => {
+  const errorsOf = watchConsole(page)
+  await page.goto('/capacity')
+  await expect(page.getByRole('heading', { name: 'Capacity' })).toBeVisible({ timeout: 20_000 })
+  // The grid itself, not just the shell: seven weekday headers.
+  await expect(page.getByText('Mon', { exact: true })).toBeVisible()
+  await expect(page.getByText('Sun', { exact: true })).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  expect(errorsOf()).toEqual([])
+})
+
 test('department routing reports its gaps instead of hiding them', async ({ page }) => {
   const res = await page.request.get('/api/departments/routing')
   expect(res.status()).toBe(200)

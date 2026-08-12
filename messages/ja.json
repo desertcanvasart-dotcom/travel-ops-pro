@@ -260,7 +260,8 @@
     "help": "ヘルプ",
     "logout": "ログアウト",
     "signOut": "サインアウト",
-    "bookings": "予約管理"
+    "bookings": "予約管理",
+    "capacity": "稼働状況"
   },
   "roles": {
     "admin": "管理者",
