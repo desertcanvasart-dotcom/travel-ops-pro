@@ -58,6 +58,7 @@ import {
   Calculator,
   Sparkles,
   CalendarDays,
+  Plug,
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -227,6 +228,7 @@ const navigationConfig: NavConfig[] = [
     roles: ['admin'],
     items: [
       { labelKey: 'settings', href: '/settings', icon: Settings },
+      { labelKey: 'integrations', href: '/settings/integrations', icon: Plug },
       { labelKey: 'userManagement', href: '/users', icon: Shield },
     ]
   }

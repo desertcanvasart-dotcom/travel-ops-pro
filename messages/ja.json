@@ -261,7 +261,8 @@
     "logout": "ログアウト",
     "signOut": "サインアウト",
     "bookings": "予約管理",
-    "capacity": "稼働状況"
+    "capacity": "稼働状況",
+    "integrations": "外部連携"
   },
   "roles": {
     "admin": "管理者",

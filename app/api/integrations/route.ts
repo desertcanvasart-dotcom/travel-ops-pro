@@ -37,6 +37,17 @@ export async function GET() {
       .order('created_at', { ascending: false })
 
     if (error) {
+      // Absent table = this deploy landed before the migration. "No connections
+      // yet" is the truthful answer and lets the page render its empty state;
+      // a 500 would read as "integrations are broken" when none exist.
+      if (error.code === 'PGRST205' || error.code === '42P01') {
+        return NextResponse.json({
+          success: true,
+          data: [],
+          providers: listAdapters(),
+          migration_pending: true,
+        })
+      }
       console.error('Error listing integrations:', error)
       return NextResponse.json({ success: false, error: 'Failed to list integrations' }, { status: 500 })
     }

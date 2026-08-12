@@ -259,7 +259,8 @@
     "logout": "Logout",
     "signOut": "Sign out",
     "bookings": "Bookings",
-    "capacity": "Capacity"
+    "capacity": "Capacity",
+    "integrations": "Integrations"
   },
   "roles": {
     "admin": "Admin",
