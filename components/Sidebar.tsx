@@ -56,7 +56,8 @@ import {
   Droplets,
   Upload,
   Calculator,
-  Sparkles
+  Sparkles,
+  CalendarDays,
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -146,6 +147,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'itineraries', href: '/itineraries', icon: Route },
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase },
       { labelKey: 'departures', href: '/departures', icon: Calendar },
+      { labelKey: 'capacity', href: '/capacity', icon: CalendarDays },
       { labelKey: 'documents', href: '/documents', icon: FileText },
       { labelKey: 'teamMembers', href: '/team-members', icon: Users },
       { labelKey: 'tasks', href: '/tasks', icon: CheckSquare },

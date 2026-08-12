@@ -164,6 +164,10 @@ export async function middleware(request: NextRequest) {
     // SHA + uptime (no data, no secrets). scripts/verify-deploy.mjs hits it
     // unauthenticated to confirm WHICH commit a deployment is serving.
     '/api/version',
+    // Partner-facing read API. Authenticates itself with an issued API key
+    // matched against a stored hash (lib/integrations/credentials.ts) — a
+    // partner platform has no user session and never will.
+    '/api/public/v1/',
   ]
   const isSelfAuthApi = apiSelfAuthPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
 

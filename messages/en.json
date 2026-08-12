@@ -258,7 +258,8 @@
     "help": "Help",
     "logout": "Logout",
     "signOut": "Sign out",
-    "bookings": "Bookings"
+    "bookings": "Bookings",
+    "capacity": "Capacity"
   },
   "roles": {
     "admin": "Admin",

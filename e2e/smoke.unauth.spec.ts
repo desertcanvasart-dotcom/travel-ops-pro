@@ -43,4 +43,28 @@ test.describe('unauthenticated smoke', () => {
     expect(typeof v.sha).toBe('string')
     expect(v.sha.length).toBeGreaterThan(0)
   })
+
+  test('partner availability API rejects an anonymous or bogus key', async ({ request }) => {
+    // Reaches the ROUTE, not the middleware gate — /api/public/v1/ is on the
+    // self-authenticating allowlist. The WWW-Authenticate header is how we can
+    // tell the two apart: middleware's blanket 401 does not send one.
+    const anon = await request.get('/api/public/v1/availability')
+    expect(anon.status()).toBe(401)
+    expect(anon.headers()['www-authenticate']).toContain('Bearer')
+
+    const bogus = await request.get('/api/public/v1/availability', {
+      headers: { Authorization: 'Bearer tops_live_not-a-real-key' },
+    })
+    expect(bogus.status()).toBe(401)
+  })
+
+  test('inbound integration webhook refuses an unknown endpoint token', async ({ request }) => {
+    // The URL carries a per-connection token, not our org id. An unknown one is
+    // a flat 404 — anything more specific would let a caller enumerate which
+    // endpoints exist.
+    const res = await request.post('/api/webhooks/integrations/ep_not-a-real-endpoint', {
+      data: { departures: [] },
+    })
+    expect(res.status()).toBe(404)
+  })
 })
