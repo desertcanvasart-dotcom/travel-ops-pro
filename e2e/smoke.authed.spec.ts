@@ -182,6 +182,25 @@ test('capacity page renders the month grid', async ({ page }) => {
   expect(errorsOf()).toEqual([])
 })
 
+test('integrations API offers the adapter registry as connectable platforms', async ({ page }) => {
+  // NOTE: the /settings/integrations PAGE is admin-only (middleware gates all
+  // of /settings) and the seeded E2E user is below that, so this checks the
+  // contract the page is built on rather than its rendering.
+  const res = await page.request.get('/api/integrations')
+  expect(res.status()).toBe(200)
+  const body = await res.json()
+  expect(body.success).toBe(true)
+
+  // Driven by lib/integrations/registry — a newly added adapter must appear in
+  // the connection picker without a second place to update.
+  const slugs = (body.providers || []).map((p: { slug: string }) => p.slug)
+  expect(slugs).toContain('generic')
+  expect(slugs).toContain('sawa')
+  expect(
+    (body.providers || []).every((p: { label: string; description: string }) => p.label && p.description)
+  ).toBe(true)
+})
+
 test('department routing reports its gaps instead of hiding them', async ({ page }) => {
   const res = await page.request.get('/api/departments/routing')
   expect(res.status()).toBe(200)
