@@ -5,13 +5,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { requireRole } from '@/lib/auth/current-org'
-import { generateInboundSecret, issueApiKey } from '@/lib/integrations/credentials'
+import { generateEndpointToken, generateInboundSecret, issueApiKey } from '@/lib/integrations/credentials'
 import { clientMessage } from '@/lib/api-errors'
 
 export const dynamic = 'force-dynamic'
 
 const SAFE_COLUMNS =
-  'id, provider, name, direction, is_active, settings, outbound_key_prefix, outbound_key_issued_at, last_inbound_at, last_outbound_at, created_at, updated_at'
+  'id, provider, name, direction, is_active, settings, endpoint_token, outbound_key_prefix, outbound_key_issued_at, last_inbound_at, last_outbound_at, created_at, updated_at'
 
 /**
  * PATCH — edit a connection, and optionally rotate its credentials.
@@ -70,6 +70,15 @@ export async function PATCH(
       const secret = generateInboundSecret()
       updates.inbound_secret = secret
       credentials.inbound_secret = secret
+    }
+    // Rotating the endpoint changes the partner's webhook URL, so it is a
+    // SEPARATE action from rotating the secret — an operator revoking a leaked
+    // signing secret rarely wants to make the partner reconfigure their URL too.
+    if (body.rotate_endpoint_token === true) {
+      const token = generateEndpointToken()
+      updates.endpoint_token = token
+      credentials.endpoint_token = token
+      credentials.webhook_url = `${process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'}/api/webhooks/integrations/${token}`
     }
 
     if (Object.keys(updates).length === 0) {

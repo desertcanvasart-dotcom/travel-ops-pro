@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { requireRole } from '@/lib/auth/current-org'
-import { generateInboundSecret, issueApiKey } from '@/lib/integrations/credentials'
+import { generateEndpointToken, generateInboundSecret, issueApiKey } from '@/lib/integrations/credentials'
 import { getAdapter, listAdapters } from '@/lib/integrations/registry'
 import { clientMessage } from '@/lib/api-errors'
 
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 // Never includes inbound_secret or outbound_key_hash — only the non-reversible
 // prefix, so the UI can say WHICH key is installed.
 const SAFE_COLUMNS =
-  'id, provider, name, direction, is_active, settings, outbound_key_prefix, outbound_key_issued_at, last_inbound_at, last_outbound_at, created_at, updated_at'
+  'id, provider, name, direction, is_active, settings, endpoint_token, outbound_key_prefix, outbound_key_issued_at, last_inbound_at, last_outbound_at, created_at, updated_at'
 
 export async function GET() {
   try {
@@ -110,6 +110,9 @@ export async function POST(request: NextRequest) {
 
     const apiKey = needsOutbound ? issueApiKey() : null
     const inboundSecret = needsInbound ? generateInboundSecret() : null
+    // Routes this partner's deliveries. Safe to show and to re-show — it is an
+    // identifier, not a credential; the signature is what authenticates.
+    const endpointToken = needsInbound ? generateEndpointToken() : null
 
     const { data, error } = await supabase
       .from('integrations')
@@ -120,6 +123,7 @@ export async function POST(request: NextRequest) {
         direction,
         settings: body.settings && typeof body.settings === 'object' ? body.settings : {},
         inbound_secret: inboundSecret,
+        endpoint_token: endpointToken,
         outbound_key_hash: apiKey?.hash ?? null,
         outbound_key_prefix: apiKey?.prefix ?? null,
         outbound_key_issued_at: apiKey ? new Date().toISOString() : null,
@@ -155,6 +159,13 @@ export async function POST(request: NextRequest) {
           notice:
             'Copy these now — the API key is stored only as a hash and cannot be shown again. Losing it means rotating.',
         },
+        // The FULL url, not just the token: handing a partner a path to
+        // assemble themselves is how an integration ends up pointed at the
+        // wrong host. Safe to show again later — it routes, it does not
+        // authenticate.
+        webhook_url: endpointToken
+          ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'}/api/webhooks/integrations/${endpointToken}`
+          : null,
       },
       { status: 201 }
     )

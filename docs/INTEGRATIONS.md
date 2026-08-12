@@ -21,7 +21,7 @@ An operator creates the connection (Settings → Integrations, or `POST
 documented shape below — start there. A platform only needs a dedicated adapter
 if it cannot send it.
 
-The response returns **both credentials once**:
+The response returns the credentials **and your webhook URL**:
 
 ```json
 {
@@ -29,9 +29,16 @@ The response returns **both credentials once**:
     "api_key": "tops_live_…",
     "inbound_secret": "whsec_…",
     "notice": "Copy these now — the API key is stored only as a hash…"
-  }
+  },
+  "webhook_url": "https://…/api/webhooks/integrations/ep_9fK2…"
 }
 ```
+
+The webhook URL carries a **per-connection token**. It identifies which
+connection a delivery belongs to — it is not a credential, and can be shown
+again at any time. Every connection gets its own, so revoking one partner's
+endpoint (`PATCH … { "rotate_endpoint_token": true }`) leaves every other
+partner untouched.
 
 The API key is stored as a SHA-256 hash and is genuinely unrecoverable. Losing
 it means rotating (`PATCH /api/integrations/{id}` with `rotate_api_key: true`),
@@ -43,12 +50,15 @@ because the usual reason to rotate is that the old key leaked.
 ## 2. Inbound — partner pushes departures to us
 
 ```
-POST /api/webhooks/integrations/{provider}
-x-tops-org:       <organization id>
+POST /api/webhooks/integrations/{endpoint_token}
 x-tops-timestamp: <unix seconds>
 x-tops-signature: sha256=<hex>
 Content-Type:     application/json
 ```
+
+Use the `webhook_url` handed to you at connection time. There is no tenant
+header: the token in the path resolves the connection, and the organization
+comes from our own record rather than from anything in your request.
 
 ### Signature
 
@@ -141,10 +151,10 @@ edits.
 | code | meaning |
 |---|---|
 | 200 | applied (check `rejected` / `conflicts`) |
-| 400 | malformed body or missing `x-tops-org` |
+| 400 | malformed body |
 | 401 | signature missing, malformed, stale or wrong |
 | 403 | connection disabled, or configured outbound-only |
-| 404 | no such connection for that org + provider |
+| 404 | no such endpoint token |
 | 413 | more than 2000 departures — page your sync |
 | 500 | our fault; **retry with the same `event_id`** |
 
@@ -190,7 +200,8 @@ business is doing.
    Translate their fields, then hand off to `normalizeDeparture` from
    `adapters/generic.ts` so validation lives in one place.
 2. Register it in `lib/integrations/registry.ts`.
-3. Create the connection with that `provider` slug.
+3. Create the connection with that `provider` slug. The webhook URL and
+   credentials come back from that call.
 
 Adapters are **pure** — no database, no network — so a partner's format can be
 verified against a fixture without touching an environment. See

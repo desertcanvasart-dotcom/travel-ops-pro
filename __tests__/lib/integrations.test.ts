@@ -10,6 +10,7 @@ import {
   signWebhookBody,
   verifyWebhookSignature,
   generateInboundSecret,
+  generateEndpointToken,
 } from '@/lib/integrations/credentials'
 import { planDepartureSync, type ExistingDeparture } from '@/lib/integrations/departure-sync'
 import { IntegrationError } from '@/lib/integrations/types'
@@ -373,6 +374,31 @@ describe('webhook signature verification', () => {
   it('generates distinct inbound secrets', () => {
     expect(generateInboundSecret()).not.toBe(generateInboundSecret())
     expect(generateInboundSecret().startsWith('whsec_')).toBe(true)
+  })
+})
+
+describe('endpoint tokens (replacing the org header)', () => {
+  it('is unguessable and unique per connection', () => {
+    // A partner never receives our org id: it is identical across every
+    // connection, ends up in their logs and config, and invites probing other
+    // endpoints with it.
+    const tokens = new Set(Array.from({ length: 200 }, () => generateEndpointToken()))
+    expect(tokens.size).toBe(200)
+    expect(generateEndpointToken().startsWith('ep_')).toBe(true)
+  })
+
+  it('carries enough entropy that endpoints cannot be enumerated', () => {
+    // 16 random bytes → 22 base64url chars. It routes rather than authenticates,
+    // but a guessable endpoint would reveal which connections exist.
+    const token = generateEndpointToken().slice('ep_'.length)
+    expect(token.length).toBeGreaterThanOrEqual(20)
+    expect(token).toMatch(/^[A-Za-z0-9_-]+$/)
+  })
+
+  it('looks nothing like a UUID, so it cannot be mistaken for an internal id', () => {
+    expect(generateEndpointToken()).not.toMatch(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+    )
   })
 })
 

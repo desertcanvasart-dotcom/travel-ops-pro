@@ -69,6 +69,23 @@ export function generateInboundSecret(): string {
   return `whsec_${randomBytes(32).toString('base64url')}`
 }
 
+/**
+ * The opaque token in a connection's inbound webhook URL.
+ *
+ * Replaces sending our org id in a header. A partner should never hold an
+ * internal identifier: the org id is the same value across every connection, it
+ * ends up in their logs and config, and it invites probing other endpoints with
+ * it. A per-connection token reveals nothing about us, and revoking one
+ * partner's endpoint leaves every other partner untouched.
+ *
+ * NOT the credential — the HMAC signature authenticates. This only routes. It
+ * is still 128 bits of entropy, because a guessable endpoint would let anyone
+ * enumerate which connections exist.
+ */
+export function generateEndpointToken(): string {
+  return `ep_${randomBytes(16).toString('base64url')}`
+}
+
 /** Constant-time compare of two strings of arbitrary length. */
 export function safeEqual(a: string, b: string): boolean {
   const ba = Buffer.from(a, 'utf8')

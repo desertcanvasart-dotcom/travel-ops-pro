@@ -58,11 +58,13 @@ test.describe('unauthenticated smoke', () => {
     expect(bogus.status()).toBe(401)
   })
 
-  test('inbound integration webhook refuses an unsigned delivery', async ({ request }) => {
-    // No signature, no org: must never reach the mirror logic.
-    const res = await request.post('/api/webhooks/integrations/generic', {
+  test('inbound integration webhook refuses an unknown endpoint token', async ({ request }) => {
+    // The URL carries a per-connection token, not our org id. An unknown one is
+    // a flat 404 — anything more specific would let a caller enumerate which
+    // endpoints exist.
+    const res = await request.post('/api/webhooks/integrations/ep_not-a-real-endpoint', {
       data: { departures: [] },
     })
-    expect([400, 401, 404]).toContain(res.status())
+    expect(res.status()).toBe(404)
   })
 })

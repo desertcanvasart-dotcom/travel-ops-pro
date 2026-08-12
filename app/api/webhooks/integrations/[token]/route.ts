@@ -1,13 +1,19 @@
 // ============================================
-// API: POST /api/webhooks/integrations/[provider] — inbound departures mirror
+// API: POST /api/webhooks/integrations/[token] — inbound departures mirror
 // ============================================
 // A partner platform POSTs their departures here. Lives under /api/webhooks/ so
 // middleware skips the session lookup — this call has no user, and
 // authenticates itself with an HMAC signature over the raw body.
 //
+// The URL carries a PER-CONNECTION opaque token, not our org id. A partner
+// should never hold an internal identifier: the org id is identical across
+// every connection, it ends up in their logs and config, and it invites probing
+// other endpoints with it. The token routes only — the signature authenticates
+// — and revoking one partner's endpoint leaves every other partner untouched.
+//
 // ORDER MATTERS and is not arbitrary:
 //   1. read the RAW body (a re-serialized JSON body signs differently)
-//   2. resolve the integration from provider + org, both supplied by the caller
+//   2. resolve the connection from the URL token alone
 //   3. verify the signature BEFORE parsing or trusting anything in the body
 //   4. record the delivery (idempotency claim) BEFORE applying it
 //   5. normalize, plan, write
@@ -37,20 +43,9 @@ const MAX_DEPARTURES_PER_DELIVERY = 2000
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ provider: string }> }
+  { params }: { params: Promise<{ token: string }> }
 ) {
-  const { provider } = await params
-
-  // The org this delivery is for. Partners cannot be expected to know our
-  // internal ids... but they must identify the tenant somehow, and a header is
-  // the least leaky channel (a query string lands in access logs).
-  const orgId = request.headers.get('x-tops-org') || request.nextUrl.searchParams.get('org')
-  if (!orgId) {
-    return NextResponse.json(
-      { success: false, error: 'Missing organization. Send the x-tops-org header.' },
-      { status: 400 }
-    )
-  }
+  const { token } = await params
 
   // 1. RAW body first. JSON.parse → JSON.stringify reorders keys and drops
   //    whitespace, producing a different digest than the partner signed.
@@ -61,21 +56,28 @@ export async function POST(
     return NextResponse.json({ success: false, error: 'Could not read request body' }, { status: 400 })
   }
 
-  // 2. Resolve the connection.
+  // 2. Resolve the connection from the token alone. The org comes from the row,
+  //    never from the caller — a partner cannot address another tenant even by
+  //    guessing, because there is nothing in the request to guess WITH.
   const { data: integration, error: lookupError } = await supabaseAdmin
     .from('integrations')
     .select('id, org_id, provider, direction, is_active, inbound_secret, settings')
-    .eq('org_id', orgId)
-    .eq('provider', provider)
+    .eq('endpoint_token', token)
     .maybeSingle()
 
   if (lookupError) {
+    // The integrations table is absent when this deploy landed before the
+    // migration. No table means no endpoint can be valid — 404, not 500.
+    if (lookupError.code === 'PGRST205' || lookupError.code === '42P01') {
+      console.warn('Integration webhook called before the integrations migration was applied')
+      return NextResponse.json({ success: false, error: 'Integration not found' }, { status: 404 })
+    }
     console.error('Integration lookup failed:', lookupError)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 
-  // Deliberately the same 404 for "no such integration" and "wrong org": a
-  // different answer would let anyone probe which orgs have which partners.
+  // One answer for "no such token": anything more specific would let a caller
+  // enumerate which endpoints exist.
   if (!integration) {
     return NextResponse.json({ success: false, error: 'Integration not found' }, { status: 404 })
   }

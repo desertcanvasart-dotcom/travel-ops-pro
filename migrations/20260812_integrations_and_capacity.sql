@@ -35,6 +35,20 @@ CREATE TABLE IF NOT EXISTS public.integrations (
   -- Operator-facing label, e.g. "Sawa — Cairo seat pool".
   name VARCHAR(120) NOT NULL,
 
+  -- The opaque id in this connection's inbound webhook URL:
+  --   POST /api/webhooks/integrations/{endpoint_token}
+  --
+  -- Deliberately NOT the org id. A partner should never be handed an internal
+  -- identifier: it is the same value across every connection, it appears in
+  -- their logs and config, and it invites probing other endpoints with it.
+  -- A per-connection token reveals nothing, and revoking one partner's access
+  -- does not touch another's.
+  --
+  -- This is an IDENTIFIER, not the credential — the HMAC signature is what
+  -- authenticates. Stored in plaintext because it must be looked up, and
+  -- hashing it would buy nothing while inbound_secret sits alongside it.
+  endpoint_token VARCHAR(64),
+
   direction VARCHAR(10) NOT NULL DEFAULT 'both'
     CHECK (direction IN ('inbound', 'outbound', 'both')),
 
@@ -77,6 +91,12 @@ CREATE INDEX IF NOT EXISTS idx_integrations_provider ON public.integrations(prov
 -- also means one key can never resolve to two orgs.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_integrations_outbound_key_hash
   ON public.integrations(outbound_key_hash) WHERE outbound_key_hash IS NOT NULL;
+
+-- The inbound webhook resolves a connection from the URL token alone, with no
+-- org context — so this must be indexed, and unique so one token can never
+-- address two connections.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_integrations_endpoint_token
+  ON public.integrations(endpoint_token) WHERE endpoint_token IS NOT NULL;
 
 COMMENT ON COLUMN public.integrations.outbound_key_hash IS
   'SHA-256 of the issued API key. The plaintext is shown once at creation and '
