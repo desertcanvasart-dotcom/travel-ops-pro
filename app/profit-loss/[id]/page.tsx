@@ -38,6 +38,17 @@ interface TripPnL {
   expense_breakdown: Record<string, number>
   invoice_count: number
   expense_count: number
+  agent_commissions: number
+  agent_commissions_paid: number
+  supplier_commissions_receivable: number
+  commission_count: number
+  net_profit: number
+  net_margin: number
+  realized_revenue: number
+  realized_cost: number
+  realized_profit: number
+  realized_margin: number
+  realized_basis: string
 }
 
 interface Invoice {
@@ -281,6 +292,57 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
             </p>
             <p className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${getMarginColor(pnlData.profit_margin)}`}>
               {pnlData.profit_margin >= 0 ? '+' : ''}{pnlData.profit_margin.toFixed(1)}% {t('margin')}
+            </p>
+          </div>
+        </div>
+
+        {/* What the trip actually kept, and what actually moved.
+            Kept below the headline row rather than replacing it: the operator
+            needs to see BOTH the gross they quoted against and the net after an
+            agent takes their cut. */}
+        <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Agent commission</p>
+            <p className="text-lg font-semibold text-amber-600">
+              {pnlData.agent_commissions > 0 ? '−' : ''}
+              {getCurrencySymbol(pnlData.currency)}{Math.round(pnlData.agent_commissions).toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {pnlData.agent_commissions === 0
+                ? 'Sold directly — no commission on this trip.'
+                : `${getCurrencySymbol(pnlData.currency)}${Math.round(pnlData.agent_commissions_paid).toLocaleString()} already paid out`}
+            </p>
+            {pnlData.supplier_commissions_receivable > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Suppliers owe us {getCurrencySymbol(pnlData.currency)}
+                {Math.round(pnlData.supplier_commissions_receivable).toLocaleString()} — not counted above, since owed is not earned.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Net margin (after commission)</p>
+            <p className={`text-lg font-semibold ${getProfitColor(pnlData.net_profit)}`}>
+              {pnlData.net_profit >= 0 ? '+' : ''}{getCurrencySymbol(pnlData.currency)}{Math.round(pnlData.net_profit).toLocaleString()}
+            </p>
+            <p className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${getMarginColor(pnlData.net_margin)}`}>
+              {pnlData.net_margin >= 0 ? '+' : ''}{pnlData.net_margin.toFixed(1)}%
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500 mb-1" title={pnlData.realized_basis}>
+              Realized (cash that moved)
+            </p>
+            <p className={`text-lg font-semibold ${getProfitColor(pnlData.realized_profit)}`}>
+              {pnlData.realized_profit >= 0 ? '+' : ''}{getCurrencySymbol(pnlData.currency)}{Math.round(pnlData.realized_profit).toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {getCurrencySymbol(pnlData.currency)}{Math.round(pnlData.realized_revenue).toLocaleString()} received ·{' '}
+              {getCurrencySymbol(pnlData.currency)}{Math.round(pnlData.realized_cost).toLocaleString()} paid out
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Excludes estimated supplier cost — only money that has actually changed hands.
             </p>
           </div>
         </div>

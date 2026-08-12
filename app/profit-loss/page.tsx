@@ -44,6 +44,19 @@ interface TripPnL {
   expense_breakdown: Record<string, number>
   invoice_count: number
   expense_count: number
+  // Agent commissions come out of the margin — see the API's header comment.
+  agent_commissions: number
+  agent_commissions_paid: number
+  supplier_commissions_receivable: number
+  commission_count: number
+  net_profit: number
+  net_margin: number
+  // Realized = money that actually moved; no pricing estimates in it.
+  realized_revenue: number
+  realized_cost: number
+  realized_profit: number
+  realized_margin: number
+  realized_basis: string
 }
 
 interface Summary {
@@ -52,6 +65,13 @@ interface Summary {
   total_expenses: number
   total_profit: number
   average_margin: number
+  total_agent_commissions: number
+  total_net_profit: number
+  average_net_margin: number
+  total_realized_revenue: number
+  total_realized_cost: number
+  total_realized_profit: number
+  average_realized_margin: number
   profitable_trips: number
   loss_trips: number
 }
@@ -153,13 +173,16 @@ export default function ProfitLossPage() {
     .sort((a, b) => {
       let aVal: number, bVal: number
       switch (sortField) {
+        // Sorted on NET, matching what the table shows. Ranking by gross would
+        // put a trip whose entire margin goes to an agent above one that keeps
+        // less headline profit but all of it.
         case 'profit_margin':
-          aVal = a.profit_margin
-          bVal = b.profit_margin
+          aVal = a.net_margin
+          bVal = b.net_margin
           break
         case 'gross_profit':
-          aVal = a.gross_profit
-          bVal = b.gross_profit
+          aVal = a.net_profit
+          bVal = b.net_profit
           break
         case 'start_date':
         default:
@@ -238,8 +261,13 @@ export default function ProfitLossPage() {
                 { key: 'start_date', label: 'Date' },
                 { key: 'total_revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
                 { key: 'total_expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'gross_profit', label: 'Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'profit_margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'gross_profit', label: 'Gross Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'agent_commissions', label: 'Agent Commission', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'net_profit', label: 'Net Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'net_margin', label: 'Net Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'realized_revenue', label: 'Cash In', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'realized_cost', label: 'Cash Out', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'realized_profit', label: 'Realized', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
                 { key: 'status', label: 'Status' },
               ]
               exportFinanceCSV(filteredData as unknown as Record<string, unknown>[], cols, 'profit-and-loss')
@@ -257,8 +285,13 @@ export default function ProfitLossPage() {
                 { key: 'start_date', label: 'Date' },
                 { key: 'total_revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
                 { key: 'total_expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'gross_profit', label: 'Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'profit_margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'gross_profit', label: 'Gross Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'agent_commissions', label: 'Agent Commission', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'net_profit', label: 'Net Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'net_margin', label: 'Net Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
+                { key: 'realized_revenue', label: 'Cash In', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'realized_cost', label: 'Cash Out', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'realized_profit', label: 'Realized', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
                 { key: 'status', label: 'Status' },
               ]
               exportFinancePDF({
@@ -268,6 +301,10 @@ export default function ProfitLossPage() {
                   { label: 'Total Revenue', value: `€${summary.total_revenue.toLocaleString()}` },
                   { label: 'Total Expenses', value: `€${summary.total_expenses.toLocaleString()}` },
                   { label: 'Gross Profit', value: `€${summary.total_profit.toLocaleString()}` },
+                  { label: 'Agent Commission', value: `€${Math.round(summary.total_agent_commissions).toLocaleString()}` },
+                  { label: 'Net Profit', value: `€${Math.round(summary.total_net_profit).toLocaleString()}` },
+                  { label: 'Avg Net Margin', value: `${summary.average_net_margin.toFixed(1)}%` },
+                  { label: 'Realized Profit', value: `€${Math.round(summary.total_realized_profit).toLocaleString()}` },
                   { label: 'Avg Margin', value: `${summary.average_margin.toFixed(1)}%` },
                 ] : [],
                 data: filteredData as unknown as Record<string, unknown>[],
@@ -322,6 +359,44 @@ export default function ProfitLossPage() {
             <p className="text-xs text-gray-500 mb-1">{t('summary.grossProfit')}</p>
             <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_profit)}`} title={`€${summary.total_profit.toLocaleString()}`}>
               €{summary.total_profit.toLocaleString()}
+            </p>
+            {summary.total_agent_commissions > 0 && (
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                before €{Math.round(summary.total_agent_commissions).toLocaleString()} agent commission
+              </p>
+            )}
+          </div>
+
+          {/* Net of agent commission — the margin the business actually keeps.
+              Shown next to gross rather than replacing it, so the difference the
+              agent takes is visible instead of silently baked in. */}
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🤝</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <p className="text-xs text-gray-500 mb-1">Net of commission</p>
+            <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_net_profit)}`} title={`€${summary.total_net_profit.toLocaleString()}`}>
+              €{Math.round(summary.total_net_profit).toLocaleString()}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{summary.average_net_margin.toFixed(1)}% margin</p>
+          </div>
+
+          {/* Realized — cash that actually moved. Deliberately separate from the
+              accrued figures above, which include supplier_cost (an estimate). */}
+          <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🏦</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+            </div>
+            <p className="text-xs text-gray-500 mb-1" title={'Payments received minus expenses and commissions actually paid. Excludes supplier_cost, which is an estimate rather than a payment.'}>
+              Realized
+            </p>
+            <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_realized_profit)}`}>
+              €{Math.round(summary.total_realized_profit).toLocaleString()}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              €{Math.round(summary.total_realized_revenue).toLocaleString()} in · €{Math.round(summary.total_realized_cost).toLocaleString()} out
             </p>
           </div>
 
@@ -475,7 +550,7 @@ export default function ProfitLossPage() {
                 const statusLabel = t(`status.${trip.status}` as any) || t('status.draft')
                 const revenue = trip.total_revenue > 0 ? trip.total_revenue : trip.quoted_amount
                 return (
-                  <tr key={trip.itinerary_id} className={`hover:bg-gray-50 ${getProfitBg(trip.gross_profit)}`}>
+                  <tr key={trip.itinerary_id} className={`hover:bg-gray-50 ${getProfitBg(trip.net_profit)}`}>
                     <td className="px-4 py-3">
                       <div>
                         <Link 
@@ -519,13 +594,25 @@ export default function ProfitLossPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className={`text-sm font-semibold ${getProfitColor(trip.gross_profit)}`}>
-                        {trip.gross_profit >= 0 ? '+' : ''}{getCurrencySymbol(trip.currency)}{trip.gross_profit.toLocaleString()}
+                      <div className={`text-sm font-semibold ${getProfitColor(trip.net_profit)}`}>
+                        {trip.net_profit >= 0 ? '+' : ''}{getCurrencySymbol(trip.currency)}{Math.round(trip.net_profit).toLocaleString()}
                       </div>
+                      {/* Only shown when an agent actually takes a cut, so the
+                          row stays quiet on directly-sold trips. */}
+                      {trip.agent_commissions > 0 && (
+                        <div className="text-xs text-amber-600" title="Agent commission deducted from gross profit">
+                          −{getCurrencySymbol(trip.currency)}{Math.round(trip.agent_commissions).toLocaleString()} commission
+                        </div>
+                      )}
+                      {trip.realized_revenue > 0 && (
+                        <div className="text-xs text-gray-500" title={trip.realized_basis}>
+                          {getCurrencySymbol(trip.currency)}{Math.round(trip.realized_profit).toLocaleString()} realized
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getMarginColor(trip.profit_margin)}`}>
-                        {trip.profit_margin >= 0 ? '+' : ''}{trip.profit_margin.toFixed(1)}%
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getMarginColor(trip.net_margin)}`}>
+                        {trip.net_margin >= 0 ? '+' : ''}{trip.net_margin.toFixed(1)}%
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
