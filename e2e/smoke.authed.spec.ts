@@ -107,3 +107,68 @@ test('dashboard loads its stat cards', async ({ page }) => {
   await page.waitForLoadState('networkidle')
   expect(errorsOf()).toEqual([])
 })
+
+// NOTE: the /profit-loss PAGE is gated to admin/manager in middleware.ts and
+// the seeded E2E user is below that, so its rendering cannot be asserted here —
+// the API test below is the contract check. Do not "fix" that by promoting the
+// E2E user: the role gate is itself worth keeping honest.
+
+test('itineraries list shows a trip owner column', async ({ page }) => {
+  const errorsOf = watchConsole(page)
+  await page.goto('/itineraries')
+  await expect(page.getByRole('columnheader', { name: 'Owner' })).toBeVisible({ timeout: 20_000 })
+
+  // An unowned trip must SAY so. A blank cell reads as "loading" or "not a
+  // field anyone fills in"; the point of the feature is that it is noticed.
+  const row = page.getByRole('row').filter({ hasText: 'E2E-SMOKE-001' })
+  await expect(row.getByText(/Unassigned|\w/).first()).toBeVisible()
+  expect(errorsOf()).toEqual([])
+})
+
+test('P&L API returns the commission and realized fields for every trip', async ({ page }) => {
+  const res = await page.request.get('/api/profit-loss')
+  expect(res.status()).toBe(200)
+  const body = await res.json()
+  expect(body.success).toBe(true)
+
+  // Summary always carries the new aggregates, even with no commissions on file
+  // — a missing key would silently render as "undefined" rather than €0.
+  for (const key of [
+    'total_agent_commissions',
+    'total_net_profit',
+    'average_net_margin',
+    'total_realized_revenue',
+    'total_realized_cost',
+    'total_realized_profit',
+  ]) {
+    expect(typeof body.summary[key], `summary.${key}`).toBe('number')
+  }
+
+  for (const trip of body.data) {
+    expect(typeof trip.agent_commissions, trip.itinerary_code).toBe('number')
+    expect(typeof trip.net_profit, trip.itinerary_code).toBe('number')
+    expect(typeof trip.realized_profit, trip.itinerary_code).toBe('number')
+    // The invariant: net is gross less what the agent takes.
+    expect(trip.net_profit).toBeCloseTo(trip.gross_profit - trip.agent_commissions, 6)
+    // Realized never silently absorbs the supplier-cost estimate.
+    expect(trip.realized_cost).toBeLessThanOrEqual(
+      trip.expenses_paid + trip.agent_commissions_paid + 0.001
+    )
+  }
+})
+
+test('department routing reports its gaps instead of hiding them', async ({ page }) => {
+  const res = await page.request.get('/api/departments/routing')
+  expect(res.status()).toBe(200)
+  const body = await res.json()
+  expect(body.success).toBe(true)
+
+  // Every service type in the data must reach a department. An empty array here
+  // is the whole point: unrouted work produces unassignable tasks that look
+  // exactly like tasks nobody has picked up.
+  expect(
+    body.routing.unrouted_service_types,
+    `service types owned by no department: ${JSON.stringify(body.routing.unrouted_service_types)}`
+  ).toEqual([])
+  expect(body.departments.length).toBeGreaterThan(0)
+})

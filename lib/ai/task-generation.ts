@@ -3,18 +3,13 @@
 // Analyzes itinerary services and generates actionable tasks
 // ============================================
 
-// Service type to department mapping (matches departments.service_types in DB)
-export const SERVICE_TYPE_TO_DEPARTMENT: Record<string, string> = {
-  accommodation: 'Reservation',
-  cruise: 'Reservation',
-  meal: 'Reservation',
-  transportation: 'Reservation',
-  flight: 'Aviation',
-  guide: 'Execution',
-  entrance: 'Execution',
-  airport_service: 'Execution',
-  hotel_service: 'Execution',
-}
+// Service-type → department routing now lives in lib/departments.ts, which is
+// the single source of truth shared with the migration. The copy that used to
+// sit here had drifted: it listed the singular 'airport_service'/'hotel_service'
+// while the live rows carry the plural, and omitted activity/tips/supplies
+// entirely — so those tasks routed nowhere and came out unassigned.
+import { SERVICE_TYPE_ROUTING } from '@/lib/departments'
+export { SERVICE_TYPE_ROUTING, resolveDepartment, buildRoutingReport } from '@/lib/departments'
 
 export interface ItineraryForTasks {
   itinerary_code: string
@@ -141,11 +136,14 @@ export function parseTaskGenerationResponse(responseText: string): GeneratedTask
     throw new Error('AI response is not an array')
   }
 
-  // Validate and sanitize each task
-  const validServiceTypes = new Set([
-    'accommodation', 'cruise', 'meal', 'transportation',
-    'flight', 'guide', 'entrance', 'airport_service', 'hotel_service'
-  ])
+  // Validate and sanitize each task.
+  //
+  // The routing table is the authority on what a service type can be — this
+  // used to be a third hand-maintained copy of the list, and it coerced anything
+  // it didn't recognise to 'transportation'. That silently sent every tips,
+  // supplies and activity task to Reservation labelled as transport: worse than
+  // leaving it unrouted, because the mis-routing is invisible.
+  const validServiceTypes = new Set(Object.keys(SERVICE_TYPE_ROUTING))
 
   return parsed
     .filter((task: any) => task.title && task.service_type)
@@ -154,21 +152,11 @@ export function parseTaskGenerationResponse(responseText: string): GeneratedTask
       description: String(task.description || '').slice(0, 2000),
       priority: ['low', 'medium', 'high', 'urgent'].includes(task.priority) ? task.priority : 'medium',
       suggested_due_date: task.suggested_due_date || '',
-      service_type: validServiceTypes.has(task.service_type) ? task.service_type : 'transportation',
+      // An unrecognised type is kept as-is (lowercased) rather than rewritten.
+      // It will then show up in the routing report as unrouted, which is the
+      // honest outcome — the alternative was a confidently wrong department.
+      service_type: validServiceTypes.has(String(task.service_type || '').toLowerCase())
+        ? String(task.service_type).toLowerCase()
+        : String(task.service_type || 'unknown').toLowerCase().slice(0, 50),
     }))
-}
-
-/**
- * Find the department that handles a given service_type
- */
-export function findDepartmentForServiceType(
-  serviceType: string,
-  departments: { id: string; name: string; service_types: string[] }[]
-): { id: string; name: string } | null {
-  for (const dept of departments) {
-    if (dept.service_types?.includes(serviceType)) {
-      return { id: dept.id, name: dept.name }
-    }
-  }
-  return null
 }

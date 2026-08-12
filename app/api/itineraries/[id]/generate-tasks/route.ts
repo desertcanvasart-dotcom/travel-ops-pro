@@ -5,9 +5,10 @@ import { MODEL_GENERATOR } from '@/lib/ai/models'
 import {
   buildTaskGenerationPrompt,
   parseTaskGenerationResponse,
-  findDepartmentForServiceType,
   type DayForTasks,
 } from '@/lib/ai/task-generation'
+import { resolveDepartment, buildRoutingReport } from '@/lib/departments'
+import { createNotifications } from '@/lib/notifications'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
@@ -127,8 +128,18 @@ export async function POST(
     }
 
     // 8. Map tasks to records with department + assignee
+    //
+    // Routing gaps are collected rather than swallowed: a task with no
+    // department gets no assignee, and in the task list that is indistinguishable
+    // from "nobody has picked it up yet". The response says which service types
+    // reached no department so the gap is fixable instead of invisible.
+    const routing = buildRoutingReport(
+      aiTasks.map(t => t.service_type).filter(Boolean) as string[],
+      departments
+    )
+
     const taskRecords = aiTasks.map(task => {
-      const dept = findDepartmentForServiceType(task.service_type, departments)
+      const dept = resolveDepartment(task.service_type, departments)
       const assignedTo = dept ? (assignments[dept.id] || null) : null
 
       return {
@@ -158,40 +169,52 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Failed to create tasks' }, { status: 500 })
     }
 
-    // 10. Send notifications to each unique assignee
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'
+    // 10. Notify each unique assignee.
+    //
+    // This used to fetch our own /api/notifications over HTTP. The /api/* auth
+    // gate rejects a session-less server-to-server call, so every one of these
+    // 401'd inside a catch that only logged — nobody has ever been told about a
+    // generated task. Now created in-process (see lib/notifications.ts).
     const uniqueAssignees = [...new Set(
       (createdTasks || [])
         .map(t => t.assigned_to)
         .filter(Boolean)
-    )]
+    )] as string[]
 
-    for (const assigneeId of uniqueAssignees) {
-      const assigneeTasks = (createdTasks || []).filter(t => t.assigned_to === assigneeId)
-      try {
-        await fetch(`${baseUrl}/api/notifications`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            team_member_id: assigneeId,
-            type: 'task_assigned',
-            title: `${assigneeTasks.length} new operations task${assigneeTasks.length !== 1 ? 's' : ''} for ${itinerary.itinerary_code}`,
-            message: `${assigneeTasks.length} operations task${assigneeTasks.length !== 1 ? 's have' : ' has'} been generated for itinerary ${itinerary.itinerary_code} (${itinerary.client_name}, ${itinerary.start_date} to ${itinerary.end_date}). Please review and begin processing.`,
-            link: '/tasks',
-            related_task_id: assigneeTasks[0]?.id || null,
-            send_email: true,
-          }),
-        })
-      } catch (notifError) {
-        console.error(`Failed to send notification to ${assigneeId}:`, notifError)
-      }
-    }
+    const notified = await createNotifications(
+      uniqueAssignees.map(assigneeId => {
+        const assigneeTasks = (createdTasks || []).filter(t => t.assigned_to === assigneeId)
+        const plural = assigneeTasks.length !== 1
+        return {
+          team_member_id: assigneeId,
+          type: 'task_assigned' as const,
+          title: `${assigneeTasks.length} new operations task${plural ? 's' : ''} for ${itinerary.itinerary_code}`,
+          message: `${assigneeTasks.length} operations task${plural ? 's have' : ' has'} been generated for itinerary ${itinerary.itinerary_code} (${itinerary.client_name}, ${itinerary.start_date} to ${itinerary.end_date}). Please review and begin processing.`,
+          link: '/tasks',
+          related_task_id: assigneeTasks[0]?.id || null,
+          related_itinerary_id: itineraryId,
+        }
+      })
+    )
+
+    const unassigned = (createdTasks || []).filter(t => !t.assigned_to).length
 
     return NextResponse.json({
       success: true,
       count: createdTasks?.length || 0,
       message: `Generated ${createdTasks?.length || 0} operations tasks`,
       data: createdTasks,
+      notified: notified.created,
+      // Surfaced so an operator can see WHY a task came out unowned, instead of
+      // it looking like an unclaimed task.
+      unassigned_tasks: unassigned,
+      routing: {
+        complete: routing.complete,
+        table_current: routing.table_current,
+        unrouted_service_types: routing.unrouted,
+        routed_by_code_only: routing.fallback,
+        drift: routing.drift,
+      },
     })
 
   } catch (error) {

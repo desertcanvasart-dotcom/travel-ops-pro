@@ -23,6 +23,9 @@ interface Itinerary {
   status: string
   created_at: string
   available_languages: Language[]
+  assigned_to?: string | null
+  /** The named internal owner. Null is a real, visible state — see the Owner column. */
+  assignee?: { id: string; name: string } | null
 }
 interface Toast {
   id: string
@@ -337,6 +340,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('created')}</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('client')}</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('trip')}</th>
+                <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">Owner</th>
                 <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-600 whitespace-nowrap">{t('dates')}</th>
                 <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('days')}</th>
                 <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-600 whitespace-nowrap">{t('pax')}</th>
@@ -365,6 +369,15 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                   </td>
                   <td className="px-3 py-3">
                     <div className="text-sm text-gray-700 max-w-[250px] truncate">{itinerary.trip_name}</div>
+                  </td>
+                  {/* Owner — an unowned trip is shown, not left blank, because
+                      that is the state worth noticing. */}
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    {itinerary.assignee ? (
+                      <span className="text-xs text-gray-700">{itinerary.assignee.name}</span>
+                    ) : (
+                      <span className="text-xs text-amber-600">Unassigned</span>
+                    )}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap">
                     <div className="text-xs text-gray-700">

@@ -14,6 +14,7 @@ import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import ShareLinkCard from '@/app/components/ShareLinkCard'
 import { generateWhatsAppMessage, generateWhatsAppLink, formatPhoneForWhatsApp } from '@/lib/communication-utils'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
+import TripAssignee from '@/components/TripAssignee'
 import ItineraryPL from '@/app/components/ItineraryPL'
 import ItineraryExpenses from '@/app/components/ItineraryExpenses'
 import { createClient } from '@/lib/supabase'
@@ -1362,6 +1363,12 @@ export default function ViewItineraryPage() {
                 )}
               </div>
             </div>
+          </div>
+          {/* Trip owner — who inside the company is responsible for this trip.
+              Distinct from the guide/vehicle/hotel assignments below, which are
+              resources booked FOR the client. */}
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <TripAssignee itineraryId={itinerary.id} />
           </div>
           {versionedContent.notes && (
             <div className="mt-3 pt-3 border-t border-gray-200">

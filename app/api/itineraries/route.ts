@@ -42,21 +42,77 @@ export async function GET(request: NextRequest) {
     // Only the scalar columns the list/picker consumers actually render —
     // deliberately excludes the wide JSONB payloads (parsed data, generation
     // warnings, cabin allocation, ...) that made select('*') expensive here.
-    const LIST_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, created_at, assigned_guide_id, assigned_vehicle_id'
+    // Two literals, never interpolated (see PR #38). The trip-owner columns are
+    // split out because they arrive with migration 20260812: if this deploys
+    // before the migration runs, PostgREST rejects the whole select and the
+    // itineraries list — the app's main page — goes blank. Falling back to the
+    // owner-less shape degrades one column instead of the page.
+    const BASE_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, created_at, assigned_guide_id, assigned_vehicle_id'
+    const OWNER_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, created_at, assigned_guide_id, assigned_vehicle_id, assigned_to, assignee:team_members!itineraries_assigned_to_fkey(id, name)'
 
-    let query = supabase
-      .from('itineraries')
-      .select(LIST_COLUMNS, { count: 'exact' })
-      .eq('org_id', orgId)
-      .order('created_at', { ascending: false })
-      .range(from, from + limit - 1)
+    // ?assignedTo=<team_member_id> for one person's trips, or ?assignedTo=none
+    // for the trips nobody owns — the query an ops lead actually wants.
+    const assignedTo = searchParams.get('assignedTo')
 
-    // By default, exclude B2B itineraries from the list
-    if (!includeB2B) {
-      query = query.not('source', 'eq', 'b2b_custom')
+    // The two selects are written out separately rather than parameterised:
+    // passing a `string` variable to .select() erases the row type and the
+    // downstream .map() calls stop type-checking (the PR #38 regression).
+    const withOwners = () => {
+      let q = supabase
+        .from('itineraries')
+        .select(OWNER_COLUMNS, { count: 'exact' })
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .range(from, from + limit - 1)
+      if (!includeB2B) q = q.not('source', 'eq', 'b2b_custom')
+      if (assignedTo === 'none') q = q.is('assigned_to', null)
+      else if (assignedTo) q = q.eq('assigned_to', assignedTo)
+      return q
     }
 
-    const { data: itineraries, error, count } = await query
+    const withoutOwners = () => {
+      let q = supabase
+        .from('itineraries')
+        .select(BASE_COLUMNS, { count: 'exact' })
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .range(from, from + limit - 1)
+      if (!includeB2B) q = q.not('source', 'eq', 'b2b_custom')
+      return q
+    }
+
+    // The two selects return different row shapes, so the result is held in one
+    // loose local type — the same shape the .map() below already assumes.
+    type ListRow = { id: string; [key: string]: any }
+    const primary = await withOwners()
+    let itineraries = primary.data as ListRow[] | null
+    let count = primary.count
+    let error = primary.error as { code?: string; message?: string } | null
+
+    // 42703 = undefined column, PGRST200 = no such relationship. Either means
+    // the trip-owner migration has not been applied here.
+    if (error && (error.code === '42703' || error.code === 'PGRST200')) {
+      console.warn(
+        '⚠️ itineraries.assigned_to is absent — migration 20260812 has not been applied. ' +
+          'Serving the list without trip owners.'
+      )
+      if (assignedTo) {
+        // The caller explicitly asked to filter by owner and we cannot. Saying
+        // so beats silently returning every trip as though it matched.
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Filtering by trip owner needs migration 20260812_departments_assignees_pnl.sql, which has not been applied to this database.',
+          },
+          { status: 503 }
+        )
+      }
+      const fallback = await withoutOwners()
+      itineraries = fallback.data as ListRow[] | null
+      count = fallback.count
+      error = fallback.error as { code?: string; message?: string } | null
+    }
 
     if (error) {
       console.error('❌ Database error:', error)

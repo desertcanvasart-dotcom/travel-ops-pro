@@ -8,11 +8,28 @@
 // converted at the rate on ITS date (lib/fx-report.ts), and an expense with no
 // usable rate is EXCLUDED and reported as an FX hole with the trip marked
 // incomplete — never summed at face value.
+//
+// THREE LAYERS (added 2026-08-12). The route used to report one number, and it
+// quietly mixed estimates with facts. It now reports each layer separately
+// because they answer different questions and have different reliability:
+//
+//   quoted    — what we told the client. total_cost. An intention.
+//   accrued   — what we have invoiced and what we owe. Includes supplier_cost,
+//               which is a PRICING ESTIMATE, not a bill anyone has sent.
+//   realized  — money that actually moved: payments received, expenses paid,
+//               commissions paid. No estimates in it at all.
+//
+// AGENT COMMISSIONS. A trip sold through an agent pays that agent out of our
+// margin, so a margin quoted before commission is not the margin we keep. Every
+// payable commission is subtracted (net_profit / net_margin); receivable
+// commissions — what suppliers owe US — are reported alongside but NOT added,
+// because money owed is not money earned and adding it would flatter the trip.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
+import { loadFxIndex, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
+import { computeTripPnL, type TripPnL } from '@/lib/trip-pnl'
 import { mergeFxSummary } from '@/lib/fx-conversion'
 
 const supabaseAdmin = createClient(
@@ -20,33 +37,8 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-interface TripPnL {
-  itinerary_id: string
-  itinerary_code: string
-  trip_name: string
-  client_name: string
-  start_date: string
-  end_date: string
-  status: string
-  currency: string
-  quoted_amount: number
-  total_revenue: number
-  total_paid: number
-  supplier_cost: number      // Cost from itinerary services (hotels, transport, guides, etc.)
-  manual_expenses: number    // Additional manual expenses
-  total_expenses: number     // supplier_cost + manual_expenses
-  expenses_paid: number
-  expenses_pending: number
-  gross_profit: number
-  profit_margin: number
-  expense_breakdown: Record<string, number>
-  invoice_count: number
-  expense_count: number
-  /** Expenses excluded from this trip's totals for want of a rate. */
-  fx_holes: FxHole[]
-  /** False when at least one cost is missing or approximated. */
-  fx_complete: boolean
-}
+// The per-trip shape and the math both live in lib/trip-pnl.ts.
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -92,10 +84,37 @@ export async function GET(request: NextRequest) {
     // Fetch all invoices
     const { data: invoices, error: invError } = await supabaseAdmin
       .from('invoices')
-      .select('itinerary_id, total_amount, amount_paid, status')
+      .select('id, itinerary_id, total_amount, amount_paid, status, currency')
 
     if (invError) {
       console.error('Error fetching invoices:', invError)
+    }
+
+    // Actual payments received, for the realized layer. amount_paid on the
+    // invoice is a running total with no date, so it cannot be converted at a
+    // historical rate; the payment rows carry their own currency AND date,
+    // which is exactly what the FX policy needs.
+    const invoiceIdToItinerary = new Map<string, string>()
+    for (const inv of invoices || []) {
+      if (inv.id && inv.itinerary_id) invoiceIdToItinerary.set(inv.id, inv.itinerary_id)
+    }
+
+    const { data: invoicePayments, error: payError } = await supabaseAdmin
+      .from('invoice_payments')
+      .select('invoice_id, amount, currency, payment_date, transaction_reference')
+
+    if (payError) {
+      console.error('Error fetching invoice payments:', payError)
+    }
+
+    // Commissions. commission_type says which direction the money goes:
+    // 'payable' is ours to pay an agent, 'receivable' is a supplier's to pay us.
+    const { data: commissions, error: commError } = await supabaseAdmin
+      .from('commissions')
+      .select('itinerary_id, commission_type, commission_amount, currency, transaction_date, status, description, category')
+
+    if (commError) {
+      console.error('Error fetching commissions:', commError)
     }
 
     // Fetch all expenses. currency + expense_date are load-bearing: they decide
@@ -116,96 +135,26 @@ export async function GET(request: NextRequest) {
     const allHoles: FxHole[] = []
 
     // Build P&L for each itinerary
-    const pnlData: TripPnL[] = itineraries.map(itinerary => {
-      // Get invoices for this itinerary
-      const itinInvoices = (invoices || []).filter(inv => inv.itinerary_id === itinerary.id)
-      const totalRevenue = itinInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0)
-      const totalPaid = itinInvoices.reduce((sum, inv) => sum + Number(inv.amount_paid || 0), 0)
-
-      // Get manual expenses for this itinerary (additional costs beyond services)
-      const itinExpenses = (expenses || []).filter(exp => exp.itinerary_id === itinerary.id)
-
-      // Convert every expense into the TRIP's currency at the rate on its own
-      // expense_date. An expense we cannot convert is excluded from all four
-      // sums below and recorded as a hole — never added at face value.
-      const tripCurrency = (itinerary.currency || 'EUR').toUpperCase()
-      const tripFx = emptyFxSummary()
-      const tripHoles: FxHole[] = []
-
-      let manualExpenses = 0
-      let expensesPaid = 0
-      let expensesPending = 0
-      const expenseBreakdown: Record<string, number> = {}
-
-      for (const exp of itinExpenses) {
-        const { amount, hole } = convertLine(fxIndex, tripFx, {
-          amount: exp.amount,
-          fromCurrency: exp.currency,
-          toCurrency: tripCurrency,
-          date: exp.expense_date,
-          kind: 'expense',
-          reference: exp.expense_number || exp.category || 'expense',
-        })
-
-        if (hole) {
-          tripHoles.push(hole)
-          continue
-        }
-
-        const value = amount ?? 0
-        manualExpenses += value
-        if (exp.status === 'paid') expensesPaid += value
-        if (exp.status !== 'paid' && exp.status !== 'rejected') expensesPending += value
-
-        const cat = exp.category || 'other'
-        expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + value
-      }
-
-      // supplier_cost is stored in the itinerary's own currency, so it needs no
-      // conversion — it is already the trip currency by construction.
-      const supplierCost = Number(itinerary.supplier_cost || 0)
-      const totalExpenses = supplierCost + manualExpenses
-
-      if (supplierCost > 0) {
-        expenseBreakdown['supplier_services'] = supplierCost
-      }
+    // Build P&L for each itinerary. The math lives in lib/trip-pnl.ts as a
+    // pure function so it can be tested without a database — see
+    // __tests__/lib/trip-pnl.test.ts.
+    const pnlData: TripPnL[] = []
+    for (const itinerary of itineraries) {
+      const { pnl, fx } = computeTripPnL(fxIndex, {
+        itinerary,
+        invoices: (invoices || []).filter(inv => inv.itinerary_id === itinerary.id),
+        payments: (invoicePayments || []).filter(
+          p => invoiceIdToItinerary.get(p.invoice_id) === itinerary.id
+        ),
+        expenses: (expenses || []).filter(exp => exp.itinerary_id === itinerary.id),
+        commissions: (commissions || []).filter(c => c.itinerary_id === itinerary.id),
+      })
 
       // Fold this trip's accuracy into the response-level tally.
-      mergeFxSummary(overallFx, tripFx)
-      allHoles.push(...tripHoles)
-
-      // Calculate profit
-      // Use totalRevenue if invoices exist, otherwise use quoted amount
-      const revenueForCalc = totalRevenue > 0 ? totalRevenue : Number(itinerary.total_cost || 0)
-      const grossProfit = revenueForCalc - totalExpenses
-      const profitMargin = revenueForCalc > 0 ? (grossProfit / revenueForCalc) * 100 : 0
-
-      return {
-        itinerary_id: itinerary.id,
-        itinerary_code: itinerary.itinerary_code,
-        trip_name: itinerary.trip_name,
-        client_name: itinerary.client_name,
-        start_date: itinerary.start_date,
-        end_date: itinerary.end_date,
-        status: itinerary.status,
-        currency: itinerary.currency || 'EUR',
-        quoted_amount: Number(itinerary.total_cost || 0),
-        total_revenue: totalRevenue,
-        total_paid: totalPaid,
-        supplier_cost: supplierCost,
-        manual_expenses: manualExpenses,
-        total_expenses: totalExpenses,
-        expenses_paid: expensesPaid,
-        expenses_pending: expensesPending,
-        gross_profit: grossProfit,
-        profit_margin: profitMargin,
-        expense_breakdown: expenseBreakdown,
-        invoice_count: itinInvoices.length,
-        expense_count: itinExpenses.length,
-        fx_holes: tripHoles,
-        fx_complete: tripHoles.length === 0 && tripFx.unconverted === 0,
-      }
-    })
+      mergeFxSummary(overallFx, fx)
+      allHoles.push(...pnl.fx_holes)
+      pnlData.push(pnl)
+    }
 
     // Calculate summary stats
     const totalRevenue = pnlData.reduce((sum, p) => sum + (p.total_revenue || p.quoted_amount), 0)
@@ -213,16 +162,21 @@ export async function GET(request: NextRequest) {
     const totalManualExpenses = pnlData.reduce((sum, p) => sum + p.manual_expenses, 0)
     const totalExpenses = totalSupplierCost + totalManualExpenses
     const totalProfit = totalRevenue - totalExpenses
+    const totalAgentCommissions = pnlData.reduce((sum, p) => sum + p.agent_commissions, 0)
+    const totalNetProfit = totalProfit - totalAgentCommissions
+    const totalRealizedRevenue = pnlData.reduce((sum, p) => sum + p.realized_revenue, 0)
+    const totalRealizedCost = pnlData.reduce((sum, p) => sum + p.realized_cost, 0)
+    const totalRealizedProfit = totalRealizedRevenue - totalRealizedCost
 
     // Currency-aware breakdown: each itinerary can carry a different currency
     // (EUR/USD/GBP/EGP). Summing them directly is meaningless, so expose a
     // per-currency breakdown and flag when more than one currency is present.
     // Flat totals below are retained for backward compatibility but should only
     // be treated as authoritative when mixed_currency is false.
-    const byCurrency: Record<string, { revenue: number; supplier_cost: number; manual_expenses: number; total_expenses: number; profit: number; trips: number }> = {}
+    const byCurrency: Record<string, { revenue: number; supplier_cost: number; manual_expenses: number; total_expenses: number; profit: number; agent_commissions: number; net_profit: number; realized_revenue: number; realized_cost: number; realized_profit: number; trips: number }> = {}
     for (const p of pnlData) {
       const cur = p.currency || 'EUR'
-      const b = byCurrency[cur] || (byCurrency[cur] = { revenue: 0, supplier_cost: 0, manual_expenses: 0, total_expenses: 0, profit: 0, trips: 0 })
+      const b = byCurrency[cur] || (byCurrency[cur] = { revenue: 0, supplier_cost: 0, manual_expenses: 0, total_expenses: 0, profit: 0, agent_commissions: 0, net_profit: 0, realized_revenue: 0, realized_cost: 0, realized_profit: 0, trips: 0 })
       const rev = p.total_revenue || p.quoted_amount
       const exp = p.supplier_cost + p.manual_expenses
       b.revenue += rev
@@ -230,6 +184,11 @@ export async function GET(request: NextRequest) {
       b.manual_expenses += p.manual_expenses
       b.total_expenses += exp
       b.profit += rev - exp
+      b.agent_commissions += p.agent_commissions
+      b.net_profit += p.net_profit
+      b.realized_revenue += p.realized_revenue
+      b.realized_cost += p.realized_cost
+      b.realized_profit += p.realized_profit
       b.trips += 1
     }
     const currencies = Object.keys(byCurrency)
@@ -246,8 +205,24 @@ export async function GET(request: NextRequest) {
       total_expenses: totalExpenses,
       total_profit: totalProfit,
       average_margin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
-      profitable_trips: pnlData.filter(p => p.gross_profit > 0).length,
-      loss_trips: pnlData.filter(p => p.gross_profit < 0).length,
+
+      // Net of what agents take. This, not total_profit, is what the business
+      // keeps on trips sold through an agent.
+      total_agent_commissions: totalAgentCommissions,
+      total_net_profit: totalNetProfit,
+      average_net_margin: totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0,
+
+      // Cash that actually moved, no estimates.
+      total_realized_revenue: totalRealizedRevenue,
+      total_realized_cost: totalRealizedCost,
+      total_realized_profit: totalRealizedProfit,
+      average_realized_margin:
+        totalRealizedRevenue > 0 ? (totalRealizedProfit / totalRealizedRevenue) * 100 : 0,
+
+      // Counted on net, not gross: a trip whose whole margin goes to the agent
+      // is not a profitable trip, however good the gross looks.
+      profitable_trips: pnlData.filter(p => p.net_profit > 0).length,
+      loss_trips: pnlData.filter(p => p.net_profit < 0).length,
       // How much of the arithmetic above rests on exact rates. `complete:false`
       // means at least one cost is excluded or approximated, so the margin is a
       // floor on cost (and a ceiling on profit), not a settled figure.
