@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { buildCommissions, summariseSkips } from '@/lib/commission-generation'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,93 +47,60 @@ export async function POST(
 
     const dayIds = days.map(d => d.id)
 
+    // THE BUG THAT MADE THIS ROUTE UNUSABLE: this filtered on `day_id`, which
+    // does not exist — the column is `itinerary_day_id`. PostgREST answered
+    // 42703 and every call returned "Failed to fetch services". Nothing in the
+    // app has ever created a commission.
+    //
+    // The supplier filter is deliberately NOT applied in SQL any more: a
+    // service with no supplier is now REPORTED as a skip rather than silently
+    // vanishing, because "0 commissions" with no explanation is exactly what
+    // the broken version looked like.
     const { data: services, error: servicesError } = await supabaseAdmin
       .from('itinerary_services')
-      .select(`
-        *,
-        supplier:suppliers(*)
-      `)
-      .in('day_id', dayIds)
-      .not('supplier_id', 'is', null)
+      .select('id, service_type, service_name, client_price, total_cost, supplier_id, commission_rate, commission_status, supplier:suppliers(id, name, commission_type, default_commission_rate)')
+      .in('itinerary_day_id', dayIds)
 
     if (servicesError) {
+      console.error('Error fetching services for commission generation:', servicesError)
       return NextResponse.json({ error: 'Failed to fetch services' }, { status: 500 })
     }
 
-    // Filter services that haven't had commissions generated
-    const eligibleServices = (services || []).filter(
-      s => s.commission_status === 'pending' || !s.commission_status
+    // Build the commission rows. The mapping lives in
+    // lib/commission-generation.ts as a pure function — see the tests there.
+    //
+    // It reads client_price / total_cost / service_name; the previous code read
+    // selling_price / cost / description, none of which exist on this table.
+    const { pairs: commissionPairs, skipped } = buildCommissions(
+      (services || []).map(s => ({
+        ...s,
+        // PostgREST types an embedded row as an array; take the single row.
+        supplier: Array.isArray(s.supplier) ? s.supplier[0] : s.supplier,
+      })),
+      {
+        orgId,
+        itineraryId,
+        itineraryCode: itinerary.itinerary_code,
+        clientId: itinerary.client?.id || null,
+        startDate: itinerary.start_date,
+        currency: itinerary.currency,
+      }
     )
 
-    if (eligibleServices.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: 'No new commissions to generate',
-        generated: 0 
-      })
-    }
-
-    // Map service types to commission categories
-    const typeToCategory: Record<string, string> = {
-      hotel: 'hotel',
-      transport: 'transport',
-      restaurant: 'restaurant',
-      cruise: 'cruise',
-      entrance: 'attraction',
-      activity: 'activity',
-      shopping: 'shopping',
-      other: 'other'
-    }
-
-    // Generate commission records as (sourceServiceId, commission) PAIRS.
-    // Output gate (harness Layer 2): skip services with no real base amount —
-    // never create a €0 (or negative/NaN) commission off an unpriced service.
-    //
-    // Pairing each commission with its source service id is load-bearing: the
-    // claim + insert below filter BY ID, not by array position. The previous
-    // code built two arrays from DIFFERENT filter chains (one with the base>0
-    // gate, one without) and matched them positionally — so any service with
-    // base ≤ 0 desynced the arrays and commissions were attributed to the wrong
-    // service. Building one paired array keeps claim, insert, and rollback in
-    // lockstep on exactly the services that produce a commission.
-    const commissionPairs = eligibleServices
-      .filter(s => s.supplier && (s.commission_rate || s.supplier.default_commission_rate))
-      .filter(s => {
-        const base = Number(s.selling_price || s.cost || 0)
-        return Number.isFinite(base) && base > 0
-      })
-      .map(s => {
-        const rate = s.commission_rate || s.supplier.default_commission_rate || 0
-        const baseAmount = Number(s.selling_price || s.cost || 0)
-        const commissionAmount = (baseAmount * rate) / 100
-
-        return {
-          serviceId: s.id,
-          commission: {
-            org_id: orgId,
-            itinerary_id: itineraryId,
-            supplier_id: s.supplier_id,
-            client_id: itinerary.client?.id || null,
-            commission_type: s.supplier.commission_type || 'receivable',
-            category: typeToCategory[s.service_type] || 'other',
-            source_name: s.supplier.name,
-            description: `${s.description || s.service_type} - ${itinerary.itinerary_code}`,
-            base_amount: baseAmount,
-            commission_rate: rate,
-            commission_amount: commissionAmount,
-            currency: 'EUR',
-            status: 'pending',
-            transaction_date: itinerary.start_date || new Date().toISOString().split('T')[0],
-            notes: `Auto-generated from itinerary ${itinerary.itinerary_code}`
-          }
-        }
-      })
+    const skipSummary = summariseSkips(skipped)
 
     if (commissionPairs.length === 0) {
+      // No bare "generated: 0" — that is indistinguishable from the broken
+      // behaviour this replaces. Say which services were skipped and why.
       return NextResponse.json({
         success: true,
-        message: 'No services with commission rates found',
-        generated: 0
+        message:
+          skipped.length === 0
+            ? 'This itinerary has no services to generate commissions from.'
+            : `No commissions generated. ${skipped.length} service${skipped.length === 1 ? '' : 's'} skipped — see "skipped" for the reason on each.`,
+        generated: 0,
+        skipped,
+        skip_summary: skipSummary,
       })
     }
 
@@ -204,6 +172,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      // Skips ride along with a successful run too: an operator who expected 8
+      // commissions and got 3 needs to know what happened to the other 5.
+      skipped,
+      skip_summary: skipSummary,
       message: `Generated ${createdCommissions?.length || 0} commission records`,
       generated: createdCommissions?.length || 0,
       commissions: createdCommissions
