@@ -329,7 +329,15 @@
     "updatingPassword": "パスワードを更新中...",
     "updatePassword": "パスワードを更新",
     "backToLoginArrow": "← ログインに戻る",
-    "anErrorOccurred": "エラーが発生しました"
+    "anErrorOccurred": "エラーが発生しました",
+    "createAccount": "アカウントを作成",
+    "creatingAccount": "アカウントを作成中...",
+    "failedToCreate": "アカウントを作成できませんでした",
+    "fullName": "氏名",
+    "goToLogin": "ログインへ進む",
+    "joinPlatform": "アカウントを作成して始めましょう",
+    "namePlaceholder": "氏名を入力",
+    "signInLink": "すでにアカウントをお持ちですか？ ログイン"
   },
   "dashboard": {
     "welcomeBack": "おかえりなさい",
@@ -781,7 +789,13 @@
       "medium": "中",
       "high": "高",
       "urgent": "緊急"
-    }
+    },
+    "deleted": "削除しました",
+    "error": "エラー",
+    "followup": "フォローアップ",
+    "snoozed": "スヌーズしました",
+    "success": "完了しました",
+    "urgent": "緊急"
   },
   "financialReports": {
     "financialReports": "財務レポート",
@@ -858,7 +872,9 @@
     "clearAll": "すべてクリア",
     "failedToSaveExpense": "経費の保存に失敗しました",
     "confirmDeleteExpense": "この経費を削除してもよろしいですか？",
-    "failedToDeleteExpense": "経費の削除に失敗しました"
+    "failedToDeleteExpense": "経費の削除に失敗しました",
+    "error": "エラー",
+    "expense": "経費"
   },
   "expenseDetail": {
     "failedToUpdateStatus": "ステータスの更新に失敗しました",
@@ -893,7 +909,9 @@
     "noReceiptAttached": "領収書が添付されていません",
     "created": "作成日",
     "lastUpdated": "最終更新",
-    "id": "ID"
+    "id": "ID",
+    "error": "エラー",
+    "expense": "経費"
   },
   "clients": {
     "title": "顧客",
@@ -1137,7 +1155,17 @@
     "followupsReminders": "フォローアップ・リマインダー",
     "noFollowups": "予定されているフォローアップはありません",
     "dueDate": "期限:",
-    "markComplete": "完了にする"
+    "markComplete": "完了にする",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "deleting": "削除中...",
+    "deleteBlocked": "この顧客には紐づく旅程があるため削除できません",
+    "forceDelete": "強制的に削除",
+    "linkedItineraries": "紐づく旅程",
+    "deleteBlockedTitle": "この顧客には紐づく旅程があります",
+    "deleteBlockedMessage": "{name} には {count} 件の旅程が紐づいています。強制削除するとそれらも削除されます。",
+    "deleteConfirmBody": "{name} を削除してもよろしいですか？この操作は取り消せません。",
+    "deleteForceConfirm": "顧客と紐づくすべての旅程を強制的に削除しますか？"
   },
   "communications": {
     "title": "コミュニケーション",
@@ -1766,33 +1794,7 @@
     "method": "方法",
     "txnRef": "取引参照",
     "actions": "アクション",
-    "invoice": {
-      "failedToDownloadInvoice": "請求書のダウンロードに失敗しました",
-      "loadingInvoice": "請求書を読み込み中...",
-      "invoiceNotFound": "請求書が見つかりません",
-      "backToPayments": "支払一覧に戻る",
-      "invoice": "請求書",
-      "billTo": "請求先",
-      "invoiceDate": "請求書日付",
-      "itinerary": "旅程",
-      "status": "ステータス",
-      "paid": "支払済",
-      "description": "説明",
-      "type": "タイプ",
-      "method": "方法",
-      "amount": "金額",
-      "paymentFor": "支払対象",
-      "subtotal": "小計",
-      "total": "合計",
-      "paidInFull": "全額支払済",
-      "paymentTerms": "支払条件",
-      "paymentTermsText": "予約確認には10%のデポジットが必要です。残額は到着時に現金でお支払いください。",
-      "thankYou": "ありがとうございます！",
-      "forQuestions": "ご質問がございましたら、お気軽にお問い合わせください",
-      "downloadPDF": "PDFをダウンロード",
-      "previewPDF": "PDFプレビュー",
-      "generating": "生成中..."
-    },
+    "invoice": "請求書",
     "itinerary": "旅程",
     "noPaymentsFound": "支払が見つかりません",
     "recordFirstPayment": "最初の支払を記録してください",
@@ -1906,7 +1908,8 @@
         "paypal": "PayPal",
         "stripe": "Stripe",
         "wise": "Wise"
-      }
+      },
+      "error": "エラー"
     },
     "edit": {
       "title": "支払を編集",
@@ -2571,8 +2574,12 @@
         "overdue14": "14日延滞",
         "overdue30": "30日以上延滞",
         "manual": "手動"
-      }
-    }
+      },
+      "notes": "備考",
+      "paymentTerms": "お支払い条件"
+    },
+    "failedToCreateInvoice": "請求書の作成に失敗しました",
+    "failedToDeleteInvoice": "請求書の削除に失敗しました"
   },
   "invite": {
     "invalidInvitationLink": "無効な招待リンクです",
@@ -3308,7 +3315,8 @@
       "whatsapp_mention": "メンション",
       "invoice_paid": "支払い",
       "booking_confirmed": "予約",
-      "client_created": "新規顧客"
+      "client_created": "新規顧客",
+      "trip_assigned": "旅程が割り当てられました"
     },
     "time": {
       "justNow": "たった今",
@@ -3515,7 +3523,10 @@
       "boardFB": "（全食事）",
       "boardAI": "（オールインクルーシブ）",
       "totalForPax": "{pax}名の合計",
-      "showingProperties": "{city}の{filtered}/{total}件の施設を表示"
+      "showingProperties": "{city}の{filtered}/{total}件の施設を表示",
+      "perPerson": "1名あたり",
+      "person": "名",
+      "persons": "名"
     },
     "meals": {
       "lunch": "ランチ",
@@ -3611,7 +3622,11 @@
       "Suez": "スエズ",
       "Taba": "タバ",
       "luxorAswan": "ルクソール・アスワン"
-    }
+    },
+    "error": "エラー",
+    "errorSavingTour": "ツアーの保存中にエラーが発生しました",
+    "failedToSaveTour": "ツアーの保存に失敗しました",
+    "tourSaved": "ツアーを保存しました"
   },
   "rates": {
     "common": {
@@ -4197,7 +4212,16 @@
         "created": "{name} を作成しました！",
         "deleted": "{name} を削除しました！",
         "exportSuccess": "{count} 件のホテルをCSVにエクスポートしました"
-      }
+      },
+      "perPersonInDouble": "1名/2名室",
+      "perPersonInDoubleFull": "2名1室あたりの1名料金",
+      "lowPPDbl": "ロー期 1名/2名室",
+      "highPPDbl": "ハイ期 1名/2名室",
+      "avgPPDblLow": "平均 1名/2名室（ロー期）",
+      "singleSupplement": "シングル追加",
+      "singleSupplementFull": "シングルルーム追加料金",
+      "tripleReduction": "トリプル減額",
+      "tripleReductionFull": "トリプルルーム減額"
     },
     "guides": {
       "title": "ガイド料金",
@@ -5781,7 +5805,11 @@
       "variations": "バリエーション",
       "lang": "言語",
       "status": "ステータス",
-      "actions": "アクション"
+      "actions": "アクション",
+      "category": "カテゴリー",
+      "passengers": "人数",
+      "price": "料金",
+      "tiers": "料金帯"
     },
     "actions": {
       "edit": "編集",
@@ -5890,6 +5918,11 @@
       "day": "日",
       "days": "日間",
       "uncategorized": "未分類"
+    },
+    "views": {
+      "grid": "グリッド",
+      "list": "リスト",
+      "table": "テーブル"
     }
   },
   "contacts": {
@@ -6336,7 +6369,9 @@
     "formDescription": "説明",
     "descriptionPlaceholder": "例：ゲスト購入の10%コミッション",
     "formNotes": "備考",
-    "notesPlaceholder": "追加のメモ..."
+    "notesPlaceholder": "追加のメモ...",
+    "error": "エラー",
+    "failedToSave": "コミッションの保存に失敗しました"
   },
   "b2bQuotes": {
     "title": "B2B見積",
@@ -7189,7 +7224,8 @@
     "guideAndVehicleAssigned": "ガイドと車両が割り当てられています",
     "guideAssignedVehicleNeeded": "ガイド割り当て済み - 車両が必要です",
     "vehicleAssignedGuideNeeded": "車両割り当て済み - ガイドが必要です",
-    "additionalResourcesNeeded": "追加のリソースが必要な場合があります"
+    "additionalResourcesNeeded": "追加のリソースが必要な場合があります",
+    "vehicleTypes": "車両タイプ"
   },
   "b2bImport": {
     "title": "旅程インポート",
@@ -7298,5 +7334,63 @@
       "footerLocation": "Travel2Egypt｜エジプト・カイロ",
       "footerAutomated": "これは自動送信のお支払いリマインダーです。このメールには直接ご返信なさらないでください。"
     }
+  },
+  "receipt": {
+    "amountReceived": "お預り金額",
+    "back": "戻る",
+    "backToReceipts": "領収書一覧に戻る",
+    "dateAndReference": "日付・参照番号",
+    "error": "エラー",
+    "failedToDownloadReceipt": "領収書のダウンロードに失敗しました",
+    "failedToSendReceipt": "領収書の送信に失敗しました",
+    "failedToSendReceiptWhatsApp": "WhatsAppでの領収書送信に失敗しました",
+    "generating": "作成中...",
+    "loadingReceipt": "領収書を読み込み中...",
+    "noPhoneAvailable": "電話番号が登録されていません",
+    "notes": "備考",
+    "paymentCompletedSuccessfully": "お支払いが完了しました",
+    "paymentDetails": "お支払い内容",
+    "paymentMethod": "お支払い方法",
+    "paymentNotFound": "支払が見つかりません",
+    "paymentReceipt": "領収書",
+    "paymentType": "お支払い種別",
+    "previewPDF": "PDFをプレビュー",
+    "questionsContact": "この領収書についてご不明な点がございましたら、お気軽にお問い合わせください。",
+    "receiptConfirmation": "この領収書はお支払いが完了したことを証明するものです。",
+    "receiptNotExist": "この領収書は存在しません。",
+    "receivedFrom": "お預り先",
+    "sendViaWhatsApp": "WhatsAppで送信",
+    "sending": "送信中...",
+    "sent": "送信済み",
+    "thankYouForPayment": "お支払いいただきありがとうございます",
+    "transactionReference": "取引参照番号"
+  },
+  "invoice": {
+    "amount": "金額",
+    "backToPayments": "支払一覧に戻る",
+    "billTo": "請求先",
+    "description": "説明",
+    "error": "エラー",
+    "failedToDownloadInvoice": "請求書のダウンロードに失敗しました",
+    "forQuestions": "ご質問がございましたら、お気軽にお問い合わせください",
+    "generating": "生成中...",
+    "invoice": "請求書",
+    "invoiceDate": "請求書日付",
+    "invoiceNotFound": "請求書が見つかりません",
+    "itinerary": "旅程",
+    "loadingInvoice": "請求書を読み込み中...",
+    "method": "方法",
+    "paid": "支払済",
+    "paidInFull": "全額支払済",
+    "paymentFor": "支払対象",
+    "paymentTerms": "支払条件",
+    "paymentTermsText": "予約確認には10%のデポジットが必要です。残額は到着時に現金でお支払いください。",
+    "previewPDF": "PDFプレビュー",
+    "status": "ステータス",
+    "subtotal": "小計",
+    "thankYou": "ありがとうございます！",
+    "total": "合計",
+    "type": "タイプ",
+    "downloadPDF": "PDFをダウンロード"
   }
 }
