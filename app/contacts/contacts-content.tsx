@@ -343,7 +343,7 @@ export default function ContactsContent() {
 
   const handleExport = () => {
     const csv = [
-      [t('export.type'), t('export.name'), t('export.email'), t('export.phone'), t('export.locationNationality'), t('export.statusRole')].join(','),
+      [t('exportHeaders.type'), t('exportHeaders.name'), t('exportHeaders.email'), t('exportHeaders.phone'), t('exportHeaders.locationNationality'), t('exportHeaders.statusRole')].join(','),
       ...filteredContacts.map(c => [c.type, c.name, c.email, c.phone, c.city, c.subtype].map(v => `"${v || ''}"`).join(','))
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })

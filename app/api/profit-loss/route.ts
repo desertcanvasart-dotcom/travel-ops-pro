@@ -31,6 +31,7 @@ import { createClient } from '@supabase/supabase-js'
 import { loadFxIndex, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
 import { computeTripPnL, type TripPnL } from '@/lib/trip-pnl'
 import { mergeFxSummary } from '@/lib/fx-conversion'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,9 +40,61 @@ const supabaseAdmin = createClient(
 
 // The per-trip shape and the math both live in lib/trip-pnl.ts.
 
+/**
+ * PostgREST puts filter values in the URL, so a single `.in()` over thousands
+ * of ids blows the request line. Everything here is filtered in batches.
+ */
+const ID_BATCH = 200
+
+function chunk<T>(items: T[], size = ID_BATCH): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/**
+ * The summary for an org with no trips.
+ *
+ * Every numeric key the populated summary carries must appear here: the page
+ * reads them straight into `.toLocaleString()` / `.toFixed()`, so a missing key
+ * renders "undefined" or throws rather than showing a zero.
+ */
+function emptySummary() {
+  return {
+    total_trips: 0,
+    currency: 'EUR' as string | null,
+    mixed_currency: false,
+    by_currency: {} as Record<string, unknown>,
+    total_revenue: 0,
+    total_supplier_cost: 0,
+    total_manual_expenses: 0,
+    total_expenses: 0,
+    total_profit: 0,
+    average_margin: 0,
+    total_agent_commissions: 0,
+    total_net_profit: 0,
+    average_net_margin: 0,
+    total_realized_revenue: 0,
+    total_realized_cost: 0,
+    total_realized_profit: 0,
+    average_realized_margin: 0,
+    profitable_trips: 0,
+    loss_trips: 0,
+    ...buildFxMeta('EUR', emptyFxSummary(), []),
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
+    // TENANCY GATE. This route reads with the service-role key, which bypasses
+    // RLS, and until now it filtered by NOTHING — every organisation's
+    // itineraries, invoices, payments, expenses and commissions came back to
+    // whoever asked. It was the only financial route missing the gate its
+    // siblings all have, and it was observable: the seeded E2E org is a second
+    // org, and its user's P&L listed the real operator's trips.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const searchParams = request.nextUrl.searchParams
     const itineraryId = searchParams.get('itineraryId')
     const startDate = searchParams.get('startDate')
@@ -52,6 +105,7 @@ export async function GET(request: NextRequest) {
     let itineraryQuery = supabaseAdmin
       .from('itineraries')
       .select('id, itinerary_code, trip_name, client_name, start_date, end_date, status, currency, total_cost, supplier_cost')
+      .eq('org_id', orgId)
       .order('start_date', { ascending: false })
 
     if (itineraryId) {
@@ -78,16 +132,27 @@ export async function GET(request: NextRequest) {
     }
 
     if (!itineraries || itineraries.length === 0) {
-      return NextResponse.json([])
+      // Was a bare `[]`, which has no `success` key — the page checks for one,
+      // so an org with no trips got a permanently-loading screen rather than an
+      // empty report. Return the same shape as every other path.
+      return NextResponse.json({ success: true, data: [], summary: emptySummary() })
     }
 
-    // Fetch all invoices
-    const { data: invoices, error: invError } = await supabaseAdmin
-      .from('invoices')
-      .select('id, itinerary_id, total_amount, amount_paid, status, currency')
+    const itineraryIds = itineraries.map(i => i.id)
 
-    if (invError) {
-      console.error('Error fetching invoices:', invError)
+    // Every child query below is scoped BY ITINERARY, not merely by org_id.
+    // Two reasons: invoice_payments has no org_id column at all, and scoping to
+    // the trips actually in this response is both the tighter gate and far less
+    // data than the previous unfiltered full-table reads.
+    const invoices: Array<Record<string, any>> = []
+    for (const ids of chunk(itineraryIds)) {
+      const { data, error } = await supabaseAdmin
+        .from('invoices')
+        .select('id, itinerary_id, total_amount, amount_paid, status, currency')
+        .eq('org_id', orgId)
+        .in('itinerary_id', ids)
+      if (error) console.error('Error fetching invoices:', error)
+      if (data) invoices.push(...data)
     }
 
     // Actual payments received, for the realized layer. amount_paid on the
@@ -95,36 +160,46 @@ export async function GET(request: NextRequest) {
     // historical rate; the payment rows carry their own currency AND date,
     // which is exactly what the FX policy needs.
     const invoiceIdToItinerary = new Map<string, string>()
-    for (const inv of invoices || []) {
+    for (const inv of invoices) {
       if (inv.id && inv.itinerary_id) invoiceIdToItinerary.set(inv.id, inv.itinerary_id)
     }
 
-    const { data: invoicePayments, error: payError } = await supabaseAdmin
-      .from('invoice_payments')
-      .select('invoice_id, amount, currency, payment_date, transaction_reference')
-
-    if (payError) {
-      console.error('Error fetching invoice payments:', payError)
+    // invoice_payments has NO org_id, so its only tenancy boundary is the
+    // invoice it belongs to — and those are org-scoped above.
+    const invoicePayments: Array<Record<string, any>> = []
+    for (const ids of chunk([...invoiceIdToItinerary.keys()])) {
+      const { data, error } = await supabaseAdmin
+        .from('invoice_payments')
+        .select('invoice_id, amount, currency, payment_date, transaction_reference')
+        .in('invoice_id', ids)
+      if (error) console.error('Error fetching invoice payments:', error)
+      if (data) invoicePayments.push(...data)
     }
 
     // Commissions. commission_type says which direction the money goes:
     // 'payable' is ours to pay an agent, 'receivable' is a supplier's to pay us.
-    const { data: commissions, error: commError } = await supabaseAdmin
-      .from('commissions')
-      .select('itinerary_id, commission_type, commission_amount, currency, transaction_date, status, description, category')
-
-    if (commError) {
-      console.error('Error fetching commissions:', commError)
+    const commissions: Array<Record<string, any>> = []
+    for (const ids of chunk(itineraryIds)) {
+      const { data, error } = await supabaseAdmin
+        .from('commissions')
+        .select('itinerary_id, commission_type, commission_amount, currency, transaction_date, status, description, category')
+        .eq('org_id', orgId)
+        .in('itinerary_id', ids)
+      if (error) console.error('Error fetching commissions:', error)
+      if (data) commissions.push(...data)
     }
 
-    // Fetch all expenses. currency + expense_date are load-bearing: they decide
-    // WHICH rate converts this line, so a missing date means no historical rate.
-    const { data: expenses, error: expError } = await supabaseAdmin
-      .from('expenses')
-      .select('itinerary_id, amount, category, status, currency, expense_date, expense_number')
-
-    if (expError) {
-      console.error('Error fetching expenses:', expError)
+    // Expenses. currency + expense_date are load-bearing: they decide WHICH
+    // rate converts this line, so a missing date means no historical rate.
+    const expenses: Array<Record<string, any>> = []
+    for (const ids of chunk(itineraryIds)) {
+      const { data, error } = await supabaseAdmin
+        .from('expenses')
+        .select('itinerary_id, amount, category, status, currency, expense_date, expense_number')
+        .eq('org_id', orgId)
+        .in('itinerary_id', ids)
+      if (error) console.error('Error fetching expenses:', error)
+      if (data) expenses.push(...data)
     }
 
     // Rate history, loaded once for every trip in this response.
@@ -142,12 +217,12 @@ export async function GET(request: NextRequest) {
     for (const itinerary of itineraries) {
       const { pnl, fx } = computeTripPnL(fxIndex, {
         itinerary,
-        invoices: (invoices || []).filter(inv => inv.itinerary_id === itinerary.id),
-        payments: (invoicePayments || []).filter(
+        invoices: invoices.filter(inv => inv.itinerary_id === itinerary.id),
+        payments: invoicePayments.filter(
           p => invoiceIdToItinerary.get(p.invoice_id) === itinerary.id
         ),
-        expenses: (expenses || []).filter(exp => exp.itinerary_id === itinerary.id),
-        commissions: (commissions || []).filter(c => c.itinerary_id === itinerary.id),
+        expenses: expenses.filter(exp => exp.itinerary_id === itinerary.id),
+        commissions: commissions.filter(c => c.itinerary_id === itinerary.id),
       })
 
       // Fold this trip's accuracy into the response-level tally.

@@ -314,7 +314,28 @@
     "updatingPassword": "Updating Password...",
     "updatePassword": "Update Password",
     "backToLoginArrow": "← Back to Login",
-    "anErrorOccurred": "An error occurred"
+    "anErrorOccurred": "An error occurred",
+    "createAccount": "Create account",
+    "creatingAccount": "Creating account…",
+    "failedToCreate": "Could not create the account",
+    "fullName": "Full name",
+    "goToLogin": "Go to sign in",
+    "joinPlatform": "Create your account to get started",
+    "namePlaceholder": "Your full name",
+    "passwordMinLength": "Password must be at least 8 characters",
+    "passwordMinLengthHint": "At least 8 characters",
+    "passwordsDoNotMatch": "The passwords do not match",
+    "signInLink": "Already have an account? Sign in",
+    "failedToSignIn": "Could not sign in. Check your email and password.",
+    "confirmPasswordPlaceholder": "Re-enter your new password",
+    "newPasswordPlaceholder": "Enter your new password",
+    "failedToResetPassword": "Could not reset the password",
+    "passwordResetSuccessMessage": "Your password has been reset.",
+    "redirectingToLogin": "Taking you to sign in…",
+    "requestNewLink": "Request a new link",
+    "resetLinkExpired": "This reset link has expired or has already been used.",
+    "resetPasswordButton": "Reset password",
+    "resetting": "Resetting…"
   },
   "dashboard": {
     "welcomeBack": "Welcome Back",
@@ -714,7 +735,8 @@
     "followupsReminders": "Follow-ups & Reminders",
     "noFollowups": "No follow-ups scheduled",
     "dueDate": "Due:",
-    "markComplete": "Mark Complete"
+    "markComplete": "Mark Complete",
+    "delete": "Delete"
   },
   "communications": {
     "title": "Communications",
@@ -1442,7 +1464,8 @@
         "paypal": "PayPal",
         "stripe": "Stripe",
         "wise": "Wise"
-      }
+      },
+      "error": "Error"
     },
     "edit": {
       "title": "Edit Payment",
@@ -1704,7 +1727,9 @@
         "overdue30": "30+ days overdue",
         "manual": "Manual"
       }
-    }
+    },
+    "failedToCreateInvoice": "Failed to create the invoice",
+    "failedToDeleteInvoice": "Failed to delete the invoice"
   },
   "whatsappParser": {
     "title": "WhatsApp to Itinerary",
@@ -2023,7 +2048,17 @@
     "notes": "Notes",
     "role": "Role",
     "location": "Location",
-    "languages": "Languages",
+    "languages": {
+      "english": "English",
+      "spanish": "Spanish",
+      "japanese": "Japanese",
+      "chinese": "Chinese",
+      "russian": "Russian",
+      "german": "German",
+      "french": "French",
+      "italian": "Italian",
+      "arabic": "Arabic"
+    },
     "shiftTimes": "Shift Times",
     "statusProspect": "Prospect",
     "statusActive": "Active",
@@ -2055,7 +2090,62 @@
     "goToSuppliers": "Go to Suppliers →",
     "showing": "Showing",
     "of": "of",
-    "perPage": "/ page"
+    "perPage": "/ page",
+    "fields": {
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "email": "Email",
+      "phone": "Phone",
+      "whatsapp": "WhatsApp",
+      "nationality": "Nationality",
+      "status": "Status",
+      "preferredLanguage": "Preferred Language",
+      "notes": "Notes",
+      "fullName": "Full Name",
+      "role": "Role",
+      "location": "Location",
+      "languages": "Languages",
+      "shiftTimes": "Shift Times"
+    },
+    "roles": {
+      "meetGreet": "Meet & Greet",
+      "transferCoordinator": "Transfer Coordinator",
+      "vipAssistant": "VIP Assistant",
+      "hotelRep": "Hotel Representative",
+      "tourLeader": "Tour Leader",
+      "officeStaff": "Office Staff",
+      "driver": "Driver",
+      "operationsManager": "Operations Manager"
+    },
+    "typeConfig": {
+      "clients": "Clients",
+      "client": "Client",
+      "staffPlural": "Staff",
+      "staff": "Staff"
+    },
+    "table": {
+      "name": "Name",
+      "type": "Type",
+      "email": "Email",
+      "phone": "Phone",
+      "statusRole": "Status/Role",
+      "actions": "Actions"
+    },
+    "viewModal": {
+      "email": "Email",
+      "phone": "Phone",
+      "nationality": "Nationality",
+      "location": "Location",
+      "notes": "Notes"
+    },
+    "form": {
+      "select": "Select"
+    },
+    "pagination": {
+      "showing": "Showing",
+      "of": "of",
+      "perPage": "/ page"
+    }
   },
   "calendar": {
     "title": "Booking Calendar",
@@ -2756,7 +2846,52 @@
     "newMessage": "New message from {name}",
     "newBooking": "New booking received",
     "paymentReceived": "Payment received",
-    "reminderDue": "Reminder: {task} is due"
+    "reminderDue": "Reminder: {task} is due",
+    "actions": {
+      "delete": "Delete",
+      "emailSent": "Email sent",
+      "markRead": "Mark as read",
+      "openChat": "Open chat",
+      "view": "View"
+    },
+    "allCaughtUp": "You're all caught up",
+    "deleteConfirm": "Delete this notification?",
+    "empty": {
+      "clearFilters": "Clear filters",
+      "noNotificationsFound": "No notifications found"
+    },
+    "filters": {
+      "all": "All",
+      "allTypes": "All types",
+      "unreadOnly": "Unread only"
+    },
+    "groups": {
+      "tasks": "Tasks",
+      "whatsapp": "WhatsApp"
+    },
+    "markAllReadButton": "Mark all as read",
+    "searchPlaceholder": "Search notifications…",
+    "showingLatest": "Showing the latest notifications",
+    "stats": {
+      "tasks": "Tasks",
+      "total": "Total",
+      "unread": "Unread",
+      "whatsapp": "WhatsApp"
+    },
+    "time": {
+      "justNow": "Just now",
+      "yesterday": "Yesterday"
+    },
+    "types": {
+      "task_assigned": "Task assigned",
+      "task_completed": "Task completed",
+      "task_due_soon": "Task due soon",
+      "task_overdue": "Task overdue",
+      "trip_assigned": "Trip assigned",
+      "whatsapp_assigned": "WhatsApp chat assigned",
+      "whatsapp_new_message": "New WhatsApp message"
+    },
+    "unread": "Unread"
   },
   "validation": {
     "required": "{field} is required",
@@ -4796,7 +4931,9 @@
     "formDescription": "Description",
     "descriptionPlaceholder": "e.g., 10% commission on guest purchases",
     "formNotes": "Notes",
-    "notesPlaceholder": "Additional notes..."
+    "notesPlaceholder": "Additional notes...",
+    "error": "Error",
+    "failedToSave": "Failed to save the commission"
   },
   "financialReports": {
     "financialReports": "Financial Reports",
@@ -4873,7 +5010,9 @@
     "clearAll": "Clear All",
     "failedToSaveExpense": "Failed to save expense",
     "confirmDeleteExpense": "Are you sure you want to delete this expense?",
-    "failedToDeleteExpense": "Failed to delete expense"
+    "failedToDeleteExpense": "Failed to delete expense",
+    "error": "Error",
+    "expense": "Expense"
   },
   "expenseDetail": {
     "failedToUpdateStatus": "Failed to update status",
@@ -4908,7 +5047,9 @@
     "noReceiptAttached": "No receipt attached",
     "created": "Created",
     "lastUpdated": "Last Updated",
-    "id": "ID"
+    "id": "ID",
+    "error": "Error",
+    "expense": "Expense"
   },
   "invite": {
     "invalidInvitationLink": "Invalid invitation link",
@@ -5161,7 +5302,11 @@
       "Suez": "Suez",
       "Taba": "Taba",
       "luxorAswan": "Luxor-Aswan"
-    }
+    },
+    "error": "Error",
+    "errorSavingTour": "Error saving the tour",
+    "failedToSaveTour": "Failed to save the tour",
+    "tourSaved": "Tour saved"
   },
   "modal": {
     "close": "Close",
@@ -6470,7 +6615,8 @@
     "guideAndVehicleAssigned": "Guide and vehicle assigned for this tour",
     "guideAssignedVehicleNeeded": "Guide assigned - vehicle needed",
     "vehicleAssignedGuideNeeded": "Vehicle assigned - guide needed",
-    "additionalResourcesNeeded": "Additional resources may be required"
+    "additionalResourcesNeeded": "Additional resources may be required",
+    "vehicleTypes": "Vehicle types"
   },
   "b2bImport": {
     "title": "Import Itinerary",
@@ -6579,5 +6725,63 @@
       "footerLocation": "Travel2Egypt | Cairo, Egypt",
       "footerAutomated": "This is an automated payment reminder. Please do not reply directly to this email."
     }
+  },
+  "receipt": {
+    "amountReceived": "Amount received",
+    "back": "Back",
+    "backToReceipts": "Back to receipts",
+    "dateAndReference": "Date and reference",
+    "error": "Error",
+    "failedToDownloadReceipt": "Failed to download the receipt",
+    "failedToSendReceipt": "Failed to send the receipt",
+    "failedToSendReceiptWhatsApp": "Failed to send the receipt via WhatsApp",
+    "generating": "Generating…",
+    "loadingReceipt": "Loading receipt…",
+    "noPhoneAvailable": "No phone number on file",
+    "notes": "Notes",
+    "paymentCompletedSuccessfully": "Payment completed successfully",
+    "paymentDetails": "Payment details",
+    "paymentMethod": "Payment method",
+    "paymentNotFound": "Payment not found",
+    "paymentReceipt": "Payment receipt",
+    "paymentType": "Payment type",
+    "previewPDF": "Preview PDF",
+    "questionsContact": "If you have any questions about this receipt, please contact us.",
+    "receiptConfirmation": "This receipt confirms your payment.",
+    "receiptNotExist": "This receipt does not exist.",
+    "receivedFrom": "Received from",
+    "sendViaWhatsApp": "Send via WhatsApp",
+    "sending": "Sending…",
+    "sent": "Sent",
+    "thankYouForPayment": "Thank you for your payment",
+    "transactionReference": "Transaction reference"
+  },
+  "invoice": {
+    "amount": "Amount",
+    "backToPayments": "Back to payments",
+    "billTo": "Bill to",
+    "description": "Description",
+    "error": "Error",
+    "failedToDownloadInvoice": "Failed to download the invoice",
+    "forQuestions": "For any questions about this invoice, please contact us.",
+    "generating": "Generating…",
+    "invoice": "Invoice",
+    "invoiceDate": "Invoice date",
+    "invoiceNotFound": "Invoice not found",
+    "itinerary": "Itinerary",
+    "loadingInvoice": "Loading invoice…",
+    "method": "Method",
+    "paid": "Paid",
+    "paidInFull": "Paid in full",
+    "paymentFor": "Payment for",
+    "paymentTerms": "Payment terms",
+    "paymentTermsText": "A 10% deposit is required to confirm the booking. The balance is payable in cash on arrival.",
+    "previewPDF": "Preview PDF",
+    "status": "Status",
+    "subtotal": "Subtotal",
+    "thankYou": "Thank you for your business",
+    "total": "Total",
+    "type": "Type",
+    "downloadPDF": "Download PDF"
   }
 }

@@ -157,6 +157,20 @@ test('P&L API returns the commission and realized fields for every trip', async 
   }
 })
 
+test('P&L returns ONLY the caller\'s own org (regression: no org filter)', async ({ page }) => {
+  // This route reads with the service-role key, which bypasses RLS, and used to
+  // filter by nothing at all — the seeded E2E org saw the real operator's trips.
+  const res = await page.request.get('/api/profit-loss')
+  expect(res.status()).toBe(200)
+  const body = await res.json()
+  expect(body.success).toBe(true)
+
+  // The E2E org is seeded with exactly one itinerary. Anything else in this
+  // response came from another tenant.
+  const codes = body.data.map((t: { itinerary_code: string }) => t.itinerary_code)
+  expect(codes, `foreign trips leaked into the P&L: ${JSON.stringify(codes)}`).toEqual(['E2E-SMOKE-001'])
+})
+
 test('department routing reports its gaps instead of hiding them', async ({ page }) => {
   const res = await page.request.get('/api/departments/routing')
   expect(res.status()).toBe(200)
