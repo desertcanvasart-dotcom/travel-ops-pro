@@ -48,19 +48,36 @@ const service = (over: Partial<CommissionSourceService> = {}): CommissionSourceS
 })
 
 describe('field mapping (the reason this never worked)', () => {
-  it('reads client_price / total_cost / service_name, not the columns that do not exist', () => {
+  it('reads total_cost / service_name, not the columns that do not exist', () => {
     const { pairs } = buildCommissions([service()], CTX)
     expect(pairs).toHaveLength(1)
 
     const c = pairs[0].commission
-    expect(c.base_amount).toBe(1000)                       // client_price
+    expect(c.base_amount).toBe(800)                        // total_cost
     expect(c.description).toContain('Steigenberger Cairo') // service_name
     expect(c.description).toContain('ITN-2026-1')
   })
 
-  it('falls back to total_cost when there is no client price', () => {
-    const { pairs } = buildCommissions([service({ client_price: null })], CTX)
+  it("bases the commission on the SUPPLIER's price, never on our marked-up one", () => {
+    // Operator decision 2026-08-12: a supplier's commission is a percentage of
+    // what they charge. The pre-existing code used the client price first,
+    // which over-claims against every supplier by the size of our margin.
+    const { pairs } = buildCommissions([service({ client_price: 1000, total_cost: 800 })], CTX)
     expect(pairs[0].commission.base_amount).toBe(800)
+    expect(pairs[0].commission.base_amount).not.toBe(1000)
+    expect(pairs[0].commission.commission_amount).toBe(80) // 10% of 800, not of 1000
+  })
+
+  it('does NOT fall back to the client price when there is no supplier cost', () => {
+    // Falling back would reintroduce the exact over-claim above, on precisely
+    // the rows where nobody would notice.
+    const { pairs, skipped } = buildCommissions(
+      [service({ client_price: 1000, total_cost: null })],
+      CTX
+    )
+    expect(pairs).toHaveLength(0)
+    expect(skipped[0].reason).toBe('no_base_amount')
+    expect(skipped[0].detail).toMatch(/SUPPLIER price/)
   })
 
   it('pairs each commission with its OWN service id', () => {
@@ -68,7 +85,7 @@ describe('field mapping (the reason this never worked)', () => {
     // version matched two arrays positionally and mis-attributed commissions.
     const { pairs } = buildCommissions(
       [
-        service({ id: 'a', client_price: 0, total_cost: 0 }), // skipped
+        service({ id: 'a', total_cost: 0 }), // skipped: no supplier cost
         service({ id: 'b' }),
         service({ id: 'c' }),
       ],
@@ -79,23 +96,20 @@ describe('field mapping (the reason this never worked)', () => {
 })
 
 describe('commission arithmetic', () => {
-  it('is base × rate percent, rounded to cents', () => {
-    const { pairs } = buildCommissions([service({ client_price: 1000 })], CTX)
+  it('is supplier cost × rate percent, rounded to cents', () => {
+    const { pairs } = buildCommissions([service({ total_cost: 1000 })], CTX)
     expect(pairs[0].commission.commission_amount).toBe(100)
     expect(pairs[0].commission.commission_rate).toBe(10)
   })
 
   it('does not emit float noise into the ledger', () => {
-    const { pairs } = buildCommissions(
-      [service({ client_price: 123.45, supplier: { ...service().supplier!, default_commission_rate: 10 } })],
-      CTX
-    )
+    const { pairs } = buildCommissions([service({ total_cost: 123.45 })], CTX)
     // 123.45 × 10% = 12.345 → 12.35 (and never 12.340000000000002)
     expect(pairs[0].commission.commission_amount).toBe(12.35)
   })
 
   it('prefers a rate set on the service over the supplier default', () => {
-    const { pairs } = buildCommissions([service({ commission_rate: 15 })], CTX)
+    const { pairs } = buildCommissions([service({ commission_rate: 15, total_cost: 1000 })], CTX)
     expect(pairs[0].commission.commission_rate).toBe(15)
     expect(pairs[0].commission.commission_amount).toBe(150)
   })
@@ -132,9 +146,9 @@ describe('skips are reported, never silent', () => {
   it('never creates a zero or negative commission off an unpriced service', () => {
     const { pairs, skipped } = buildCommissions(
       [
-        service({ id: 'zero', client_price: 0, total_cost: 0 }),
-        service({ id: 'negative', client_price: -50, total_cost: 0 }),
-        service({ id: 'garbage', client_price: 'abc' as unknown as number, total_cost: null }),
+        service({ id: 'zero', total_cost: 0 }),
+        service({ id: 'negative', total_cost: -50 }),
+        service({ id: 'garbage', total_cost: 'abc' as unknown as number }),
       ],
       CTX
     )
@@ -161,7 +175,7 @@ describe('skips are reported, never silent', () => {
       [
         service({ id: 'a', supplier: null, supplier_id: null }),
         service({ id: 'b', supplier: null, supplier_id: null }),
-        service({ id: 'c', client_price: 0, total_cost: 0 }),
+        service({ id: 'c', total_cost: 0 }),
       ],
       CTX
     )

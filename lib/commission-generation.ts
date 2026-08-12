@@ -84,9 +84,9 @@ export interface CommissionSourceService {
   id: string
   service_type?: string | null
   service_name?: string | null
-  /** What we charge the client. */
+  /** What we charge the client. NOT the commission base — see buildCommissions. */
   client_price?: number | string | null
-  /** What the supplier charges us. */
+  /** What the supplier charges us. This is the commission base. */
   total_cost?: number | string | null
   supplier_id?: string | null
   commission_rate?: number | string | null
@@ -154,7 +154,7 @@ const SKIP_DETAIL: Record<SkipReason, string> = {
   no_rate:
     'Neither the service nor the supplier carries a commission rate. Set the rate on the supplier (default_commission_rate) or on the service.',
   no_base_amount:
-    'The service has no price to calculate a commission from — price the itinerary first.',
+    'The service has no supplier cost to calculate a commission from. Commission is a percentage of the SUPPLIER price, so a service priced only to the client is skipped rather than commissioned off our markup.',
 }
 
 const toNumber = (value: unknown): number => {
@@ -209,10 +209,17 @@ export function buildCommissions(
       continue
     }
 
-    // Preserves the original intent (`selling_price || cost`) with the real
-    // column names. NOTE: this bases a supplier's commission on the CLIENT
-    // price, i.e. including our markup — see the route's response note.
-    const baseAmount = toNumber(s.client_price) || toNumber(s.total_cost)
+    // The SUPPLIER's price, not ours (operator decision, 2026-08-12): a
+    // supplier's commission is a percentage of what they charge, so our markup
+    // must not be in the base. The pre-existing code used `selling_price ||
+    // cost` — the client price first — which would have over-claimed against
+    // every supplier by the size of our margin.
+    //
+    // Deliberately NO fallback to client_price: a service with no supplier cost
+    // is skipped, not priced off the marked-up figure. Falling back would
+    // reintroduce the exact error this line exists to prevent, on precisely the
+    // rows where nobody would notice.
+    const baseAmount = toNumber(s.total_cost)
     if (baseAmount <= 0) {
       skip(s, 'no_base_amount')
       continue
