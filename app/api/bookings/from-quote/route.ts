@@ -264,6 +264,8 @@ export async function POST(request: NextRequest) {
       itinerary,
       depositPercent,
       total: quote.selling_price,
+      // The agreed price and the currency it was agreed in travel together.
+      currency: quote.currency,
       partnerName: partnerInfo?.company_name ?? null,
       quote: { id: quote_id, type: quoteType },
       // A deposit without a date to pay it by is not a deposit.

@@ -31,6 +31,20 @@ export function currencyDecimals(code: string): number {
   return ZERO_DECIMAL_CURRENCIES.has(code.toUpperCase()) ? 0 : 2
 }
 
+/**
+ * Round an amount to the smallest unit its currency actually has.
+ *
+ * Any money DERIVED by arithmetic — a deposit taken as a percentage, a balance
+ * taken as a difference, a converted amount — has to pass through here before
+ * it is stored or billed. `(1854367 * 20) / 100` is ¥370,873.4, and a yen with
+ * a decimal place is not a quantity of money that exists.
+ */
+export function roundToCurrency(amount: unknown, currency: unknown): number {
+  const code = normCurrency(currency)
+  const factor = currencyDecimals(code) === 0 ? 1 : 100
+  return Math.round(num(amount) * factor) / factor
+}
+
 /** Normalise to a 3-letter upper code; blank/garbage falls back to EUR. */
 function normCurrency(c: unknown): string {
   const s = typeof c === 'string' ? c.trim().toUpperCase() : ''

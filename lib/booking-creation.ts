@@ -178,6 +178,14 @@ export interface BuildBookingRowInput {
    * total. Defaults to the itinerary total.
    */
   total?: number | null
+  /**
+   * Currency of `total`. MUST be passed whenever `total` is — an amount and its
+   * currency are one fact, and taking them from different rows silently
+   * relabels the money: a ¥1,854,367 quote booked against a EUR itinerary
+   * becomes €1,854,367. Defaults to the itinerary's currency, which is correct
+   * only when the total also came from the itinerary.
+   */
+  currency?: string | null
   partnerName?: string | null
   /** Set only when converting; omitted for a plain itinerary booking. */
   quote?: { id: string; type: 'b2b' | 'b2c' } | null
@@ -209,7 +217,9 @@ export function buildBookingRow(input: BuildBookingRowInput): Record<string, unk
     num_adults: itinerary.num_adults || 1,
     num_children: itinerary.num_children || 0,
     total_cost: roundMoney(total),
-    currency: itinerary.currency || 'EUR',
+    // Paired with `total` above, never sourced independently — see the comment
+    // on BuildBookingRowInput.currency.
+    currency: input.currency || itinerary.currency || 'EUR',
     tier: itinerary.tier,
 
     status: 'pending',
