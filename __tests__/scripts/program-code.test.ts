@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
 // Import tooling, deliberately plain JS and outside the app bundle.
 import {
+  assignedSequence,
   auditProgramCode,
   canonicalFieldsFor,
   canonicalFor,
   findSequenceCollisions,
+  documentCodeConflicts,
   formatProgramCode,
   nextFreeSequence,
   parseProgramCode,
@@ -99,9 +101,11 @@ describe('parseProgramCode — tolerating the existing catalogue', () => {
 
 describe('canonicalFor', () => {
   it('takes length and type from the itinerary, not the old string', () => {
-    // MSN1005-CR calls itself a 10-day cruise; the itinerary is 8 days.
-    const code = canonicalFor(parseProgramCode('MSN1005-CR'), program({ duration_days: 8 }))
-    expect(code).toBe('NMS805-CR')
+    // MSN1004-CR calls itself a 10-day programme; the itinerary is 8 days.
+    // (Deliberately a code with no operator ruling, so this isolates the
+    // length derivation from the sequence assignments tested below.)
+    const code = canonicalFor(parseProgramCode('MSN1004-CR'), program({ duration_days: 8 }))
+    expect(code).toBe('NMS804-CR')
   })
 
   it('writes LND for a programme with no cruise night', () => {
@@ -221,5 +225,58 @@ describe('findSequenceCollisions', () => {
       { code: 'b', fields: fields({ sequence: '05' }) },
     ]
     expect(nextFreeSequence(entries, { airport: 'N', carrier: 'MS', days: 8 })).toBe('02')
+  })
+})
+
+describe('operator sequence rulings', () => {
+  it('applies the assigned number in place of the contested one', () => {
+    // Ruled 2026-08-16: MSN805-CR keeps 05, so these two move.
+    expect(assignedSequence('MSN805-LND')?.sequence).toBe('02')
+    expect(assignedSequence('MSN1005-CR')?.sequence).toBe('03')
+    expect(assignedSequence('MSN805-CR')).toBeNull()
+  })
+
+  it('is case-insensitive on the written code', () => {
+    expect(assignedSequence('msn805-lnd')?.sequence).toBe('02')
+  })
+
+  it('beats the number in the old code when canonicalising', () => {
+    // MSN1005-CR's own code says 05; the ruling says 03, and the ruling wins
+    // because that number is exactly what was contested.
+    const p = program({ duration_days: 8, days: [{ is_cruise_day: true }] })
+    const fields = canonicalFieldsFor(parseProgramCode('MSN1005-CR'), p)
+    expect(fields.sequence).toBe('03')
+    expect(fields.assigned_sequence).toBe(true)
+  })
+
+  it('leaves an unruled programme on its own number', () => {
+    const p = program({ duration_days: 8, days: [{ is_cruise_day: true }] })
+    expect(canonicalFieldsFor(parseProgramCode('MSN805-CR'), p).sequence).toBe('05')
+  })
+})
+
+describe('documentCodeConflicts', () => {
+  const canonical = { airport: 'N', carrier: 'EK', days: 9 }
+
+  it('is NOT a conflict when only the derived type differs', () => {
+    // NEK901 vs NEK901-CR: the itinerary has cruise nights, so CR is right and
+    // the filename simply dropped a suffix we derive anyway.
+    expect(documentCodeConflicts('NEK901-CR', canonical)).toBe(false)
+  })
+
+  it('IS a conflict when the carrier differs', () => {
+    // MSN-601 claims to be NEK601 — an EgyptAir programme carrying an Emirates
+    // code, which the itinerary cannot settle either way.
+    expect(documentCodeConflicts('NEK601', { airport: 'N', carrier: 'MS', days: 6 })).toEqual([
+      'carrier',
+    ])
+  })
+
+  it('IS a conflict when the length differs', () => {
+    expect(documentCodeConflicts('NEK1201-CR', canonical)).toEqual(['length'])
+  })
+
+  it('treats an unreadable document code as a conflict', () => {
+    expect(documentCodeConflicts('rubbish', canonical)).toBe(true)
   })
 })

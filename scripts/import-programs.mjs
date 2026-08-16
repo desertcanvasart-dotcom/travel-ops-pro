@@ -22,8 +22,10 @@ import path from 'path'
 import mammoth from 'mammoth'
 import { parseProgram } from './lib/parse-program.mjs'
 import {
+  assignedSequence,
   auditProgramCode,
   canonicalFieldsFor,
+  documentCodeConflicts,
   findSequenceCollisions,
   formatProgramCode,
   nextFreeSequence,
@@ -92,8 +94,25 @@ for (const file of files) {
     : null
 
   // A code that misstates the length or the type is not an old spelling of a
-  // right fact; it is a wrong fact, and it blocks the import.
-  program.problems.push(...auditProgramCode(program.code_fields, program))
+  // right fact; it is a wrong fact, and it blocks the import — UNLESS the
+  // operator has already ruled on this programme, in which case the ruling is
+  // the answer and there is nothing left to ask.
+  program.assignment = assignedSequence(program.code)
+  if (!program.assignment) {
+    program.problems.push(...auditProgramCode(program.code_fields, program))
+  }
+
+  // Adjudicate a code found inside the document. Most are a filename that
+  // dropped a suffix we now derive from the itinerary anyway; only a
+  // disagreement the itinerary cannot settle is a real conflict.
+  program.problems = program.problems.filter(problem => {
+    if (problem.kind !== 'document_code_mismatch') return true
+    if (program.assignment) return false
+    const conflict = documentCodeConflicts(problem.documentCode, program.canonical_fields)
+    if (!conflict) return false
+    problem.message += ` — they disagree on ${conflict.join(' and ')}, which the itinerary cannot settle`
+    return true
+  })
 
   programs.push(program)
 }

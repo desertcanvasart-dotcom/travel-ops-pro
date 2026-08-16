@@ -370,11 +370,18 @@ export function parseProgram({ html, filename, folder }) {
     problems.push({ severity: 'error', message: `No programme code in the filename "${filename}"` })
   }
 
+  // A code written inside the document that differs from the filename is
+  // REPORTED here but not judged. Whether it is a real conflict depends on what
+  // it disagrees about, and that needs the decoded fields — see the importer.
+  // Most of these turn out to be a filename that dropped the type suffix, which
+  // is not a conflict at all once the type is derived from the itinerary.
   const documentCode = codeInDocument(tables)
   if (code && documentCode && documentCode !== code) {
     problems.push({
+      kind: 'document_code_mismatch',
       severity: 'error',
-      message: `The document says ${documentCode} but the file is ${code} — one of them is a stale copy`,
+      documentCode,
+      message: `The document says ${documentCode} but the file is ${code}`,
     })
   }
 

@@ -99,6 +99,56 @@ export function deriveFeatures(program) {
   }).map(f => f.token)
 }
 
+// ---------------------------------------------------------------------------
+// OPERATOR DECISIONS
+// ---------------------------------------------------------------------------
+// A sequence number identifies one programme, and three of them had drifted
+// onto 8-day #05. Which programme keeps a contested number is a business
+// decision, not something to infer — these are the owner's rulings, recorded
+// here so the reasoning survives and the importer stops asking.
+//
+// Keyed by the code AS WRITTEN, because that is what the source documents say
+// and no document is being renamed.
+export const SEQUENCE_ASSIGNMENTS = {
+  // Ruled 2026-08-16. MSN805-CR keeps 05 — the number is written into its own
+  // code and its business twin MSBZ805-CR carries the same one, so moving it
+  // would mean correcting two codes to fix one clash.
+  'MSN805-LND': { sequence: '02', ruled: '2026-08-16' },
+  // Its code claimed ten days for an eight-day programme, so it was being
+  // corrected regardless; it takes the next free number rather than 05.
+  'MSN1005-CR': { sequence: '03', ruled: '2026-08-16' },
+}
+
+/** The number the operator has assigned this programme, if they have ruled. */
+export function assignedSequence(code) {
+  return SEQUENCE_ASSIGNMENTS[String(code ?? '').toUpperCase()] ?? null
+}
+
+/**
+ * Does a code found INSIDE a document actually conflict with what the itinerary
+ * says the programme is?
+ *
+ * Usually not. A filename that reads NEK901 while the document says NEK901-CR
+ * is not two claims in conflict — the itinerary has cruise nights, so CR is
+ * correct and the filename simply dropped the suffix we now derive anyway.
+ *
+ * A real conflict is a disagreement about something the itinerary cannot
+ * settle: a different carrier, a different departure airport, a different
+ * length. MSN-601 claiming to be NEK601 is that — an EgyptAir programme
+ * carrying an Emirates code, which means its flight content is suspect too.
+ */
+export function documentCodeConflicts(documentCode, canonicalFields) {
+  const parsed = parseProgramCode(documentCode)
+  if (!parsed.valid || !canonicalFields) return true
+
+  const disagreements = []
+  if (parsed.carrier && parsed.carrier !== canonicalFields.carrier) disagreements.push('carrier')
+  if (parsed.airport && parsed.airport !== canonicalFields.airport) disagreements.push('airport')
+  if (parsed.days !== canonicalFields.days) disagreements.push('length')
+
+  return disagreements.length ? disagreements : false
+}
+
 /** Full-width and typographic dashes all mean the ASCII hyphen here. */
 function normalizeDashes(text) {
   return String(text).replace(/[－ー–—]/g, '-')
@@ -238,12 +288,16 @@ export function formatProgramCode({
  */
 export function canonicalFieldsFor(parsed, program) {
   const hasCruise = program.days.some(d => d.is_cruise_day)
+  const assigned = assignedSequence(parsed.code)
   return {
     airport: parsed.airport ?? deriveAirport(program),
     carrier: parsed.carrier,
     service_class: parsed.service_class,
     days: program.duration_days,
-    sequence: parsed.sequence,
+    // An operator ruling beats the number in the old code — that number is
+    // exactly what was contested.
+    sequence: assigned?.sequence ?? parsed.sequence,
+    assigned_sequence: Boolean(assigned),
     type: hasCruise ? 'CR' : 'LND',
     features: deriveFeatures(program),
   }

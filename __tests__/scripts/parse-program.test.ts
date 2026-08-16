@@ -200,9 +200,11 @@ describe('parseProgram — problems', () => {
     // Emirates code. Which one is right is the operator's call, not ours.
     const html = DOC.replace('<p>日</p>', '<p>NEK999</p>')
     const program = parseProgram({ html, filename: 'NEK303-CR.docx', folder: 'NRT EK' })
-    expect(program.problems.some(p => p.severity === 'error' && /stale copy/.test(p.message))).toBe(
-      true
-    )
+    // Reported here, but judged in the importer: whether it is a real conflict
+    // depends on what the two codes disagree ABOUT.
+    expect(
+      program.problems.some(p => p.kind === 'document_code_mismatch' && p.documentCode === 'NEK999')
+    ).toBe(true)
   })
 
   it('flags a missing day rather than renumbering around it', () => {
