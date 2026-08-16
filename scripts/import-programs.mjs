@@ -21,6 +21,14 @@ import fs from 'fs'
 import path from 'path'
 import mammoth from 'mammoth'
 import { parseProgram } from './lib/parse-program.mjs'
+import {
+  auditProgramCode,
+  canonicalFieldsFor,
+  findSequenceCollisions,
+  formatProgramCode,
+  nextFreeSequence,
+  parseProgramCode,
+} from './lib/program-code.mjs'
 
 const args = process.argv.slice(2)
 const dir = args.find(a => !a.startsWith('--'))
@@ -70,6 +78,23 @@ for (const file of files) {
     folder: path.basename(path.dirname(file)),
   })
   program.source_path = file
+  program.folder = path.basename(path.dirname(file))
+
+  // Decode the code into fields. The string keeps whatever spelling it has —
+  // historic documents are not being re-cut — but everything downstream reasons
+  // about the fields, so an old spelling costs nothing.
+  program.code_fields = parseProgramCode(program.code)
+  program.canonical_fields = program.code_fields.valid
+    ? canonicalFieldsFor(program.code_fields, program)
+    : null
+  program.canonical_code = program.canonical_fields
+    ? formatProgramCode(program.canonical_fields)
+    : null
+
+  // A code that misstates the length or the type is not an old spelling of a
+  // right fact; it is a wrong fact, and it blocks the import.
+  program.problems.push(...auditProgramCode(program.code_fields, program))
+
   programs.push(program)
 }
 
@@ -103,6 +128,51 @@ for (const p of programs) {
       `${p.has_menu ? ' yes' : '  - '}  ${String(p.hotels.length).padStart(6)}  ` +
       `${cities.slice(0, 38).padEnd(38)}  ${issues}`
   )
+}
+
+// --- code report -------------------------------------------------------------
+// Deviations are not failures. They are the ways an existing code is spelled
+// differently from the canon, listed so the shape of the drift is visible —
+// and so anything created from here can be held to the standard.
+
+const deviating = programs.filter(p => p.code_fields?.deviations?.length)
+if (deviating.length) {
+  console.log(`\n${C.bold('CODES')}  ${deviating.length} of ${programs.length} deviate from the canon`)
+  console.log(C.dim('  Existing spellings are kept. This is what they would be written as today.\n'))
+  console.log(C.dim('  AS WRITTEN     WOULD BE          DEPARTS   CARRIER    CABIN     WHY'))
+  for (const p of deviating) {
+    const f = p.code_fields
+    const why = f.deviations.map(d => d.kind).join(', ')
+    console.log(
+      `  ${(p.code ?? '?').padEnd(14)} ${(p.canonical_code ?? '—').padEnd(17)} ` +
+        `${(f.airport_name ?? C.yellow('unknown')).padEnd(9)} ${(f.carrier_name ?? '?').padEnd(10)} ` +
+        `${(f.service_class ?? '?').padEnd(9)} ${C.dim(why)}`
+    )
+  }
+}
+
+const entries = programs
+  .filter(p => p.canonical_fields)
+  .map(p => ({ code: p.code, fields: p.canonical_fields }))
+const collisions = findSequenceCollisions(entries)
+if (collisions.length) {
+  console.log(`\n${C.bold('SEQUENCE COLLISIONS')}\n`)
+  for (const c of collisions) {
+    const [airport, carrier, serviceClass, days] = c.bucket.split('/')
+    const free = nextFreeSequence(entries, {
+      airport,
+      carrier,
+      service_class: serviceClass,
+      days: Number(days),
+    })
+    console.log(
+      `  ${C.yellow(c.codes.join('  ·  '))}\n` +
+        C.dim(
+          `    all ${c.codes.length} resolve to ${days}-day #${c.sequence} on ${carrier}/${airport}. ` +
+            `Next free number: ${free}\n`
+        )
+    )
+  }
 }
 
 const withProblems = programs.filter(p => p.problems.length)
