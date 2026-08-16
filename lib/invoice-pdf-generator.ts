@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface LineItem {
   description: string
@@ -54,14 +55,12 @@ const DEFAULT_COMPANY: CompanyInfo = {
   website: 'www.travel2egypt.com'
 }
 
-const getCurrencySymbol = (currency: string): string => {
-  const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
-  return symbols[currency] || currency
-}
-
-const formatCurrency = (amount: number, currency: string): string => {
-  return `${getCurrencySymbol(currency)}${Number(amount).toFixed(2)}`
-}
+// Money on a document is formatted by ONE function, in lib/currency-totals.ts.
+// The local table this replaced had no ¥ and a hardcoded two decimals, so a yen
+// invoice printed JPY370873.00 — wrong symbol and a minor unit the currency
+// does not have.
+const formatCurrency = (amount: number, currency: string): string =>
+  formatMoney(Number(amount), currency)
 
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('en-GB', {

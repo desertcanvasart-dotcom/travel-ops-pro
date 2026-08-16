@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface ReceiptData {
   receiptNumber: string
@@ -105,7 +106,6 @@ export function generateReceiptPDF(receipt: ReceiptData, invoice: Invoice): jsPD
   y += 25
 
   // Amount
-  const currencySymbol = { EUR: '€', USD: '$', GBP: '£' }[receipt.currency] || receipt.currency
   
   doc.setFillColor(100, 124, 71)
   doc.roundedRect(margin, y, pageWidth - 2 * margin, 25, 3, 3, 'F')
@@ -116,7 +116,9 @@ export function generateReceiptPDF(receipt: ReceiptData, invoice: Invoice): jsPD
   doc.text('AMOUNT RECEIVED', margin + 10, y + 10)
   
   doc.setFontSize(18)
-  doc.text(`${currencySymbol}${Number(receipt.amount).toFixed(2)}`, pageWidth - margin - 10, y + 15, { align: 'right' })
+  // A receipt states what was actually received, so the amount must be
+  // printed in that currency's own units — ¥370,873, never ¥370873.00.
+  doc.text(formatMoney(Number(receipt.amount), receipt.currency), pageWidth - margin - 10, y + 15, { align: 'right' })
 
   y += 40
 
