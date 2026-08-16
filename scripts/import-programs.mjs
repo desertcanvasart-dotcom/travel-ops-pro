@@ -138,15 +138,27 @@ for (const p of programs) {
 const deviating = programs.filter(p => p.code_fields?.deviations?.length)
 if (deviating.length) {
   console.log(`\n${C.bold('CODES')}  ${deviating.length} of ${programs.length} deviate from the canon`)
-  console.log(C.dim('  Existing spellings are kept. This is what they would be written as today.\n'))
-  console.log(C.dim('  AS WRITTEN     WOULD BE          DEPARTS   CARRIER    CABIN     WHY'))
+  console.log(
+    C.dim(
+      '  The CANONICAL code comes first. Existing spellings are kept as they are —\n' +
+        '  nothing is renamed; the old label still resolves to the same programme.\n'
+    )
+  )
+  console.log(
+    C.dim('  CANONICAL            was written as   DEPARTS     CARRIER    CABIN     WHAT DIFFERED')
+  )
   for (const p of deviating) {
     const f = p.code_fields
     const why = f.deviations.map(d => d.kind).join(', ')
+    // Pad BEFORE colouring — escape codes have width in a string and none on
+    // screen, so padding a coloured value misaligns every column after it.
+    const departs = f.airport_name
+      ? f.airport_name.padEnd(12)
+      : C.yellow('not stated'.padEnd(12))
     console.log(
-      `  ${(p.code ?? '?').padEnd(14)} ${(p.canonical_code ?? '—').padEnd(17)} ` +
-        `${(f.airport_name ?? C.yellow('unknown')).padEnd(9)} ${(f.carrier_name ?? '?').padEnd(10)} ` +
-        `${(f.service_class ?? '?').padEnd(9)} ${C.dim(why)}`
+      `  ${C.green((p.canonical_code ?? '—').padEnd(20))} ${C.dim((p.code ?? '?').padEnd(16))}` +
+        `${departs}${(f.carrier_name ?? '?').padEnd(11)}` +
+        `${(f.service_class ?? '?').padEnd(10)}${C.dim(why)}`
     )
   }
 }
