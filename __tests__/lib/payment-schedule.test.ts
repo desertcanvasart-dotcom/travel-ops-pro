@@ -169,6 +169,24 @@ describe('paymentRuleFrom', () => {
     expect(paymentRuleFrom({})).toEqual(DEFAULT_PAYMENT_RULE)
   })
 
+  it('falls back on NULL columns, which is what the database actually returns', () => {
+    // Number(null) is 0 — finite and non-negative — so a naive guard accepts
+    // it. That gave every organisation with unset terms a 0% deposit due the
+    // same day, with the balance due on the departure date. An object with
+    // MISSING keys does not catch this; only null does.
+    expect(
+      paymentRuleFrom({
+        deposit_percent: null,
+        deposit_due_days: null,
+        balance_due_days_before_departure: null,
+      })
+    ).toEqual(DEFAULT_PAYMENT_RULE)
+  })
+
+  it('falls back on an empty string too', () => {
+    expect(paymentRuleFrom({ deposit_due_days: '' }).deposit_due_days).toBe(3)
+  })
+
   it('takes an organisation that trades on different terms', () => {
     expect(
       paymentRuleFrom({ deposit_percent: 30, deposit_due_days: 7, balance_due_days_before_departure: 45 })

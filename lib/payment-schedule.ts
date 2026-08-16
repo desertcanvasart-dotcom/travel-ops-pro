@@ -186,6 +186,14 @@ export function paymentRuleFrom(org: Record<string, any> | null | undefined): Pa
 }
 
 function num(value: unknown, fallback: number): number {
+  // NULL is the important case and the easy one to get wrong: a column the
+  // operator has not set comes back as null, and Number(null) is 0 — finite,
+  // non-negative, and therefore accepted by a naive guard. That silently traded
+  // the standing rule for "0% deposit, due today, balance due on the departure
+  // date" for every organisation that had not filled the columns in.
+  //
+  // undefined and '' are absent too. Zero itself remains a legitimate value.
+  if (value === null || value === undefined || value === '') return fallback
   const n = Number(value)
   return Number.isFinite(n) && n >= 0 ? n : fallback
 }

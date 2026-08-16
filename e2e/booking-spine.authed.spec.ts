@@ -62,6 +62,7 @@ async function rest(path: string, init?: RequestInit) {
 
 let orgId: string
 let itineraryId: string
+let itineraryStart: string | null
 let originalItineraryStatus: string
 let quoteId: string
 let bookingId: string
@@ -131,6 +132,7 @@ test.beforeAll(async () => {
   expect(itin, `seeded itinerary ${ITIN_CODE} must exist — run npm run seed:e2e`).toBeTruthy()
   itineraryId = itin.id
   orgId = itin.org_id
+  itineraryStart = itin.start_date
   originalItineraryStatus = itin.status
 
   // Clear anything an interrupted run left behind.
@@ -195,6 +197,47 @@ test('1 — an accepted yen quote becomes a booking', async ({ request }) => {
   expect(Number(booking.balance_due)).toBe(SELLING_PRICE_JPY)
   // The currency the customer is actually being charged in must survive.
   expect(booking.currency, 'the booking must stay in JPY').toBe('JPY')
+})
+
+test('1b — the booking carries a payment schedule', async () => {
+  expect(bookingId, 'booking must exist from step 1').toBeTruthy()
+
+  const [booking] = await rest(
+    `bookings?id=eq.${bookingId}&select=deposit_amount,payment_deadline,balance_due_date,payment_schedule_overridden,payment_schedule_note,balance_due,total_cost`
+  )
+
+  // The operator's terms: 20% within three days, balance sixty days before
+  // departure. Asserted against the SEEDED dates rather than fixed ones, so
+  // this keeps meaning as the fixture ages.
+  expect(booking.payment_deadline, 'a deposit needs a date to pay it by').toMatch(
+    /^\d{4}-\d{2}-\d{2}$/
+  )
+  expect(booking.payment_schedule_overridden).toBe(false)
+
+  const departsIn = itineraryStart
+    ? Math.round(
+        (Date.parse(`${itineraryStart}T00:00:00Z`) - Date.parse(`${booking.payment_deadline}T00:00:00Z`)) /
+          86_400_000
+      )
+    : null
+
+  if (departsIn !== null && departsIn <= 60) {
+    // The seeded trip departs in the past, so this is the LATE-BOOKING path:
+    // splitting would date the balance before the deposit, so the whole amount
+    // is asked for at once and the reason is recorded rather than left to be
+    // worked out.
+    expect(Number(booking.deposit_amount)).toBe(SELLING_PRICE_JPY)
+    expect(booking.balance_due_date).toBeNull()
+    expect(booking.payment_schedule_note).toMatch(/inside 60 days/)
+  } else {
+    expect(Number(booking.deposit_amount)).toBe(Math.round((SELLING_PRICE_JPY * DEPOSIT_PERCENT) / 100))
+    expect(booking.balance_due_date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  }
+
+  // Whatever the schedule, the OUTSTANDING money is still the whole total —
+  // nothing has been paid yet. balance_due and balance_due_date read alike and
+  // answer different questions.
+  expect(Number(booking.balance_due)).toBe(SELLING_PRICE_JPY)
 })
 
 test('2 — the passenger manifest accepts a full traveller record', async ({ request }) => {
