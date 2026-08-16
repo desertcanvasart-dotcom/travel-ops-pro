@@ -1,3 +1,10 @@
+import {
+  DEFAULT_PAYMENT_RULE,
+  computePaymentSchedule,
+  type PaymentRule,
+  type ScheduleOverrides,
+} from './payment-schedule'
+
 // ============================================
 // BOOKING CREATION — shared by both entry points
 // ============================================
@@ -56,7 +63,16 @@ export interface DepositPercentResult {
   error?: string
 }
 
-/** The default when a caller does not specify one. */
+/**
+ * The value validateDepositPercent reports when a caller names no percentage.
+ *
+ * This is a PARSING default, not a commercial one. The operator's actual share
+ * lives in their payment rule (organizations.deposit_percent, falling back to
+ * DEFAULT_PAYMENT_RULE), and the booking routes use that when the request is
+ * silent. The two disagreed for a while — this constant said 30 while the rule
+ * said 20 — and every booking created without an explicit percentage quietly
+ * took the wrong one.
+ */
 export const DEFAULT_DEPOSIT_PERCENT = 30
 
 /**
@@ -189,8 +205,20 @@ export interface BuildBookingRowInput {
   partnerName?: string | null
   /** Set only when converting; omitted for a plain itinerary booking. */
   quote?: { id: string; type: 'b2b' | 'b2c' } | null
-  /** Set a deposit deadline. Off by default to preserve existing behaviour. */
-  withDeadline?: boolean
+  /**
+   * The operator's payment terms. Omitted falls back to the standing rule —
+   * 20% within three days, balance sixty days before departure.
+   */
+  paymentRule?: PaymentRule
+  /**
+   * A schedule agreed with THIS customer instead of the standing rule. Recorded
+   * on the booking, so an unusual date reads as a decision and not a mistake.
+   */
+  scheduleOverrides?: ScheduleOverrides
+  /** ISO date the booking is being taken. Defaults to today. */
+  bookedOn?: string
+  /** Why the schedule departs from the rule. */
+  scheduleNote?: string | null
 }
 
 /**
@@ -200,7 +228,24 @@ export interface BuildBookingRowInput {
 export function buildBookingRow(input: BuildBookingRowInput): Record<string, unknown> {
   const { orgId, bookingCode, itinerary, depositPercent, quote } = input
   const total = Number(input.total ?? itinerary.total_cost ?? 0)
-  const { depositAmount, balanceDue } = computeDeposit(total, depositPercent)
+  const { balanceDue } = computeDeposit(total, depositPercent)
+  const currency = input.currency || itinerary.currency || 'EUR'
+
+  // WHEN the money is due, not just how much. A booking taken inside the
+  // balance window collapses to one payment rather than carrying a balance
+  // date already in the past — see lib/payment-schedule.ts.
+  const schedule = computePaymentSchedule({
+    total,
+    currency,
+    booked_on: input.bookedOn ?? new Date().toISOString().slice(0, 10),
+    departure_date: itinerary.start_date ?? null,
+    // The caller's percentage always wins — it has been validated and may be a
+    // deliberate choice for this booking. Building the rule unconditionally
+    // matters: making it conditional on paymentRule silently dropped an
+    // explicit 30% back to the standing 20% whenever no rule was passed.
+    rule: { ...(input.paymentRule ?? DEFAULT_PAYMENT_RULE), deposit_percent: depositPercent },
+    overrides: input.scheduleOverrides,
+  })
 
   return {
     org_id: orgId,
@@ -219,16 +264,23 @@ export function buildBookingRow(input: BuildBookingRowInput): Record<string, unk
     total_cost: roundMoney(total),
     // Paired with `total` above, never sourced independently — see the comment
     // on BuildBookingRowInput.currency.
-    currency: input.currency || itinerary.currency || 'EUR',
+    currency,
     tier: itinerary.tier,
 
     status: 'pending',
     payment_status: 'pending',
-    deposit_amount: depositAmount,
+    deposit_amount: schedule.deposit_amount,
     deposit_percent: depositPercent,
     deposit_paid: false,
+    // balance_due is the OUTSTANDING MONEY and stays the full total until
+    // something is paid (see the header). balance_due_date is WHEN the second
+    // instalment falls due. Two different questions that read alike.
     balance_due: balanceDue,
-    ...(input.withDeadline ? { payment_deadline: depositDeadline() } : {}),
+    payment_deadline: schedule.deposit_due_date,
+    balance_due_date: schedule.balance_due_date,
+    payment_schedule_overridden: schedule.overridden.length > 0,
+    payment_schedule_note:
+      input.scheduleNote ?? schedule.note ?? null,
 
     assigned_guide_id: itinerary.assigned_guide_id,
     assigned_vehicle_id: itinerary.assigned_vehicle_id,

@@ -111,7 +111,17 @@ describe('buildBookingRow', () => {
     partner_id: 'partner-1',
   }
 
-  const base = { orgId: 'org-1', bookingCode: 'BKG-2026-0001', itinerary, depositPercent: 30 }
+  // bookedOn is PINNED. buildBookingRow defaults it to today, so without this
+  // every deposit assertion below would change meaning as the calendar moves:
+  // a booking taken inside sixty days of departure collapses to one payment.
+  // That behaviour is covered deliberately further down.
+  const base = {
+    orgId: 'org-1',
+    bookingCode: 'BKG-2026-0001',
+    itinerary,
+    depositPercent: 30,
+    bookedOn: '2026-01-05',
+  }
 
   it('copies trip and client details from the itinerary', () => {
     const row = buildBookingRow(base)
@@ -138,7 +148,7 @@ describe('buildBookingRow', () => {
     // quote's number, so that is what gets booked.
     const row = buildBookingRow({ ...base, total: 5822.05 })
     expect(row.total_cost).toBe(5822.05)
-    expect(row.deposit_amount).toBe(1746.62)
+    expect(row.deposit_amount).toBe(1746.62)  // 30% as asked, not the standing 20%
     expect(row.balance_due).toBe(5822.05)
   })
 
@@ -147,6 +157,37 @@ describe('buildBookingRow', () => {
     expect(row.total_cost).toBe(5000)
     expect(row.deposit_amount).toBe(1500)
     expect(row.balance_due).toBe(5000)
+  })
+
+  it('carries the payment schedule', () => {
+    const row = buildBookingRow(base)
+    // Booked 5 Jan for a 1 Sep departure: deposit +3 days, balance −60 days.
+    expect(row.payment_deadline).toBe('2026-01-08')
+    expect(row.balance_due_date).toBe('2026-07-03')
+    expect(row.payment_schedule_overridden).toBe(false)
+  })
+
+  it('asks for the whole amount when the trip departs inside the balance window', () => {
+    // Booked 15 days out. Splitting would date the balance before the deposit.
+    const row = buildBookingRow({ ...base, bookedOn: '2026-08-17' })
+    expect(row.deposit_amount).toBe(5000)
+    expect(row.balance_due_date).toBeNull()
+    expect(row.payment_schedule_note).toMatch(/inside 60 days/)
+    // The outstanding MONEY is still the full total — a different question
+    // from when it is due.
+    expect(row.balance_due).toBe(5000)
+  })
+
+  it('records a schedule agreed with the customer as an override', () => {
+    const row = buildBookingRow({
+      ...base,
+      scheduleOverrides: { deposit_amount: 2000, balance_due_date: '2026-08-01' },
+      scheduleNote: 'Agreed by email with the client',
+    })
+    expect(row.deposit_amount).toBe(2000)
+    expect(row.balance_due_date).toBe('2026-08-01')
+    expect(row.payment_schedule_overridden).toBe(true)
+    expect(row.payment_schedule_note).toBe('Agreed by email with the client')
   })
 
   it('records the percentage used, so the figure stays explainable', () => {
@@ -163,10 +204,12 @@ describe('buildBookingRow', () => {
     expect(converted.quote_type).toBe('b2b')
   })
 
-  it('sets a deposit deadline only when asked', () => {
-    expect(buildBookingRow(base).payment_deadline).toBeUndefined()
-    const withDeadline = buildBookingRow({ ...base, withDeadline: true })
-    expect(withDeadline.payment_deadline).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  it('always sets a deposit deadline from the rule', () => {
+    // Every booking carries a schedule now — a deposit with no date to pay it
+    // by is not a deposit, and the flag that made it optional is gone.
+    const row = buildBookingRow({ ...base, bookedOn: '2026-08-16' })
+    expect(row.payment_deadline).toBe('2026-08-19')
+    expect(row.payment_schedule_overridden).toBe(false)
   })
 
   it('defaults a missing traveller count to one adult, not zero', () => {

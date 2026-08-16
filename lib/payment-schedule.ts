@@ -65,8 +65,12 @@ export interface PaymentSchedule {
    * balance invoice dated in the past is worse than asking for the lot up front.
    */
   single_payment: boolean
-  /** Why it collapsed, for the operator to see rather than guess at. */
-  single_payment_reason: string | null
+  /**
+   * Anything about this schedule the operator should not have to work out:
+   * why it collapsed to one payment, or why the balance has no date yet.
+   * Null when the standing rule applied cleanly.
+   */
+  note: string | null
   /** Which fields the operator set by hand. */
   overridden: Array<keyof ScheduleOverrides>
 }
@@ -125,19 +129,23 @@ export function computePaymentSchedule(input: PaymentScheduleInput): PaymentSche
   // An operator override is a decision and is honoured even if the dates look
   // odd; only a COMPUTED balance date that lands on or before the deposit
   // collapses, which is the late-booking case.
+  // ONLY a departure we know about, and know to be close, collapses the
+  // payment. An UNKNOWN departure is a different thing entirely: the balance is
+  // still owed and still a balance, we simply cannot say when yet. Treating the
+  // two alike would demand the whole trip price up front from every booking
+  // whose dates were not filled in — turning a missing field into a bill.
   let singlePayment = false
   let reason: string | null = null
 
-  if (!balanceDue && !input.departure_date) {
-    singlePayment = true
-    reason = 'No departure date, so the balance date cannot be derived'
-  } else if (
+  if (
     balanceDue &&
     !overridden.includes('balance_due_date') &&
     compareDates(balanceDue, depositDue) <= 0
   ) {
     singlePayment = true
     reason = `Departure is inside ${rule.balance_due_days_before_departure} days, so the balance would fall due on or before the deposit`
+  } else if (!balanceDue) {
+    reason = 'No departure date yet, so the balance has no due date'
   }
 
   if (singlePayment) {
@@ -147,7 +155,7 @@ export function computePaymentSchedule(input: PaymentScheduleInput): PaymentSche
       balance_amount: 0,
       balance_due_date: null,
       single_payment: true,
-      single_payment_reason: reason,
+      note: reason,
       overridden,
     }
   }
@@ -160,7 +168,7 @@ export function computePaymentSchedule(input: PaymentScheduleInput): PaymentSche
     balance_amount: roundToCurrency(total - depositAmount, input.currency),
     balance_due_date: balanceDue,
     single_payment: false,
-    single_payment_reason: null,
+    note: reason,
     overridden,
   }
 }

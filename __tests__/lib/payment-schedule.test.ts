@@ -69,7 +69,7 @@ describe('late bookings', () => {
     expect(schedule.deposit_amount).toBe(base.total)
     expect(schedule.balance_amount).toBe(0)
     expect(schedule.balance_due_date).toBeNull()
-    expect(schedule.single_payment_reason).toMatch(/inside 60 days/)
+    expect(schedule.note).toMatch(/inside 60 days/)
   })
 
   it('collapses when the balance would land exactly on the deposit date', () => {
@@ -84,10 +84,15 @@ describe('late bookings', () => {
     expect(schedule.balance_due_date).toBe('2026-08-20')
   })
 
-  it('asks for the whole amount when departure is unknown', () => {
+  it('keeps the split when departure is unknown, and says the date is missing', () => {
+    // A missing departure date is not a reason to bill the whole trip up front.
+    // The balance is still owed; we simply cannot say when yet.
     const schedule = computePaymentSchedule({ ...base, departure_date: null })
-    expect(schedule.single_payment).toBe(true)
-    expect(schedule.single_payment_reason).toMatch(/No departure date/)
+    expect(schedule.single_payment).toBe(false)
+    expect(schedule.deposit_amount).toBe(370873)
+    expect(schedule.balance_amount).toBe(1483494)
+    expect(schedule.balance_due_date).toBeNull()
+    expect(schedule.note).toMatch(/No departure date yet/)
   })
 })
 

@@ -7,6 +7,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { paymentRuleFrom } from '@/lib/payment-schedule'
 import {
   buildBookingRow,
   populateSuppliersFromItinerary,
@@ -151,6 +152,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
     }
 
+    // The operator's payment terms. A missing row or missing columns fall back
+    // to the standing rule rather than failing the booking.
+    const { data: org } = await supabaseAdmin
+      .from('organizations')
+      .select('deposit_percent, deposit_due_days, balance_due_days_before_departure')
+      .eq('id', orgId)
+      .maybeSingle()
+
     // Extract partner info if linked
     const partnerInfo = itinerary.b2b_partners as { id: string; company_name: string; partner_code: string } | null
 
@@ -172,8 +181,11 @@ export async function POST(request: NextRequest) {
           orgId,
           bookingCode,
           itinerary,
-          depositPercent: DEFAULT_DEPOSIT_PERCENT,
+          // No caller percentage on this path, so the operator's own rule
+          // decides — not a constant that happens to say something else.
+          depositPercent: paymentRuleFrom(org).deposit_percent,
           partnerName: partnerInfo?.company_name ?? null,
+          paymentRule: paymentRuleFrom(org),
         })
       )
       .select()

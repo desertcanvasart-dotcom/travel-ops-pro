@@ -30,6 +30,7 @@ import {
   populateSuppliersFromItinerary,
   validateDepositPercent,
 } from '@/lib/booking-creation'
+import { paymentRuleFrom } from '@/lib/payment-schedule'
 
 export const dynamic = 'force-dynamic'
 
@@ -257,19 +258,36 @@ export async function POST(request: NextRequest) {
     const bookingCode =
       codeData || `BKG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
 
+    // The operator's payment terms. A missing row or missing columns fall back
+    // to the standing rule rather than failing the booking.
+    const { data: org } = await supabaseAdmin
+      .from('organizations')
+      .select('deposit_percent, deposit_due_days, balance_due_days_before_departure')
+      .eq('id', orgId)
+      .maybeSingle()
+
+    // The org's own terms supply the DEFAULT deposit share. A caller that names
+    // a percentage overrides it; one that says nothing gets the operator's
+    // standing rule rather than a constant that disagrees with it.
+    const rule = paymentRuleFrom(org)
+    const effectiveDepositPercent =
+      body?.deposit_percent == null ? rule.deposit_percent : depositPercent
+
     const partnerInfo = itinerary.b2b_partners as { company_name?: string } | null
     const row = buildBookingRow({
       orgId,
       bookingCode,
       itinerary,
-      depositPercent,
+      depositPercent: effectiveDepositPercent,
       total: quote.selling_price,
       // The agreed price and the currency it was agreed in travel together.
       currency: quote.currency,
       partnerName: partnerInfo?.company_name ?? null,
       quote: { id: quote_id, type: quoteType },
-      // A deposit without a date to pay it by is not a deposit.
-      withDeadline: true,
+      // The org's own terms, falling back to the standing rule. A booking
+      // always carries a schedule now — a deposit without a date to pay it by
+      // is not a deposit.
+      paymentRule: rule,
     })
 
     const { data: booking, error: createError } = await supabaseAdmin
