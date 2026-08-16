@@ -140,7 +140,11 @@ export async function middleware(request: NextRequest) {
   // '/share' is the traveller's itinerary link: public by design, but only for
   // a token that resolves to an unrevoked share. The page itself does that
   // check with the service role (and 404s otherwise) — see app/share/[token].
-  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share']
+  // '/portal' is the same idea for a BOOKING, and unlike /share it accepts
+  // input — the traveller fills in their own passport and contact details there
+  // instead of returning a form by fax. Same shape: the page resolves the token
+  // with the service role and 404s on anything else.
+  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal']
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || 
     (route !== '/' && request.nextUrl.pathname.startsWith(route))
@@ -168,6 +172,11 @@ export async function middleware(request: NextRequest) {
     // matched against a stored hash (lib/integrations/credentials.ts) — a
     // partner platform has no user session and never will.
     '/api/public/v1/',
+    // The traveller's own page. Authenticates by unguessable token rather than
+    // by session — the visitor is a customer, not a user, and never will be.
+    // The route validates the token, checks revocation and expiry, rate-limits
+    // by IP, and writes only allowlisted fields.
+    '/api/portal/',
   ]
   const isSelfAuthApi = apiSelfAuthPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
 
