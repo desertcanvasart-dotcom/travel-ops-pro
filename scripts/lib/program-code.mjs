@@ -132,21 +132,63 @@ export function assignedSequence(code) {
  * is not two claims in conflict — the itinerary has cruise nights, so CR is
  * correct and the filename simply dropped the suffix we now derive anyway.
  *
- * A real conflict is a disagreement about something the itinerary cannot
- * settle: a different carrier, a different departure airport, a different
- * length. MSN-601 claiming to be NEK601 is that — an EgyptAir programme
- * carrying an Emirates code, which means its flight content is suspect too.
+ * A real conflict is a disagreement the itinerary cannot settle. That test is
+ * stricter than it first appears, because these documents say a great deal
+ * about themselves: MSN-601 carries a stray NEK601 label, but its day one
+ * checks in at EgyptAir's Narita terminal, flies エジプト航空 straight to Cairo
+ * and never mentions Dubai. The programme is not in doubt; only a header cell
+ * nobody edited is. Blocking that import taught A.T.S nothing and cost them a
+ * programme.
+ *
+ * So the code is treated as the weaker evidence and the itinerary as the
+ * stronger, which is the right way round — one is a label, the other is what
+ * actually happens.
+ *
+ * @param {string} documentCode
+ * @param {Record<string, any> | null} canonicalFields
+ * @param {{ days?: any[] } | null} [program] the itinerary, when there is one to consult
  */
-export function documentCodeConflicts(documentCode, canonicalFields) {
+export function documentCodeConflicts(documentCode, canonicalFields, program = null) {
   const parsed = parseProgramCode(documentCode)
   if (!parsed.valid || !canonicalFields) return true
 
   const disagreements = []
-  if (parsed.carrier && parsed.carrier !== canonicalFields.carrier) disagreements.push('carrier')
+
+  if (parsed.carrier && parsed.carrier !== canonicalFields.carrier) {
+    // A carrier disagreement is only unresolvable if the ITINERARY is silent.
+    // Usually it is not: these documents name their airline in the day-one
+    // check-in instruction, which is stronger evidence than a label in a header
+    // cell somebody forgot to edit.
+    const flown = program ? carrierFromItinerary(program) : null
+    if (flown !== canonicalFields.carrier) disagreements.push('carrier')
+  }
+
   if (parsed.airport && parsed.airport !== canonicalFields.airport) disagreements.push('airport')
   if (parsed.days !== canonicalFields.days) disagreements.push('length')
 
   return disagreements.length ? disagreements : false
+}
+
+const CARRIER_EVIDENCE = [
+  { carrier: 'MS', pattern: /エジプト航空|EGYPTAIR/i },
+  { carrier: 'EK', pattern: /エミレーツ|EMIRATES/i },
+]
+
+/**
+ * Which airline the itinerary actually flies, read from the day text.
+ *
+ * Returns null when the text is silent, and null when it names BOTH — a
+ * document half-edited from another carrier's original is exactly the case
+ * worth refusing to guess about, and it is the failure this check exists to
+ * catch.
+ */
+export function carrierFromItinerary(program) {
+  const text = (program.days ?? [])
+    .map(d => `${d.title ?? ''} ${d.description ?? ''} ${(d.attractions ?? []).join(' ')}`)
+    .join(' ')
+
+  const found = CARRIER_EVIDENCE.filter(c => c.pattern.test(text)).map(c => c.carrier)
+  return found.length === 1 ? found[0] : null
 }
 
 /** Full-width and typographic dashes all mean the ASCII hyphen here. */

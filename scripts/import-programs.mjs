@@ -108,9 +108,34 @@ for (const file of files) {
   program.problems = program.problems.filter(problem => {
     if (problem.kind !== 'document_code_mismatch') return true
     if (program.assignment) return false
-    const conflict = documentCodeConflicts(problem.documentCode, program.canonical_fields)
-    if (!conflict) return false
-    problem.message += ` — they disagree on ${conflict.join(' and ')}, which the itinerary cannot settle`
+
+    const conflict = documentCodeConflicts(
+      problem.documentCode,
+      program.canonical_fields,
+      program
+    )
+    if (conflict) {
+      problem.message += ` — they disagree on ${conflict.join(' and ')}, which the itinerary cannot settle`
+      return true
+    }
+
+    // Cleared on evidence — but say WHICH of the two is the wrong one, because
+    // "they disagree" is not an instruction anyone can act on. When the label
+    // inside the document already matches what the itinerary says, the label is
+    // right and the FILENAME is the one missing something.
+    const inner = parseProgramCode(problem.documentCode)
+    const labelAgrees =
+      inner.valid &&
+      inner.carrier === program.canonical_fields.carrier &&
+      inner.days === program.canonical_fields.days
+
+    problem.severity = 'warning'
+    problem.message = labelAgrees
+      ? `The filename says ${program.code} but the document says ${problem.documentCode}, ` +
+        `which matches the itinerary. The label is right; the FILENAME is the short one.`
+      : `A stale "${problem.documentCode}" label is left inside the document. ` +
+        `The itinerary is consistent with ${program.code}, so this imports — ` +
+        `but the label is wrong and worth correcting at the source.`
     return true
   })
 

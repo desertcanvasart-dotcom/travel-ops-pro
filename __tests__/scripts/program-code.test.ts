@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   assignedSequence,
   auditProgramCode,
+  carrierFromItinerary,
   canonicalFieldsFor,
   canonicalFor,
   findSequenceCollisions,
@@ -278,5 +279,52 @@ describe('documentCodeConflicts', () => {
 
   it('treats an unreadable document code as a conflict', () => {
     expect(documentCodeConflicts('rubbish', canonical)).toBe(true)
+  })
+})
+
+describe('carrierFromItinerary', () => {
+  const withText = (text: string) => ({ days: [{ description: text }] })
+
+  it('reads EgyptAir from the check-in instruction', () => {
+    expect(carrierFromItinerary(withText('成田空港発 エジプト航空XX便にて空路、カイロへ'))).toBe('MS')
+  })
+
+  it('reads Emirates', () => {
+    expect(carrierFromItinerary(withText('成田空港発　エミレーツ航空XXX便にて空路　ドバイへ'))).toBe('EK')
+  })
+
+  it('returns null when the itinerary names BOTH', () => {
+    // A document half-edited from another carrier's original is exactly the
+    // case worth refusing to guess about.
+    expect(carrierFromItinerary(withText('エジプト航空 ... エミレーツ航空'))).toBeNull()
+  })
+
+  it('returns null when the itinerary is silent', () => {
+    expect(carrierFromItinerary(withText('カイロ市内観光'))).toBeNull()
+  })
+})
+
+describe('documentCodeConflicts — with itinerary evidence', () => {
+  const canonical = { airport: 'N', carrier: 'MS', days: 6 }
+  const egyptair = { days: [{ description: '成田空港発 エジプト航空XX便にて空路、カイロへ' }] }
+
+  it('clears a carrier disagreement the itinerary can settle', () => {
+    // MSN-601 carries a stray NEK601 label, but flies EgyptAir from Narita
+    // Terminal 1 with no Dubai transit. The label is stale, not the programme.
+    expect(documentCodeConflicts('NEK601', canonical, egyptair)).toBe(false)
+  })
+
+  it('still conflicts when the itinerary does not back the code', () => {
+    const silent = { days: [{ description: 'カイロ市内観光' }] }
+    expect(documentCodeConflicts('NEK601', canonical, silent)).toEqual(['carrier'])
+  })
+
+  it('still conflicts when the itinerary names both carriers', () => {
+    const both = { days: [{ description: 'エジプト航空 ... エミレーツ航空' }] }
+    expect(documentCodeConflicts('NEK601', canonical, both)).toEqual(['carrier'])
+  })
+
+  it('does not let carrier evidence excuse a length disagreement', () => {
+    expect(documentCodeConflicts('NMS1201-LND', canonical, egyptair)).toEqual(['length'])
   })
 })
