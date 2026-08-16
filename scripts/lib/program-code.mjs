@@ -17,14 +17,17 @@
 // the label differs. Nothing has to be rewritten for the inconsistency to stop
 // costing anything.
 //
-// THE CANON:  [airport][carrier][class?][days][seq]-[type]
+// THE CANON:  [airport][carrier][class?][days][seq]-[type]{-feature}
 //
 //   airport  N  Narita (Tokyo) · K  Kansai (Osaka)   — always first
 //   carrier  EK Emirates       · MS EgyptAir         — always second
-//   class    BZ business       · omitted = economy
+//   class    BZ business       · omitted = economy (the default)
 //   days     the programme's real length
-//   seq      two digits, unique within one (airport, carrier, class, days)
-//   type     CR Nile cruise    · LND land
+//   seq      two digits, identifying ONE programme within (airport, carrier,
+//            days). Cabin is not part of that identity: MSBZ805-CR and
+//            MSN805-CR are the same trip sold twice, and sharing 805 is right.
+//   type     CR Nile cruise    · LND land — exactly one, mandatory
+//   feature  any number, fixed order — see FEATURES below
 //
 // Known deviations in the existing catalogue, all tolerated on read:
 //   * carrier-first ordering (MSN… instead of NMS…)
@@ -43,6 +46,58 @@ export const AIRPORTS = { N: 'Narita', K: 'Kansai' }
 export const CARRIERS = { EK: 'Emirates', MS: 'EgyptAir' }
 export const SERVICE_CLASSES = { BZ: 'business' }
 export const PROGRAM_TYPES = { CR: 'Nile cruise', LND: 'Land' }
+
+// ---------------------------------------------------------------------------
+// FEATURES — what makes one programme worth telling apart from another
+// ---------------------------------------------------------------------------
+// The owner's rule, in his words: a destination earns a place in the code when
+// STAYING there is unusual. Nobody is surprised by a night in Luxor or Aswan,
+// so those never appear. A night in Abu Simbel or Alexandria is worth
+// announcing, so it does.
+//
+// That generalises cleanly to the rest of what his codes were already trying to
+// say — the Red Sea, the Western Desert, Jordan are all "we sleep somewhere
+// people do not expect". So every feature below is an UNUSUAL OVERNIGHT, with a
+// single exception: the sleeper train, which is a way of travelling rather than
+// a place. One rule, one exception, which is about as much as a code scheme can
+// carry before it starts drifting again.
+//
+// Order is fixed. Which order matters far less than it not changing.
+export const FEATURES = [
+  { token: 'ABS', label: 'night in Abu Simbel', overnight: ['Abu Simbel'] },
+  { token: 'ALX', label: 'night in Alexandria', overnight: ['Alexandria'] },
+  { token: 'HRG', label: 'nights on the Red Sea', overnight: ['Hurghada', 'Sharm El Sheikh'] },
+  { token: 'DST', label: 'nights in the Western Desert', overnight: ['Bahariya Oasis', 'Siwa Oasis'] },
+  { token: 'JOR', label: 'nights in Jordan', overnight: ['Petra', 'Dead Sea', 'Amman'] },
+  // The one feature that is a way of travelling rather than a place. It also
+  // has to read the day text: NEK1001's sleeper-train night is labelled 車中泊
+  // ("night in a vehicle") in the source, while the same day's text names the
+  // 寝台列車「ナイルエクスプレス」. Trusting only the label would lose it.
+  { token: 'TRN', label: 'sleeper train', overnight: [], kind: 'train', text: /寝台列車|ナイルエクスプレス/ },
+]
+
+/**
+ * The features a programme actually has, read off its itinerary.
+ *
+ * Deliberately NOT read off the old code: the whole point is that the old code
+ * is unreliable, and eight programmes have an Abu Simbel night without saying
+ * so. The itinerary is the evidence.
+ */
+export function deriveFeatures(program) {
+  const days = program.days ?? []
+  const overnights = new Set(days.map(d => d.overnight_city).filter(Boolean))
+  const kinds = new Set(days.map(d => d.overnight_kind))
+  const text = days
+    .map(d => `${d.description ?? ''} ${(d.attractions ?? []).join(' ')}`)
+    .join(' ')
+
+  return FEATURES.filter(f => {
+    if (f.overnight.some(city => overnights.has(city))) return true
+    if (f.kind && kinds.has(f.kind)) return true
+    if (f.text && f.text.test(text)) return true
+    return false
+  }).map(f => f.token)
+}
 
 /** Full-width and typographic dashes all mean the ASCII hyphen here. */
 function normalizeDashes(text) {
@@ -168,10 +223,12 @@ export function formatProgramCode({
   days,
   sequence,
   type = 'LND',
+  features = [],
 }) {
   const cabin = service_class === 'business' ? 'BZ' : ''
   const seq = String(sequence ?? '').padStart(2, '0')
-  return `${airport ?? '?'}${carrier ?? '??'}${cabin}${days}${seq}-${type ?? 'LND'}`
+  const tail = [type ?? 'LND', ...features].join('-')
+  return `${airport ?? '?'}${carrier ?? '??'}${cabin}${days}${seq}-${tail}`
 }
 
 /**
@@ -188,6 +245,7 @@ export function canonicalFieldsFor(parsed, program) {
     days: program.duration_days,
     sequence: parsed.sequence,
     type: hasCruise ? 'CR' : 'LND',
+    features: deriveFeatures(program),
   }
 }
 
@@ -238,21 +296,32 @@ export function auditProgramCode(parsed, program) {
 }
 
 /**
- * Sequence numbers must be unique within one (airport, carrier, class, days)
- * bucket. The suffix is NOT part of the identity — the operator has confirmed
- * that two programmes sharing a number is an accident, not a variant scheme.
+ * A sequence number identifies ONE programme within an (airport, carrier, days)
+ * bucket. Cabin is NOT part of that identity, and the catalogue proves why:
+ * MSBZ805-CR and MSN805-CR have the same overnights, the same hotel and the
+ * same sightseeing. They are one programme sold in two cabins, and sharing 805
+ * is correct.
+ *
+ * So a shared number is only a collision when the programmes genuinely differ —
+ * a different type or different features. Same type and features means cabin
+ * variants, which is the scheme working.
  *
  * Run this over CANONICAL fields, not the spellings as written. Two codes can
- * look distinct and still resolve to the same programme identity — MSN1005-CR
- * is an 8-day programme, so it lands on 8-day #05, where MSN805-CR already is.
+ * look distinct and still resolve to the same identity: MSN1005-CR is an 8-day
+ * programme, so it lands on 8-day #05, where MSN805-CR already sits.
  */
 export function findSequenceCollisions(entries) {
   const buckets = new Map()
   for (const { code, fields } of entries) {
     if (!fields) continue
-    const key = [fields.airport, fields.carrier, fields.service_class, fields.days].join('/')
+    const key = [fields.airport, fields.carrier, fields.days].join('/')
     const list = buckets.get(key) ?? []
-    list.push({ code, sequence: fields.sequence })
+    list.push({
+      code,
+      sequence: fields.sequence,
+      // What actually distinguishes one programme from another.
+      identity: [fields.type, ...(fields.features ?? [])].join('-'),
+    })
     buckets.set(key, list)
   }
 
@@ -261,18 +330,22 @@ export function findSequenceCollisions(entries) {
     const bySequence = new Map()
     for (const item of list) {
       const same = bySequence.get(item.sequence) ?? []
-      same.push(item.code)
+      same.push(item)
       bySequence.set(item.sequence, same)
     }
-    for (const [sequence, codes] of bySequence) {
-      if (codes.length > 1) collisions.push({ bucket: key, sequence, codes })
+    for (const [sequence, items] of bySequence) {
+      // One distinct identity on a number is fine however many cabins sell it.
+      const identities = new Set(items.map(i => i.identity))
+      if (identities.size > 1) {
+        collisions.push({ bucket: key, sequence, codes: items.map(i => i.code), identities: [...identities] })
+      }
     }
   }
   return collisions
 }
 
 /** Sequence numbers already taken in a bucket, so a free one can be suggested. */
-export function nextFreeSequence(entries, { airport, carrier, service_class, days }) {
+export function nextFreeSequence(entries, { airport, carrier, days }) {
   const taken = new Set(
     entries
       .filter(
@@ -280,7 +353,6 @@ export function nextFreeSequence(entries, { airport, carrier, service_class, day
           e.fields &&
           e.fields.airport === airport &&
           e.fields.carrier === carrier &&
-          e.fields.service_class === service_class &&
           e.fields.days === days
       )
       .map(e => e.fields.sequence)

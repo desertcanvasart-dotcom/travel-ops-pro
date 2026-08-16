@@ -23,7 +23,7 @@ describe('parseProgramCode — the canonical form', () => {
     expect(c).toMatchObject({
       airport: 'N',
       airport_name: 'Narita',
-      carrier: 'MS' === 'MS' ? 'EK' : 'EK',
+      carrier: 'EK',
       carrier_name: 'Emirates',
       service_class: 'economy',
       days: 8,
@@ -167,6 +167,7 @@ describe('findSequenceCollisions', () => {
     days: 8,
     sequence: '05',
     type: 'CR',
+    features: [],
     ...over,
   })
 
@@ -179,6 +180,7 @@ describe('findSequenceCollisions', () => {
     ])
     expect(collisions).toHaveLength(1)
     expect(collisions[0].codes).toEqual(['MSN805-CR', 'MSN805-LND'])
+    expect(collisions[0].identities).toEqual(['CR', 'LND'])
   })
 
   it('catches a collision only visible after canonicalisation', () => {
@@ -186,19 +188,29 @@ describe('findSequenceCollisions', () => {
     // 8-day #05 where MSN805-CR already sits.
     const collisions = findSequenceCollisions([
       { code: 'MSN805-CR', fields: fields({}) },
-      { code: 'MSN1005-CR', fields: fields({}) },
+      { code: 'MSN1005-CR', fields: fields({ features: ['ABS'] }) },
     ])
     expect(collisions[0].codes).toHaveLength(2)
   })
 
-  it('does not collide across different lengths, carriers or cabins', () => {
+  it('does not collide across different lengths, carriers or airports', () => {
     expect(
       findSequenceCollisions([
         { code: 'a', fields: fields({}) },
         { code: 'b', fields: fields({ days: 10 }) },
         { code: 'c', fields: fields({ carrier: 'EK' }) },
-        { code: 'd', fields: fields({ service_class: 'business' }) },
-        { code: 'e', fields: fields({ airport: 'K' }) },
+        { code: 'd', fields: fields({ airport: 'K' }) },
+      ])
+    ).toEqual([])
+  })
+
+  it('allows one number to be shared by cabin variants of ONE programme', () => {
+    // MSBZ805-CR and MSN805-CR have the same overnights, hotel and sightseeing.
+    // They are one trip sold in two cabins, so sharing 805 is correct.
+    expect(
+      findSequenceCollisions([
+        { code: 'MSN805-CR', fields: fields({ service_class: 'economy' }) },
+        { code: 'MSBZ805-CR', fields: fields({ service_class: 'business' }) },
       ])
     ).toEqual([])
   })
@@ -208,8 +220,6 @@ describe('findSequenceCollisions', () => {
       { code: 'a', fields: fields({ sequence: '01' }) },
       { code: 'b', fields: fields({ sequence: '05' }) },
     ]
-    expect(
-      nextFreeSequence(entries, { airport: 'N', carrier: 'MS', service_class: 'economy', days: 8 })
-    ).toBe('02')
+    expect(nextFreeSequence(entries, { airport: 'N', carrier: 'MS', days: 8 })).toBe('02')
   })
 })

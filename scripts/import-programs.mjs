@@ -158,18 +158,14 @@ const collisions = findSequenceCollisions(entries)
 if (collisions.length) {
   console.log(`\n${C.bold('SEQUENCE COLLISIONS')}\n`)
   for (const c of collisions) {
-    const [airport, carrier, serviceClass, days] = c.bucket.split('/')
-    const free = nextFreeSequence(entries, {
-      airport,
-      carrier,
-      service_class: serviceClass,
-      days: Number(days),
-    })
+    const [airport, carrier, days] = c.bucket.split('/')
+    const free = nextFreeSequence(entries, { airport, carrier, days: Number(days) })
     console.log(
       `  ${C.yellow(c.codes.join('  ·  '))}\n` +
         C.dim(
-          `    all ${c.codes.length} resolve to ${days}-day #${c.sequence} on ${carrier}/${airport}. ` +
-            `Next free number: ${free}\n`
+          `    ${c.identities.length} different programmes share ${days}-day #${c.sequence} ` +
+            `on ${carrier}/${airport}: ${c.identities.join(' vs ')}\n` +
+            `    ${c.identities.length - 1} need a new number. Next free: ${free}\n`
         )
     )
   }
