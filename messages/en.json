@@ -2580,8 +2580,6 @@
       "documentContacts": "Document header contacts",
       "documentContactsHint": "The contact slots printed in the itinerary document header. Blank slots print blank.",
       "slots": {
-        "cairo_guide": "Cairo guide",
-        "south_guide": "Southern guide",
         "emergency_japan": "Emergency contact (Japan)",
         "cairo_office": "Cairo office"
       },

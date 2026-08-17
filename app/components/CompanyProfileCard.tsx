@@ -26,7 +26,11 @@ interface Profile {
   document_contacts: Record<string, string>
 }
 
-const CONTACT_SLOTS = ['cairo_guide', 'south_guide', 'emergency_japan', 'cairo_office'] as const
+// Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
+// per-trip facts — a different guide each departure — so they are filled at
+// the itinerary level, never here; the programme document prints them blank
+// exactly like the office's own template files.
+const CONTACT_SLOTS = ['emergency_japan', 'cairo_office'] as const
 
 export default function CompanyProfileCard() {
   const t = useTranslations('settings.companyProfile')
