@@ -377,6 +377,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       variation_id,
+      // Alternative to variation_id: price a template directly. The engine
+      // (calculateAutoPricing) needs only templateId + tier + pax — a variation
+      // is a services lookup, not a pricing requirement. Imported programmes
+      // (A.T.S catalogue) have itineraries but no variations, and must still
+      // be priceable.
+      template_id = null,
       num_pax = 2,
       // NEW: Passenger breakdown for child discounts
       num_adults,
@@ -412,39 +418,71 @@ export async function POST(request: NextRequest) {
       margin_percent
     })
 
-    if (!variation_id) {
-      return NextResponse.json({ error: 'variation_id is required' }, { status: 400 })
+    if (!variation_id && !template_id) {
+      return NextResponse.json({ error: 'variation_id or template_id is required' }, { status: 400 })
     }
 
-    // Fetch variation with template info
-    const { data: variation, error: varError } = await supabaseAdmin
-      .from('tour_variations')
-      .select(`
-        id, variation_name, variation_code, tier, group_type, min_pax, max_pax,
-        tour_templates (id, template_name, template_code, duration_days, uses_day_builder, pricing_mode)
-      `)
-      .eq('id', variation_id)
-      .single()
+    let variation: any
+    if (variation_id) {
+      // Fetch variation with template info
+      const { data: varRow, error: varError } = await supabaseAdmin
+        .from('tour_variations')
+        .select(`
+          id, variation_name, variation_code, tier, group_type, min_pax, max_pax,
+          tour_templates (id, template_name, template_code, duration_days, uses_day_builder, pricing_mode)
+        `)
+        .eq('id', variation_id)
+        .single()
 
-    if (varError || !variation) {
-      console.error('Variation fetch error:', varError)
-      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+      if (varError || !varRow) {
+        console.error('Variation fetch error:', varError)
+        return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+      }
+      variation = varRow
+    } else {
+      // Template-direct: synthesize the variation shape the rest of this route
+      // expects. No services row exists, so the auto-pricing fallback below is
+      // the path that will actually price it.
+      const { data: templateRow, error: tplError } = await supabaseAdmin
+        .from('tour_templates')
+        .select('id, template_name, template_code, duration_days, uses_day_builder, pricing_mode')
+        .eq('id', template_id)
+        .single()
+
+      if (tplError || !templateRow) {
+        console.error('Template fetch error:', tplError)
+        return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+      }
+      variation = {
+        id: null,
+        variation_name: `${templateRow.template_name} (${tier})`,
+        variation_code: null,
+        tier,
+        group_type: 'private',
+        min_pax: 1,
+        max_pax: 15,
+        tour_templates: templateRow,
+      }
     }
 
     const effectiveTier = (variation.tier || tier) as ServiceTier
     const template = variation.tour_templates as any
     const templateId = template?.id
 
-    // Fetch services for this variation
-    const { data: services, error: servError } = await supabaseAdmin
-      .from('tour_variation_services')
-      .select('*')
-      .eq('variation_id', variation_id)
-      .order('sequence_order')
+    // Fetch services for this variation (template-direct requests have none).
+    let services: any[] | null = null
+    if (variation_id) {
+      const { data: serviceRows, error: servError } = await supabaseAdmin
+        .from('tour_variation_services')
+        .select('*')
+        .eq('variation_id', variation_id)
+        .order('sequence_order')
 
-    if (servError) {
-      console.error('Services fetch error:', servError)
-      return NextResponse.json({ error: 'Failed to fetch services' }, { status: 500 })
+      if (servError) {
+        console.error('Services fetch error:', servError)
+        return NextResponse.json({ error: 'Failed to fetch services' }, { status: 500 })
+      }
+      services = serviceRows
     }
 
     // ============================================

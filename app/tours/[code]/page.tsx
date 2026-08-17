@@ -34,7 +34,9 @@ import {
 } from 'lucide-react'
 
 interface TourDetail {
-  variation_id: string
+  // null for programmes without variations (imported catalogue) — those price
+  // template-direct instead.
+  variation_id: string | null
   template_id: string
   template_name: string
   template_code: string
@@ -45,8 +47,8 @@ interface TourDetail {
   short_description: string
   long_description: string
   highlights: string[]
-  variation_name: string
-  variation_code: string
+  variation_name: string | null
+  variation_code: string | null
   tier: string
   group_type: string
   min_pax: number
@@ -170,12 +172,13 @@ export default function TourDetailPage() {
     }
   }, [params.code])
 
-  // Calculate price when tour loads or params change
+  // Calculate price when tour loads or params change. Programmes without
+  // variations (imported catalogue) price template-direct at the default tier.
   useEffect(() => {
-    if (tour?.variation_id) {
+    if (tour?.variation_id || tour?.template_id) {
       calculatePrice()
     }
-  }, [tour?.variation_id, selectedPax, travelDate, isEurPassport])
+  }, [tour?.variation_id, tour?.template_id, selectedPax, travelDate, isEurPassport])
 
   const fetchTourDetail = async (code: string) => {
     try {
@@ -208,7 +211,7 @@ export default function TourDetailPage() {
   }
 
   const calculatePrice = async () => {
-    if (!tour?.variation_id) return
+    if (!tour?.variation_id && !tour?.template_id) return
 
     setPricingLoading(true)
     setPricingError(null)
@@ -218,7 +221,9 @@ export default function TourDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          variation_id: tour.variation_id,
+          ...(tour.variation_id
+            ? { variation_id: tour.variation_id }
+            : { template_id: tour.template_id, tier: tour.tier || 'standard' }),
           num_pax: selectedPax,
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
