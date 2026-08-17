@@ -44,6 +44,7 @@ import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import PassengerManifest from '@/components/PassengerManifest'
 import SendConfirmationButton from '@/components/SendConfirmationButton'
+import PortalLinkCard from '@/app/components/PortalLinkCard'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
@@ -260,8 +261,16 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     )
   }
 
-  const statusConfig = BOOKING_STATUS_CONFIG[booking.status]
-  const paymentStatusConfig = PAYMENT_STATUS_CONFIG[booking.payment_status]
+  // A status outside the config vocabulary used to take the WHOLE page down
+  // with "cannot read properties of undefined". Nothing in the database
+  // constrains these columns, so one unexpected value — from an import, a
+  // migration, or another service — white-screened a booking rather than
+  // showing an unfamiliar label.
+  const UNKNOWN = { label: booking.status ?? 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-100' }
+  const statusConfig = BOOKING_STATUS_CONFIG[booking.status] ?? UNKNOWN
+  const paymentStatusConfig =
+    PAYMENT_STATUS_CONFIG[booking.payment_status] ??
+    { ...UNKNOWN, label: booking.payment_status ?? 'Unknown' }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -346,6 +355,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           </div>
         )}
       </div>
+
+      {/* The traveller's own link — mint, copy, revoke. */}
+      <PortalLinkCard bookingId={resolvedParams.id} />
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow-sm border mb-6">

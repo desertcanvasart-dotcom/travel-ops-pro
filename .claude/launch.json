@@ -1,12 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    {
-      "name": "next-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000,
-      "autoPort": true
-    }
+    { "name": "travel-ops-pro", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "-p", "3007"], "port": 3007 }
   ]
 }

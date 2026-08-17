@@ -62,19 +62,46 @@ export async function POST(
 
     const {
       title,
+      // The ROMANISED name — must match the passport exactly.
       first_name,
       last_name,
+      // The same name in the other two scripts a Japanese traveller has.
+      family_name_kanji,
+      given_name_kanji,
+      family_name_kana,
+      given_name_kana,
       date_of_birth,
       gender,
       nationality,
       email,
       phone,
+      home_phone,
+      fax,
+      employer_name,
+      employer_phone,
+      postal_code,
+      address,
+      address_kana,
+      // 書類送付先 — where the final documents are posted, when that differs.
+      documents_postal_code,
+      documents_address,
+      documents_address_kana,
       emergency_contact_name,
+      emergency_contact_kana,
       emergency_contact_phone,
+      // 続柄 — a number without a relationship does not say who is being called.
+      emergency_contact_relationship,
       passport_number,
+      passport_issued_date,
       passport_expiry,
       passport_issuing_country,
+      // 'applying' means the traveller has applied and passport_expected_date
+      // says when — a real state on their form, not a missing answer.
+      passport_status = 'held',
+      passport_expected_date,
       visa_required,
+      insurance_requested,
+      insurance_plan_code,
       passenger_type = 'adult',
       is_lead_passenger = false,
       room_type,
@@ -82,6 +109,8 @@ export async function POST(
       mobility_requirements,
       medical_conditions,
       special_requests,
+      // 'customer' when the traveller filled it in themselves.
+      details_source,
     } = body
 
     if (!first_name || !last_name) {
@@ -94,17 +123,38 @@ export async function POST(
       title,
       first_name,
       last_name,
+      family_name_kanji,
+      given_name_kanji,
+      family_name_kana,
+      given_name_kana,
       date_of_birth,
       gender,
       nationality,
       email,
       phone,
+      home_phone,
+      fax,
+      employer_name,
+      employer_phone,
+      postal_code,
+      address,
+      address_kana,
+      documents_postal_code,
+      documents_address,
+      documents_address_kana,
       emergency_contact_name,
+      emergency_contact_kana,
       emergency_contact_phone,
+      emergency_contact_relationship,
       passport_number,
+      passport_issued_date,
       passport_expiry,
       passport_issuing_country,
+      passport_status,
+      passport_expected_date,
       visa_required,
+      insurance_requested,
+      insurance_plan_code,
       passenger_type,
       is_lead_passenger,
       room_type,
@@ -112,6 +162,10 @@ export async function POST(
       mobility_requirements,
       medical_conditions,
       special_requests,
+      // Stamped only when somebody actually returned the details. NULL is the
+      // chase list, so it must not be set just because a row exists.
+      details_source: details_source ?? null,
+      details_submitted_at: details_source ? new Date().toISOString() : null,
     }
 
     const { data: passenger, error } = await supabase

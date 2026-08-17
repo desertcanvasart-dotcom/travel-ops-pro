@@ -72,6 +72,14 @@ export const RATE_LIMITS = {
     limit: 10,         // invites
     windowMs: 3600000, // per hour
   },
+  // The traveller's own page. Unauthenticated by design — the visitor is a
+  // customer, not a user — so it is the one write path with no session behind
+  // it. Generous enough that filling a form field by field never trips it,
+  // tight enough that the endpoint is not a useful thing to hammer.
+  portal: {
+    limit: 60,         // requests
+    windowMs: 60000,   // per minute
+  },
 }
 
 // ============================================

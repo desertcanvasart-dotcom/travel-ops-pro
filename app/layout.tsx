@@ -24,9 +24,32 @@ export default function RootLayout({
   // Prefixed public sections, matched by prefix because their paths are dynamic.
   // /share/[token] is a CLIENT-facing page: a traveller must never be shown the
   // operator's sidebar and navigation.
-  const publicPrefixes = ['/share/']
+  // '/portal/' is the same: the traveller's own page for a booking. It also
+  // ACCEPTS input, which makes showing them the operator's navigation worse
+  // than merely untidy.
+  const publicPrefixes = ['/share/', '/portal/']
   const isPublicPage =
     publicPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p))
+
+  // A CUSTOMER page — token-gated, no session, never will have one. It mounts
+  // none of the operator providers, because AuthProvider and
+  // PreferencesProvider fetch /api/notifications, /api/user-preferences and
+  // /api/exchange-rates on mount. With no session those 401 in a loop: noise in
+  // the operator's logs, needless requests from a traveller's phone, and enough
+  // re-rendering to make the page feel broken.
+  //
+  // The marketing pages keep the providers — some of them use translations.
+  const isCustomerPage = publicPrefixes.some(p => pathname.startsWith(p))
+
+  if (isCustomerPage) {
+    return (
+      <html lang={pathname.startsWith('/portal/') ? 'ja' : 'en'} suppressHydrationWarning>
+        <body className={inter.className} suppressHydrationWarning>
+          <main className="min-h-screen">{children}</main>
+        </body>
+      </html>
+    )
+  }
 
   return (
     <html lang="en" suppressHydrationWarning>
