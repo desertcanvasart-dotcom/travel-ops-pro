@@ -1,4 +1,7 @@
 // GET /api/documents/program-itinerary?template_id=…&format=pdf|html[&print=1]
+//   [&departure_date=YYYY-MM-DD&cairo_guide=…&south_guide=…&author=…]
+// Departure params fill the date column, the guide cells and 作成者 — the
+// office-held facts of one departure. Absent params render the blank template.
 //
 // Renders the customer-facing 日程表 for one programme, in the office's own
 // document layout. `format=html` is the same document the PDF is made from —
@@ -69,6 +72,13 @@ export async function GET(request: NextRequest) {
       ? { ...(org as any), logo_url: await inlineImage((org as any).logo_url) }
       : null
 
+    const departure = {
+      start_date: params.get('departure_date'),
+      cairo_guide: params.get('cairo_guide'),
+      south_guide: params.get('south_guide'),
+      author: params.get('author'),
+    }
+
     const context = assembleProgramItinerary({
       template_code: program.template_code,
       itinerary: program.itinerary,
@@ -76,6 +86,7 @@ export async function GET(request: NextRequest) {
       created_date: createdDate,
       font_face_css: await getJapaneseFontFace(),
       org: orgForDoc,
+      departure,
     })
 
     let html = template.render(context)
