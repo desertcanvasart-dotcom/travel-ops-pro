@@ -262,7 +262,8 @@
     "signOut": "サインアウト",
     "bookings": "予約管理",
     "capacity": "稼働状況",
-    "integrations": "外部連携"
+    "integrations": "外部連携",
+    "departments": "部署"
   },
   "roles": {
     "admin": "管理者",
@@ -7498,5 +7499,19 @@
     "total": "合計",
     "type": "タイプ",
     "downloadPDF": "PDFをダウンロード"
+  },
+  "departments": {
+    "loading": "部署を読み込み中…",
+    "title": "部署",
+    "subtitle": "各サービス種別は1つの部署に割り当てられ、生成されたタスクはその部署のメンバーに届きます。",
+    "memberCount": "{count}名",
+    "active": "有効",
+    "descriptionPlaceholder": "説明（任意）",
+    "routedTypes": "担当サービス種別",
+    "ownedBy": "{name} に割り当て済み — 先にそちらで外してください",
+    "save": "保存",
+    "saved": "保存しました",
+    "newPlaceholder": "新しい部署名",
+    "create": "作成"
   }
 }
