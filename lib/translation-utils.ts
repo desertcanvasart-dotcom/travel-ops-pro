@@ -1,6 +1,7 @@
 // lib/translation-utils.ts
 // Utility functions for translating content between languages
 
+import { translateSingle } from './translate-core'
 import type { Language } from '@/types/multilingual'
 
 /**
@@ -17,47 +18,19 @@ export async function translateText(
     return null
   }
 
-  try {
-    // Determine action based on languages
-    let action: 'toEnglish' | 'fromEnglish'
-    let targetLanguage: string | undefined
-
-    if (toLang === 'en') {
-      action = 'toEnglish'
-    } else {
-      action = 'fromEnglish'
-      targetLanguage = toLang === 'ja' ? 'Japanese' : toLang
-    }
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/translate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        action,
-        targetLanguage
-      })
-    })
-
-    const data = await response.json().catch(() => null)
-
-    if (response.ok && data?.success && data.data?.translatedText) {
-      return data.data.translatedText
-    }
-
-    // Systemic failure (retired model, outage, bad key, rate limit). DO NOT
-    // silently return the English original — that's the silent-failure class
-    // that produced "Japanese" versions that were actually still English with
-    // a SUCCESS response. Throw so the caller (copy-translate routes) surfaces
-    // a clear error instead of writing untranslated content. The route already
-    // localized data.error via the cookie pattern.
-    const reason = data?.error || `translate API returned ${response.status}`
-    throw new Error(reason)
-  } catch (error) {
-    // Re-throw so the failure is visible to the operator. (Empty input is
-    // handled by the early `return null` above and never reaches here.)
-    throw error instanceof Error ? error : new Error(String(error))
-  }
+  // IN-PROCESS, deliberately. This used to fetch our own /api/translate over
+  // HTTP; every caller of this file is a server route, so the request carried
+  // no session cookie and the API auth gate 401'd it — all three
+  // copy-translate features failed with "Unauthorized" on their own internal
+  // call from the day the gate shipped. NEVER fetch our own /api/* from
+  // server code (same lesson as lib/email-send.ts).
+  //
+  // Failures still THROW rather than returning the original text — the
+  // silent-failure class that once produced "Japanese" versions that were
+  // still English with a SUCCESS response.
+  const action = toLang === 'en' ? 'toEnglish' : 'fromEnglish'
+  const targetLanguage = toLang === 'ja' ? 'Japanese' : toLang
+  return translateSingle({ text, action, targetLanguage })
 }
 
 /**

@@ -34,16 +34,73 @@ export async function GET(request: NextRequest) {
 
     const rates: AvailableRate[] = []
 
-    // Transportation rates (one row per service with tiered vehicle rates)
-    if (!rate_type || rate_type === 'transportation') {
-      const { data } = await supabaseAdmin
+    // Six independent tables. The rate picker's DEFAULT request has no type
+    // filter and therefore needs all six — and they used to run one after
+    // another, so the picker paid six round trips of latency for one screen.
+    // Supabase builders are lazy: nothing executes until awaited, so building
+    // them first and awaiting together is what actually makes them concurrent.
+    // Processing stays in the original order below, so the response body is
+    // byte-identical to the sequential version.
+    // transportation
+    const q_trans =
+      !rate_type || rate_type === 'transportation'
+        ? supabaseAdmin
         .from('transportation_rates')
         .select('id, service_code, service_type, route_name, city, origin_city, destination_city, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur, supplier_id, suppliers (name)')
         .eq('is_active', true)
         .order('city')
         .order('service_type')
+        : null
+    // guide
+    const q_guide =
+      !rate_type || rate_type === 'guide'
+        ? supabaseAdmin
+        .from('guide_rates')
+        .select('id, guide_type, city, half_day_rate, full_day_rate, supplier_id, suppliers (name)')
+        .eq('is_active', true)
+        .order('city')
+        : null
+    // activity
+    const q_activ =
+      !rate_type || rate_type === 'activity'
+        ? supabaseAdmin
+        .from('activity_rates')
+        .select('id, activity_name, activity_category, city, base_rate_eur, base_rate_non_eur, supplier_id, suppliers (name)')
+        .eq('is_active', true)
+        .order('activity_name')
+        : null
+    // meal
+    const q_meal =
+      !rate_type || rate_type === 'meal'
+        ? supabaseAdmin
+        .from('meal_rates')
+        .select('id, restaurant_name, meal_type, tier, cuisine, city, base_rate_eur, base_rate_non_eur, supplier_id, suppliers (name)')
+        .eq('is_active', true)
+        .order('restaurant_name')
+        : null
+    // accommodation
+    const q_accom =
+      !rate_type || rate_type === 'accommodation'
+        ? supabaseAdmin
+        .from('accommodation_rates')
+        .select('id, hotel_name, room_type, city, star_rating, rate_low_season_sgl, rate_high_season_sgl, rate_peak_season_sgl, supplier_id, suppliers (name)')
+        .eq('is_active', true)
+        .order('hotel_name')
+        : null
+    // cruise
+    const q_cruis =
+      !rate_type || rate_type === 'cruise'
+        ? supabaseAdmin
+        .from('nile_cruises')
+        .select('id, ship_name, cabin_type, cruise_type, nights, rate_low_season, rate_high_season, rate_peak_season, supplier_id, suppliers (name)')
+        .eq('is_active', true)
+        .order('ship_name')
+        : null
 
-      if (data) {
+    const [r_trans, r_guide, r_activ, r_meal, r_accom, r_cruis] = await Promise.all([q_trans, q_guide, q_activ, q_meal, q_accom, q_cruis])
+
+    if (r_trans?.data) {
+      const data = r_trans.data
         for (const r of data) {
           // Find the cheapest available tier rate for display
           const tierRates = [r.sedan_rate_eur, r.minivan_rate_eur, r.van_rate_eur, r.minibus_rate_eur, r.bus_rate_eur].filter(Boolean) as number[]
@@ -63,18 +120,9 @@ export async function GET(request: NextRequest) {
             details: `${tierCount} vehicle tier${tierCount !== 1 ? 's' : ''} | from €${minRate}`
           })
         }
-      }
     }
-
-    // Guide rates
-    if (!rate_type || rate_type === 'guide') {
-      const { data } = await supabaseAdmin
-        .from('guide_rates')
-        .select('id, guide_type, city, half_day_rate, full_day_rate, supplier_id, suppliers (name)')
-        .eq('is_active', true)
-        .order('city')
-
-      if (data) {
+    if (r_guide?.data) {
+      const data = r_guide.data
         for (const r of data) {
           rates.push({
             rate_type: 'guide',
@@ -89,18 +137,9 @@ export async function GET(request: NextRequest) {
             details: `Half: €${r.half_day_rate} | Full: €${r.full_day_rate}`
           })
         }
-      }
     }
-
-    // Activity rates
-    if (!rate_type || rate_type === 'activity') {
-      const { data } = await supabaseAdmin
-        .from('activity_rates')
-        .select('id, activity_name, activity_category, city, base_rate_eur, base_rate_non_eur, supplier_id, suppliers (name)')
-        .eq('is_active', true)
-        .order('activity_name')
-
-      if (data) {
+    if (r_activ?.data) {
+      const data = r_activ.data
         for (const r of data) {
           rates.push({
             rate_type: 'activity',
@@ -115,18 +154,9 @@ export async function GET(request: NextRequest) {
             details: r.activity_category
           })
         }
-      }
     }
-
-    // Meal rates
-    if (!rate_type || rate_type === 'meal') {
-      const { data } = await supabaseAdmin
-        .from('meal_rates')
-        .select('id, restaurant_name, meal_type, tier, cuisine, city, base_rate_eur, base_rate_non_eur, supplier_id, suppliers (name)')
-        .eq('is_active', true)
-        .order('restaurant_name')
-
-      if (data) {
+    if (r_meal?.data) {
+      const data = r_meal.data
         for (const r of data) {
           rates.push({
             rate_type: 'meal',
@@ -141,18 +171,9 @@ export async function GET(request: NextRequest) {
             details: `${r.cuisine || ''} ${r.tier}`
           })
         }
-      }
     }
-
-    // Accommodation rates
-    if (!rate_type || rate_type === 'accommodation') {
-      const { data } = await supabaseAdmin
-        .from('accommodation_rates')
-        .select('id, hotel_name, room_type, city, star_rating, rate_low_season_sgl, rate_high_season_sgl, rate_peak_season_sgl, supplier_id, suppliers (name)')
-        .eq('is_active', true)
-        .order('hotel_name')
-
-      if (data) {
+    if (r_accom?.data) {
+      const data = r_accom.data
         for (const r of data) {
           rates.push({
             rate_type: 'accommodation',
@@ -167,18 +188,9 @@ export async function GET(request: NextRequest) {
             details: `${r.star_rating || ''}★ | Low: €${r.rate_low_season_sgl}`
           })
         }
-      }
     }
-
-    // Cruise rates
-    if (!rate_type || rate_type === 'cruise') {
-      const { data } = await supabaseAdmin
-        .from('nile_cruises')
-        .select('id, ship_name, cabin_type, cruise_type, nights, rate_low_season, rate_high_season, rate_peak_season, supplier_id, suppliers (name)')
-        .eq('is_active', true)
-        .order('ship_name')
-
-      if (data) {
+    if (r_cruis?.data) {
+      const data = r_cruis.data
         for (const r of data) {
           rates.push({
             rate_type: 'cruise',
@@ -193,7 +205,6 @@ export async function GET(request: NextRequest) {
             details: `${r.cruise_type} | ${r.nights} nights`
           })
         }
-      }
     }
 
     // Apply filters
