@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies, headers } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { roleAllows } from './roles'
 import { VERIFIED_USER_HEADER, verifyVerifiedUserHeader } from '@/lib/auth/verified-user-header'
 
 // M3 Phase 2A — resolve the current request's org_id.
@@ -110,25 +111,32 @@ export function noOrgResponse() {
   )
 }
 
-// Resolve the current request's RBAC role from user_profiles. Returns null if
-// there's no session. The middleware role-gate only matches financial routes by
-// path PREFIX, so nested action routes it can't match (e.g.
+// Resolve the current request's role from ORGANIZATION MEMBERSHIP — the one
+// role system. user_profiles.role is a display mirror and nothing may gate on
+// it (see lib/auth/roles.ts for why the two systems were consolidated).
+//
+// Returns null with no session or no membership. The middleware role-gate only
+// matches routes by path PREFIX, so nested action routes it can't match (e.g.
 // /api/itineraries/[id]/generate-commissions) call this in-route instead.
 export async function getCurrentUserRole(): Promise<string | null> {
   const userId = await resolveVerifiedUserId()
   if (!userId) return null
-  const { data: profile } = await getAdmin()
-    .from('user_profiles')
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return null
+  const { data: membership } = await getAdmin()
+    .from('organization_members')
     .select('role')
-    .eq('id', userId)
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
     .maybeSingle()
-  return (profile as { role?: string } | null)?.role ?? null
+  return (membership as { role?: string } | null)?.role ?? null
 }
 
-// 403 helper for role-gated routes. Fails closed: a null/insufficient role is denied.
+// 403 helper for role-gated routes. Fails closed: a null/insufficient role is
+// denied. The owner clears every gate — see roleAllows.
 export async function requireRole(allowed: string[]): Promise<NextResponse | null> {
   const role = await getCurrentUserRole()
-  if (!role || !allowed.includes(role)) {
+  if (!roleAllows(role, allowed)) {
     return NextResponse.json(
       { success: false, error: 'Forbidden — insufficient role' },
       { status: 403 }

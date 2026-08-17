@@ -227,15 +227,17 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Add the new user as a member of the inviter's org. The role from the
-    // invitation maps to organization_members.role so Phase 2C's owner-only
-    // policies (rename org, manage members) know who can do what.
+    // Membership IS the role system now, so the invited role is stored
+    // verbatim. The old mapping ('admin' → owner, everyone else → 'member')
+    // is how production ended up with every member an owner: each admin
+    // invite minted another one, and the owner-gates passed everybody.
+    // Ownership is transferred deliberately, never granted by an invite.
     const { error: memberErr } = await supabase
       .from('organization_members')
       .insert({
         org_id: invitation.org_id,
         user_id: profile.id,
-        role: invitation.role === 'admin' ? 'owner' : 'member',
+        role: invitation.role,
       })
 
     // Conflict (already a member) is fine — the invite-accept flow may be

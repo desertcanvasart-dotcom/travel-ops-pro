@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { INVITABLE_ROLES } from '@/lib/auth/roles'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
@@ -8,8 +9,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Fields only an admin may change — `role` is the column the middleware reads
-// for RBAC, so allowing self-service edits here is a privilege-escalation path.
+// Fields only an admin may change. `role` now lives on organization_members —
+// the PATCH below writes the membership and mirrors user_profiles.role for the
+// client contexts that still display from it. Self-service edits stay blocked:
+// this is a privilege-escalation path either way.
 const PRIVILEGED_FIELDS = ['role', 'is_active'] as const
 // Fields a user may change on their OWN profile.
 const SELF_EDITABLE_FIELDS = ['full_name', 'phone', 'timezone'] as const
@@ -31,12 +34,16 @@ async function getCaller(): Promise<{ id: string; role: string } | null> {
   )
   const { data: { user } } = await userClient.auth.getUser()
   if (!user) return null
-  const { data: profile } = await supabase
-    .from('user_profiles')
+  // Authority comes from ORGANIZATION MEMBERSHIP, the one role system.
+  // user_profiles.role is a display mirror and gating on it re-opens the
+  // second authority this codebase just closed.
+  const { data: membership } = await supabase
+    .from('organization_members')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .limit(1)
     .maybeSingle()
-  return { id: user.id, role: (profile as { role?: string } | null)?.role || 'viewer' }
+  return { id: user.id, role: (membership as { role?: string } | null)?.role || 'viewer' }
 }
 
 // GET - Get single profile
@@ -82,7 +89,7 @@ export async function PUT(
     if (!caller) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-    const isAdmin = caller.role === 'admin'
+    const isAdmin = caller.role === 'admin' || caller.role === 'owner'
     const isSelf = caller.id === id
     if (!isAdmin && !isSelf) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
@@ -115,6 +122,40 @@ export async function PUT(
         { success: false, error: 'No valid fields to update' },
         { status: 400 }
       )
+    }
+
+    // A role change is validated against the vocabulary and written to the
+    // AUTHORITY — the target's membership — before the profile mirror. Owner
+    // is deliberately not assignable here: ownership is transferred, never
+    // granted from a profile form (and minting owners casually is exactly how
+    // the last role system rotted).
+    if (updateData.role !== undefined) {
+      if (!INVITABLE_ROLES.includes(updateData.role)) {
+        return NextResponse.json(
+          { success: false, error: `role must be one of: ${INVITABLE_ROLES.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      const { data: target } = await supabase
+        .from('organization_members')
+        .select('org_id, role')
+        .eq('user_id', id)
+        .limit(1)
+        .maybeSingle()
+      if (target?.role === 'owner') {
+        return NextResponse.json(
+          { success: false, error: 'Ownership is transferred, not edited from a profile' },
+          { status: 403 }
+        )
+      }
+      if (target) {
+        const { error: roleErr } = await supabase
+          .from('organization_members')
+          .update({ role: updateData.role })
+          .eq('org_id', target.org_id)
+          .eq('user_id', id)
+        if (roleErr) throw roleErr
+      }
     }
 
     const { data, error } = await supabase
@@ -152,7 +193,7 @@ export async function DELETE(
     if (!caller) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-    if (caller.role !== 'admin') {
+    if (caller.role !== 'admin' && caller.role !== 'owner') {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
 
