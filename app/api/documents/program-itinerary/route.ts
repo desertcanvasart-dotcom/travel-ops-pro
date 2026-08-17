@@ -12,6 +12,7 @@ import { getTemplate } from '@/lib/documents/registry'
 import { renderHtmlToPdf } from '@/lib/documents/render'
 import { assembleProgramItinerary } from '@/lib/documents/assemble-program-itinerary'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
+import { inlineImage } from '@/lib/documents/inline-image'
 
 const TEMPLATE_SLUG = 'ats-daily-itinerary'
 
@@ -62,13 +63,19 @@ export async function GET(request: NextRequest) {
       year: 'numeric',
     })
 
+    // The renderer must never make a network request — see lib/documents/
+    // inline-image.ts. The logo travels inside the document.
+    const orgForDoc = org
+      ? { ...(org as any), logo_url: await inlineImage((org as any).logo_url) }
+      : null
+
     const context = assembleProgramItinerary({
       template_code: program.template_code,
       itinerary: program.itinerary,
       hotels: (program as any).hotels ?? null,
       created_date: createdDate,
       font_face_css: await getJapaneseFontFace(),
-      org: (org as any) ?? null,
+      org: orgForDoc,
     })
 
     let html = template.render(context)
