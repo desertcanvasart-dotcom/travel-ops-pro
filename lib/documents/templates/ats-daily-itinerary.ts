@@ -35,8 +35,15 @@ export interface DailyItineraryContext {
   /** 作成日 as the office writes it, e.g. "17 August 2026". */
   created_date: string
   days: DailyItineraryDay[]
-  /** Distinct hotel stays — one blank 利用ホテル row is drawn per entry. */
-  hotel_row_count: number
+  /** 利用ホテル rows — the programme's standard hotels, blanks staying blank.
+   *  An empty list still draws one empty row to keep the table fillable. */
+  hotel_rows: Array<{
+    hotel: string
+    check_in: string
+    check_out: string
+    phone: string
+    address: string
+  }>
   /** @font-face CSS for NotoSansJP; empty string is valid (tests, preview). */
   font_face_css: string
   /** Company letterhead — everything optional; absent facts render nothing. */
@@ -91,8 +98,14 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   page: PAGE,
 
   render(ctx: DailyItineraryContext): string {
-    const hotelRows = Array.from({ length: Math.max(ctx.hotel_row_count, 1) })
-      .map(() => '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>')
+    const rows = ctx.hotel_rows.length
+      ? ctx.hotel_rows
+      : [{ hotel: '', check_in: '', check_out: '', phone: '', address: '' }]
+    const hotelRows = rows
+      .map(
+        h =>
+          `<tr><td>${esc(h.hotel) || '&nbsp;'}</td><td>${esc(h.check_in)}</td><td>${esc(h.check_out)}</td><td>${esc(h.phone)}</td><td>${esc(h.address)}</td></tr>`
+      )
       .join('')
 
     return `<!doctype html>

@@ -312,6 +312,9 @@ for (const p of programs) {
     duration_nights: p.duration_nights,
     cities_covered: p.cities_covered,
     tour_type: p.days.some(d => d.is_cruise_day) ? 'cruise' : 'land',
+    // The 利用ホテル table, exactly as the document states it. check_in/out are
+    // blank in the sources (per-departure facts) and stay blank here.
+    hotels: p.hotels ?? [],
     uses_day_builder: false,
     pricing_mode: 'auto',
     is_active: true,
