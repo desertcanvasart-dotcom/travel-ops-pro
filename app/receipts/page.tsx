@@ -245,7 +245,7 @@ export default function ReceiptsPage() {
   }
 
   const formatCurrency = (amount: number, currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return `${symbols[currency] || currency} ${amount.toFixed(2)}`
   }
 

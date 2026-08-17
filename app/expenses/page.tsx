@@ -363,7 +363,7 @@ export default function ExpensesPage() {
   }
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return symbols[currency] || currency
   }
 
@@ -1010,6 +1010,7 @@ export default function ExpensesPage() {
                       <option value="USD">USD $</option>
                       <option value="GBP">GBP £</option>
                       <option value="EGP">EGP E£</option>
+                      <option value="JPY">JPY ¥</option>
                     </select>
                     <input
                       type="number"

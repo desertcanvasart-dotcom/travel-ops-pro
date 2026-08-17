@@ -975,6 +975,7 @@ export default function InvoicesContent() {
                     <option value="EUR">EUR (€)</option>
                     <option value="USD">USD ($)</option>
                     <option value="GBP">GBP (£)</option>
+                    <option value="JPY">JPY (¥)</option>
                   </select>
                 </div>
                 <div>

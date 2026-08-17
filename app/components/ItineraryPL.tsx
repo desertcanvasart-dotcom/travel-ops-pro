@@ -180,7 +180,7 @@ export default function ItineraryPL({
   }
 
   const getCurrencySymbol = (curr: string) => {
-    return { EUR: '€', USD: '$', GBP: '£' }[curr] || curr
+    return { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }[curr] || curr
   }
 
   const formatCurrency = (amount: number) => {

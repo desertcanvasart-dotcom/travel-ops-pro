@@ -201,7 +201,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return symbols[currency] || currency
   }
 

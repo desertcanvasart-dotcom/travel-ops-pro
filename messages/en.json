@@ -5784,7 +5784,9 @@
       "multi_day": "Multi-Day Tour",
       "multi_day_tour": "Multi-Day Tour",
       "cruise_land": "Cruise & Land",
-      "stopover": "Stopover Tour"
+      "stopover": "Stopover Tour",
+      "land": "Land Tour",
+      "cruise": "Nile Cruise"
     },
     "physicalLevels": {
       "easy": "Easy - Suitable for all",
