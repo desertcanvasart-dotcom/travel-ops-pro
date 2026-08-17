@@ -66,20 +66,48 @@ for (const file of [...sourceFiles(path.join(ROOT, 'app')), ...sourceFiles(path.
   if (SKIP.has(rel)) continue
   const src = fs.readFileSync(file, 'utf8')
 
-  const namespaces = [...src.matchAll(/useTranslations\('([A-Za-z0-9_.]+)'\)/g)].map(m => m[1])
-  // Two namespaces in one file means a bare t('x') is ambiguous to this scanner.
-  // Those files are skipped rather than guessed at — a wrong assertion here
-  // would be worse than no assertion.
-  if (namespaces.length !== 1) continue
+  // Bind each translator VARIABLE to its namespace — `const tCommon =
+  // useTranslations('common')` — instead of assuming one namespace per file.
+  // The old scanner skipped any file with two or more useTranslations() calls
+  // as ambiguous, and that blind spot is precisely where 43 missing payments
+  // keys hid until 2026-08-17: the payments pages all pair a `t` with a
+  // `tCommon`, so nothing checked them.
+  const bindings = new Map<string, Set<string>>()
+  for (const m of src.matchAll(
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*useTranslations\('([A-Za-z0-9_.]+)'\)/g
+  )) {
+    if (!bindings.has(m[1])) bindings.set(m[1], new Set())
+    bindings.get(m[1])!.add(m[2])
+  }
 
-  const keys = [...new Set([...src.matchAll(/\bt\('([A-Za-z][A-Za-z0-9_.]*)'\)/g)].map(m => m[1]))]
-  if (keys.length) usages.push({ file: rel, namespace: namespaces[0], keys })
+  for (const [varName, namespaces] of bindings) {
+    // The same variable name bound to two different namespaces (two components
+    // in one file) really is ambiguous — skip the variable, not the file.
+    if (namespaces.size !== 1) continue
+    const [namespace] = namespaces
+    // `[,)]` after the key: a call with interpolation args — t('key', {count})
+    // — is a lookup too. Requiring an immediate `)` silently exempted every
+    // parameterized string from this test.
+    const callRe = new RegExp(
+      `\\b${varName.replace(/\$/g, '\\$')}\\('([A-Za-z][A-Za-z0-9_.]*)'\\s*[,)]`,
+      'g'
+    )
+    const keys = [...new Set([...src.matchAll(callRe)].map(m => m[1]))]
+    if (keys.length) usages.push({ file: rel, namespace, keys })
+  }
 }
 
 describe('i18n message coverage', () => {
   it('scans a meaningful number of components (guards against a broken scanner)', () => {
     // If the regex ever stops matching, every assertion below passes vacuously.
     expect(usages.length).toBeGreaterThan(20)
+    // And specifically files with MORE THAN ONE namespace — the payments pages
+    // (t + tCommon) sat unchecked for months because a previous version of the
+    // scanner skipped them. If this drops to zero the binding regex broke.
+    const files = new Map<string, number>()
+    for (const u of usages) files.set(u.file, (files.get(u.file) ?? 0) + 1)
+    const multiNamespaceFiles = [...files.values()].filter(n => n > 1).length
+    expect(multiNamespaceFiles).toBeGreaterThan(5)
   })
 
   for (const locale of LOCALES) {
