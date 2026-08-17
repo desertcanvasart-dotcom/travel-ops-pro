@@ -27,6 +27,13 @@ const CSS = `
 .portal *{box-sizing:border-box}
 .portal .hd{padding:32px 0 20px;border-bottom:2px solid var(--brand)}
 .portal .oplogo{max-height:44px;max-width:180px;object-fit:contain;display:block;margin:0 0 10px}
+.portal .gate{max-width:420px}
+.portal .gateform{display:flex;flex-direction:column;gap:10px}
+.portal .gateform label{font-size:13px;color:var(--soft)}
+.portal .gateform input{padding:12px;border:1px solid var(--line);border-radius:8px;font-size:16px;background:var(--card);color:inherit}
+.portal .gateform button{padding:12px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+.portal .gateform button:disabled{opacity:.5;cursor:default}
+.portal .gateerr{font-size:13px;color:#c0392b;margin:0}
 .portal .op{font-size:12px;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
 .portal .optag{font-size:11px;color:var(--soft);margin:-4px 0 8px}
 .portal h1{font-size:22px;line-height:1.4;margin:0 0 8px;font-weight:700}

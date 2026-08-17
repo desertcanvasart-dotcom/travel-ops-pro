@@ -26,6 +26,8 @@ import {
   isValidPortalToken,
   pickWritableFields,
   portalLinkState,
+  portalVerifyCookieName,
+  isPortalVerified,
 } from '@/lib/booking-portal'
 import { validatePassenger } from '@/lib/passenger-validation'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
@@ -55,6 +57,11 @@ export async function PATCH(
   if (!limit.success) return rateLimitResponse(limit)
 
   if (!isValidPortalToken(token)) return notFound()
+  // The confirmation gate covers WRITES too: a forwarded link without the
+  // verified cookie cannot submit or alter traveller details.
+  if (!isPortalVerified(token, request.cookies.get(portalVerifyCookieName(token))?.value)) {
+    return NextResponse.json({ success: false, error: '本人確認が必要です。ページを再読み込みしてください。' }, { status: 403 })
+  }
 
   const supabase = admin()
 

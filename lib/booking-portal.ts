@@ -344,3 +344,81 @@ export function portalLinkState(
   }
   return { usable: true, reason: null }
 }
+
+// ---------------------------------------------------------------------------
+// CONFIRMATION GATE
+// ---------------------------------------------------------------------------
+// The link is the credential; this is the second, human factor against a
+// FORWARDED link: before the page shows anything, the visitor states one fact
+// the traveller knows — the booking number, or the lead traveller's family
+// name (any script). Passing sets a cookie that cannot be derived from the
+// token alone (HMAC with a server-side secret), so possessing the URL is not
+// possession of the cookie.
+
+import { createHmac, createHash } from 'crypto'
+
+function portalVerifySecret(): string {
+  // A dedicated secret when configured; the service key otherwise — it is
+  // server-only and long, which is all HMAC needs. Never sent anywhere.
+  return process.env.PORTAL_VERIFY_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+}
+
+/** Cookie name is derived from the token so one browser can hold verified
+ *  state for several links without collisions. */
+export function portalVerifyCookieName(token: string): string {
+  return 'pv_' + createHash('sha256').update(token).digest('hex').slice(0, 16)
+}
+
+export function portalVerifyCookieValue(token: string): string {
+  return createHmac('sha256', portalVerifySecret()).update(`portal-verify:${token}`).digest('hex')
+}
+
+export function isPortalVerified(token: string, cookieValue: string | undefined | null): boolean {
+  return !!cookieValue && cookieValue === portalVerifyCookieValue(token)
+}
+
+/** NFKC (full/half width), lowercase, all whitespace stripped — the visitor
+ *  should not fail the check over a full-width space or letter case. */
+export function normalizeVerifyAnswer(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+}
+
+/** Does the visitor's answer match a fact of this booking? Candidates are the
+ *  booking number, the client name (full and family-name token), and the lead
+ *  traveller's family name in all three scripts. */
+export function verifyAnswerMatches(
+  answer: unknown,
+  facts: {
+    booking_code?: string | null
+    client_name?: string | null
+    lead_names?: Array<string | null | undefined>
+  }
+): boolean {
+  const given = normalizeVerifyAnswer(answer)
+  if (given.length < 2) return false
+
+  const candidates = new Set<string>()
+  const add = (v: string | null | undefined) => {
+    const n = normalizeVerifyAnswer(v)
+    if (n.length >= 2) candidates.add(n)
+  }
+  add(facts.booking_code)
+  add(facts.client_name)
+  // The family name is the FIRST token of a Japanese full name and usually the
+  // LAST of a romanised one — offer both rather than guessing the convention.
+  const parts = String(facts.client_name ?? '')
+    .normalize('NFKC')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (parts.length > 1) {
+    add(parts[0])
+    add(parts[parts.length - 1])
+  }
+  for (const name of facts.lead_names ?? []) add(name)
+
+  return candidates.has(given)
+}

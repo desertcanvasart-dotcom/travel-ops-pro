@@ -21,6 +21,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
+import { cookies } from 'next/headers'
+import VerifyGate from './VerifyGate'
 import type { Metadata } from 'next'
 import {
   isValidPortalToken,
@@ -28,6 +30,8 @@ import {
   toPortalBooking,
   type PortalBooking,
   type PortalDocument,
+  portalVerifyCookieName,
+  isPortalVerified,
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
@@ -179,6 +183,29 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   if (!resolved) notFound()
 
   const { booking, operator } = resolved
+
+  // CONFIRMATION GATE: the link alone shows nothing. One fact the traveller
+  // knows (booking number or the lead family name) sets the cookie; until
+  // then the page renders only the operator's masthead and the form.
+  const jar = await cookies()
+  if (!isPortalVerified(token, jar.get(portalVerifyCookieName(token))?.value)) {
+    return (
+      <main style={{ ['--brand' as string]: operator.brandHex }} className="portal">
+        <header className="hd">
+          {operator.logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="oplogo" src={operator.logoUrl} alt={operator.name} />
+          )}
+          <p className="op">{operator.name}</p>
+          <h1>ご本人確認</h1>
+          <p className="sub">お客様の情報を守るため、ご予約の確認をお願いいたします。</p>
+        </header>
+        <section className="gate">
+          <VerifyGate token={token} />
+        </section>
+      </main>
+    )
+  }
   const { payment } = booking
   const money = (n: number | null) => (n == null ? '—' : formatMoney(n, payment.currency))
 
