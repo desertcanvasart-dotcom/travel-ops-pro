@@ -1743,7 +1743,8 @@
       "assignTasksDescription": "各部門からタスクを担当するチームメンバーを選択してください。",
       "unassigned": "未割り当て",
       "noMembersInDept": "この部門にメンバーがいません",
-      "generate": "タスクを生成"
+      "generate": "タスクを生成",
+      "opsSheet": "オペレーションシート"
     },
     "editAction": "編集",
     "share": {
@@ -3241,7 +3242,21 @@
     "marginDescription": "サプライヤーコストに適用するデフォルトのマージン率を設定します。",
     "defaultCurrency": "デフォルト通貨",
     "currencyDescription": "新しい旅程と価格のデフォルト通貨を設定します。",
-    "savePreferencesError": "設定を保存するにはサインインしてください"
+    "savePreferencesError": "設定を保存するにはサインインしてください",
+    "paymentTerms": {
+      "title": "お支払い条件",
+      "description": "すべての予約の支払いスケジュールの基準となるルールです。",
+      "summary": "現在の設定：申込金{percent}%（予約から{depositDays}日以内）、残金はご出発の{balanceDays}日前まで。",
+      "depositPercent": "申込金",
+      "depositDueDays": "申込金の期限",
+      "balanceDueDays": "残金の期限（出発前）",
+      "days": "日",
+      "blankHint": "空欄の場合は標準ルール（グレー表示）が適用されます。変更は今後作成される予約に適用され、既存のスケジュールは変更されません。",
+      "save": "保存",
+      "savedNote": "保存しました — 新規予約から適用されます",
+      "loadFailed": "お支払い条件を読み込めませんでした",
+      "saveFailed": "保存できませんでした"
+    }
   },
   "translate": {
     "errors": {

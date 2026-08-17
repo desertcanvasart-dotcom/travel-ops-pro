@@ -1299,7 +1299,8 @@
       "generate": "Generate Tasks",
       "paymentDueWithin14Days": "Payment due within 14 days",
       "tripDatesNote": "Trip dates: {startDate} – {endDate}",
-      "failedToCreateInvoice": "Failed to create invoice"
+      "failedToCreateInvoice": "Failed to create invoice",
+      "opsSheet": "Ops Sheet"
     },
     "editAction": "Edit",
     "share": {
@@ -2485,7 +2486,21 @@
     "marginDescription": "Set the default margin percentage applied to supplier costs.",
     "defaultCurrency": "Default Currency",
     "currencyDescription": "Set the default currency for new itineraries and pricing.",
-    "savePreferencesError": "Please sign in to save preferences"
+    "savePreferencesError": "Please sign in to save preferences",
+    "paymentTerms": {
+      "title": "Payment terms",
+      "description": "The rule every booking's payment schedule is derived from.",
+      "summary": "Currently: {percent}% deposit due {depositDays} days after booking, balance due {balanceDays} days before departure.",
+      "depositPercent": "Deposit",
+      "depositDueDays": "Deposit due within",
+      "balanceDueDays": "Balance due before departure",
+      "days": "days",
+      "blankHint": "Leave a field blank to use the standing rule (shown greyed). Changes apply to bookings created from now on — existing schedules are not rewritten.",
+      "save": "Save terms",
+      "savedNote": "Saved — applies to new bookings",
+      "loadFailed": "Could not load payment terms",
+      "saveFailed": "Could not save"
+    }
   },
   "translate": {
     "errors": {

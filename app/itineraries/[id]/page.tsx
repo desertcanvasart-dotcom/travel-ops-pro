@@ -1523,6 +1523,19 @@ export default function ViewItineraryPage() {
               itineraryId={itinerary.id}
               itineraryCode={itinerary.itinerary_code}
             />
+            {/* The ENG. ITIN. worksheet the ground operator runs the trip from.
+                A plain link, not a handler: the route streams the PDF and the
+                browser's tab is the right place for a document. Office-held
+                fields (guides, file no.) print as ruled blanks to write in. */}
+            <a
+              href={`/api/documents/operations-sheet?itinerary_id=${itinerary.id}&format=pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              {t('opsSheet')}
+            </a>
             <Link
               href={`/documents/contract/${itinerary.id}`}
               className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 import { SignatureEditor } from '@/components/email/RichTextEditor'
+import PaymentTermsCard from '@/app/components/PaymentTermsCard'
 
 // ============================================
 // TYPES
@@ -1409,6 +1410,9 @@ function SettingsContent() {
                   </div>
                 </div>
               )}
+              {/* Commercial terms live with the org, not with a user: how much
+                  money is asked for and when is not a per-agent preference. */}
+              {activeTab === 'organization' && <PaymentTermsCard />}
             </>
           )}
         </div>
