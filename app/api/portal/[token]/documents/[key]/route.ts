@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { isValidPortalToken, portalLinkState } from '@/lib/booking-portal'
+import { isValidPortalToken, portalLinkState, portalVerifyCookieName, isPortalVerified } from '@/lib/booking-portal'
 import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
@@ -39,6 +39,11 @@ export async function GET(
   if (!limit.success) return rateLimitResponse(limit)
 
   if (!isValidPortalToken(token)) return notFound()
+  // Invoices are the most sensitive thing behind this token; the gate
+  // cookie is required, same as the page.
+  if (!isPortalVerified(token, request.cookies.get(portalVerifyCookieName(token))?.value)) {
+    return NextResponse.json({ success: false, error: '本人確認が必要です。' }, { status: 403 })
+  }
 
   const supabase = admin()
 
