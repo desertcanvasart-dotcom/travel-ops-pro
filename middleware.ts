@@ -12,6 +12,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   
   // Admin and Manager
   '/team-members': ['admin', 'manager'],
+  '/departments': ['admin', 'manager'],
   '/financial-reports': ['admin', 'manager'],
   '/profit-loss': ['admin', 'manager'],
   '/accounts-receivable': ['admin', 'manager'],

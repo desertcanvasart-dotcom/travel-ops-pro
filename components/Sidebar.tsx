@@ -59,6 +59,7 @@ import {
   Sparkles,
   CalendarDays,
   Plug,
+  Building2,
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -151,6 +152,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'capacity', href: '/capacity', icon: CalendarDays },
       { labelKey: 'documents', href: '/documents', icon: FileText },
       { labelKey: 'teamMembers', href: '/team-members', icon: Users },
+      { labelKey: 'departments', href: '/departments', icon: Building2, roles: ['admin', 'manager'] },
       { labelKey: 'tasks', href: '/tasks', icon: CheckSquare },
     ]
   },

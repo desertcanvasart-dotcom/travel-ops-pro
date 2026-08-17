@@ -262,7 +262,8 @@
     "signOut": "Sign out",
     "bookings": "Bookings",
     "capacity": "Capacity",
-    "integrations": "Integrations"
+    "integrations": "Integrations",
+    "departments": "Departments"
   },
   "roles": {
     "admin": "Admin",
@@ -6912,5 +6913,19 @@
     "total": "Total",
     "type": "Type",
     "downloadPDF": "Download PDF"
+  },
+  "departments": {
+    "loading": "Loading departments…",
+    "title": "Departments",
+    "subtitle": "Each service type routes to one department; generated tasks land on the people in it.",
+    "memberCount": "{count} members",
+    "active": "Active",
+    "descriptionPlaceholder": "Description (optional)",
+    "routedTypes": "Routed service types",
+    "ownedBy": "Routed to {name} — remove it there first",
+    "save": "Save",
+    "saved": "Saved",
+    "newPlaceholder": "New department name",
+    "create": "Create"
   }
 }
