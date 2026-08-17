@@ -66,10 +66,11 @@ export async function getAuthenticatedUser(): Promise<AuthResult> {
     return { supabase, user: null, error: 'Not authenticated' }
   }
   
-  // Get user profile with role
+  // Profile carries the ACCOUNT facts (email, is_active); the ROLE comes from
+  // organization membership — the one role system (lib/auth/roles.ts).
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('id, email, role, is_active')
+    .select('id, email, is_active')
     .eq('id', user.id)
     .single()
   
@@ -81,12 +82,19 @@ export async function getAuthenticatedUser(): Promise<AuthResult> {
     return { supabase, user: null, error: 'Account is deactivated' }
   }
   
+  const { data: membership } = await supabase
+    .from('organization_members')
+    .select('role')
+    .eq('user_id', user.id)
+    .limit(1)
+    .maybeSingle()
+  
   return {
     supabase,
     user: {
       id: profile.id,
       email: profile.email,
-      role: profile.role as UserRole,
+      role: ((membership as { role?: string } | null)?.role ?? 'viewer') as UserRole,
       is_active: profile.is_active
     },
     error: null

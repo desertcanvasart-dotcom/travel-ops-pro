@@ -128,7 +128,12 @@ async function seed() {
     await insert('organization_members', { org_id: org.id, user_id: user.id, role: 'owner' })
     console.log('✓ owner membership created')
   } else {
-    console.log('= membership exists')
+    // Role is ENFORCED, not just created: membership is now the one role
+    // system, and the org-wide backfill sets roles from profiles — which for
+    // this synthetic user says 'agent'. The harness needs its owner back on
+    // the next seed, or owner-gated specs quietly test the wrong thing.
+    await rest('PATCH', `/rest/v1/organization_members?org_id=eq.${org.id}&user_id=eq.${user.id}`, { role: 'owner' })
+    console.log('= membership exists — role enforced to owner')
   }
 
   // 4. Client (global table — no org_id column; named to be obviously

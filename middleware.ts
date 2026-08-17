@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { roleAllows } from '@/lib/auth/roles'
 import { VERIFIED_USER_HEADER, signVerifiedUserHeader } from '@/lib/auth/verified-user-header'
 
 // Define route permissions - which roles can access which routes
@@ -232,25 +234,37 @@ export async function middleware(request: NextRequest) {
     })
 
     if (matchedRoute) {
-      // Get user's role from profile
+      // is_active is ACCOUNT-level and stays on the profile: a deactivated
+      // person is deactivated in every organisation.
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('role, is_active')
+        .select('is_active')
         .eq('id', user.id)
         .single()
 
-      // Check if user is active
       if (profile && !profile.is_active) {
-        // User is deactivated - sign them out and redirect
         return NextResponse.redirect(new URL('/login?error=account_inactive', request.url))
       }
 
-      const userRole = profile?.role || 'viewer'
+      // The ROLE comes from organization membership — the one role system.
+      // Read with the service client, deliberately: this is the gate itself,
+      // and an RLS surprise here would fail everyone closed into a redirect
+      // loop rather than a 403 anyone can read.
+      const { data: membership } = await createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false } }
+      )
+        .from('organization_members')
+        .select('role')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle()
+
+      const userRole = (membership as { role?: string } | null)?.role ?? 'viewer'
       const allowedRoles = ROUTE_PERMISSIONS[matchedRoute]
 
-      // Check if user's role is allowed
-      if (!allowedRoles.includes(userRole)) {
-        // User doesn't have permission - redirect to dashboard with error
+      if (!roleAllows(userRole, allowedRoles)) {
         return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url))
       }
     }
