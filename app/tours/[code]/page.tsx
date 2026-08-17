@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import {
@@ -130,9 +131,14 @@ interface VersionData {
   available_languages: Language[]
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', EGP: 'E£', JPY: '¥' }
+
 export default function TourDetailPage() {
   const params = useParams()
   const t = useTranslations('tours')
+  // Engine prices are EUR; render them in the preferred currency.
+  const { formatWithConversion, currency } = useCurrency()
+  const currencySymbol = CURRENCY_SYMBOLS[currency] || currency
   const [tour, setTour] = useState<TourDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -475,7 +481,7 @@ export default function TourDetailPage() {
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[#647C47]">€</span>
+            <span className="text-[#647C47]">{currencySymbol}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('detail.from')}</p>
@@ -483,9 +489,9 @@ export default function TourDetailPage() {
             {pricingLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : pricing ? (
-              `€${pricing.price_per_person.toFixed(0)}`
+              formatWithConversion(pricing.price_per_person, 'EUR')
             ) : (
-              '€N/A'
+              'N/A'
             )}
           </p>
         </div>
@@ -736,11 +742,11 @@ export default function TourDetailPage() {
                     </span>
                   </div>
                   <p className="text-3xl font-bold text-[#647C47]">
-                    €{pricing.price_per_person.toFixed(0)}
+                    {formatWithConversion(pricing.price_per_person, 'EUR')}
                   </p>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#647C47]/20">
                     <span className="text-sm text-gray-600">{t('detail.totalFor')} {selectedPax} {selectedPax === 1 ? t('detail.person') : t('detail.people')}</span>
-                    <span className="text-lg font-semibold text-gray-900">€{pricing.selling_price.toFixed(0)}</span>
+                    <span className="text-lg font-semibold text-gray-900">{formatWithConversion(pricing.selling_price, 'EUR')}</span>
                   </div>
                 </div>
 
@@ -768,13 +774,13 @@ export default function TourDetailPage() {
                             <span>{getCategoryIcon(service.service_category)}</span>
                             <span className="truncate max-w-[180px]">{service.service_name}</span>
                           </span>
-                          <span className="text-gray-900 font-medium">€{service.line_total.toFixed(0)}</span>
+                          <span className="text-gray-900 font-medium">{formatWithConversion(service.line_total, 'EUR')}</span>
                         </div>
                       ))}
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-medium">
                       <span className="text-gray-700">{t('detail.subtotal')}</span>
-                      <span className="text-gray-900">€{pricing.subtotal_cost.toFixed(0)}</span>
+                      <span className="text-gray-900">{formatWithConversion(pricing.subtotal_cost, 'EUR')}</span>
                     </div>
                   </div>
                 )}
@@ -787,7 +793,7 @@ export default function TourDetailPage() {
                       {pricing.optional_services.map((service, idx) => (
                         <div key={idx} className="flex items-center justify-between text-sm">
                           <span className="text-amber-800">{service.service_name}</span>
-                          <span className="text-amber-900 font-medium">+€{service.line_total.toFixed(0)}</span>
+                          <span className="text-amber-900 font-medium">+{formatWithConversion(service.line_total, 'EUR')}</span>
                         </div>
                       ))}
                     </div>

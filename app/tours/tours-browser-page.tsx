@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 
@@ -39,6 +40,9 @@ type ViewMode = 'grid' | 'table' | 'list'
 
 export default function ToursBrowsePage() {
   const t = useTranslations('tours')
+  // Program prices come out of the EUR-denominated B2B engine; display them in
+  // the user's preferred currency like the rates pages do.
+  const { formatWithConversion } = useCurrency()
   const [tours, setTours] = useState<TourTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -219,7 +223,7 @@ export default function ToursBrowsePage() {
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('stats.startingFrom')}</p>
           <p className="text-2xl font-semibold text-gray-900">
-            €{tours.length > 0 ? Math.min(...tours.map(t => t.starting_from || 9999)).toLocaleString() : '—'}
+            {tours.length > 0 ? formatWithConversion(Math.min(...tours.map(t => t.starting_from || 9999)), 'EUR') : '—'}
           </p>
         </div>
       </div>
@@ -399,7 +403,7 @@ export default function ToursBrowsePage() {
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide">{t('card.startingFrom')}</p>
                     <p className="text-xl font-semibold text-[#647C47]">
-                      €{tour.starting_from ? tour.starting_from.toLocaleString() : 'N/A'}
+                      {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
                     </p>
                     <p className="text-[10px] text-gray-400">
                       {t('card.perPerson')} • {tour.starting_from_tier || 'standard'}
@@ -497,7 +501,7 @@ export default function ToursBrowsePage() {
                   </div>
                   <div className="text-right min-w-[70px]">
                     <p className="font-semibold text-[#647C47] text-sm">
-                      €{tour.starting_from ? tour.starting_from.toLocaleString() : 'N/A'}
+                      {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
                     </p>
                     <p className="text-[10px] text-gray-400">{t('card.perPerson')}</p>
                   </div>
@@ -604,7 +608,7 @@ export default function ToursBrowsePage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <p className="font-semibold text-[#647C47] text-sm">
-                        €{tour.starting_from ? tour.starting_from.toLocaleString() : 'N/A'}
+                        {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
                       </p>
                       <p className="text-[10px] text-gray-400">{tour.starting_from_tier || 'standard'}</p>
                     </td>

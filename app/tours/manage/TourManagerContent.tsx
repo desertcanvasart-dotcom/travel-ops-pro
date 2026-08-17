@@ -6,6 +6,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 import {
   Map,
   Plus,
@@ -267,6 +268,8 @@ interface AttractionDropdownProps {
 }
 
 function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemove }: AttractionDropdownProps) {
+  // Entrance rates are stored in EUR per passport type; show them converted.
+  const { formatWithConversion } = useCurrency()
   const [searchTerm, setSearchTerm] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -343,7 +346,7 @@ function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemo
                       <div>
                         <p className="text-sm text-gray-900">{attr.attraction_name}</p>
                         <p className="text-xs text-gray-500">
-                          EUR: €{attr.eur_rate} / Non-EUR: €{attr.non_eur_rate}
+                          EUR passport: {formatWithConversion(attr.eur_rate, 'EUR')} / Non-EUR: {formatWithConversion(attr.non_eur_rate, 'EUR')}
                         </p>
                       </div>
                       <Plus className="w-4 h-4 text-gray-400 group-hover:text-green-600" />
