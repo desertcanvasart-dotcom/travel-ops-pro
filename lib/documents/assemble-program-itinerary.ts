@@ -71,9 +71,18 @@ export interface OrgBranding {
   document_contacts: Record<string, string> | null
 }
 
+export interface SourceProgramHotel {
+  hotel?: string | null
+  check_in?: string | null
+  check_out?: string | null
+  phone?: string | null
+  address?: string | null
+}
+
 export interface AssembleProgramInput {
   template_code: string
   itinerary: SourceProgramDay[] | null
+  hotels: SourceProgramHotel[] | null
   created_date: string
   font_face_css: string
   org: OrgBranding | null
@@ -97,14 +106,17 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
     },
   }))
 
-  // One blank 利用ホテル line per distinct hotel city — the hotels themselves
-  // are assigned per departure, so the rows are there to be filled, not filled
-  // in here.
-  const hotelCities = new Set(
-    days
-      .filter(d => (d.overnight_kind ?? 'hotel') === 'hotel' && d.overnight_city)
-      .map(d => d.overnight_city as string)
-  )
+  // The programme's standard hotels, exactly as the source document lists
+  // them: names/phones/addresses filled, check-in/out blank (per-departure).
+  const hotelRows = (input.hotels ?? [])
+    .filter(h => (h.hotel ?? '').trim())
+    .map(h => ({
+      hotel: (h.hotel ?? '').trim(),
+      check_in: (h.check_in ?? '').trim(),
+      check_out: (h.check_out ?? '').trim(),
+      phone: (h.phone ?? '').trim(),
+      address: (h.address ?? '').trim(),
+    }))
 
   const org = input.org
   const contacts = org?.document_contacts ?? {}
@@ -113,7 +125,7 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
     program_code: input.template_code,
     created_date: input.created_date,
     days: contextDays,
-    hotel_row_count: Math.max(hotelCities.size, 1),
+    hotel_rows: hotelRows,
     font_face_css: input.font_face_css,
     letterhead: {
       logo_url: org?.logo_url ?? null,

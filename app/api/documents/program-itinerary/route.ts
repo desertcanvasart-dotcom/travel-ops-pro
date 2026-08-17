@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const { data: program, error: programError } = await supabase
       .from('tour_templates')
-      .select('id, template_code, itinerary')
+      .select('id, template_code, itinerary, hotels')
       .eq('id', templateId)
       .single()
 
@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
     const context = assembleProgramItinerary({
       template_code: program.template_code,
       itinerary: program.itinerary,
+      hotels: (program as any).hotels ?? null,
       created_date: createdDate,
       font_face_css: await getJapaneseFontFace(),
       org: (org as any) ?? null,
