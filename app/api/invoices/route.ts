@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { syncInvoice } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -121,10 +122,15 @@ export async function POST(request: NextRequest) {
     let lineItems = body.line_items || []
     const depositPercent = body.deposit_percent || 10
     const fullTripCost = body.full_trip_cost || totalAmount // Store original trip cost
+    // Every derived amount below is rounded to THIS currency's minor unit.
+    // Without it a 20% deposit on ¥1,854,367 bills ¥370,873.4, and a yen with a
+    // decimal place is not an amount of money that exists.
+    const currency = body.currency || 'EUR'
+    const moneyDp = currencyDecimals(currency)
 
     if (invoiceType === 'deposit') {
       // Deposit invoice: calculate deposit amount
-      totalAmount = (fullTripCost * depositPercent) / 100
+      totalAmount = roundToCurrency((fullTripCost * depositPercent) / 100, currency)
       lineItems = [{
         description: `Booking Deposit (${depositPercent}%) - ${body.line_items?.[0]?.description || 'Tour Package'}`,
         quantity: 1,
@@ -141,7 +147,7 @@ export async function POST(request: NextRequest) {
       // deposit_percent on the parent, so the final could under- or
       // over-charge by the rounding/override delta. Prefer the linked
       // deposit invoice's actual total_amount.
-      let depositAmount = (fullTripCost * depositPercent) / 100
+      let depositAmount = roundToCurrency((fullTripCost * depositPercent) / 100, currency)
       let depositSource: 'percent' | 'parent' = 'percent'
       let depositReconciles = true
       let reconcileNote = ''
@@ -158,17 +164,17 @@ export async function POST(request: NextRequest) {
           // Surface a mismatch between the recomputed percent and the
           // actual parent amount; don't fail the request — the caller may
           // intentionally have a manual deposit — but record the delta.
-          const expected = (fullTripCost * depositPercent) / 100
+          const expected = roundToCurrency((fullTripCost * depositPercent) / 100, currency)
           if (Math.abs(expected - depositAmount) > 0.01) {
             depositReconciles = false
-            reconcileNote = ` (parent deposit ${parent.currency || ''}${depositAmount.toFixed(2)} differs from ${depositPercent}% of trip ${expected.toFixed(2)})`
+            reconcileNote = ` (parent deposit ${parent.currency || ''}${depositAmount.toFixed(moneyDp)} differs from ${depositPercent}% of trip ${expected.toFixed(moneyDp)})`
           }
         }
       }
-      totalAmount = Math.max(0, fullTripCost - depositAmount)
+      totalAmount = roundToCurrency(Math.max(0, fullTripCost - depositAmount), currency)
       const headerPrefix = depositSource === 'parent' ? 'Final Balance (parent-deposit-based)' : 'Final Balance'
       lineItems = [{
-        description: `${headerPrefix} - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${body.currency || 'EUR'} ${fullTripCost.toFixed(2)} minus deposit ${body.currency || 'EUR'} ${depositAmount.toFixed(2)})${depositReconciles ? '' : reconcileNote}`,
+        description: `${headerPrefix} - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${currency} ${fullTripCost.toFixed(moneyDp)} minus deposit ${currency} ${depositAmount.toFixed(moneyDp)})${depositReconciles ? '' : reconcileNote}`,
         quantity: 1,
         unit_price: totalAmount,
         amount: totalAmount
@@ -190,7 +196,7 @@ export async function POST(request: NextRequest) {
       tax_amount: body.tax_amount || 0,
       discount_amount: body.discount_amount || 0,
       total_amount: totalAmount,
-      currency: body.currency || 'EUR',
+      currency,
       amount_paid: 0,
       balance_due: totalAmount,
       status: 'draft',

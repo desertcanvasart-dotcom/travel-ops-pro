@@ -183,6 +183,26 @@ describe('buildBookingRow', () => {
     expect(row.currency).toBe('EUR')
   })
 
+  // Regression: the total came from the quote while the currency came from the
+  // itinerary, so a yen quote booked against a euro itinerary produced
+  // €1,854,367 instead of ¥1,854,367 — the right number wearing the wrong
+  // currency, which no total-based check can catch.
+  it('takes the currency from the same source as the total', () => {
+    const row = buildBookingRow({
+      ...base,
+      total: 1854367,
+      currency: 'JPY',
+      itinerary: { ...itinerary, currency: 'EUR', total_cost: 4200 },
+    })
+    expect(row.total_cost).toBe(1854367)
+    expect(row.currency).toBe('JPY')
+  })
+
+  it('falls back to the itinerary currency when the total is the itinerary total', () => {
+    const row = buildBookingRow({ ...base, itinerary: { ...itinerary, currency: 'USD' } })
+    expect(row.currency).toBe('USD')
+  })
+
   it('carries the partner through for a B2B booking', () => {
     const row = buildBookingRow({ ...base, partnerName: 'Desert Canvas Travel' })
     expect(row.partner_id).toBe('partner-1')
