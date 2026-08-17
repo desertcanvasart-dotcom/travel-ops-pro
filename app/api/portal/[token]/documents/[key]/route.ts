@@ -55,7 +55,7 @@ export async function GET(
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('itinerary_id, org_id')
+    .select('itinerary_id, org_id, balance_due_date')
     .eq('id', link!.booking_id)
     .maybeSingle()
 
@@ -84,8 +84,14 @@ export async function GET(
     // out as mojibake without this — on the customer's own invoice.
     const font = await loadJapaneseFont()
 
+    // The generator labels the balance with its due date, but reads that from
+    // the INVOICE — and there is no such column; the payment schedule lives on
+    // the booking. Without this the label silently falls back to a bare
+    // "Balance", which is the one thing the date was added to avoid.
+    const withSchedule = { ...invoice, balance_due_date: booking.balance_due_date ?? null }
+
     const doc = generateInvoicePDF(
-      invoice as never,
+      withSchedule as never,
       org
         ? {
             name: org.name,
