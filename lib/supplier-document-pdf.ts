@@ -4,6 +4,7 @@
 
 import jsPDF from 'jspdf'
 import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
+import { formatMoney } from '@/lib/currency-totals'
 
 // Caller-supplied translations. Construct in the calling page via
 // useTranslations('pdf.voucher') and pass in. Async font load happens
@@ -637,7 +638,7 @@ export async function generateSupplierDocumentPDF(
       // Amount
       const amount = item.total_cost || item.total_price || item.eur_rate || item.unit_price || 0
       if (amount > 0) {
-        pdf.text(`${doc.currency} ${amount.toFixed(2)}`, pageWidth - margin - 4, y + 6.5, { align: 'right' })
+        pdf.text(formatMoney(amount, doc.currency), pageWidth - margin - 4, y + 6.5, { align: 'right' })
       } else {
         pdf.text('—', pageWidth - margin - 4, y + 6.5, { align: 'right' })
       }
@@ -718,7 +719,7 @@ export async function generateSupplierDocumentPDF(
   pdf.setFontSize(14)
   pdf.setFont(fontFamily, 'bold')
   pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-  pdf.text(`${doc.currency} ${doc.total_cost.toFixed(2)}`, totalBoxX + totalBoxWidth - 4, y + 14, { align: 'right' })
+  pdf.text(formatMoney(doc.total_cost, doc.currency), totalBoxX + totalBoxWidth - 4, y + 14, { align: 'right' })
   
   y += 28
 

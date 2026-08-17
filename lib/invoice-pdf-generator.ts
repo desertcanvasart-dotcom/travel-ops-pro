@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface LineItem {
   description: string
@@ -13,6 +14,10 @@ interface Invoice {
   invoice_type?: 'standard' | 'deposit' | 'final'
   deposit_percent?: number
   parent_invoice_id?: string | null
+  /** The whole trip price this invoice is a share of. */
+  full_trip_cost?: number | null
+  /** When the remaining balance falls due, so the document can say so. */
+  balance_due_date?: string | null
   client_name: string
   client_email: string
   line_items: LineItem[]
@@ -54,14 +59,12 @@ const DEFAULT_COMPANY: CompanyInfo = {
   website: 'www.travel2egypt.com'
 }
 
-const getCurrencySymbol = (currency: string): string => {
-  const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
-  return symbols[currency] || currency
-}
-
-const formatCurrency = (amount: number, currency: string): string => {
-  return `${getCurrencySymbol(currency)}${Number(amount).toFixed(2)}`
-}
+// Money on a document is formatted by ONE function, in lib/currency-totals.ts.
+// The local table this replaced had no ¥ and a hardcoded two decimals, so a yen
+// invoice printed JPY370873.00 — wrong symbol and a minor unit the currency
+// does not have.
+const formatCurrency = (amount: number, currency: string): string =>
+  formatMoney(Number(amount), currency)
 
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('en-GB', {
@@ -163,11 +166,23 @@ export function generateInvoicePDF(
   // ============================================
 
   if (invoiceType !== 'standard' && invoice.deposit_percent) {
-    const fullTripCost = invoiceType === 'deposit'
+    // Prefer the STORED trip cost. Reconstructing it by dividing the deposit
+    // back out cannot recover what rounding removed — a ¥370,873 deposit
+    // reconstructs a ¥1,854,365 trip that actually costs ¥1,854,367 — so the
+    // reconstruction is a fallback for rows written before full_trip_cost
+    // existed, not the normal path.
+    const reconstructed = invoiceType === 'deposit'
       ? (Number(invoice.total_amount) * 100) / invoice.deposit_percent
       : Number(invoice.total_amount) + (Number(invoice.total_amount) * invoice.deposit_percent) / (100 - invoice.deposit_percent)
+    const fullTripCost = invoice.full_trip_cost != null
+      ? Number(invoice.full_trip_cost)
+      : reconstructed
 
-    const depositAmount = (fullTripCost * invoice.deposit_percent) / 100
+    // Both parts are taken from the same total so they add back up to it. The
+    // deposit is what THIS invoice charges when it is the deposit invoice.
+    const depositAmount = invoiceType === 'deposit'
+      ? Number(invoice.total_amount)
+      : fullTripCost - Number(invoice.total_amount)
     const balanceAmount = fullTripCost - depositAmount
 
     // Background box
@@ -193,9 +208,16 @@ export function generateInvoicePDF(
     doc.setFontSize(8)
     doc.setTextColor(...mediumGray)
     doc.setFont('helvetica', 'normal')
+    // "Balance on Arrival" contradicted the operator's own terms, which are
+    // that the balance falls due sixty days BEFORE departure and that no final
+    // documents are released until it clears. Telling a customer they can pay
+    // on arrival is the kind of wrong that costs money.
+    const balanceLabel = invoice.balance_due_date
+      ? `Balance by ${formatDate(invoice.balance_due_date)}`
+      : 'Balance'
     doc.text('Full Trip Cost', col1X, y)
     doc.text(`Deposit (${invoice.deposit_percent}%)`, col2X, y)
-    doc.text('Balance on Arrival', col3X, y)
+    doc.text(balanceLabel, col3X, y)
 
     y += 5
 
@@ -363,13 +385,24 @@ export function generateInvoicePDF(
   const totalsX = margin + contentWidth * 0.55
   const totalsValueX = margin + contentWidth - 3
 
-  // Subtotal
+  // Subtotal — the sum of the LINES above it.
+  //
+  // On a deposit invoice the lines describe the whole trip while total_amount
+  // is only what is due now, so printing `subtotal` here (which equals the
+  // deposit) put a figure under the table that contradicted the table. The
+  // lines are what a reader has just added up, so the subtotal must be theirs.
+  const lineTotal = (invoice.line_items || []).reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0
+  )
+  const subtotal = lineTotal > 0 ? lineTotal : Number(invoice.subtotal)
+
   doc.setFontSize(10)
   doc.setTextColor(...mediumGray)
   doc.setFont('helvetica', 'normal')
   doc.text('Subtotal:', totalsX, y)
   doc.setTextColor(...darkGray)
-  doc.text(formatCurrency(invoice.subtotal, invoice.currency), totalsValueX, y, { align: 'right' })
+  doc.text(formatCurrency(subtotal, invoice.currency), totalsValueX, y, { align: 'right' })
   y += 6
 
   // Tax (if applicable)
@@ -401,11 +434,14 @@ export function generateInvoicePDF(
   doc.setTextColor(...darkGray)
   doc.setFont('helvetica', 'bold')
   
+  // Say what is due and WHEN, since a deposit invoice also states a second,
+  // larger figure due on a different date. Two numbers both called "balance"
+  // is how a customer pays the wrong one.
   let totalLabel = 'Total:'
   if (invoiceType === 'deposit') {
-    totalLabel = 'Deposit Amount:'
+    totalLabel = invoice.due_date ? `Deposit due ${formatDate(invoice.due_date)}:` : 'Deposit due now:'
   } else if (invoiceType === 'final') {
-    totalLabel = 'Balance Due:'
+    totalLabel = invoice.due_date ? `Balance due ${formatDate(invoice.due_date)}:` : 'Balance due:'
   }
   
   doc.text(totalLabel, totalsX, y)
@@ -424,8 +460,14 @@ export function generateInvoicePDF(
     y += 6
   }
 
-  // Balance Due
-  if (Number(invoice.balance_due) > 0) {
+  // Outstanding on THIS invoice. Suppressed when nothing has been paid yet and
+  // it would simply restate the total printed directly above it — on a deposit
+  // invoice that repetition read as a third, separate amount owed.
+  const restatesTotal =
+    Number(invoice.amount_paid) === 0 &&
+    Number(invoice.balance_due) === Number(invoice.total_amount)
+
+  if (Number(invoice.balance_due) > 0 && !restatesTotal) {
     doc.setFontSize(11)
     doc.setTextColor(...darkGray)
     doc.setFont('helvetica', 'bold')

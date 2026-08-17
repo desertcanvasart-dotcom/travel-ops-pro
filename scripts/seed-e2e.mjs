@@ -148,13 +148,25 @@ async function seed() {
   }
 
   // 5. Itinerary in the E2E org (+ Day 1)
+  //
+  // Departure sits 120 days out, and is REFRESHED on every run. Both matter:
+  //
+  //   * The payment schedule collapses a booking to one payment when departure
+  //     is inside 60 days (lib/payment-schedule.ts), so a fixture nearer than
+  //     that silently exercises the late-booking path in every spec that books
+  //     it. 120 days keeps the ordinary deposit-plus-balance case the default.
+  //   * The seed is idempotent, so a fixture created once used to keep its
+  //     original dates forever and drift into the past. Its behaviour then
+  //     changed under specs that had not been touched — which is how the
+  //     deposit assertions in quote-to-booking came to fail on their own.
   let [itin] = await select('itineraries', `itinerary_code=eq.${ITIN_CODE}&select=id,org_id`)
+  const start = new Date()
+  start.setDate(start.getDate() + 120)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  const d = (x) => x.toISOString().split('T')[0]
+
   if (!itin) {
-    const start = new Date()
-    start.setDate(start.getDate() + 30)
-    const end = new Date(start)
-    end.setDate(end.getDate() + 1)
-    const d = (x) => x.toISOString().split('T')[0]
     ;[itin] = await insert('itineraries', {
       itinerary_code: ITIN_CODE,
       org_id: org.id,
@@ -182,9 +194,17 @@ async function seed() {
       description: 'Synthetic seed row for the E2E smoke harness',
       attractions: [],
     })
-    console.log(`✓ itinerary + day created: ${ITIN_CODE}`)
+    console.log(`✓ itinerary + day created: ${ITIN_CODE} (departs ${d(start)})`)
   } else {
-    console.log('= itinerary exists')
+    // Keep an existing fixture from ageing into the past.
+    await rest('PATCH', `/rest/v1/itineraries?id=eq.${itin.id}`, {
+      start_date: d(start),
+      end_date: d(end),
+    })
+    await rest('PATCH', `/rest/v1/itinerary_days?itinerary_id=eq.${itin.id}&day_number=eq.1`, {
+      date: d(start),
+    })
+    console.log(`= itinerary exists — dates refreshed to depart ${d(start)}`)
   }
 
   // 6. Persist generated credentials

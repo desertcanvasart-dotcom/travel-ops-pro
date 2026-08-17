@@ -5,6 +5,7 @@
 
 import { jsPDF } from 'jspdf'
 import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
+import { formatMoney } from '@/lib/currency-totals'
 
 // ============================================
 // TYPES
@@ -216,22 +217,14 @@ function formatShortDate(dateStr: string, locale: 'en' | 'ja' = 'en'): string {
 /**
  * Get currency symbol
  */
-function getCurrencySymbol(currency: string): string {
-  const symbols: Record<string, string> = {
-    EUR: '€',
-    USD: '$',
-    GBP: '£',
-    EGP: 'E£'
-  }
-  return symbols[currency] || currency
-}
-
 /**
- * Format currency amount
+ * Format a money amount at its own currency's precision.
+ *
+ * Delegates to lib/currency-totals.ts so every document agrees. The local
+ * table this replaced knew nothing of ¥ and always printed two decimals.
  */
 function formatCurrency(amount: number, currency: string): string {
-  const symbol = getCurrencySymbol(currency)
-  return `${symbol}${Number(amount).toFixed(2)}`
+  return formatMoney(Number(amount), currency)
 }
 
 /**

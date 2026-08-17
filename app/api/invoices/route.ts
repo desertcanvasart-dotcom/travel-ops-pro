@@ -129,14 +129,26 @@ export async function POST(request: NextRequest) {
     const moneyDp = currencyDecimals(currency)
 
     if (invoiceType === 'deposit') {
-      // Deposit invoice: calculate deposit amount
       totalAmount = roundToCurrency((fullTripCost * depositPercent) / 100, currency)
-      lineItems = [{
-        description: `Booking Deposit (${depositPercent}%) - ${body.line_items?.[0]?.description || 'Tour Package'}`,
-        quantity: 1,
-        unit_price: totalAmount,
-        amount: totalAmount
-      }]
+
+      // The itemisation is KEPT. This used to replace every line with a single
+      // "Booking Deposit (20%)", which discarded the fuel surcharge, the airport
+      // taxes, the tips and the visa fee — the whole price stack the customer is
+      // agreeing to. For this operator the deposit invoice doubles as the
+      // booking confirmation, so throwing that away left them confirming a trip
+      // without saying what was in it.
+      //
+      // What is due NOW lives in total_amount; what the trip costs lives in
+      // full_trip_cost. The lines say what is being bought, which is a
+      // different question from what is being paid today.
+      if (!lineItems.length) {
+        lineItems = [{
+          description: body.description || 'Tour Package',
+          quantity: 1,
+          unit_price: fullTripCost,
+          amount: fullTripCost,
+        }]
+      }
     } else if (invoiceType === 'final') {
       // Final invoice: remaining balance after deposit.
       //
@@ -191,6 +203,10 @@ export async function POST(request: NextRequest) {
       client_name: body.client_name,
       client_email: body.client_email || null,
       line_items: lineItems,
+      // What the whole trip costs. Stored rather than reconstructed: dividing a
+      // rounded deposit back out cannot recover what rounding removed, which is
+      // how the PDF came to quote a trip cost 2 yen below the real one.
+      full_trip_cost: invoiceType === 'standard' ? null : fullTripCost,
       subtotal: totalAmount,
       tax_rate: body.tax_rate || 0,
       tax_amount: body.tax_amount || 0,
