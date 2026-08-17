@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { STORAGE_STATE } from './helpers'
+import {
+  createTestItinerary,
+  destroyTestItinerary,
+  rest,
+  runCode,
+  type TestItinerary,
+} from './fixtures'
 
 // ============================================
 // Tier 2 — quote → booking conversion, end to end through the REAL route
@@ -27,49 +34,23 @@ test.use({ storageState: STORAGE_STATE })
 test.skip(!HAVE_CREDS, 'E2E_EMAIL / E2E_PASSWORD not set')
 test.skip(!SUPABASE_URL || !SERVICE_KEY, 'Supabase service credentials not set')
 
-const ITIN_CODE = 'E2E-SMOKE-001'
-const QUOTE_NUMBER = 'E2E-Q2B-001'
+// A throwaway itinerary this spec owns. It used to book the SHARED seeded one,
+// which the app allows to be booked only once — so this spec and the booking
+// spine fought each other, and any run that died left a booking that blocked
+// every later run with a 409.
+const QUOTE_NUMBER = runCode('Q2B')
 /** The agreed total under test. Deliberately not round, to catch bad rounding. */
 const SELLING_PRICE = 5822.05
 
-// --- direct REST helpers (fixture setup/teardown only; never the assertions) ---
-function headers() {
-  return {
-    apikey: SERVICE_KEY!,
-    Authorization: `Bearer ${SERVICE_KEY}`,
-    'Content-Type': 'application/json',
-    Prefer: 'return=representation',
-  }
-}
-
-async function rest(path: string, init?: RequestInit) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: headers() })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`REST ${path} -> ${res.status} ${text}`)
-  return text ? JSON.parse(text) : null
-}
-
+let itinerary: TestItinerary | null = null
 let itineraryId: string
 let orgId: string
 let quoteId: string
-/** Itinerary status before the test, so the conversion's side effect is undone. */
-let originalItineraryStatus: string
 
 test.beforeAll(async () => {
-  const [itin] = await rest(
-    `itineraries?itinerary_code=eq.${ITIN_CODE}&select=id,org_id,status,start_date,end_date`
-  )
-  expect(itin, `seeded itinerary ${ITIN_CODE} must exist — run npm run seed:e2e`).toBeTruthy()
-  itineraryId = itin.id
-  orgId = itin.org_id
-  originalItineraryStatus = itin.status
-  // The route refuses an itinerary without real dates; the seed provides them.
-  expect(itin.start_date, 'seeded itinerary needs a start date').toBeTruthy()
-  expect(itin.end_date, 'seeded itinerary needs an end date').toBeTruthy()
-
-  // Clean any leftovers from an interrupted previous run.
-  await rest(`bookings?quote_type=eq.b2c&itinerary_id=eq.${itineraryId}`, { method: 'DELETE' })
-  await rest(`b2c_quotes?quote_number=eq.${QUOTE_NUMBER}`, { method: 'DELETE' })
+  itinerary = await createTestItinerary('Q2B')
+  itineraryId = itinerary.id
+  orgId = itinerary.orgId
 
   const [quote] = await rest('b2c_quotes', {
     method: 'POST',
@@ -89,16 +70,8 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-  if (!quoteId) return
-  // Bookings first — booking_supplier_status cascades from them.
-  await rest(`bookings?quote_id=eq.${quoteId}`, { method: 'DELETE' })
-  await rest(`b2c_quotes?id=eq.${quoteId}`, { method: 'DELETE' })
-  if (itineraryId && originalItineraryStatus) {
-    await rest(`itineraries?id=eq.${itineraryId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: originalItineraryStatus }),
-    })
-  }
+  // The whole itinerary goes, so nothing has to be restored to a prior state.
+  await destroyTestItinerary(itinerary)
 })
 
 test('rejects a deposit percentage that would misprice the deposit', async ({ request }) => {

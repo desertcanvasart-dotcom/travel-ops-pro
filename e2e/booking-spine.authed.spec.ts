@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { STORAGE_STATE } from './helpers'
+import {
+  createTestItinerary,
+  destroyTestItinerary,
+  rest,
+  runCode,
+  type TestItinerary,
+} from './fixtures'
 
 // ============================================
 // Tier 2 — the BOOKING SPINE, end to end, in yen
@@ -35,8 +42,10 @@ test.describe.configure({ mode: 'serial' })
 test.skip(!HAVE_CREDS, 'E2E_EMAIL / E2E_PASSWORD not set')
 test.skip(!SUPABASE_URL || !SERVICE_KEY, 'Supabase service credentials not set')
 
-const ITIN_CODE = 'E2E-SMOKE-001'
-const QUOTE_NUMBER = 'E2E-SPINE-JPY-001'
+// A throwaway itinerary this spec owns — see e2e/fixtures.ts. Sharing the
+// seeded one made this spec and quote-to-booking contend for the single
+// booking the app permits per itinerary.
+const QUOTE_NUMBER = runCode('SPINE')
 
 /** An A.T.S-shaped sale: 3 travellers on a fixed 8-day program, priced in yen. */
 const PAX = 3
@@ -44,26 +53,10 @@ const PAX = 3
 const SELLING_PRICE_JPY = 1854367
 const DEPOSIT_PERCENT = 20
 
-function headers() {
-  return {
-    apikey: SERVICE_KEY!,
-    Authorization: `Bearer ${SERVICE_KEY}`,
-    'Content-Type': 'application/json',
-    Prefer: 'return=representation',
-  }
-}
-
-async function rest(path: string, init?: RequestInit) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...init, headers: headers() })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`REST ${path} -> ${res.status} ${text}`)
-  return text ? JSON.parse(text) : null
-}
-
+let itinerary: TestItinerary | null = null
 let orgId: string
 let itineraryId: string
 let itineraryStart: string | null
-let originalItineraryStatus: string
 let quoteId: string
 let bookingId: string
 let depositInvoiceId: string
@@ -126,25 +119,10 @@ const MANIFEST = [
 ]
 
 test.beforeAll(async () => {
-  const [itin] = await rest(
-    `itineraries?itinerary_code=eq.${ITIN_CODE}&select=id,org_id,status,start_date,end_date`
-  )
-  expect(itin, `seeded itinerary ${ITIN_CODE} must exist — run npm run seed:e2e`).toBeTruthy()
-  itineraryId = itin.id
-  orgId = itin.org_id
-  itineraryStart = itin.start_date
-  originalItineraryStatus = itin.status
-
-  // Clear anything an interrupted run left behind.
-  const stale = await rest(`b2c_quotes?quote_number=eq.${QUOTE_NUMBER}&select=id`)
-  for (const q of stale ?? []) {
-    const bookings = await rest(`bookings?quote_id=eq.${q.id}&select=id`)
-    for (const b of bookings ?? []) {
-      await rest(`booking_passengers?booking_id=eq.${b.id}`, { method: 'DELETE' })
-    }
-    await rest(`bookings?quote_id=eq.${q.id}`, { method: 'DELETE' })
-    await rest(`b2c_quotes?id=eq.${q.id}`, { method: 'DELETE' })
-  }
+  itinerary = await createTestItinerary('SPINE')
+  itineraryId = itinerary.id
+  orgId = itinerary.orgId
+  itineraryStart = itinerary.startDate
 
   const [quote] = await rest('b2c_quotes', {
     method: 'POST',
@@ -164,22 +142,9 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-  for (const invId of [finalInvoiceId, depositInvoiceId]) {
-    if (!invId) continue
-    await rest(`invoice_payments?invoice_id=eq.${invId}`, { method: 'DELETE' })
-    await rest(`invoices?id=eq.${invId}`, { method: 'DELETE' })
-  }
-  if (bookingId) {
-    await rest(`booking_passengers?booking_id=eq.${bookingId}`, { method: 'DELETE' })
-    await rest(`bookings?id=eq.${bookingId}`, { method: 'DELETE' })
-  }
-  if (quoteId) await rest(`b2c_quotes?id=eq.${quoteId}`, { method: 'DELETE' })
-  if (itineraryId && originalItineraryStatus) {
-    await rest(`itineraries?id=eq.${itineraryId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: originalItineraryStatus }),
-    })
-  }
+  // One call: the itinerary and every booking, passenger, quote, invoice and
+  // portal link hanging off it.
+  await destroyTestItinerary(itinerary)
 })
 
 // ---------------------------------------------------------------------------
