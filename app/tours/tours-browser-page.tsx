@@ -59,15 +59,25 @@ export default function ToursBrowsePage() {
 
   const fetchTours = async () => {
     try {
-      const response = await fetch('/api/tours/browse')
-      const data = await response.json()
+      // This page is the whole catalogue, so walk every page — a bare fetch
+      // used the API's default limit of 12 and silently hid the rest (26
+      // programmes in the system, 12 on screen, no pager to reach the others).
+      const all: TourTemplate[] = []
+      let page = 1
+      let totalPages = 1
+      do {
+        const response = await fetch(`/api/tours/browse?page=${page}&limit=50`)
+        const data = await response.json()
+        if (!data.success) {
+          setError(data.error || 'Failed to load tours')
+          return
+        }
+        all.push(...(data.data?.templates || []))
+        totalPages = data.data?.pagination?.total_pages ?? 1
+        page++
+      } while (page <= totalPages && page <= 20) // hard stop: 1000 templates
 
-      if (data.success) {
-        // API now returns { data: { templates: [...], pagination: {...} } }
-        setTours(data.data?.templates || [])
-      } else {
-        setError(data.error || 'Failed to load tours')
-      }
+      setTours(all)
     } catch (err) {
       setError('Error loading tours')
       console.error(err)
