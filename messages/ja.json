@@ -339,7 +339,8 @@
     "goToLogin": "ログインへ進む",
     "joinPlatform": "アカウントを作成して始めましょう",
     "namePlaceholder": "氏名を入力",
-    "signInLink": "すでにアカウントをお持ちですか？ ログイン"
+    "signInLink": "すでにアカウントをお持ちですか？ ログイン",
+    "confirmationSent": "{email} 宛に確認メールを送信しました。受信トレイをご確認ください。"
   },
   "dashboard": {
     "welcomeBack": "おかえりなさい",
@@ -1167,7 +1168,8 @@
     "deleteBlockedTitle": "この顧客には紐づく旅程があります",
     "deleteBlockedMessage": "{name} には {count} 件の旅程が紐づいています。強制削除するとそれらも削除されます。",
     "deleteConfirmBody": "{name} を削除してもよろしいですか？この操作は取り消せません。",
-    "deleteForceConfirm": "顧客と紐づくすべての旅程を強制的に削除しますか？"
+    "deleteForceConfirm": "顧客と紐づくすべての旅程を強制的に削除しますか？",
+    "error": "エラー"
   },
   "communications": {
     "title": "コミュニケーション",
@@ -2625,7 +2627,8 @@
       "paymentTerms": "お支払い条件"
     },
     "failedToCreateInvoice": "請求書の作成に失敗しました",
-    "failedToDeleteInvoice": "請求書の削除に失敗しました"
+    "failedToDeleteInvoice": "請求書の削除に失敗しました",
+    "depositWithPercent": "デポジット（{percent}%）"
   },
   "invite": {
     "invalidInvitationLink": "無効な招待リンクです",
@@ -4956,7 +4959,8 @@
         "failedToLoad": "空港サービス料金の読み込みに失敗しました",
         "failedToSave": "料金の保存に失敗しました",
         "failedToDelete": "空港サービス料金の削除に失敗しました。もう一度お試しください。"
-      }
+      },
+      "searchPlaceholder": "空港サービスを検索..."
     },
     "hotelServices": {
       "title": "ホテルサービス",
@@ -5032,7 +5036,8 @@
         "failedToLoad": "ホテルサービス料金の読み込みに失敗しました",
         "failedToSave": "料金の保存に失敗しました",
         "failedToDelete": "ホテルサービス料金の削除に失敗しました。もう一度お試しください。"
-      }
+      },
+      "searchPlaceholder": "ホテルサービスを検索..."
     },
     "tipping": {
       "title": "チップ料金",
@@ -5612,7 +5617,8 @@
       "standard": "スタンダード",
       "deluxe": "デラックス",
       "luxury": "ラグジュアリー"
-    }
+    },
+    "error": "エラー"
   },
   "aiPrompts": {
     "title": "AIプロンプト",

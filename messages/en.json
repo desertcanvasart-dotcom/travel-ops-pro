@@ -44,7 +44,9 @@
     "currency": "Currency",
     "startDate": "Start Date",
     "endDate": "End Date",
-    "backToList": "Back to List"
+    "backToList": "Back to List",
+    "saved": "Saved",
+    "unknownError": "Unknown error"
   },
   "contract": {
     "loadingContract": "Loading contract...",
@@ -337,7 +339,8 @@
     "requestNewLink": "Request a new link",
     "resetLinkExpired": "This reset link has expired or has already been used.",
     "resetPasswordButton": "Reset password",
-    "resetting": "Resetting…"
+    "resetting": "Resetting…",
+    "confirmationSent": "We've sent a confirmation link to {email}. Please check your inbox."
   },
   "dashboard": {
     "welcomeBack": "Welcome Back",
@@ -738,7 +741,8 @@
     "noFollowups": "No follow-ups scheduled",
     "dueDate": "Due:",
     "markComplete": "Mark Complete",
-    "delete": "Delete"
+    "delete": "Delete",
+    "error": "Error"
   },
   "communications": {
     "title": "Communications",
@@ -1300,7 +1304,22 @@
       "paymentDueWithin14Days": "Payment due within 14 days",
       "tripDatesNote": "Trip dates: {startDate} – {endDate}",
       "failedToCreateInvoice": "Failed to create invoice",
-      "opsSheet": "Ops Sheet"
+      "opsSheet": "Ops Sheet",
+      "clientEmailRequired": "The client's email address is required. Add it in edit mode.",
+      "clientPhoneRequired": "The client's phone number is required for WhatsApp. Add it in edit mode.",
+      "emailSentSuccessfully": "Email sent successfully! ✅",
+      "errorLoadingItinerary": "Error loading the itinerary",
+      "failedToGenerateCommissions": "Failed to generate commissions",
+      "failedToGeneratePDF": "Failed to generate the PDF",
+      "failedToSendEmail": "Failed to send the email",
+      "failedToSendEmailError": "Failed to send the email: {error}",
+      "failedToSendWhatsApp": "Failed to send the WhatsApp message",
+      "failedToSendWhatsAppError": "Failed to send via WhatsApp: {error}",
+      "failedToUpdateCost": "Failed to update the cost",
+      "pleaseEnterValidCost": "Please enter a valid cost",
+      "quoteSentWhatsApp": "Quote sent via WhatsApp! ✅",
+      "sendViaEmail": "Send via email",
+      "sendingEmail": "Sending email..."
     },
     "editAction": "Edit",
     "share": {
@@ -1775,7 +1794,8 @@
       }
     },
     "failedToCreateInvoice": "Failed to create the invoice",
-    "failedToDeleteInvoice": "Failed to delete the invoice"
+    "failedToDeleteInvoice": "Failed to delete the invoice",
+    "depositWithPercent": "Deposit ({percent}%)"
   },
   "whatsappParser": {
     "title": "WhatsApp to Itinerary",
@@ -2940,7 +2960,10 @@
     },
     "time": {
       "justNow": "Just now",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "minutesAgo": "{minutes} minutes ago",
+      "hoursAgo": "{hours} hours ago",
+      "daysAgo": "{days} days ago"
     },
     "types": {
       "task_assigned": "Task assigned",
@@ -3093,7 +3116,10 @@
       "showAll": "Show All",
       "activeOnly": "Active Only",
       "adjustFilters": "Try adjusting your filters",
-      "confirmDelete": "Are you sure you want to delete"
+      "confirmDelete": "Are you sure you want to delete",
+      "edit": "Edit",
+      "showPerPage": "per page",
+      "toOf": "–{end} of {total}"
     },
     "meals": {
       "title": "Meal Rates",
@@ -4168,7 +4194,8 @@
         "failedToLoad": "Failed to load airport service rates",
         "failedToSave": "Failed to save rate",
         "failedToDelete": "Failed to delete airport service rate. Please try again."
-      }
+      },
+      "searchPlaceholder": "Search airport services..."
     },
     "hotelServices": {
       "title": "Hotel Services",
@@ -4244,7 +4271,8 @@
         "failedToLoad": "Failed to load hotel service rates",
         "failedToSave": "Failed to save rate",
         "failedToDelete": "Failed to delete hotel service rate. Please try again."
-      }
+      },
+      "searchPlaceholder": "Search hotel services..."
     },
     "activities": {
       "title": "Activities & Add-ons Rates",
@@ -5451,7 +5479,8 @@
       "standard": "Standard",
       "deluxe": "Deluxe",
       "luxury": "Luxury"
-    }
+    },
+    "error": "Error"
   },
   "aiPrompts": {
     "title": "AI Prompts",
