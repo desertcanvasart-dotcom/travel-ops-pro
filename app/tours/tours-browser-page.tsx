@@ -409,18 +409,12 @@ export default function ToursBrowsePage() {
                       {t('card.perPerson')} • {tour.starting_from_tier || 'standard'}
                     </p>
                   </div>
-                  {tour.variations_count > 0 ? (
-                    <Link
+                  <Link
                       href={`/tours/${tour.id}`}
                       className="bg-[#647C47] text-white px-4 py-2 rounded-lg hover:bg-[#4a5c35] transition-colors text-xs font-medium"
                     >
                       {t('card.viewDetails')}
                     </Link>
-                  ) : (
-                    <span className="bg-gray-200 text-gray-500 px-4 py-2 rounded-lg text-xs font-medium cursor-not-allowed">
-                      {t('card.viewDetails')}
-                    </span>
-                  )}
                 </div>
               </div>
 
@@ -514,18 +508,12 @@ export default function ToursBrowsePage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1 shrink-0">
-                  {tour.variations_count > 0 ? (
-                    <Link
+                  <Link
                       href={`/tours/${tour.id}`}
                       className="bg-[#647C47] text-white px-3 py-1.5 rounded-lg hover:bg-[#4a5c35] transition-colors text-xs font-medium"
                     >
                       {t('card.viewDetails')}
                     </Link>
-                  ) : (
-                    <span className="bg-gray-200 text-gray-500 px-3 py-1.5 rounded-lg text-xs font-medium cursor-not-allowed">
-                      {t('card.viewDetails')}
-                    </span>
-                  )}
                   <button
                     onClick={() => setDeleteTarget(tour)}
                     className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 transition-all rounded"
@@ -614,16 +602,12 @@ export default function ToursBrowsePage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        {tour.variations_count > 0 ? (
-                          <Link
+                        <Link
                             href={`/tours/${tour.id}`}
                             className="text-[#647C47] hover:text-[#4a5c35] text-xs font-medium hover:underline"
                           >
                             {t('actions.view')}
                           </Link>
-                        ) : (
-                          <span className="text-gray-400 text-xs">{t('actions.view')}</span>
-                        )}
                         <span className="text-gray-200">|</span>
                         <button
                           onClick={() => setDeleteTarget(tour)}

@@ -117,10 +117,85 @@ export async function GET(
     }
 
     if (!variation) {
-      return NextResponse.json(
-        { success: false, error: 'Tour not found' },
-        { status: 404 }
-      )
+      // ============================================
+      // TEMPLATE FALLBACK — no variations exist
+      // ============================================
+      // Programmes imported from documents (the A.T.S catalogue) carry their
+      // day-by-day in tour_templates.itinerary and have NO variations. They
+      // must still open: build the detail from the template itself. Pricing
+      // runs template-direct — calculate-price accepts template_id and prices
+      // via the auto-pricing engine at the default tier.
+      const isTemplateUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
+      const { data: template } = await supabase
+        .from('tour_templates')
+        .select(`
+          id, template_code, template_name, short_description, long_description,
+          highlights, main_attractions, duration_days, duration_nights,
+          itinerary, cities_covered,
+          tour_categories (category_name),
+          destinations (destination_name)
+        `)
+        .eq(isTemplateUUID ? 'id' : 'template_code', code)
+        .single()
+
+      if (!template) {
+        return NextResponse.json(
+          { success: false, error: 'Tour not found' },
+          { status: 404 }
+        )
+      }
+
+      const tpl = template as any
+      const templateItinerary = Array.isArray(tpl.itinerary) ? tpl.itinerary : []
+      const dailyItinerary = templateItinerary.map((day: any) => ({
+        day_number: day.day,
+        day_title: day.title,
+        day_description: day.description,
+        city: day.city,
+        overnight_city: day.overnight_city,
+        breakfast_included: Array.isArray(day.meals) && day.meals.includes('breakfast'),
+        lunch_included: Array.isArray(day.meals) && day.meals.includes('lunch'),
+        dinner_included: Array.isArray(day.meals) && day.meals.includes('dinner'),
+        is_cruise_day: day.is_cruise_day || false
+      }))
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          variation_id: null,
+          template_id: tpl.id,
+          template_name: tpl.template_name,
+          template_code: tpl.template_code,
+          category_name: tpl.tour_categories?.category_name || 'Uncategorized',
+          destination_name:
+            tpl.destinations?.destination_name ||
+            (Array.isArray(tpl.cities_covered) && tpl.cities_covered.length
+              ? tpl.cities_covered.join(', ')
+              : 'Various'),
+          duration_days: tpl.duration_days,
+          duration_nights: tpl.duration_nights || 0,
+          short_description: tpl.short_description,
+          long_description: tpl.long_description,
+          highlights: tpl.highlights || [],
+          main_attractions: tpl.main_attractions || [],
+          variation_name: null,
+          variation_code: null,
+          tier: 'standard',
+          group_type: 'private',
+          min_pax: 1,
+          max_pax: 15,
+          inclusions: [],
+          exclusions: [],
+          optional_extras: [],
+          guide_type: null,
+          guide_languages: ['English', 'Arabic'],
+          vehicle_type: null,
+          services: [],
+          daily_itinerary: dailyItinerary,
+          has_dynamic_pricing: false,
+          pricing_source: 'template'
+        }
+      })
     }
 
     // Fetch services from tour_variation_services (for B2B pricing)
