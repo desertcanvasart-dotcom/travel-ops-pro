@@ -414,6 +414,23 @@ export default function TourDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* The office's own 日程表 document — PDF download and direct print. */}
+          <a
+            href={`/api/documents/program-itinerary?template_id=${tour.template_id}&format=pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#647C47] text-white hover:bg-[#4a5c35] transition-colors"
+          >
+            {t('detail.itineraryPdf')}
+          </a>
+          <a
+            href={`/api/documents/program-itinerary?template_id=${tour.template_id}&format=html&print=1`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[#647C47] text-[#647C47] hover:bg-[#647C47]/10 transition-colors"
+          >
+            {t('detail.printItinerary')}
+          </a>
           <span className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${tierStyle.bg} ${tierStyle.text}`}>
             {tierStyle.icon} {tour.tier.charAt(0).toUpperCase() + tour.tier.slice(1)}
           </span>

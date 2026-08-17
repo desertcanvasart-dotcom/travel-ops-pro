@@ -234,6 +234,13 @@ export function parseDays(tables, problems) {
       if (meals?.lunch.note && meals.lunch.note !== 'in flight') menu.lunch = meals.lunch.note
       if (meals?.dinner.note && meals.dinner.note !== 'in flight') menu.dinner = meals.dinner.note
 
+      // 機内 slots: eaten aboard, not included — but the customer document
+      // prints 機内 there, not ×, so the distinction must survive import.
+      const mealsInFlight = []
+      if (meals?.breakfast.note === 'in flight') mealsInFlight.push('breakfast')
+      if (meals?.lunch.note === 'in flight') mealsInFlight.push('lunch')
+      if (meals?.dinner.note === 'in flight') mealsInFlight.push('dinner')
+
       days.push({
         day: number,
         // The source has no per-day titles. Rather than invent marketing copy,
@@ -244,6 +251,7 @@ export function parseDays(tables, problems) {
         overnight_city: overnight.city,
         overnight_kind: overnight.kind,
         meals: included,
+        meals_in_flight: mealsInFlight,
         menu: Object.keys(menu).length ? menu : null,
         attractions,
         description,

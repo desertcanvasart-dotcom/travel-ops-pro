@@ -5853,7 +5853,9 @@
       "pax": "pax",
       "day": "day",
       "days": "days",
-      "uncategorized": "Uncategorized"
+      "uncategorized": "Uncategorized",
+      "itineraryPdf": "Itinerary PDF",
+      "printItinerary": "Print"
     }
   },
   "b2bQuotes": {
