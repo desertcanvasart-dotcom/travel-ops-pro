@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/app/supabase'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { usePreferences } from '@/app/contexts/PreferencesContext'
 import {
   User,
   Mail,
@@ -138,6 +139,11 @@ function SettingsContent() {
     default_margin_percent: 25,
     default_currency: 'USD'
   })
+  // Saving MUST go through the app-wide context, not a direct DB write: every
+  // page formats money via PreferencesContext, and a direct write leaves its
+  // in-memory currency stale until a full reload — Settings said USD, Rates
+  // kept showing €.
+  const { updatePreferences: applyPreferencesAppWide } = usePreferences()
   const [accountingStatus, setAccountingStatus] = useState<{
     xero: { connected: boolean; company_name: string; last_updated: string } | null
     quickbooks: { connected: boolean; company_name: string; last_updated: string } | null
@@ -365,33 +371,18 @@ function SettingsContent() {
   const savePreferences = async () => {
     setSaving(true)
     setError(null)
-  
+
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        setError('Please sign in to save preferences')
-        return
-      }
-  
-      const prefData = {
-        user_id: user.id,
+      // Persists via PUT /api/user-preferences AND updates the context's
+      // in-memory state, so Rates/dashboards re-format in the new currency
+      // immediately — no reload, no window refocus.
+      const ok = await applyPreferencesAppWide({
         default_tier: userPreferences.default_tier,
         default_margin_percent: userPreferences.default_margin_percent,
-        default_currency: userPreferences.default_currency,
-        updated_at: new Date().toISOString()
-      }
-  
-      const { error } = await supabase
-        .from('user_preferences')
-        .upsert(prefData, { 
-          onConflict: 'user_id',
-          ignoreDuplicates: false 
-        })
-  
-      if (error) throw error
-  
+        default_currency: userPreferences.default_currency
+      })
+      if (!ok) throw new Error('Failed to save preferences')
+
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err: any) {

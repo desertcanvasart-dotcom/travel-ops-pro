@@ -268,7 +268,8 @@
     "admin": "管理者",
     "manager": "マネージャー",
     "agent": "エージェント",
-    "viewer": "閲覧者"
+    "viewer": "閲覧者",
+    "owner": "オーナー"
   },
   "auth": {
     "login": "ログイン",

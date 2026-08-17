@@ -268,7 +268,8 @@
     "admin": "Admin",
     "manager": "Manager",
     "agent": "Agent",
-    "viewer": "Viewer"
+    "viewer": "Viewer",
+    "owner": "Owner"
   },
   "auth": {
     "login": "Login",
