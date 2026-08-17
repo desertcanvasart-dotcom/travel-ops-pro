@@ -25,66 +25,48 @@ async function translateItineraryDays(
     return []
   }
 
-  const translatedDays = []
+  // ONE query for both languages' existing versions, not two SELECTs per day.
+  // A 12-day trip used to spend 24 round trips discovering what it already
+  // had before translating anything.
+  const { data: versions } = await supabase
+    .from('itinerary_day_versions')
+    .select('*')
+    .in('itinerary_day_id', days.map(d => d.id))
+    .in('language', [targetLanguage, sourceLanguage])
 
+  const existingTarget = new Set(
+    (versions ?? []).filter(v => v.language === targetLanguage).map(v => v.itinerary_day_id)
+  )
+  const sourceById = new Map(
+    (versions ?? []).filter(v => v.language === sourceLanguage).map(v => [v.itinerary_day_id, v])
+  )
+
+  // Translation calls stay SEQUENTIAL on purpose: they hit an external model,
+  // and a 12-day fan-out is a rate-limit incident, not a speed-up.
+  const rows = []
   for (const day of days) {
-    // Check if target version already exists for this day
-    const { data: existingDayVersion } = await supabase
-      .from('itinerary_day_versions')
-      .select('id')
-      .eq('itinerary_day_id', day.id)
-      .eq('language', targetLanguage)
-      .single()
-
-    if (existingDayVersion) {
+    if (existingTarget.has(day.id)) {
       console.log(`Day version already exists for day ${day.id} in ${targetLanguage}`)
       continue
     }
-
-    // Try to get source day version first
-    const { data: sourceDayVersion } = await supabase
-      .from('itinerary_day_versions')
-      .select('*')
-      .eq('itinerary_day_id', day.id)
-      .eq('language', sourceLanguage)
-      .single()
-
-    // Use source version if available, otherwise use main day content
-    const sourceContent = sourceDayVersion || day
-
-    // Translate the day content
-    console.log(`[copy-translate] Translating day ${day.id}: "${sourceContent.title}"`)
+    const sourceContent = sourceById.get(day.id) || day
     const translatedContent = await translateFields(
       sourceContent,
       ITINERARY_DAY_TRANSLATION_FIELDS,
       sourceLanguage,
       targetLanguage
     )
-    console.log(`[copy-translate] Day translated: "${translatedContent.title}"`)
-
-    // Create the day version
-    const { data: newDayVersion, error: createDayError } = await supabase
-      .from('itinerary_day_versions')
-      .insert({
-        itinerary_day_id: day.id,
-        language: targetLanguage,
-        title: translatedContent.title || sourceContent.title || null,
-        description: translatedContent.description || sourceContent.description || null,
-        city: translatedContent.city || sourceContent.city || null,
-        overnight_city: translatedContent.overnight_city || sourceContent.overnight_city || null
-      })
-      .select()
-      .single()
-
-    if (createDayError) {
-      console.error('[copy-translate] Error creating day version:', createDayError)
-    } else {
-      console.log(`[copy-translate] Created day version: ${newDayVersion.id}`)
-      translatedDays.push(newDayVersion)
-    }
+    rows.push({
+      itinerary_day_id: day.id,
+      language: targetLanguage,
+      title: translatedContent.title || sourceContent.title || null,
+      description: translatedContent.description || sourceContent.description || null,
+      city: translatedContent.city || sourceContent.city || null,
+      overnight_city: translatedContent.overnight_city || sourceContent.overnight_city || null,
+    })
   }
 
-  return translatedDays
+  return insertRows('itinerary_day_versions', rows)
 }
 
 // Helper function to translate itinerary services
@@ -117,64 +99,67 @@ async function translateItineraryServices(
     return []
   }
 
-  const translatedServices = []
+  // ONE query for both languages, not two SELECTs per service — the dominant
+  // cost of the old shape, since services outnumber days severalfold.
+  const { data: versions } = await supabase
+    .from('itinerary_service_versions')
+    .select('*')
+    .in('itinerary_service_id', services.map(s => s.id))
+    .in('language', [targetLanguage, sourceLanguage])
 
+  const existingTarget = new Set(
+    (versions ?? []).filter(v => v.language === targetLanguage).map(v => v.itinerary_service_id)
+  )
+  const sourceById = new Map(
+    (versions ?? []).filter(v => v.language === sourceLanguage).map(v => [v.itinerary_service_id, v])
+  )
+
+  const rows = []
   for (const service of services) {
-    // Check if target version already exists for this service
-    const { data: existingServiceVersion } = await supabase
-      .from('itinerary_service_versions')
-      .select('id')
-      .eq('itinerary_service_id', service.id)
-      .eq('language', targetLanguage)
-      .single()
-
-    if (existingServiceVersion) {
+    if (existingTarget.has(service.id)) {
       console.log(`Service version already exists for service ${service.id} in ${targetLanguage}`)
       continue
     }
-
-    // Try to get source service version first
-    const { data: sourceServiceVersion } = await supabase
-      .from('itinerary_service_versions')
-      .select('*')
-      .eq('itinerary_service_id', service.id)
-      .eq('language', sourceLanguage)
-      .single()
-
-    // Use source version if available, otherwise use base service content
-    const sourceContent = sourceServiceVersion || service
-
-    // Translate the service content
-    console.log(`[copy-translate] Translating service ${service.id}: "${sourceContent.service_name}"`)
+    const sourceContent = sourceById.get(service.id) || service
     const translatedContent = await translateFields(
       sourceContent,
       SERVICE_TRANSLATION_FIELDS,
       sourceLanguage,
       targetLanguage
     )
-    console.log(`[copy-translate] Service translated: "${translatedContent.service_name}"`)
-
-    // Create the service version
-    const { data: newServiceVersion, error: createServiceError } = await supabase
-      .from('itinerary_service_versions')
-      .insert({
-        itinerary_service_id: service.id,
-        language: targetLanguage,
-        service_name: translatedContent.service_name || sourceContent.service_name || null,
-        notes: translatedContent.notes || sourceContent.notes || null
-      })
-      .select()
-      .single()
-
-    if (createServiceError) {
-      console.error('[copy-translate] Error creating service version:', createServiceError)
-    } else {
-      console.log(`[copy-translate] Created service version: ${newServiceVersion.id}`)
-      translatedServices.push(newServiceVersion)
-    }
+    rows.push({
+      itinerary_service_id: service.id,
+      language: targetLanguage,
+      service_name: translatedContent.service_name || sourceContent.service_name || null,
+      notes: translatedContent.notes || sourceContent.notes || null,
+    })
   }
 
-  return translatedServices
+  return insertRows('itinerary_service_versions', rows)
+}
+
+/**
+ * Bulk insert, with a per-row fallback when the batch is refused.
+ *
+ * The old shape inserted row by row, so one bad row cost one version and the
+ * rest survived. A plain bulk insert would trade that resilience for speed —
+ * one conflict (say, a version created concurrently) voids the whole batch.
+ * So: one round trip on the happy path, the old row-by-row behaviour only
+ * when the batch fails.
+ */
+async function insertRows(table: string, rows: Record<string, unknown>[]) {
+  if (rows.length === 0) return []
+  const { data, error } = await supabase.from(table).insert(rows).select()
+  if (!error) return data ?? []
+
+  console.error(`[copy-translate] Bulk insert into ${table} failed (${error.message}); retrying per row`)
+  const created = []
+  for (const row of rows) {
+    const { data: one, error: rowError } = await supabase.from(table).insert(row).select().single()
+    if (rowError) console.error(`[copy-translate] Row insert into ${table} failed:`, rowError)
+    else created.push(one)
+  }
+  return created
 }
 
 // POST - Copy existing version and translate to target language
