@@ -184,8 +184,9 @@ if (deviating.length) {
   console.log(`\n${C.bold('CODES')}  ${deviating.length} of ${programs.length} deviate from the canon`)
   console.log(
     C.dim(
-      '  The CANONICAL code comes first. Existing spellings are kept as they are —\n' +
-        '  nothing is renamed; the old label still resolves to the same programme.\n'
+      '  The CANONICAL code comes first — it is what the system stores and shows\n' +
+        '  (ruled 2026-08-17). Source documents keep their old spellings; an\n' +
+        '  existing row under the old spelling is renamed, not duplicated.\n'
     )
   )
   console.log(
@@ -292,15 +293,21 @@ let written = 0
 for (const p of programs) {
   if (p.problems.some(x => x.severity === 'error')) continue
 
+  // The system stores the CANONICAL code (operator ruling, 2026-08-17): the
+  // documents keep their legacy spellings, but everything created inside the
+  // system is held to the standard. The old spelling still resolves — a row
+  // imported under it is renamed below before this upsert.
+  const finalCode = p.canonical_code ?? p.code
+
   const row = {
-    template_code: p.code,
+    template_code: finalCode,
     // Composed from facts the document states — duration and the places it
     // actually visits — because the source has no English names and inventing
     // marketing copy would put words in the operator's mouth. A real name is
     // theirs to write; this is a legible placeholder in a picker.
     template_name: p.cities_covered.length
-      ? `${p.code} — ${p.duration_days} days: ${p.cities_covered.join(', ')}`
-      : `${p.code} — ${p.duration_days} days`,
+      ? `${finalCode} — ${p.duration_days} days: ${p.cities_covered.join(', ')}`
+      : `${finalCode} — ${p.duration_days} days`,
     duration_days: p.duration_days,
     duration_nights: p.duration_nights,
     cities_covered: p.cities_covered,
@@ -321,6 +328,42 @@ for (const p of programs) {
       accommodation_type: d.accommodation_type,
       ...(d.menu ? { menu: d.menu } : {}),
     })),
+  }
+
+  // Rename an existing row that carries the legacy spelling BEFORE upserting on
+  // the canonical one — otherwise a re-import would insert a duplicate and
+  // strand the old row (with its id, and anything hanging off that id).
+  if (finalCode !== p.code) {
+    const { data: oldRows } = await supabase
+      .from('tour_templates')
+      .select('id')
+      .eq('template_code', p.code)
+    if (oldRows?.length) {
+      const { data: canonRows } = await supabase
+        .from('tour_templates')
+        .select('id')
+        .eq('template_code', finalCode)
+      if (canonRows?.length) {
+        // Both spellings exist as separate rows — renaming would collide, and
+        // which row is the real one is not this script's call to make.
+        console.log(
+          C.red(
+            `  ${p.code}: a row already exists under ${finalCode} — ` +
+              'two rows for one programme; resolve manually, skipping.'
+          )
+        )
+        continue
+      }
+      const { error: renameError } = await supabase
+        .from('tour_templates')
+        .update({ template_code: finalCode })
+        .eq('template_code', p.code)
+      if (renameError) {
+        console.log(C.red(`  ${p.code} → ${finalCode}: rename failed: ${renameError.message}`))
+        continue
+      }
+      console.log(C.dim(`  renamed ${p.code} → ${finalCode}`))
+    }
   }
 
   const { error } = await supabase

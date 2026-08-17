@@ -323,7 +323,7 @@ export default function CommissionsPage() {
   })
 
   const formatCurrency = (amount: number, currency: string = 'EUR') => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return `${symbols[currency] || currency}${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 

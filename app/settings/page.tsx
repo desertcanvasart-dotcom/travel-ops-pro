@@ -1033,9 +1033,9 @@ function SettingsContent() {
         </p>
 
         <div className="flex gap-2">
-          {['EUR', 'USD', 'GBP', 'EGP'].map((currency) => {
+          {['EUR', 'USD', 'GBP', 'EGP', 'JPY'].map((currency) => {
             const isSelected = userPreferences.default_currency === currency
-            const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
+            const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
 
             return (
               <button

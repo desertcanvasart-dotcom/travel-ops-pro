@@ -219,7 +219,7 @@ export default function PaymentsPage() {
   }
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return symbols[currency] || currency
   }
 

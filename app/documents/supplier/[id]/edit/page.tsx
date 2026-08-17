@@ -1136,6 +1136,7 @@ export default function EditSupplierDocumentPage() {
                   <option value="USD">USD</option>
                   <option value="EGP">EGP</option>
                   <option value="GBP">GBP</option>
+                  <option value="JPY">JPY</option>
                 </select>
               </div>
               <div>

@@ -66,7 +66,7 @@ const MATCH_STYLES: Record<string, { bg: string; text: string }> = {
   discrepancy: { bg: 'bg-red-100', text: 'text-red-700' },
 }
 
-const CURRENCIES: Record<string, string> = { EUR: '\u20AC', USD: '$', GBP: '\u00A3', EGP: 'E\u00A3' }
+const CURRENCIES: Record<string, string> = { EUR: '\u20AC', USD: '$', GBP: '\u00A3', EGP: 'E\u00A3', JPY: '\u00A5' }
 
 const SERVICE_CATEGORIES = [
   { value: 'guide', label: 'Tour Guide' },
@@ -728,6 +728,7 @@ export default function SupplierInvoicesPage() {
                     <option value="USD">USD</option>
                     <option value="GBP">GBP</option>
                     <option value="EGP">EGP</option>
+                    <option value="JPY">JPY</option>
                   </select>
                 </div>
               </div>

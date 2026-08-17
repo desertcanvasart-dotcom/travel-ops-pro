@@ -199,7 +199,7 @@ export default function ProfitLossPage() {
   )
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return symbols[currency] || currency
   }
 

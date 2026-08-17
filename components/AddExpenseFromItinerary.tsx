@@ -228,6 +228,7 @@ export default function AddExpenseFromItinerary({
                       <option value="EUR">€</option>
                       <option value="USD">$</option>
                       <option value="EGP">E£</option>
+                      <option value="JPY">¥</option>
                     </select>
                     <input
                       type="number"

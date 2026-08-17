@@ -719,7 +719,15 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
                       )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{config.description}</p>
-                    
+                    {/* Every tier has these defaults — shown unconditionally so the
+                        tiers can be compared before selecting one. Inside the
+                        expanded block it read as a property of the Private radio. */}
+                    <p className="text-xs text-gray-400 mt-1">
+                      {`Pax: ${config.defaults.min_pax}-${config.defaults.max_pax} • ` +
+                        `Vehicle: ${config.defaults.vehicle_type.replace('_', ' ')} • ` +
+                        `${(config.defaults.group_type as string) === 'private' ? 'Private' : 'Shared'} by default`}
+                    </p>
+
                     {selectedTiers.has(tier) && (
                       <div className="mt-3 pt-3 border-t border-gray-200" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-4">
@@ -743,10 +751,6 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
                             />
                             <span className="text-sm text-gray-700">👥 Shared</span>
                           </label>
-                        </div>
-                        <div className="mt-2 text-xs text-gray-500">
-                          Pax: {config.defaults.min_pax}-{config.defaults.max_pax} • 
-                          Vehicle: {config.defaults.vehicle_type.replace('_', ' ')}
                         </div>
                       </div>
                     )}

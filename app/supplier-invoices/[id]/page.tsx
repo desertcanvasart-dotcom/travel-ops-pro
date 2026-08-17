@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react'
 
-const CURRENCIES: Record<string, string> = { EUR: '\u20AC', USD: '$', GBP: '\u00A3', EGP: 'E\u00A3' }
+const CURRENCIES: Record<string, string> = { EUR: '\u20AC', USD: '$', GBP: '\u00A3', EGP: 'E\u00A3', JPY: '\u00A5' }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string }> = {
   received: { bg: 'bg-gray-100', text: 'text-gray-700' },

@@ -64,7 +64,7 @@ export default function NewClientPage() {
     sms_consent: false,
     tags: [] as string[],
     internal_notes: '',
-    currency_preference: 'EUR' as 'EUR' | 'USD' | 'GBP'
+    currency_preference: 'EUR' as 'EUR' | 'USD' | 'GBP' | 'JPY'
   })
 
   const supabase = createClient()
@@ -596,6 +596,7 @@ export default function NewClientPage() {
                   <option value="EUR">EUR (€)</option>
                   <option value="USD">USD ($)</option>
                   <option value="GBP">GBP (£)</option>
+                  <option value="JPY">JPY (¥)</option>
                 </select>
               </div>
             </div>

@@ -5917,7 +5917,9 @@
       "multi_day": "複数日ツアー",
       "multi_day_tour": "複数日ツアー",
       "cruise_land": "クルーズ＆陸上",
-      "stopover": "ストップオーバーツアー"
+      "stopover": "ストップオーバーツアー",
+      "land": "陸上ツアー",
+      "cruise": "ナイルクルーズ"
     },
     "physicalLevels": {
       "easy": "簡単 - 誰でも参加可能",

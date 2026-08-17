@@ -433,7 +433,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return symbols[currency] || currency
   }
 
@@ -1054,6 +1054,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     <option value="EUR">EUR (€)</option>
                     <option value="USD">USD ($)</option>
                     <option value="GBP">GBP (£)</option>
+                    <option value="JPY">JPY (¥)</option>
                   </select>
                 </div>
               </div>

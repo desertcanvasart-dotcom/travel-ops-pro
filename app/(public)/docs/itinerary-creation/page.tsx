@@ -74,7 +74,7 @@ export default function ItineraryCreationPage() {
               </tr>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <td className="px-4 py-2 font-medium text-gray-900">Currency</td>
-                <td className="px-4 py-2 text-gray-600">EUR, USD, GBP, or EGP. All rates are converted and displayed in the selected currency.</td>
+                <td className="px-4 py-2 text-gray-600">EUR, USD, GBP, EGP, or JPY. All rates are converted and displayed in the selected currency.</td>
               </tr>
               <tr>
                 <td className="px-4 py-2 font-medium text-gray-900">Markup %</td>
