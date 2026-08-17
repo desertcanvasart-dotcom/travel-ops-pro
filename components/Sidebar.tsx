@@ -239,6 +239,7 @@ const STORAGE_KEY = 'autoura-sidebar-sections'
 
 // Role badge colors
 const ROLE_COLORS: Record<UserRole, string> = {
+  owner: 'bg-amber-100 text-amber-700',
   admin: 'bg-purple-100 text-purple-700',
   manager: 'bg-blue-100 text-blue-700',
   agent: 'bg-green-100 text-green-700',
@@ -608,9 +609,11 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 <p className="text-[13px] font-medium text-gray-700 truncate">
                   {profile?.full_name || 'User'}
                 </p>
-                <span className={`inline-block px-1.5 py-0.5 text-[9px] font-medium rounded ${ROLE_COLORS[role]}`}>
-                  {tRoles(role)}
-                </span>
+                {role && (
+                  <span className={`inline-block px-1.5 py-0.5 text-[9px] font-medium rounded ${ROLE_COLORS[role]}`}>
+                    {tRoles(role)}
+                  </span>
+                )}
               </div>
             )}
           </div>

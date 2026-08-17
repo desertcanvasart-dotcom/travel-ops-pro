@@ -52,8 +52,12 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$',
   EUR: '€',
   GBP: '£',
-  EGP: 'E£'
+  EGP: 'E£',
+  JPY: '¥'
 }
+
+// Yen has no minor unit — ¥1,234.00 is wrong on sight.
+const ZERO_DECIMAL_CURRENCIES = new Set(['JPY'])
 
 // ============================================
 // CONTEXT
@@ -121,7 +125,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       setExchangeRates({
         base: 'USD',
         date: new Date().toISOString().split('T')[0],
-        rates: { USD: 1, EUR: 0.92, GBP: 0.79, EGP: 50.5 }
+        rates: { USD: 1, EUR: 0.92, GBP: 0.79, EGP: 50.5, JPY: 147 }
       })
     } finally {
       setExchangeRatesLoading(false)
@@ -186,9 +190,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const formatCurrency = useCallback((amount: number, currency?: string): string => {
     const curr = currency || preferences.default_currency
     const symbol = CURRENCY_SYMBOLS[curr] || curr
+    const digits = ZERO_DECIMAL_CURRENCIES.has(curr) ? 0 : 2
     const formatted = amount.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
     })
 
     return `${symbol}${formatted}`

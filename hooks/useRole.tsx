@@ -1,12 +1,19 @@
 'use client'
 
 import { useAuth } from '@/app/contexts/AuthContext'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ORG_ROLES, roleAllows, type OrgRole } from '@/lib/auth/roles'
 
-export type UserRole = 'admin' | 'manager' | 'agent' | 'viewer'
+// The ONE role system: organization_members.role, served by /api/auth/role.
+// This hook used to read profile.role — the user_profiles DISPLAY MIRROR that
+// nothing may gate on (lib/auth/roles.ts) — which meant the sidebar and every
+// WithRole gate ran on the wrong system, and an owner was only seeing admin
+// sections when the mirror happened to agree.
+
+export type UserRole = OrgRole
 
 interface UseRoleReturn {
-  role: UserRole
+  role: UserRole | null
   isAdmin: boolean
   isManager: boolean
   isAgent: boolean
@@ -19,39 +26,70 @@ interface UseRoleReturn {
   canDeleteRecords: boolean
 }
 
-const ROLE_HIERARCHY: Record<UserRole, number> = {
-  admin: 4,
-  manager: 3,
-  agent: 2,
-  viewer: 1
+// One fetch per page load, shared by every consumer of the hook.
+let cachedRole: OrgRole | null | undefined
+let inflight: Promise<OrgRole | null> | null = null
+
+async function fetchMembershipRole(): Promise<OrgRole | null> {
+  if (cachedRole !== undefined) return cachedRole
+  inflight ??= fetch('/api/auth/role')
+    .then(async res => {
+      if (!res.ok) return null
+      const body = await res.json()
+      const role = body?.role
+      return ORG_ROLES.includes(role) ? (role as OrgRole) : null
+    })
+    .catch(() => null)
+    .then(role => {
+      cachedRole = role
+      inflight = null
+      return role
+    })
+  return inflight
 }
 
 export function useRole(): UseRoleReturn {
   const { profile } = useAuth()
-  
-  const role = (profile?.role as UserRole) || 'viewer'
-  
+  const [membershipRole, setMembershipRole] = useState<OrgRole | null | undefined>(cachedRole)
+
+  useEffect(() => {
+    let alive = true
+    fetchMembershipRole().then(role => {
+      if (alive) setMembershipRole(role)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Until the membership answer arrives, fall back to the profile mirror so the
+  // sidebar doesn't flash empty — the mirror is kept in sync and is only wrong
+  // in the cases the membership fetch then corrects.
+  const mirror = profile?.role
+  const role: UserRole | null =
+    membershipRole !== undefined
+      ? membershipRole
+      : ORG_ROLES.includes(mirror as OrgRole)
+        ? (mirror as OrgRole)
+        : null
+
   return useMemo(() => {
-    const roleLevel = ROLE_HIERARCHY[role] || 0
-    
     return {
       role,
-      isAdmin: role === 'admin',
+      // roleAllows fails closed on null and lets the OWNER clear every gate
+      // without being named in any list.
+      isAdmin: roleAllows(role, ['admin']),
       isManager: role === 'manager',
       isAgent: role === 'agent',
       isViewer: role === 'viewer',
-      
-      // Check if user can access based on required roles
-      canAccess: (requiredRoles: UserRole[]) => {
-        return requiredRoles.includes(role)
-      },
-      
-      // Permission helpers
-      canManageTeam: role === 'admin' || role === 'manager',
-      canManageSettings: role === 'admin',
-      canViewFinancials: role === 'admin' || role === 'manager',
-      canEditClients: role !== 'viewer',
-      canDeleteRecords: role === 'admin' || role === 'manager',
+
+      canAccess: (requiredRoles: UserRole[]) => roleAllows(role, requiredRoles),
+
+      canManageTeam: roleAllows(role, ['admin', 'manager']),
+      canManageSettings: roleAllows(role, ['admin']),
+      canViewFinancials: roleAllows(role, ['admin', 'manager']),
+      canEditClients: roleAllows(role, ['admin', 'manager', 'agent']),
+      canDeleteRecords: roleAllows(role, ['admin', 'manager']),
     }
   }, [role])
 }
@@ -65,11 +103,11 @@ interface WithRoleProps {
 
 export function WithRole({ children, roles, fallback = null }: WithRoleProps) {
   const { canAccess } = useRole()
-  
+
   if (!canAccess(roles)) {
     return <>{fallback}</>
   }
-  
+
   return <>{children}</>
 }
 
