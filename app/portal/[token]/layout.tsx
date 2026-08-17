@@ -26,7 +26,9 @@ const CSS = `
 }
 .portal *{box-sizing:border-box}
 .portal .hd{padding:32px 0 20px;border-bottom:2px solid var(--brand)}
+.portal .oplogo{max-height:44px;max-width:180px;object-fit:contain;display:block;margin:0 0 10px}
 .portal .op{font-size:12px;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
+.portal .optag{font-size:11px;color:var(--soft);margin:-4px 0 8px}
 .portal h1{font-size:22px;line-height:1.4;margin:0 0 8px;font-weight:700}
 .portal .sub{margin:0;color:var(--soft);font-size:14px}
 .portal .ref{margin:6px 0 0;color:var(--soft);font-size:12px;font-variant-numeric:tabular-nums}

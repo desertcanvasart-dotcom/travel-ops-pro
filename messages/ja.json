@@ -3303,6 +3303,29 @@
       "savedNote": "保存しました — 新規予約から適用されます",
       "loadFailed": "お支払い条件を読み込めませんでした",
       "saveFailed": "保存できませんでした"
+    },
+    "companyProfile": {
+      "loading": "会社情報を読み込み中…",
+      "title": "会社プロフィール",
+      "subtitle": "顧客向け書類（日程表・請求書）とカスタマーポータルに表示されます。",
+      "noLogo": "ロゴなし",
+      "uploadLogo": "ロゴをアップロード",
+      "companyName": "会社名",
+      "tagline": "キャッチコピー",
+      "phone": "電話番号",
+      "email": "メールアドレス",
+      "website": "ウェブサイト",
+      "address": "住所",
+      "documentContacts": "書類ヘッダーの連絡先",
+      "documentContactsHint": "日程表ヘッダーに印刷される連絡先です。空欄はそのまま空欄で印刷されます。",
+      "slots": {
+        "cairo_guide": "カイロガイド",
+        "south_guide": "南部ガイド",
+        "emergency_japan": "緊急連絡先（日本）",
+        "cairo_office": "カイロ"
+      },
+      "save": "保存",
+      "saved": "保存しました"
     }
   },
   "translate": {

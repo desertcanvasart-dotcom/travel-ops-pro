@@ -39,6 +39,20 @@ export interface DailyItineraryContext {
   hotel_row_count: number
   /** @font-face CSS for NotoSansJP; empty string is valid (tests, preview). */
   font_face_css: string
+  /** Company letterhead — everything optional; absent facts render nothing. */
+  letterhead: {
+    logo_url: string | null
+    company_name: string
+    /** Address / phone / email / website, one per line, blanks filtered. */
+    lines: string[]
+  }
+  /** Values for the header contact slots; blank prints blank. */
+  office_contacts: {
+    cairo_guide: string
+    south_guide: string
+    emergency_japan: string
+    cairo_office: string
+  }
 }
 
 const PAGE: DocumentPage = { size: 'A4', orientation: 'portrait', margin: '12mm' }
@@ -98,6 +112,18 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   table { border-collapse: collapse; width: 100%; }
   td, th { border: 0.6pt solid #333; padding: 3pt 5pt; vertical-align: top; }
 
+  .letterhead {
+    display: flex;
+    align-items: center;
+    gap: 10pt;
+    border: none;
+    margin-bottom: 6pt;
+  }
+  .letterhead img { max-height: 34pt; max-width: 120pt; object-fit: contain; }
+  .letterhead .co { flex: 1; }
+  .letterhead .co .nm { font-size: 12pt; font-weight: 700; }
+  .letterhead .co .ln { font-size: 7.5pt; color: #333; }
+
   .office td { font-size: 8pt; }
   .office .l { width: 22%; background: #f3f3f3; }
   .office .v { width: 28%; }
@@ -125,10 +151,21 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
 </style>
 </head>
 <body>
+  ${
+    ctx.letterhead.company_name || ctx.letterhead.logo_url
+      ? `<div class="letterhead">
+    ${ctx.letterhead.logo_url ? `<img src="${esc(ctx.letterhead.logo_url)}" alt="" />` : ''}
+    <div class="co">
+      <div class="nm">${esc(ctx.letterhead.company_name)}</div>
+      ${ctx.letterhead.lines.map(l => `<div class="ln">${esc(l)}</div>`).join('')}
+    </div>
+  </div>`
+      : ''
+  }
   <table class="office">
-    <tr><td class="l">カイロガイド</td><td class="v"></td><td class="l">作成日</td><td class="v">${esc(ctx.created_date)}</td></tr>
-    <tr><td class="l">南部ガイド</td><td class="v"></td><td class="l">作成者</td><td class="v"></td></tr>
-    <tr><td class="l">緊急連絡先（日本）</td><td class="v"></td><td class="l">カイロ</td><td class="v"></td></tr>
+    <tr><td class="l">カイロガイド</td><td class="v">${esc(ctx.office_contacts.cairo_guide)}</td><td class="l">作成日</td><td class="v">${esc(ctx.created_date)}</td></tr>
+    <tr><td class="l">南部ガイド</td><td class="v">${esc(ctx.office_contacts.south_guide)}</td><td class="l">作成者</td><td class="v"></td></tr>
+    <tr><td class="l">緊急連絡先（日本）</td><td class="v">${esc(ctx.office_contacts.emergency_japan)}</td><td class="l">カイロ</td><td class="v">${esc(ctx.office_contacts.cairo_office)}</td></tr>
   </table>
 
   <div class="codeline">${esc(ctx.program_code)}</div>

@@ -61,11 +61,22 @@ function mealSlot(day: SourceProgramDay, slot: 'breakfast' | 'lunch' | 'dinner')
   return '×'
 }
 
+export interface OrgBranding {
+  name: string | null
+  logo_url: string | null
+  company_phone: string | null
+  contact_email: string | null
+  company_website: string | null
+  company_address: string | null
+  document_contacts: Record<string, string> | null
+}
+
 export interface AssembleProgramInput {
   template_code: string
   itinerary: SourceProgramDay[] | null
   created_date: string
   font_face_css: string
+  org: OrgBranding | null
 }
 
 export function assembleProgramItinerary(input: AssembleProgramInput): DailyItineraryContext {
@@ -95,11 +106,31 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
       .map(d => d.overnight_city as string)
   )
 
+  const org = input.org
+  const contacts = org?.document_contacts ?? {}
+
   return {
     program_code: input.template_code,
     created_date: input.created_date,
     days: contextDays,
     hotel_row_count: Math.max(hotelCities.size, 1),
     font_face_css: input.font_face_css,
+    letterhead: {
+      logo_url: org?.logo_url ?? null,
+      company_name: org?.name ?? '',
+      lines: [
+        org?.company_address,
+        [org?.company_phone, org?.contact_email].filter(Boolean).join(' · '),
+        org?.company_website,
+      ]
+        .map(l => (l ?? '').trim())
+        .filter(Boolean),
+    },
+    office_contacts: {
+      cairo_guide: contacts.cairo_guide ?? '',
+      south_guide: contacts.south_guide ?? '',
+      emergency_japan: contacts.emergency_japan ?? '',
+      cairo_office: contacts.cairo_office ?? '',
+    },
   }
 }

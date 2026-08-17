@@ -53,6 +53,9 @@ interface Operator {
   brandHex: string
   email: string | null
   phone: string | null
+  logoUrl: string | null
+  address: string | null
+  tagline: string | null
 }
 
 async function resolve(token: string): Promise<{ booking: PortalBooking; operator: Operator } | null> {
@@ -129,7 +132,7 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('name, primary_color, contact_email, company_phone')
+    .select('name, primary_color, contact_email, company_phone, logo_url, company_address, tagline')
     .eq('id', link!.org_id)
     .maybeSingle()
 
@@ -157,6 +160,9 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
       brandHex: org?.primary_color || '#647C47',
       email: org?.contact_email ?? null,
       phone: org?.company_phone ?? null,
+      logoUrl: (org as any)?.logo_url ?? null,
+      address: (org as any)?.company_address ?? null,
+      tagline: (org as any)?.tagline ?? null,
     },
   }
 }
@@ -179,7 +185,12 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   return (
     <main style={{ ['--brand' as string]: operator.brandHex }} className="portal">
       <header className="hd">
+        {operator.logoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="oplogo" src={operator.logoUrl} alt={operator.name} />
+        )}
         <p className="op">{operator.name}</p>
+        {operator.tagline && <p className="optag">{operator.tagline}</p>}
         <h1>{booking.tripName}</h1>
         <p className="sub">
           {booking.tourCode ? `${booking.tourCode} ・ ` : ''}
@@ -312,6 +323,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
 
       <footer>
         <p>{operator.name}</p>
+        {operator.address && <p>{operator.address}</p>}
         {operator.phone && <p>{operator.phone}</p>}
         {operator.email && <p>{operator.email}</p>}
       </footer>

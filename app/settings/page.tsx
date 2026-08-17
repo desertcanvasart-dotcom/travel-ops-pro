@@ -37,6 +37,7 @@ import {
 import { LanguageSelector } from '@/components/LanguageSelector'
 import { SignatureEditor } from '@/components/email/RichTextEditor'
 import PaymentTermsCard from '@/app/components/PaymentTermsCard'
+import CompanyProfileCard from '@/app/components/CompanyProfileCard'
 
 // ============================================
 // TYPES
@@ -1403,6 +1404,7 @@ function SettingsContent() {
               )}
               {/* Commercial terms live with the org, not with a user: how much
                   money is asked for and when is not a per-agent preference. */}
+              {activeTab === 'organization' && <CompanyProfileCard />}
               {activeTab === 'organization' && <PaymentTermsCard />}
             </>
           )}

@@ -2564,6 +2564,29 @@
       "savedNote": "Saved — applies to new bookings",
       "loadFailed": "Could not load payment terms",
       "saveFailed": "Could not save"
+    },
+    "companyProfile": {
+      "loading": "Loading company profile…",
+      "title": "Company Profile",
+      "subtitle": "Printed on customer documents (itineraries, invoices) and shown on the customer portal.",
+      "noLogo": "No logo",
+      "uploadLogo": "Upload logo",
+      "companyName": "Company name",
+      "tagline": "Tagline",
+      "phone": "Phone",
+      "email": "Email",
+      "website": "Website",
+      "address": "Address",
+      "documentContacts": "Document header contacts",
+      "documentContactsHint": "The contact slots printed in the itinerary document header. Blank slots print blank.",
+      "slots": {
+        "cairo_guide": "Cairo guide",
+        "south_guide": "Southern guide",
+        "emergency_japan": "Emergency contact (Japan)",
+        "cairo_office": "Cairo office"
+      },
+      "save": "Save",
+      "saved": "Saved"
     }
   },
   "translate": {

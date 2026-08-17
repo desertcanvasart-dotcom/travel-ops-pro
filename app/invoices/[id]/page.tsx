@@ -29,6 +29,7 @@ import {
   Eye
 } from 'lucide-react'
 import { generateInvoicePDF, downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { fetchCompanyInfo } from '@/lib/company-info-client'
 import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
@@ -287,12 +288,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const handlePreviewInvoicePDF = () => {
+  const handlePreviewInvoicePDF = async () => {
     if (!invoice) return
 
     setGeneratingPDF(true)
     try {
-      const doc = generateInvoicePDF(invoice)
+      const doc = generateInvoicePDF(invoice, await fetchCompanyInfo())
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
       setPreviewTitle(`Invoice ${invoice.invoice_number}`)

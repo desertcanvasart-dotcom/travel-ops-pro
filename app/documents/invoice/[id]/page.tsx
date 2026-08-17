@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Loader2, FileText, Calendar, CreditCard, Eye } from 'lucide-react'
 import { generateInvoicePDF, downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { fetchCompanyInfo } from '@/lib/company-info-client'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
@@ -93,13 +94,13 @@ export default function InvoicePage() {
     }
   }
 
-  const handlePreviewPDF = () => {
+  const handlePreviewPDF = async () => {
     if (!payment) return
 
     setDownloading(true)
     try {
       const invoiceData = buildInvoiceData(payment)
-      const doc = generateInvoicePDF(invoiceData)
+      const doc = generateInvoicePDF(invoiceData, await fetchCompanyInfo())
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
       setShowPdfPreview(true)

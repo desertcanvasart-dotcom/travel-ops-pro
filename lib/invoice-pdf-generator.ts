@@ -37,7 +37,7 @@ interface Invoice {
   payment_instructions: string | null
 }
 
-interface CompanyInfo {
+export interface CompanyInfo {
   name: string
   address: string
   city: string
@@ -48,15 +48,18 @@ interface CompanyInfo {
   taxId?: string
 }
 
-// Default company info - customize this for Travel2Egypt
+// The fallback when no caller supplies company info is BLANK, deliberately.
+// This used to be a placeholder company ("Travel2Egypt, 123 Pyramids Road"),
+// which printed as if real on customer invoices. Real details come from the
+// organization's Company Profile (Settings → Organization); an unset field
+// prints nothing.
 const DEFAULT_COMPANY: CompanyInfo = {
-  name: 'Travel2Egypt',
-  address: '123 Pyramids Road',
-  city: 'Cairo',
-  country: 'Egypt',
-  email: 'info@travel2egypt.com',
-  phone: '+20 123 456 7890',
-  website: 'www.travel2egypt.com'
+  name: '',
+  address: '',
+  city: '',
+  country: '',
+  email: '',
+  phone: ''
 }
 
 // Money on a document is formatted by ONE function, in lib/currency-totals.ts.
@@ -165,23 +168,20 @@ export function generateInvoicePDF(
     y += 2
   }
 
-  // Company details
+  // Company details — only the lines that exist; blanks don't leave gaps.
   doc.setFontSize(9)
   doc.setTextColor(...mediumGray)
   doc.setFont(FONT, 'normal')
-  doc.text(company.address, margin, y)
-  y += 4
-  doc.text(`${company.city}, ${company.country}`, margin, y)
-  y += 4
-  doc.text(company.email, margin, y)
-  y += 4
-  doc.text(company.phone, margin, y)
-  if (company.website) {
+  const cityCountry = [company.city, company.country].filter(Boolean).join(', ')
+  const companyLines = [company.address, cityCountry, company.email, company.phone, company.website]
+    .map(l => (l ?? '').trim())
+    .filter(Boolean)
+  for (const line of companyLines) {
+    doc.text(line, margin, y)
     y += 4
-    doc.text(company.website, margin, y)
   }
 
-  y += 15
+  y += 15 - (companyLines.length ? 4 : 0)
 
   // Divider line
   doc.setDrawColor(...primaryColor)
