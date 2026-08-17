@@ -20,6 +20,8 @@ import type { DocumentPage, DocumentTemplate } from '../types'
 
 export interface DailyItineraryDay {
   day: number
+  /** Filled per departure: month/day and Japanese weekday. Null = blank slot. */
+  date: { md: string; wd: string } | null
   /** 宿泊地 — カイロ, 船中泊, 機中泊 … Empty string on the final day. */
   overnight_label: string
   /** Schedule text, one line per line the office wrote. */
@@ -53,6 +55,8 @@ export interface DailyItineraryContext {
     /** Address / phone / email / website, one per line, blanks filtered. */
     lines: string[]
   }
+  /** 作成者 — who generated this departure's document. Blank on the template. */
+  author: string
   /** Values for the header contact slots; blank prints blank. */
   office_contacts: {
     cairo_guide: string
@@ -77,7 +81,7 @@ function dayRow(day: DailyItineraryDay): string {
   const attractions = day.attractions.map(a => `<div>◎${esc(a)}</div>`).join('')
   return `<tr class="day">
     <td class="num">${day.day}</td>
-    <td class="date">/<br />(&#12288;)</td>
+    <td class="date">${day.date ? `${esc(day.date.md)}<br />(${esc(day.date.wd)})` : '/<br />(&#12288;)'}</td>
     <td class="stay">${esc(day.overnight_label)}</td>
     <td class="sched">
       ${schedule}
@@ -177,7 +181,7 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   }
   <table class="office">
     <tr><td class="l">カイロガイド</td><td class="v">${esc(ctx.office_contacts.cairo_guide)}</td><td class="l">作成日</td><td class="v">${esc(ctx.created_date)}</td></tr>
-    <tr><td class="l">南部ガイド</td><td class="v">${esc(ctx.office_contacts.south_guide)}</td><td class="l">作成者</td><td class="v"></td></tr>
+    <tr><td class="l">南部ガイド</td><td class="v">${esc(ctx.office_contacts.south_guide)}</td><td class="l">作成者</td><td class="v">${esc(ctx.author)}</td></tr>
     <tr><td class="l">緊急連絡先（日本）</td><td class="v">${esc(ctx.office_contacts.emergency_japan)}</td><td class="l">カイロ</td><td class="v">${esc(ctx.office_contacts.cairo_office)}</td></tr>
   </table>
 

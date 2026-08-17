@@ -5876,7 +5876,14 @@
       "days": "days",
       "uncategorized": "Uncategorized",
       "itineraryPdf": "Itinerary PDF",
-      "printItinerary": "Print"
+      "printItinerary": "Print",
+      "itineraryDoc": "Itinerary Doc (日程表)",
+      "nitteiTitle": "Generate 日程表",
+      "nitteiHint": "All fields optional — leave blank to print the template as-is. Filling the departure date puts real dates on every day.",
+      "departureDate": "Departure date (Day 1)",
+      "cairoGuide": "Cairo guide",
+      "southGuide": "Southern guide",
+      "docAuthor": "Author (作成者)"
     }
   },
   "b2bQuotes": {

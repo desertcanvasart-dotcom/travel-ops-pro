@@ -160,6 +160,9 @@ export default function TourDetailPage() {
   })
   const [isEurPassport, setIsEurPassport] = useState(true)
   const [pricing, setPricing] = useState<PricingResult | null>(null)
+  // 日程表 generation dialog — departure-specific facts, all optional
+  const [showNitteiDialog, setShowNitteiDialog] = useState(false)
+  const [nittei, setNittei] = useState({ departure_date: '', cairo_guide: '', south_guide: '', author: '' })
   const [pricingLoading, setPricingLoading] = useState(false)
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
@@ -414,23 +417,14 @@ export default function TourDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* The office's own 日程表 document — PDF download and direct print. */}
-          <a
-            href={`/api/documents/program-itinerary?template_id=${tour.template_id}&format=pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
+          {/* The office's own 日程表 document — blank template or a filled
+              departure, chosen in a small dialog. */}
+          <button
+            onClick={() => setShowNitteiDialog(true)}
             className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#647C47] text-white hover:bg-[#4a5c35] transition-colors"
           >
-            {t('detail.itineraryPdf')}
-          </a>
-          <a
-            href={`/api/documents/program-itinerary?template_id=${tour.template_id}&format=html&print=1`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[#647C47] text-[#647C47] hover:bg-[#647C47]/10 transition-colors"
-          >
-            {t('detail.printItinerary')}
-          </a>
+            {t('detail.itineraryDoc')}
+          </button>
           <span className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${tierStyle.bg} ${tierStyle.text}`}>
             {tierStyle.icon} {tour.tier.charAt(0).toUpperCase() + tour.tier.slice(1)}
           </span>
@@ -896,6 +890,67 @@ export default function TourDetailPage() {
           </div>
         </div>
       </div>
+
+      {showNitteiDialog && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowNitteiDialog(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200">
+              <h3 className="font-semibold text-gray-900">{t('detail.nitteiTitle')}</h3>
+              <p className="text-xs text-gray-500 mt-1">{t('detail.nitteiHint')}</p>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('detail.departureDate')}</label>
+                <input type="date" value={nittei.departure_date}
+                  onChange={e => setNittei(prev => ({ ...prev, departure_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('detail.cairoGuide')}</label>
+                  <input value={nittei.cairo_guide}
+                    onChange={e => setNittei(prev => ({ ...prev, cairo_guide: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('detail.southGuide')}</label>
+                  <input value={nittei.south_guide}
+                    onChange={e => setNittei(prev => ({ ...prev, south_guide: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('detail.docAuthor')}</label>
+                <input value={nittei.author}
+                  onChange={e => setNittei(prev => ({ ...prev, author: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+            </div>
+            <div className="flex gap-2 px-5 py-4 border-t border-gray-200">
+              {(() => {
+                const qs = new URLSearchParams({ template_id: tour.template_id })
+                if (nittei.departure_date) qs.set('departure_date', nittei.departure_date)
+                if (nittei.cairo_guide) qs.set('cairo_guide', nittei.cairo_guide)
+                if (nittei.south_guide) qs.set('south_guide', nittei.south_guide)
+                if (nittei.author) qs.set('author', nittei.author)
+                const base = `/api/documents/program-itinerary?${qs.toString()}`
+                return (
+                  <>
+                    <a href={`${base}&format=pdf`} target="_blank" rel="noopener noreferrer"
+                      className="flex-1 text-center px-4 py-2 bg-[#647C47] text-white rounded-lg text-sm font-medium hover:bg-[#4a5c35]">
+                      {t('detail.itineraryPdf')}
+                    </a>
+                    <a href={`${base}&format=html&print=1`} target="_blank" rel="noopener noreferrer"
+                      className="flex-1 text-center px-4 py-2 border border-[#647C47] text-[#647C47] rounded-lg text-sm font-medium hover:bg-[#647C47]/10">
+                      {t('detail.printItinerary')}
+                    </a>
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

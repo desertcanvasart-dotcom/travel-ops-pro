@@ -6009,7 +6009,14 @@
       "days": "日間",
       "uncategorized": "未分類",
       "itineraryPdf": "日程表PDF",
-      "printItinerary": "印刷"
+      "printItinerary": "印刷",
+      "itineraryDoc": "日程表",
+      "nitteiTitle": "日程表を作成",
+      "nitteiHint": "すべて任意です。空欄のままならテンプレートをそのまま印刷します。出発日を入れると各日の日付が入ります。",
+      "departureDate": "出発日（1日目）",
+      "cairoGuide": "カイロガイド",
+      "southGuide": "南部ガイド",
+      "docAuthor": "作成者"
     },
     "views": {
       "grid": "グリッド",

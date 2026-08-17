@@ -86,13 +86,38 @@ export interface AssembleProgramInput {
   created_date: string
   font_face_css: string
   org: OrgBranding | null
+  /** Departure-specific facts, all optional — absent renders the blank
+   *  template exactly as before. Dates are computed as departure + (day-1). */
+  departure?: {
+    start_date: string | null
+    cairo_guide: string | null
+    south_guide: string | null
+    author: string | null
+  }
+}
+
+const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土']
+
+/** "10/5" over "(月)" — the two lines of the date cell, as the office writes
+ *  them. Computed in UTC so the label never shifts a day by server timezone. */
+function dateLabel(startDate: string, dayNumber: number): { md: string; wd: string } | null {
+  const base = new Date(`${startDate.slice(0, 10)}T00:00:00Z`)
+  if (Number.isNaN(base.getTime())) return null
+  const d = new Date(base)
+  d.setUTCDate(d.getUTCDate() + (dayNumber - 1))
+  return {
+    md: `${d.getUTCMonth() + 1}/${d.getUTCDate()}`,
+    wd: WEEKDAYS_JA[d.getUTCDay()],
+  }
 }
 
 export function assembleProgramItinerary(input: AssembleProgramInput): DailyItineraryContext {
   const days = [...(input.itinerary ?? [])].sort((a, b) => (a.day ?? 0) - (b.day ?? 0))
 
+  const startDate = input.departure?.start_date ?? null
   const contextDays: DailyItineraryDay[] = days.map(day => ({
     day: day.day,
+    date: startDate ? dateLabel(startDate, day.day) : null,
     overnight_label: overnightLabel(day),
     schedule_lines: String(day.description ?? '')
       .split('\n')
@@ -139,14 +164,13 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
         .filter(Boolean),
     },
     office_contacts: {
-      // The guide cells are PER-TRIP: a different guide each departure. At
-      // programme level they print blank, exactly like the office's own
-      // template documents — they get filled when this document is generated
-      // from a booking, from that trip's staff assignment.
-      cairo_guide: '',
-      south_guide: '',
+      // The guide cells are PER-TRIP: blank on the bare programme document,
+      // filled when the office generates for a departure.
+      cairo_guide: input.departure?.cairo_guide ?? '',
+      south_guide: input.departure?.south_guide ?? '',
       emergency_japan: contacts.emergency_japan ?? '',
       cairo_office: contacts.cairo_office ?? '',
     },
+    author: input.departure?.author ?? '',
   }
 }
