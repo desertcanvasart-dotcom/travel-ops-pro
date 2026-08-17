@@ -28,8 +28,8 @@ interface TourTemplate {
   available_tiers: string[]
   min_pax: number
   max_pax: number
-  starting_from: number
-  starting_from_tier: string
+  starting_from: number | null
+  starting_from_tier: string | null
   currency: string
   uses_day_builder: boolean
   pricing_mode: string
@@ -223,7 +223,7 @@ export default function ToursBrowsePage() {
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('stats.startingFrom')}</p>
           <p className="text-2xl font-semibold text-gray-900">
-            {tours.length > 0 ? formatWithConversion(Math.min(...tours.map(t => t.starting_from || 9999)), 'EUR') : '—'}
+            {tours.some(t => t.starting_from) ? formatWithConversion(Math.min(...tours.filter(t => t.starting_from).map(t => t.starting_from as number)), 'EUR') : '—'}
           </p>
         </div>
       </div>
@@ -406,7 +406,7 @@ export default function ToursBrowsePage() {
                       {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
                     </p>
                     <p className="text-[10px] text-gray-400">
-                      {t('card.perPerson')} • {tour.starting_from_tier || 'standard'}
+                      {t('card.perPerson')}{tour.starting_from_tier ? ` • ${tour.starting_from_tier}` : ''}
                     </p>
                   </div>
                   <Link
@@ -598,7 +598,7 @@ export default function ToursBrowsePage() {
                       <p className="font-semibold text-[#647C47] text-sm">
                         {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
                       </p>
-                      <p className="text-[10px] text-gray-400">{tour.starting_from_tier || 'standard'}</p>
+                      <p className="text-[10px] text-gray-400">{tour.starting_from_tier || ''}</p>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
