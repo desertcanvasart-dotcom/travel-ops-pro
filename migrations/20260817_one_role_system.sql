@@ -28,12 +28,14 @@ UPDATE public.organization_members
 SET role = 'viewer'
 WHERE role NOT IN ('owner', 'admin', 'manager', 'agent', 'viewer');
 
--- 2. The owner, designated by the operator (2026-08-17): islamjp69@gmail.com.
+-- 2. The owner, designated by the operator (2026-08-17). Their LOGIN is
+--    travel2egypt69@gmail.com — islamjp69@gmail.com is a contact address with
+--    no auth account, which the ownerless-org check caught on first apply.
 UPDATE public.organization_members m
 SET role = 'owner'
 FROM auth.users u
 WHERE u.id = m.user_id
-  AND lower(u.email) = 'islamjp69@gmail.com';
+  AND lower(u.email) = 'travel2egypt69@gmail.com';
 
 -- The E2E harness org keeps its owner: the smoke user exercises owner-gated
 -- routes, and its profile says 'agent' so step 1 just downgraded it.
