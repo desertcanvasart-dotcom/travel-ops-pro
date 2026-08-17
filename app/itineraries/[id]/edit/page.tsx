@@ -768,94 +768,140 @@ export default function ItineraryEditorPage() {
       setItinerary(prev => prev ? { ...prev, total_cost: clientTotal, supplier_cost: supplierCost } : prev)
       console.log('✅ Itinerary updated')
 
-      // 2. Update each day
-      for (const day of days) {
-        const dayData = {
-          day_number: day.day_number,
-          title: day.title,
-          city: day.city,
-          description: day.description,
-          overnight_city: day.overnight_city,
-          attractions: day.attractions || [],
-          guide_required: day.services?.guide ?? true,
-          lunch_included: day.services?.lunch ?? true,
-          dinner_included: day.services?.dinner ?? false,
-          hotel_included: day.services?.hotel ?? false,
-          // B3 transport-rule flags (persisted by the
-          // 20260623_itinerary_days_transport_meta migration).
-          is_cruise_day: day.is_cruise_day ?? false,
-          transport_type: day.transport_type ?? null,
-          skip_arrival_checkin: day.skip_arrival_checkin ?? false,
-          extras: day.extras ?? [],
+      // 2. Save the days — batched. This save used to make one round trip per
+      // row, from the BROWSER, so its latency scaled with the size of the trip:
+      // a 12-day, 40-service save was 50+ sequential round trips over the
+      // internet. New days go in one bulk insert; updates carry different
+      // payloads per row, so they run concurrently instead.
+      const dayPayload = (day: (typeof days)[number]) => ({
+        day_number: day.day_number,
+        title: day.title,
+        city: day.city,
+        description: day.description,
+        overnight_city: day.overnight_city,
+        attractions: day.attractions || [],
+        guide_required: day.services?.guide ?? true,
+        lunch_included: day.services?.lunch ?? true,
+        dinner_included: day.services?.dinner ?? false,
+        hotel_included: day.services?.hotel ?? false,
+        // B3 transport-rule flags (persisted by the
+        // 20260623_itinerary_days_transport_meta migration).
+        is_cruise_day: day.is_cruise_day ?? false,
+        transport_type: day.transport_type ?? null,
+        skip_arrival_checkin: day.skip_arrival_checkin ?? false,
+        extras: day.extras ?? [],
+      })
+
+      const isRealUUID = (id: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+
+      const newDays = days.filter(d => !isRealUUID(d.id))
+      const existingDays = days.filter(d => isRealUUID(d.id))
+
+      if (newDays.length > 0) {
+        const { data: insertedDays, error: insertError } = await supabase
+          .from('itinerary_days')
+          .insert(newDays.map(d => ({ ...dayPayload(d), itinerary_id: itineraryId })))
+          .select()
+
+        if (insertError) throw insertError
+        // Matched by day_number, not by array position: the services below
+        // resolve their day ids through these objects, and a positional
+        // mismatch would silently attach services to the wrong day.
+        for (const day of newDays) {
+          const inserted = insertedDays?.find(r => r.day_number === day.day_number)
+          if (inserted) day.id = inserted.id
         }
+        console.log(`✅ ${newDays.length} day(s) inserted`)
+      }
 
-        const isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(day.id)
-
-        if (!isRealUUID) {
-          const { data: newDay, error: insertError } = await supabase
-            .from('itinerary_days')
-            .insert({ ...dayData, itinerary_id: itineraryId })
-            .select()
-            .single()
-
-          if (insertError) throw insertError
-          if (newDay) day.id = newDay.id
-          console.log(`✅ Day ${day.day_number} inserted`)
-        } else {
-          const { error: updateError } = await supabase
-            .from('itinerary_days')
-            .update(dayData)
-            .eq('id', day.id)
-
-          if (updateError) throw updateError
-          console.log(`✅ Day ${day.day_number} updated`)
-        }
+      if (existingDays.length > 0) {
+        const dayResults = await Promise.all(
+          existingDays.map(day =>
+            supabase.from('itinerary_days').update(dayPayload(day)).eq('id', day.id)
+          )
+        )
+        const dayFailure = dayResults.find(r => r.error)
+        if (dayFailure?.error) throw dayFailure.error
+        console.log(`✅ ${existingDays.length} day(s) updated`)
       }
 
       // 3. Save services if changed
       if (servicesChanged) {
         console.log('💾 Saving services...', { activeLanguage, baseServiceDataKeys: Object.keys(baseServiceData) })
         
-        // Delete services marked for deletion
+        // Delete services marked for deletion — one round trip, not one per row.
         const toDelete = services.filter(s => s.isDeleted && !s.isNew)
-        for (const service of toDelete) {
-          await supabase.from('itinerary_services').delete().eq('id', service.id)
-          console.log(`🗑️ Deleted service ${service.id}`)
+        if (toDelete.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('itinerary_services')
+            .delete()
+            .in('id', toDelete.map(s => s.id))
+          if (deleteError) console.error('Error deleting services:', deleteError)
+          else console.log(`🗑️ Deleted ${toDelete.length} service(s)`)
         }
 
-        // Insert new services
+        // Insert new services in one batch. Row order in the insert is the
+        // iteration order of `insertable`, and PostgREST returns inserted rows
+        // in that same order — which is how each state object gets its new id
+        // back. On a batch failure, fall back to row-by-row so one bad row
+        // costs one service, as it always did.
         const toInsert = services.filter(s => s.isNew && !s.isDeleted)
-        for (const service of toInsert) {
-          const { isNew, isDeleted, day_number, ...serviceData } = service
-          // Make sure we have a valid day ID
-          const day = days.find(d => d.day_number === day_number)
-          if (day) {
-            const { data: newService, error } = await supabase
-              .from('itinerary_services')
-              .insert({ ...serviceData, itinerary_day_id: day.id })
-              .select()
-              .single()
+        const insertable = toInsert
+          .map(service => {
+            const { isNew, isDeleted, day_number, ...serviceData } = service
+            const day = days.find(d => d.day_number === day_number)
+            return day ? { service, row: { ...serviceData, itinerary_day_id: day.id } } : null
+          })
+          .filter((x): x is NonNullable<typeof x> => x !== null)
 
-            if (error) {
-              console.error('Error inserting service:', error)
-            } else if (newService) {
-              service.id = newService.id
-              service.isNew = false
-              console.log(`✅ Service inserted: ${service.service_name}`)
+        if (insertable.length > 0) {
+          let inserted: Array<Record<string, any>> | null = null
+          const { data: bulk, error: bulkError } = await supabase
+            .from('itinerary_services')
+            .insert(insertable.map(x => x.row))
+            .select()
 
-              // If inserting in non-English, also create a language version
-              if (activeLanguage !== 'en') {
-                await supabase
-                  .from('itinerary_service_versions')
-                  .insert({
-                    itinerary_service_id: newService.id,
-                    language: activeLanguage,
-                    service_name: serviceData.service_name,
-                    notes: serviceData.notes
-                  })
-                console.log(`✅ Service version created (${activeLanguage}): ${serviceData.service_name}`)
-              }
+          if (!bulkError) {
+            inserted = bulk
+          } else {
+            console.error('Bulk service insert failed, retrying per row:', bulkError)
+            inserted = []
+            for (const { row } of insertable) {
+              const { data: one, error } = await supabase
+                .from('itinerary_services')
+                .insert(row)
+                .select()
+                .single()
+              if (error) console.error('Error inserting service:', error)
+              inserted.push(one ?? null as never)
             }
+          }
+
+          const versionRows = []
+          for (let i = 0; i < insertable.length; i++) {
+            const newService = inserted?.[i]
+            if (!newService) continue
+            const { service, row } = insertable[i]
+            service.id = newService.id
+            service.isNew = false
+            if (activeLanguage !== 'en') {
+              versionRows.push({
+                itinerary_service_id: newService.id,
+                language: activeLanguage,
+                service_name: row.service_name,
+                notes: row.notes,
+              })
+            }
+          }
+          console.log(`✅ ${insertable.length} service(s) inserted`)
+
+          if (versionRows.length > 0) {
+            const { error: versionError } = await supabase
+              .from('itinerary_service_versions')
+              .insert(versionRows)
+            if (versionError) console.error('Error creating service versions:', versionError)
+            else console.log(`✅ ${versionRows.length} service version(s) created (${activeLanguage})`)
           }
         }
 
@@ -881,17 +927,30 @@ export default function ItineraryEditorPage() {
           console.log('🌐 Fresh base data fetched for', Object.keys(freshBaseData).length, 'services, activeLanguage:', activeLanguage)
         }
 
-        for (const service of toUpdate) {
-          const { isNew, isDeleted, day_number, ...serviceData } = service
+        // Every update carries a different payload, so they cannot be one
+        // statement — but nothing about them is sequential. They used to run
+        // one after another, which is where most of a large save's wall-clock
+        // went; the browser now issues them concurrently.
+        if (activeLanguage !== 'en') {
+          // One query answers "which versions already exist?" for the whole
+          // save, instead of one SELECT per service.
+          const { data: existingVersions } = await supabase
+            .from('itinerary_service_versions')
+            .select('id, itinerary_service_id')
+            .in('itinerary_service_id', toUpdate.map(su => su.id).filter(vid => !vid.startsWith('new-')))
+            .eq('language', activeLanguage)
+          const versionIdByService = new Map(
+            (existingVersions ?? []).map(v => [v.itinerary_service_id, v.id])
+          )
 
-          if (activeLanguage !== 'en') {
-            // For non-English: save translatable fields to version table,
-            // keep base English data intact in main record
+          const versionInserts: Array<Record<string, unknown>> = []
+          const updates: Array<PromiseLike<{ error: unknown }>> = []
+
+          for (const service of toUpdate) {
+            const { isNew, isDeleted, day_number, ...serviceData } = service
             const translatedName = serviceData.service_name
             const translatedNotes = serviceData.notes
             const base = freshBaseData[service.id]
-
-            console.log(`🌐 Service ${service.id}: lang=${activeLanguage}, hasBase=${!!base}, translatedName="${translatedName}", baseName="${base?.service_name}"`)
 
             // Restore English values for main record so we don't overwrite them
             if (base) {
@@ -899,60 +958,51 @@ export default function ItineraryEditorPage() {
               serviceData.notes = base.notes
             }
 
-            // Update main record (non-translatable fields like quantity, rate, etc.)
-            const { error } = await supabase
-              .from('itinerary_services')
-              .update(serviceData)
-              .eq('id', service.id)
+            updates.push(
+              supabase.from('itinerary_services').update(serviceData).eq('id', service.id)
+            )
 
-            if (error) {
-              console.error('Error updating service:', error)
+            const versionId = versionIdByService.get(service.id)
+            if (versionId) {
+              updates.push(
+                supabase
+                  .from('itinerary_service_versions')
+                  .update({
+                    service_name: translatedName,
+                    notes: translatedNotes,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', versionId)
+              )
             } else {
-              console.log(`✅ Service base record preserved: ${serviceData.service_name}`)
-            }
-
-            // Upsert the language version for translatable fields
-            const { data: existingVersion } = await supabase
-              .from('itinerary_service_versions')
-              .select('id')
-              .eq('itinerary_service_id', service.id)
-              .eq('language', activeLanguage)
-              .single()
-
-            if (existingVersion) {
-              await supabase
-                .from('itinerary_service_versions')
-                .update({
-                  service_name: translatedName,
-                  notes: translatedNotes,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', existingVersion.id)
-              console.log(`✅ Service version updated (${activeLanguage}): ${translatedName}`)
-            } else {
-              await supabase
-                .from('itinerary_service_versions')
-                .insert({
-                  itinerary_service_id: service.id,
-                  language: activeLanguage,
-                  service_name: translatedName,
-                  notes: translatedNotes
-                })
-              console.log(`✅ Service version created (${activeLanguage}): ${translatedName}`)
-            }
-          } else {
-            // English: save directly to main record as before
-            const { error } = await supabase
-              .from('itinerary_services')
-              .update(serviceData)
-              .eq('id', service.id)
-
-            if (error) {
-              console.error('Error updating service:', error)
-            } else {
-              console.log(`✅ Service updated: ${service.service_name}`)
+              versionInserts.push({
+                itinerary_service_id: service.id,
+                language: activeLanguage,
+                service_name: translatedName,
+                notes: translatedNotes,
+              })
             }
           }
+
+          const results = await Promise.all(updates)
+          for (const r of results) if (r.error) console.error('Error updating service:', r.error)
+
+          if (versionInserts.length > 0) {
+            const { error: versionError } = await supabase
+              .from('itinerary_service_versions')
+              .insert(versionInserts)
+            if (versionError) console.error('Error creating service versions:', versionError)
+          }
+          console.log(`✅ ${toUpdate.length} service(s) saved (${activeLanguage})`)
+        } else {
+          const results = await Promise.all(
+            toUpdate.map(service => {
+              const { isNew, isDeleted, day_number, ...serviceData } = service
+              return supabase.from('itinerary_services').update(serviceData).eq('id', service.id)
+            })
+          )
+          for (const r of results) if (r.error) console.error('Error updating service:', r.error)
+          console.log(`✅ ${toUpdate.length} service(s) updated`)
         }
 
         // Clean up deleted services from state
