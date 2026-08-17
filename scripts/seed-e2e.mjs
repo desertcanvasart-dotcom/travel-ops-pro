@@ -207,6 +207,35 @@ async function seed() {
     console.log(`= itinerary exists — dates refreshed to depart ${d(start)}`)
   }
 
+  // 5b. Sweep fixtures abandoned by earlier runs.
+  //
+  // Every row a spec creates is prefixed E2ERUN-<id> and removed in afterAll.
+  // A run that is cancelled or crashes never gets there, and the leftovers used
+  // to be actively harmful: the app permits one booking per itinerary, so a
+  // stale booking on a shared itinerary failed every later run with a 409 that
+  // looked exactly like a real defect.
+  //
+  // Per-run itineraries mean a leftover blocks nothing now, but they still
+  // accumulate. Anything older than a day is certainly not in use.
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const stale = await select(
+    'itineraries',
+    `itinerary_code=like.E2ERUN-*&created_at=lt.${cutoff}&select=id,itinerary_code`
+  )
+  for (const old of stale ?? []) {
+    const bookings = await select('bookings', `itinerary_id=eq.${old.id}&select=id`)
+    for (const b of bookings ?? []) {
+      await del('booking_passengers', `booking_id=eq.${b.id}`)
+      await del('booking_portal_links', `booking_id=eq.${b.id}`)
+    }
+    await del('bookings', `itinerary_id=eq.${old.id}`)
+    await del('b2c_quotes', `itinerary_id=eq.${old.id}`)
+    await del('invoices', `itinerary_id=eq.${old.id}`)
+    await del('itinerary_days', `itinerary_id=eq.${old.id}`)
+    await del('itineraries', `id=eq.${old.id}`)
+  }
+  if (stale?.length) console.log(`✓ swept ${stale.length} abandoned run fixture(s)`)
+
   // 6. Persist generated credentials
   if (generatedPassword) {
     fs.appendFileSync(

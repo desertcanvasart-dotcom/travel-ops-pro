@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { STORAGE_STATE } from './helpers'
+import { SEEDED_ITINERARY_CODE, isFixtureCode } from './fixtures'
 
 // Tier 2 — authenticated journeys as the seeded E2E user (own test org, so
 // nothing here can touch real operator data). Each journey asserts the page
@@ -165,10 +166,14 @@ test('P&L returns ONLY the caller\'s own org (regression: no org filter)', async
   const body = await res.json()
   expect(body.success).toBe(true)
 
-  // The E2E org is seeded with exactly one itinerary. Anything else in this
-  // response came from another tenant.
+  // What this guards is TENANCY: no other operator's trips may appear. It used
+  // to assert exactly one itinerary, which made it fail whenever a booking spec
+  // left an orphan — reporting a leak that had not happened. Assert instead
+  // that everything returned belongs to this harness.
   const codes = body.data.map((t: { itinerary_code: string }) => t.itinerary_code)
-  expect(codes, `foreign trips leaked into the P&L: ${JSON.stringify(codes)}`).toEqual(['E2E-SMOKE-001'])
+  const foreign = codes.filter((c: string) => !isFixtureCode(c))
+  expect(foreign, `foreign trips leaked into the P&L: ${JSON.stringify(foreign)}`).toEqual([])
+  expect(codes, 'the seeded itinerary should be in its own P&L').toContain(SEEDED_ITINERARY_CODE)
 })
 
 test('capacity page renders the month grid', async ({ page }) => {
