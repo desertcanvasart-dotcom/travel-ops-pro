@@ -61,6 +61,14 @@ function mealSlot(day: SourceProgramDay, slot: 'breakfast' | 'lunch' | 'dinner')
   return '×'
 }
 
+export interface OrgOffice {
+  label?: string | null
+  postal_code?: string | null
+  address?: string | null
+  tel?: string | null
+  fax?: string | null
+}
+
 export interface OrgBranding {
   name: string | null
   logo_url: string | null
@@ -69,6 +77,7 @@ export interface OrgBranding {
   company_website: string | null
   company_address: string | null
   document_contacts: Record<string, string> | null
+  offices?: OrgOffice[] | null
 }
 
 export interface SourceProgramHotel {
@@ -155,6 +164,15 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
     letterhead: {
       logo_url: org?.logo_url ?? null,
       company_name: org?.name ?? '',
+      offices: (org?.offices ?? [])
+        .map(o => ({
+          label: (o.label ?? '').trim(),
+          postal_code: (o.postal_code ?? '').trim(),
+          address: (o.address ?? '').trim(),
+          tel: (o.tel ?? '').trim(),
+          fax: (o.fax ?? '').trim(),
+        }))
+        .filter(o => o.label || o.address || o.tel),
       lines: [
         org?.company_address,
         [org?.company_phone, org?.contact_email].filter(Boolean).join(' · '),

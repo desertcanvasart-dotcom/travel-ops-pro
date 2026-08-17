@@ -3323,7 +3323,14 @@
         "cairo_office": "カイロ"
       },
       "save": "保存",
-      "saved": "保存しました"
+      "saved": "保存しました",
+      "offices": "オフィス（レターヘッド）",
+      "officesHint": "日程表のレターヘッドに印刷されます。最初の2件は横並び、3件目以降は全幅の行になります。",
+      "officeLabel": "ラベル（東京）",
+      "officePostal": "〒 郵便番号",
+      "officeAddress": "住所",
+      "removeOffice": "削除",
+      "addOffice": "オフィスを追加"
     }
   },
   "translate": {
