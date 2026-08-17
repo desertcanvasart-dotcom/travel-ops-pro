@@ -89,6 +89,16 @@ const CSS = `
 .blocked{font-size:12px;color:var(--err);margin:8px 0 0;text-align:center}
 .locked{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px;font-size:14px}
 
+.docs{list-style:none;padding:0;margin:0}
+.docs li{margin-bottom:8px}
+.docs a{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  background:var(--card);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;text-decoration:none;color:inherit}
+.docs a:hover{border-color:var(--brand)}
+.docs a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.docs .dt{font-size:15px;font-weight:700}
+.docs .dn{font-size:12px;color:var(--soft);white-space:nowrap}
+
 .days{list-style:none;padding:0;margin:0}
 .days li{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
 .days li:last-child{border-bottom:none}

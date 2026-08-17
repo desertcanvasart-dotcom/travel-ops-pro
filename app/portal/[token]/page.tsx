@@ -27,6 +27,7 @@ import {
   portalLinkState,
   toPortalBooking,
   type PortalBooking,
+  type PortalDocument,
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
@@ -100,6 +101,32 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
     if (itin) itinerary = toClientItinerary(itin, days ?? [])
   }
 
+  // The documents a traveller can actually be handed today: their invoices.
+  // Deposit before final, oldest first, so the list reads in the order the
+  // money is asked for.
+  const documents: PortalDocument[] = []
+  if (booking.itinerary_id) {
+    const { data: invoices } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency')
+      .eq('itinerary_id', booking.itinerary_id)
+      .order('created_at', { ascending: true })
+
+    for (const inv of invoices ?? []) {
+      // A draft is not something to hand a customer — it has not been sent.
+      documents.push({
+        key: `invoice:${inv.id}`,
+        title:
+          inv.invoice_type === 'deposit'
+            ? 'お申込金 請求書'
+            : inv.invoice_type === 'final'
+              ? '残金 請求書'
+              : '請求書',
+        note: inv.due_date ? `お支払い期限 ${jpDate(inv.due_date)}` : inv.invoice_number,
+      })
+    }
+  }
+
   const { data: org } = await supabase
     .from('organizations')
     .select('name, primary_color, contact_email, company_phone')
@@ -118,7 +145,13 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
     .then(undefined, () => {})
 
   return {
-    booking: toPortalBooking({ booking, passengers: passengers ?? [], link: link!, itinerary }),
+    booking: toPortalBooking({
+      booking,
+      passengers: passengers ?? [],
+      link: link!,
+      itinerary,
+      documents,
+    }),
     operator: {
       name: org?.name ?? '',
       brandHex: org?.primary_color || '#647C47',
@@ -240,6 +273,23 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           />
         ))}
       </section>
+
+      {/* ---------------- documents ---------------- */}
+      {booking.documents.length > 0 && (
+        <section>
+          <h2>書類</h2>
+          <ul className="docs">
+            {booking.documents.map(d => (
+              <li key={d.key}>
+                <a href={`/api/portal/${token}/documents/${encodeURIComponent(d.key)}`} target="_blank" rel="noopener noreferrer">
+                  <span className="dt">{d.title}</span>
+                  {d.note && <span className="dn">{d.note}</span>}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* ---------------- the trip ---------------- */}
       {booking.itinerary && (

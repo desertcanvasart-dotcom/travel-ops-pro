@@ -85,11 +85,40 @@ const getInvoiceTypeConfig = (type: string | undefined): { label: string; color:
   }
 }
 
+export interface InvoicePdfOptions {
+  /**
+   * A typeface to embed and use for the whole document.
+   *
+   * Without it the document uses jsPDF's built-in helvetica, which is
+   * LATIN-ONLY: a Japanese client name rendered through it comes out as
+   * mojibake on the customer's own invoice. Server routes load Noto Sans JP
+   * with loadJapaneseFont() from lib/pdf-fonts-node.ts and pass it here.
+   *
+   * Passed as DATA rather than a family name because the fonts have to be
+   * registered on the document this function creates — a family registered on
+   * some other document means nothing here.
+   */
+  font?: {
+    family: string
+    files: Array<{ name: string; base64: string; weight: string }>
+  } | null
+}
+
 export function generateInvoicePDF(
-  invoice: Invoice, 
-  company: CompanyInfo = DEFAULT_COMPANY
+  invoice: Invoice,
+  company: CompanyInfo = DEFAULT_COMPANY,
+  options: InvoicePdfOptions = {}
 ): jsPDF {
   const doc = new jsPDF()
+
+  let FONT = 'helvetica'
+  if (options.font) {
+    for (const file of options.font.files) {
+      doc.addFileToVFS(file.name, file.base64)
+      doc.addFont(file.name, options.font.family, file.weight)
+    }
+    FONT = options.font.family
+  }
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = 20
   const contentWidth = pageWidth - (margin * 2)
@@ -114,7 +143,7 @@ export function generateInvoicePDF(
   // Company Name (left)
   doc.setFontSize(24)
   doc.setTextColor(...primaryColor)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text(company.name, margin, y)
 
   // INVOICE label with type (right)
@@ -128,7 +157,7 @@ export function generateInvoicePDF(
   if (invoiceType !== 'standard' && invoice.deposit_percent) {
     doc.setFontSize(10)
     doc.setTextColor(...typeConfig.color)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
     const badgeText = invoiceType === 'deposit' 
       ? `${invoice.deposit_percent}% Booking Deposit`
       : `Balance After ${invoice.deposit_percent}% Deposit`
@@ -139,7 +168,7 @@ export function generateInvoicePDF(
   // Company details
   doc.setFontSize(9)
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.text(company.address, margin, y)
   y += 4
   doc.text(`${company.city}, ${company.country}`, margin, y)
@@ -195,7 +224,7 @@ export function generateInvoicePDF(
     // Title
     doc.setFontSize(9)
     doc.setTextColor(...darkGray)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(FONT, 'bold')
     doc.text('Trip Cost Breakdown', margin + 5, y + 5)
 
     y += 12
@@ -207,7 +236,7 @@ export function generateInvoicePDF(
 
     doc.setFontSize(8)
     doc.setTextColor(...mediumGray)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
     // "Balance on Arrival" contradicted the operator's own terms, which are
     // that the balance falls due sixty days BEFORE departure and that no final
     // documents are released until it clears. Telling a customer they can pay
@@ -222,7 +251,7 @@ export function generateInvoicePDF(
     y += 5
 
     doc.setFontSize(11)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(FONT, 'bold')
     doc.setTextColor(...darkGray)
     doc.text(formatCurrency(fullTripCost, invoice.currency), col1X, y)
     doc.setTextColor(...amberColor)
@@ -243,44 +272,44 @@ export function generateInvoicePDF(
   // Invoice details (left)
   doc.setFontSize(10)
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text('Invoice Number:', leftColX, y)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.setTextColor(...darkGray)
   doc.text(invoice.invoice_number, leftColX + 35, y)
 
   // Bill To (right)
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text('Bill To:', rightColX, y)
 
   y += 6
 
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text('Issue Date:', leftColX, y)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.setTextColor(...darkGray)
   doc.text(formatDate(invoice.issue_date), leftColX + 35, y)
 
   // Client name
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.setTextColor(...darkGray)
   doc.text(invoice.client_name, rightColX, y)
 
   y += 6
 
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text('Due Date:', leftColX, y)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.setTextColor(...darkGray)
   const dueDateText = invoice.due_date ? formatDate(invoice.due_date) : (invoiceType === 'final' ? 'On Arrival' : '-')
   doc.text(dueDateText, leftColX + 35, y)
 
   // Client email
   if (invoice.client_email) {
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
     doc.setTextColor(...mediumGray)
     doc.text(invoice.client_email, rightColX, y)
   }
@@ -289,7 +318,7 @@ export function generateInvoicePDF(
 
   // Status badge
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text('Status:', leftColX, y)
   
   const statusColors: Record<string, [number, number, number]> = {
@@ -304,7 +333,7 @@ export function generateInvoicePDF(
   
   const statusColor = statusColors[invoice.status] || statusColors.draft
   doc.setTextColor(...statusColor)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text(invoice.status.toUpperCase(), leftColX + 35, y)
 
   // Invoice type badge (next to status)
@@ -326,7 +355,7 @@ export function generateInvoicePDF(
   // Table header text
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   
   const colDescription = margin + 3
   const colQty = margin + contentWidth * 0.55
@@ -342,7 +371,7 @@ export function generateInvoicePDF(
 
   // Table rows
   doc.setTextColor(...darkGray)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.setFontSize(9)
 
   const lineItems = invoice.line_items || []
@@ -364,9 +393,9 @@ export function generateInvoicePDF(
     doc.text(description, colDescription, y + 7)
     doc.text(String(item.quantity), colQty, y + 7, { align: 'center' })
     doc.text(formatCurrency(item.unit_price, invoice.currency), colUnitPrice, y + 7, { align: 'right' })
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(FONT, 'bold')
     doc.text(formatCurrency(item.amount, invoice.currency), colAmount, y + 7, { align: 'right' })
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
 
     y += 10
   })
@@ -399,7 +428,7 @@ export function generateInvoicePDF(
 
   doc.setFontSize(10)
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.text('Subtotal:', totalsX, y)
   doc.setTextColor(...darkGray)
   doc.text(formatCurrency(subtotal, invoice.currency), totalsValueX, y, { align: 'right' })
@@ -432,7 +461,7 @@ export function generateInvoicePDF(
   // Total - with type-specific label
   doc.setFontSize(12)
   doc.setTextColor(...darkGray)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   
   // Say what is due and WHEN, since a deposit invoice also states a second,
   // larger figure due on a different date. Two numbers both called "balance"
@@ -453,7 +482,7 @@ export function generateInvoicePDF(
   if (Number(invoice.amount_paid) > 0) {
     doc.setFontSize(10)
     doc.setTextColor(...mediumGray)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
     doc.text('Amount Paid:', totalsX, y)
     doc.setTextColor(34, 197, 94)
     doc.text(formatCurrency(invoice.amount_paid, invoice.currency), totalsValueX, y, { align: 'right' })
@@ -470,7 +499,7 @@ export function generateInvoicePDF(
   if (Number(invoice.balance_due) > 0 && !restatesTotal) {
     doc.setFontSize(11)
     doc.setTextColor(...darkGray)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(FONT, 'bold')
     doc.text('Balance Due:', totalsX, y)
     doc.setTextColor(239, 68, 68) // Red
     doc.text(formatCurrency(invoice.balance_due, invoice.currency), totalsValueX, y, { align: 'right' })
@@ -478,7 +507,7 @@ export function generateInvoicePDF(
   } else if (invoice.status === 'paid') {
     doc.setFontSize(11)
     doc.setTextColor(34, 197, 94) // Green
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(FONT, 'bold')
     doc.text('PAID IN FULL', totalsValueX, y, { align: 'right' })
     y += 6
   }
@@ -499,11 +528,11 @@ export function generateInvoicePDF(
     if (invoice.payment_terms) {
       doc.setFontSize(9)
       doc.setTextColor(...primaryColor)
-      doc.setFont('helvetica', 'bold')
+      doc.setFont(FONT, 'bold')
       doc.text('Payment Terms', margin, y)
       y += 5
       doc.setTextColor(...mediumGray)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(FONT, 'normal')
       const termsLines = doc.splitTextToSize(invoice.payment_terms, contentWidth)
       doc.text(termsLines, margin, y)
       y += termsLines.length * 4 + 8
@@ -512,11 +541,11 @@ export function generateInvoicePDF(
     if (invoice.payment_instructions) {
       doc.setFontSize(9)
       doc.setTextColor(...primaryColor)
-      doc.setFont('helvetica', 'bold')
+      doc.setFont(FONT, 'bold')
       doc.text('Payment Instructions', margin, y)
       y += 5
       doc.setTextColor(...mediumGray)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(FONT, 'normal')
       const instructionLines = doc.splitTextToSize(invoice.payment_instructions, contentWidth)
       doc.text(instructionLines, margin, y)
       y += instructionLines.length * 4 + 8
@@ -525,11 +554,11 @@ export function generateInvoicePDF(
     if (invoice.notes) {
       doc.setFontSize(9)
       doc.setTextColor(...primaryColor)
-      doc.setFont('helvetica', 'bold')
+      doc.setFont(FONT, 'bold')
       doc.text('Notes', margin, y)
       y += 5
       doc.setTextColor(...mediumGray)
-      doc.setFont('helvetica', 'normal')
+      doc.setFont(FONT, 'normal')
       const notesLines = doc.splitTextToSize(invoice.notes, contentWidth)
       doc.text(notesLines, margin, y)
       y += notesLines.length * 4 + 8
@@ -550,9 +579,9 @@ export function generateInvoicePDF(
 
     doc.setFontSize(9)
     doc.setTextColor(...amberColor)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(FONT, 'bold')
     doc.text('Important Notice', margin + 5, y + 7)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
     doc.setFontSize(8)
     doc.setTextColor(146, 64, 14)
     doc.text('This deposit is required to confirm your booking. The remaining balance is payable upon arrival.', margin + 5, y + 14)
@@ -570,9 +599,9 @@ export function generateInvoicePDF(
 
     doc.setFontSize(9)
     doc.setTextColor(...emeraldColor)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont(FONT, 'bold')
     doc.text('Balance Payment', margin + 5, y + 7)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
     doc.setFontSize(8)
     doc.setTextColor(6, 95, 70)
     doc.text('This invoice represents the remaining balance after your deposit. Payable in cash upon arrival in Cairo.', margin + 5, y + 14)
@@ -588,7 +617,7 @@ export function generateInvoicePDF(
   
   doc.setFontSize(8)
   doc.setTextColor(...mediumGray)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.text('Thank you for choosing Travel2Egypt!', pageWidth / 2, footerY, { align: 'center' })
   doc.text(
     `Generated on ${formatDate(new Date().toISOString())}`,
