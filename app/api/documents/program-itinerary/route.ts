@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     const { data: org } = await supabase
       .from('organizations')
-      .select('name, logo_url, company_phone, contact_email, company_website, company_address, document_contacts')
+      .select('name, logo_url, company_phone, contact_email, company_website, company_address, document_contacts, offices')
       .eq('id', org_id)
       .maybeSingle()
 

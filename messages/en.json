@@ -2584,7 +2584,14 @@
         "cairo_office": "Cairo office"
       },
       "save": "Save",
-      "saved": "Saved"
+      "saved": "Saved",
+      "offices": "Offices (letterhead)",
+      "officesHint": "Printed on the itinerary letterhead. The first two offices appear side by side, further offices as full-width lines.",
+      "officeLabel": "Label (東京)",
+      "officePostal": "〒 Postal code",
+      "officeAddress": "Address",
+      "removeOffice": "Remove",
+      "addOffice": "Add office"
     }
   },
   "translate": {

@@ -52,8 +52,18 @@ export interface DailyItineraryContext {
   letterhead: {
     logo_url: string | null
     company_name: string
-    /** Address / phone / email / website, one per line, blanks filtered. */
+    /** Address / phone / email / website, one per line, blanks filtered.
+     *  Used only when no offices are defined. */
     lines: string[]
+    /** The letterhead's real shape: first two offices print side by side
+     *  (label 〒postal / address / TEL・FAX), the rest as full-width lines. */
+    offices: Array<{
+      label: string
+      postal_code: string
+      address: string
+      tel: string
+      fax: string
+    }>
   }
   /** 作成者 — who generated this departure's document. Blank on the template. */
   author: string
@@ -95,6 +105,39 @@ function dayRow(day: DailyItineraryDay): string {
   </tr>`
 }
 
+function renderLetterhead(lh: DailyItineraryContext['letterhead']): string {
+  if (!lh.company_name && !lh.logo_url && lh.offices.length === 0) return ''
+
+  // With offices defined, the letterhead takes the office's own shape: logo
+  // left, the first two offices as columns, further offices as full-width
+  // lines, then the double-dash rule their documents draw under the header.
+  if (lh.offices.length) {
+    const columns = lh.offices.slice(0, 2)
+    const wide = lh.offices.slice(2)
+    const col = (o: (typeof columns)[number]) => `<div class="office">
+      <div class="hd1">${esc(o.label)}${o.postal_code ? `　〒${esc(o.postal_code)}` : ''}</div>
+      ${o.address ? `<div>${esc(o.address)}</div>` : ''}
+      ${o.tel || o.fax ? `<div class="tf">${o.tel ? `TEL:${esc(o.tel)}` : ''}${o.tel && o.fax ? '　' : ''}${o.fax ? `FAX:${esc(o.fax)}` : ''}</div>` : ''}
+    </div>`
+    const wideLine = (o: (typeof wide)[number]) =>
+      `<div class="officewide">${esc(o.label)}　${esc(o.address)}${o.tel ? `　Tel: ${esc(o.tel)}` : ''}${o.fax ? `　Fax: ${esc(o.fax)}` : ''}</div>`
+    return `<div class="letterhead">
+    ${lh.logo_url ? `<img src="${esc(lh.logo_url)}" alt="" />` : `<div class="co"><div class="nm">${esc(lh.company_name)}</div></div>`}
+    <div class="offices">${columns.map(col).join('')}</div>
+  </div>
+  ${wide.map(wideLine).join('')}
+  <div class="lhdivider"></div>`
+  }
+
+  return `<div class="letterhead">
+    ${lh.logo_url ? `<img src="${esc(lh.logo_url)}" alt="" />` : ''}
+    <div class="co">
+      <div class="nm">${esc(lh.company_name)}</div>
+      ${lh.lines.map(l => `<div class="ln">${esc(l)}</div>`).join('')}
+    </div>
+  </div>`
+}
+
 export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   slug: 'ats-daily-itinerary',
   label: '日程表 (Daily Itinerary)',
@@ -128,18 +171,32 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   }
   table { border-collapse: collapse; width: 100%; }
   td, th { border: 0.6pt solid #333; padding: 3pt 5pt; vertical-align: top; }
+  /* The outer frame. With border-collapse alone, a table split across pages
+     loses its right edge and the rules at the page cut; the table's own
+     border keeps the sides continuous on every page fragment, the repeating
+     thead re-draws the top on each page, and the tfoot rule closes the
+     bottom of every fragment. */
+  .itin { border: 1pt solid #333; }
+  .itin thead { display: table-header-group; }
+  .itin tfoot td { border: none; border-top: 0.6pt solid #333; padding: 0; height: 0; }
 
   .letterhead {
     display: flex;
-    align-items: center;
-    gap: 10pt;
+    align-items: flex-start;
+    gap: 12pt;
     border: none;
-    margin-bottom: 6pt;
+    margin-bottom: 4pt;
   }
-  .letterhead img { max-height: 34pt; max-width: 120pt; object-fit: contain; }
+  .letterhead img { max-height: 44pt; max-width: 130pt; object-fit: contain; }
   .letterhead .co { flex: 1; }
   .letterhead .co .nm { font-size: 12pt; font-weight: 700; }
   .letterhead .co .ln { font-size: 7.5pt; color: #333; }
+  .offices { flex: 1; display: flex; flex-wrap: wrap; gap: 2pt 18pt; justify-content: flex-end; }
+  .offices .office { font-size: 8.5pt; line-height: 1.5; }
+  .offices .office .hd1 { font-size: 10pt; }
+  .offices .office .tf { font-size: 8pt; color: #222; }
+  .officewide { font-size: 8.5pt; margin: 2pt 0; }
+  .lhdivider { border-top: 1.6pt dashed #222; margin: 4pt 0 8pt; }
 
   .office td { font-size: 8pt; }
   .office .l { width: 22%; background: #f3f3f3; }
@@ -168,17 +225,7 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
 </style>
 </head>
 <body>
-  ${
-    ctx.letterhead.company_name || ctx.letterhead.logo_url
-      ? `<div class="letterhead">
-    ${ctx.letterhead.logo_url ? `<img src="${esc(ctx.letterhead.logo_url)}" alt="" />` : ''}
-    <div class="co">
-      <div class="nm">${esc(ctx.letterhead.company_name)}</div>
-      ${ctx.letterhead.lines.map(l => `<div class="ln">${esc(l)}</div>`).join('')}
-    </div>
-  </div>`
-      : ''
-  }
+  ${renderLetterhead(ctx.letterhead)}
   <table class="office">
     <tr><td class="l">カイロガイド</td><td class="v">${esc(ctx.office_contacts.cairo_guide)}</td><td class="l">作成日</td><td class="v">${esc(ctx.created_date)}</td></tr>
     <tr><td class="l">南部ガイド</td><td class="v">${esc(ctx.office_contacts.south_guide)}</td><td class="l">作成者</td><td class="v">${esc(ctx.author)}</td></tr>
@@ -188,8 +235,13 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   <div class="codeline">${esc(ctx.program_code)}</div>
 
   <table class="itin">
-    <tr><th style="width:5%"></th><th style="width:8%">日</th><th style="width:12%">宿泊地</th><th style="width:75%">日程</th></tr>
+    <thead>
+      <tr><th style="width:5%"></th><th style="width:8%">日</th><th style="width:12%">宿泊地</th><th style="width:75%">日程</th></tr>
+    </thead>
+    <tfoot><tr><td colspan="4"></td></tr></tfoot>
+    <tbody>
     ${ctx.days.map(dayRow).join('\n')}
+    </tbody>
   </table>
 
   <p class="disclaimer">※現地事情により観光スケジュール変更がある場合がございます。予めご了承ください。</p>

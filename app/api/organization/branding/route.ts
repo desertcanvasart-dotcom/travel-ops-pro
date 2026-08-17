@@ -30,7 +30,25 @@ const FIELDS = [
   'company_website',
   'company_address',
   'document_contacts',
+  'offices',
 ] as const
+
+/** Offices arrive as arbitrary JSON; keep only the known string fields, cap
+ *  the list, and drop rows that say nothing. */
+function sanitizeOffices(value: unknown): Array<Record<string, string>> {
+  if (!Array.isArray(value)) return []
+  const out: Array<Record<string, string>> = []
+  for (const row of value.slice(0, 10)) {
+    if (!row || typeof row !== 'object') continue
+    const office: Record<string, string> = {}
+    for (const key of ['label', 'postal_code', 'address', 'tel', 'fax']) {
+      const v = (row as Record<string, unknown>)[key]
+      if (typeof v === 'string' && v.trim()) office[key] = v.trim().slice(0, 200)
+    }
+    if (Object.keys(office).length) out.push(office)
+  }
+  return out
+}
 
 export async function GET() {
   try {
@@ -76,7 +94,9 @@ export async function PUT(request: NextRequest) {
       if (field === 'logo_url') continue // set via the upload endpoint only
       if (field in body) {
         update[field] =
-          field === 'document_contacts'
+          field === 'offices'
+            ? sanitizeOffices(body.offices)
+            : field === 'document_contacts'
             ? body.document_contacts && typeof body.document_contacts === 'object'
               ? body.document_contacts
               : {}

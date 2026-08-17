@@ -15,6 +15,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Building2, Loader2, Check, Upload } from 'lucide-react'
 
+interface Office {
+  label: string
+  postal_code: string
+  address: string
+  tel: string
+  fax: string
+}
+
+const EMPTY_OFFICE: Office = { label: '', postal_code: '', address: '', tel: '', fax: '' }
+
 interface Profile {
   name: string
   tagline: string
@@ -24,6 +34,7 @@ interface Profile {
   company_website: string
   company_address: string
   document_contacts: Record<string, string>
+  offices: Office[]
 }
 
 // Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
@@ -43,6 +54,7 @@ export default function CompanyProfileCard() {
     company_website: '',
     company_address: '',
     document_contacts: {},
+    offices: [],
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -65,6 +77,10 @@ export default function CompanyProfileCard() {
         company_website: data.data.company_website ?? '',
         company_address: data.data.company_address ?? '',
         document_contacts: data.data.document_contacts ?? {},
+        offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
+          ...EMPTY_OFFICE,
+          ...o,
+        })),
       })
     } catch (err: any) {
       setError(err.message || 'Failed to load')
@@ -116,6 +132,14 @@ export default function CompanyProfileCard() {
 
   const set = (field: keyof Profile, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }))
+  const setOffice = (i: number, field: keyof Office, value: string) =>
+    setForm(prev => ({
+      ...prev,
+      offices: prev.offices.map((o, idx) => (idx === i ? { ...o, [field]: value } : o)),
+    }))
+  const addOffice = () => setForm(prev => ({ ...prev, offices: [...prev.offices, { ...EMPTY_OFFICE }] }))
+  const removeOffice = (i: number) =>
+    setForm(prev => ({ ...prev, offices: prev.offices.filter((_, idx) => idx !== i) }))
   const setContact = (slot: string, value: string) =>
     setForm(prev => ({
       ...prev,
@@ -202,6 +226,39 @@ export default function CompanyProfileCard() {
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('address')}</label>
           <input className={inputClass} value={form.company_address} onChange={e => set('company_address', e.target.value)} />
         </div>
+      </div>
+
+      {/* Offices — the letterhead's real shape: first two print side by side,
+          any further offices as full-width lines. */}
+      <p className="text-xs font-medium text-gray-600 mt-5 mb-1">{t('offices')}</p>
+      <p className="text-xs text-gray-400 mb-3">{t('officesHint')}</p>
+      <div className="space-y-3">
+        {form.offices.map((o, i) => (
+          <div key={i} className="border border-gray-200 rounded-lg p-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <input className={inputClass} placeholder={t('officeLabel')} value={o.label}
+                onChange={e => setOffice(i, 'label', e.target.value)} />
+              <input className={inputClass} placeholder={t('officePostal')} value={o.postal_code}
+                onChange={e => setOffice(i, 'postal_code', e.target.value)} />
+              <input className={`${inputClass} col-span-2 md:col-span-3`} placeholder={t('officeAddress')} value={o.address}
+                onChange={e => setOffice(i, 'address', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 items-center">
+              <input className={inputClass} placeholder="TEL" value={o.tel}
+                onChange={e => setOffice(i, 'tel', e.target.value)} />
+              <input className={inputClass} placeholder="FAX" value={o.fax}
+                onChange={e => setOffice(i, 'fax', e.target.value)} />
+              <button onClick={() => removeOffice(i)}
+                className="text-xs text-red-500 hover:text-red-700 text-left md:col-start-5 md:text-right">
+                {t('removeOffice')}
+              </button>
+            </div>
+          </div>
+        ))}
+        <button onClick={addOffice}
+          className="text-sm text-[#647C47] hover:underline">
+          + {t('addOffice')}
+        </button>
       </div>
 
       {/* Document header contacts */}
