@@ -25,10 +25,16 @@ export async function renderHtmlToPdf(html: string, page: DocumentPage): Promise
 
   try {
     const tab = await browser.newPage()
-    // 'networkidle0' rather than 'load': templates inline everything, so the
-    // only thing left to settle is font layout, and a PDF captured mid-layout
-    // silently ships with fallback metrics.
-    await tab.setContent(html, { waitUntil: 'networkidle0' })
+    // Templates inline everything — including, for Japanese documents, a ~7MB
+    // base64 @font-face. 'networkidle0' alone has timed out on that payload;
+    // the settled-fonts signal that actually matters is document.fonts.ready
+    // (the pattern proven by the b2b quote PDF route). A PDF captured before
+    // it resolves silently ships with fallback metrics.
+    await tab.setContent(html, {
+      waitUntil: ['domcontentloaded', 'networkidle0'],
+      timeout: 60_000,
+    })
+    await tab.evaluateHandle('document.fonts.ready')
 
     const pdf = await tab.pdf({
       format: page.size,
