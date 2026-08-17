@@ -127,8 +127,12 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
         .filter(Boolean),
     },
     office_contacts: {
-      cairo_guide: contacts.cairo_guide ?? '',
-      south_guide: contacts.south_guide ?? '',
+      // The guide cells are PER-TRIP: a different guide each departure. At
+      // programme level they print blank, exactly like the office's own
+      // template documents — they get filled when this document is generated
+      // from a booking, from that trip's staff assignment.
+      cairo_guide: '',
+      south_guide: '',
       emergency_japan: contacts.emergency_japan ?? '',
       cairo_office: contacts.cairo_office ?? '',
     },

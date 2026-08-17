@@ -3319,8 +3319,6 @@
       "documentContacts": "書類ヘッダーの連絡先",
       "documentContactsHint": "日程表ヘッダーに印刷される連絡先です。空欄はそのまま空欄で印刷されます。",
       "slots": {
-        "cairo_guide": "カイロガイド",
-        "south_guide": "南部ガイド",
         "emergency_japan": "緊急連絡先（日本）",
         "cairo_office": "カイロ"
       },
