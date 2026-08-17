@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
         image_url,
         uses_day_builder,
         pricing_mode,
+        cached_starting_price,
+        cached_starting_tier,
+        cached_price_updated_at,
         tour_categories (
           id,
           category_name,
@@ -137,10 +140,11 @@ export async function GET(request: NextRequest) {
         variations = variations.filter((v: any) => v.tier === tier)
       }
 
-      // Estimate price based on duration
-      // Note: When cached pricing columns are added, this can use cached values
-      const startingFromPrice = template.duration_days * 150
-      const startingFromTier = 'standard'
+      // Cached engine price, written by /api/tours/recalculate-prices.
+      // No cache means no price shown — a duration×150 estimate used to stand
+      // in here, and a made-up number in a sales catalogue is worse than none.
+      const startingFromPrice = template.cached_starting_price ?? null
+      const startingFromTier = template.cached_starting_tier ?? null
 
       return {
         id: template.id,
@@ -165,12 +169,12 @@ export async function GET(request: NextRequest) {
           ? Math.max(...variations.map((v: any) => v.max_pax || 15))
           : 15,
 
-        // Pricing (estimated based on duration)
+        // Pricing (engine output cached on the template; EUR cost base)
         starting_from: startingFromPrice,
         starting_from_tier: startingFromTier,
         currency: 'EUR',
-        price_is_cached: false,
-        price_updated_at: null,
+        price_is_cached: startingFromPrice !== null,
+        price_updated_at: template.cached_price_updated_at ?? null,
 
         // Flags
         uses_day_builder: template.uses_day_builder,
@@ -181,12 +185,10 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Filter out templates with invalid pricing
-    const validTemplates = templatesWithPricing.filter(t =>
-      t.starting_from !== null &&
-      isFinite(t.starting_from) &&
-      t.starting_from > 0
-    )
+    // A template without a cached price still lists — hiding a programme from
+    // the catalogue because its price hasn't been recomputed yet would make
+    // fresh imports silently vanish. The card shows its price as unavailable.
+    const validTemplates = templatesWithPricing
 
     return NextResponse.json({
       success: true,

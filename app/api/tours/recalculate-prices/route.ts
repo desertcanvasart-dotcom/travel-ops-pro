@@ -117,11 +117,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Final fallback: estimate based on duration
-        if (startingPrice === null) {
-          startingPrice = template.duration_days * 150
-          startingTier = 'standard'
-        }
+        // No final estimate fallback — deliberately. A duration×150 guess in a
+        // sales catalogue reads as a real price; a template the engine cannot
+        // price caches NULL and its card shows no price until it can.
 
         // Update the template with cached price
         const { error: updateError } = await supabaseAdmin
