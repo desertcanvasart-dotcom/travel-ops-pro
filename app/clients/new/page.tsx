@@ -305,7 +305,6 @@ export default function NewClientPage() {
                   <option value="French">{t('langFrench')}</option>
                   <option value="German">{t('langGerman')}</option>
                   <option value="Italian">{t('langItalian')}</option>
-                  <option value="Arabic">{t('langArabic')}</option>
                   <option value="Russian">{t('langRussian')}</option>
                   <option value="Chinese">{t('langChinese')}</option>
                   <option value="Japanese">{t('langJapanese')}</option>

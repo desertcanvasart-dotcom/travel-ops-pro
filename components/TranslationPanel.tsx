@@ -33,7 +33,6 @@ const SUPPORTED_LANGUAGES = [
   { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
   { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
   { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-  { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
   { code: 'nl', name: 'Dutch', flag: '🇳🇱' },
   { code: 'pl', name: 'Polish', flag: '🇵🇱' },
   { code: 'tr', name: 'Turkish', flag: '🇹🇷' },

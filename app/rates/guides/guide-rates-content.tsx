@@ -39,7 +39,7 @@ const EGYPT_CITIES = [
 ]
 
 const LANGUAGES = [
-  'English', 'Arabic', 'French', 'German', 'Spanish', 'Italian',
+  'English', 'French', 'German', 'Spanish', 'Italian',
   'Russian', 'Chinese', 'Japanese', 'Portuguese', 'Dutch', 'Polish'
 ]
 
