@@ -129,7 +129,6 @@ export default function ContractPage() {
     { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
     { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
     { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-    { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
   ]
 
   useEffect(() => {

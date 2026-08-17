@@ -587,16 +587,9 @@ export async function POST(request: Request) {
         'russian': 'Russian', 'russia': 'Russian',
         // Korean-speaking
         'korean': 'Korean', 'south korean': 'Korean', 'korea': 'Korean',
-        // Arabic-speaking (still useful for Arabic-speaking guides)
-        'saudi': 'Arabic', 'saudi arabian': 'Arabic', 'saudi arabia': 'Arabic',
-        'emirati': 'Arabic', 'uae': 'Arabic', 'kuwaiti': 'Arabic', 'kuwait': 'Arabic',
-        'qatari': 'Arabic', 'qatar': 'Arabic', 'bahraini': 'Arabic', 'bahrain': 'Arabic',
-        'omani': 'Arabic', 'oman': 'Arabic', 'iraqi': 'Arabic', 'iraq': 'Arabic',
-        'jordanian': 'Arabic', 'jordan': 'Arabic', 'lebanese': 'Arabic', 'lebanon': 'Arabic',
-        'libyan': 'Arabic', 'libya': 'Arabic', 'tunisian': 'Arabic', 'tunisia': 'Arabic',
-        'algerian': 'Arabic', 'algeria': 'Arabic', 'moroccan': 'Arabic', 'morocco': 'Arabic',
-        'sudanese': 'Arabic', 'sudan': 'Arabic', 'syrian': 'Arabic', 'syria': 'Arabic',
-        'palestinian': 'Arabic', 'palestine': 'Arabic', 'yemeni': 'Arabic', 'yemen': 'Arabic',
+        // Arabic deliberately absent: the operator's business rule excludes it
+        // system-wide (no Arabic guide rates exist). Arabic-speaking
+        // nationalities fall through to the English default below.
         // Dutch-speaking
         'dutch': 'Dutch', 'netherlands': 'Dutch', 'holland': 'Dutch',
         // Polish-speaking

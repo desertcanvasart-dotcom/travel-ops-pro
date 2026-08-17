@@ -508,7 +508,6 @@ export default function EditClientPage() {
                 >
                   <option value="">{t('selectOption')}</option>
                   <option value="English">{t('langEnglish')}</option>
-                  <option value="Arabic">{t('langArabic')}</option>
                   <option value="French">{t('langFrench')}</option>
                   <option value="German">{t('langGerman')}</option>
                   <option value="Spanish">{t('langSpanish')}</option>

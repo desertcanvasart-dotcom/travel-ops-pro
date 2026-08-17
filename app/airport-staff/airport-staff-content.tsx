@@ -271,7 +271,7 @@ export default function AirportStaffContent() {
     )
   }
 
-  const languagesList = ['English', 'Arabic', 'French', 'German', 'Spanish', 'Italian', 'Russian', 'Chinese', 'Japanese']
+  const languagesList = ['English', 'French', 'German', 'Spanish', 'Italian', 'Russian', 'Chinese', 'Japanese']
 
   return (
     <div className="min-h-screen bg-gray-50">

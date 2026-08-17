@@ -57,7 +57,6 @@ const QUICK_LANGUAGES = [
   { code: 'ru', name: 'Russian', flag: '🇷🇺' },
   { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
   { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-  { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
 ]
 
 interface UnifiedMessageThreadProps {

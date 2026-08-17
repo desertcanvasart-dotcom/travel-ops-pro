@@ -77,7 +77,7 @@ const EGYPTIAN_CITIES = [
 
 const VEHICLE_TYPES = ['Sedan', 'Minivan', 'Van', 'Bus', 'SUV', '4x4']
 
-const LANGUAGES = ['English', 'Spanish', 'Japanese', 'Chinese', 'Russian', 'German', 'French', 'Italian', 'Arabic']
+const LANGUAGES = ['English', 'Spanish', 'Japanese', 'Chinese', 'Russian', 'German', 'French', 'Italian']
 
 const CUISINE_TYPES = [
   'Egyptian', 'Mediterranean', 'Italian', 'Middle Eastern', 'Asian',

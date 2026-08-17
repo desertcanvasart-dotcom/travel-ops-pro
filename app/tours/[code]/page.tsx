@@ -481,7 +481,7 @@ export default function TourDetailPage() {
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('detail.languages')}</p>
           <p className="text-lg font-semibold text-gray-900 truncate">
-            {tour.guide_languages?.length > 0 ? tour.guide_languages.join(', ') : 'English, Arabic'}
+            {tour.guide_languages?.length > 0 ? tour.guide_languages.join(', ') : 'English'}
           </p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -851,7 +851,7 @@ export default function TourDetailPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('detail.languages')}</span>
-                <span className="text-gray-900">{tour.guide_languages?.join(', ') || 'English, Arabic'}</span>
+                <span className="text-gray-900">{tour.guide_languages?.join(', ') || 'English'}</span>
               </div>
             </div>
           </div>
