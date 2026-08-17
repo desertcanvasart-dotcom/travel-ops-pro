@@ -75,7 +75,7 @@ export async function GET(
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('name, contact_email, company_phone, company_website')
+    .select('name, contact_email, company_phone, company_website, company_address')
     .eq('id', booking.org_id)
     .maybeSingle()
 
@@ -95,7 +95,7 @@ export async function GET(
       org
         ? {
             name: org.name,
-            address: '',
+            address: (org as any).company_address ?? '',
             city: '',
             country: '',
             email: org.contact_email ?? '',

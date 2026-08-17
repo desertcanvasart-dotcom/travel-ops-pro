@@ -18,13 +18,13 @@ const TEMPLATE_SLUG = 'ats-daily-itinerary'
 export async function GET(request: NextRequest) {
   try {
     const auth = await orgAuth()
-    if (auth.error || !auth.supabase) {
+    if (auth.error || !auth.supabase || !auth.org_id) {
       return NextResponse.json(
         { success: false, error: auth.error || 'Not authenticated' },
         { status: auth.status }
       )
     }
-    const { supabase } = auth
+    const { supabase, org_id } = auth
 
     const params = request.nextUrl.searchParams
     const templateId = params.get('template_id')
@@ -50,6 +50,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Programme not found' }, { status: 404 })
     }
 
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('name, logo_url, company_phone, contact_email, company_website, company_address, document_contacts')
+      .eq('id', org_id)
+      .maybeSingle()
+
     const createdDate = new Date().toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'long',
@@ -61,6 +67,7 @@ export async function GET(request: NextRequest) {
       itinerary: program.itinerary,
       created_date: createdDate,
       font_face_css: await getJapaneseFontFace(),
+      org: (org as any) ?? null,
     })
 
     let html = template.render(context)
