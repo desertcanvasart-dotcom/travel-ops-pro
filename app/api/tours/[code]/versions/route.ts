@@ -6,8 +6,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Helper to resolve variation from code (which can be variation_code, template_id, or template_code)
-async function resolveVariation(code: string) {
+// Resolve code (variation_code, template_id, or template_code) to its target.
+// A programme WITHOUT variations is still a valid target: the imported A.T.S
+// catalogue is variation-less, and language versions attach at the TEMPLATE
+// level — requiring a variation here made "create version" fail with "Tour
+// not found" on every imported programme.
+async function resolveTarget(
+  code: string
+): Promise<{ template_id: string; variation: { id: string; variation_code: string; template_id: string } | null } | null> {
   // First, try to find by variation_code
   const { data: varByCode } = await supabase
     .from('tour_variations')
@@ -15,44 +21,27 @@ async function resolveVariation(code: string) {
     .eq('variation_code', code)
     .single()
 
-  if (varByCode) return varByCode
+  if (varByCode) return { template_id: varByCode.template_id, variation: varByCode }
 
-  // Check if it's a UUID (template_id)
+  // Otherwise the code names a template, by UUID or by template_code.
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
+  const { data: template } = await supabase
+    .from('tour_templates')
+    .select('id')
+    .eq(isUUID ? 'id' : 'template_code', code)
+    .single()
 
-  if (isUUID) {
-    // Try to find by template_id and get the first variation
-    const { data: varByTemplateId } = await supabase
-      .from('tour_variations')
-      .select('id, variation_code, template_id')
-      .eq('template_id', code)
-      .order('tier', { ascending: true })
-      .limit(1)
-      .single()
+  if (!template) return null
 
-    if (varByTemplateId) return varByTemplateId
-  } else {
-    // Try to find by template_code and get the first variation
-    const { data: template } = await supabase
-      .from('tour_templates')
-      .select('id')
-      .eq('template_code', code)
-      .single()
+  const { data: variation } = await supabase
+    .from('tour_variations')
+    .select('id, variation_code, template_id')
+    .eq('template_id', template.id)
+    .order('tier', { ascending: true })
+    .limit(1)
+    .single()
 
-    if (template) {
-      const { data: varByTemplate } = await supabase
-        .from('tour_variations')
-        .select('id, variation_code, template_id')
-        .eq('template_id', template.id)
-        .order('tier', { ascending: true })
-        .limit(1)
-        .single()
-
-      if (varByTemplate) return varByTemplate
-    }
-  }
-
-  return null
+  return { template_id: template.id, variation: variation ?? null }
 }
 
 // GET - Fetch all language versions for a tour
@@ -63,44 +52,47 @@ export async function GET(
   try {
     const { code } = await params
 
-    // Resolve to variation
-    const variation = await resolveVariation(code)
-    if (!variation) {
+    const target = await resolveTarget(code)
+    if (!target) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },
         { status: 404 }
       )
     }
 
-    // Fetch variation versions
-    const { data: variationVersions, error: varError } = await supabase
-      .from('tour_variation_versions')
-      .select('*')
-      .eq('variation_id', variation.id)
-      .order('language', { ascending: true })
+    // Fetch variation versions (a variation-less programme has none)
+    let variationVersions: any[] = []
+    if (target.variation) {
+      const { data, error: varError } = await supabase
+        .from('tour_variation_versions')
+        .select('*')
+        .eq('variation_id', target.variation.id)
+        .order('language', { ascending: true })
 
-    if (varError) throw varError
+      if (varError) throw varError
+      variationVersions = data || []
+    }
 
     // Also fetch template versions
     const { data: templateVersions, error: tmpError } = await supabase
       .from('tour_template_versions')
       .select('*')
-      .eq('template_id', variation.template_id)
+      .eq('template_id', target.template_id)
       .order('language', { ascending: true })
 
     if (tmpError) throw tmpError
 
     // Combine available languages
-    const variationLangs = new Set((variationVersions || []).map(v => v.language))
+    const variationLangs = new Set(variationVersions.map(v => v.language))
     const templateLangs = new Set((templateVersions || []).map(v => v.language))
     const availableLanguages = [...new Set([...variationLangs, ...templateLangs])]
 
     return NextResponse.json({
       success: true,
       data: {
-        variation_id: variation.id,
-        template_id: variation.template_id,
-        variation_versions: variationVersions || [],
+        variation_id: target.variation?.id ?? null,
+        template_id: target.template_id,
+        variation_versions: variationVersions,
         template_versions: templateVersions || [],
         available_languages: availableLanguages
       }
@@ -136,19 +128,20 @@ export async function POST(
       )
     }
 
-    // Resolve to variation
-    const variation = await resolveVariation(code)
-    if (!variation) {
+    const target = await resolveTarget(code)
+    if (!target) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },
         { status: 404 }
       )
     }
+    const variation = target.variation
 
     const results: { variationVersion?: unknown; templateVersion?: unknown } = {}
 
-    // Create variation version if content provided
-    if (variation_content) {
+    // Create variation version if content provided — only meaningful when the
+    // programme actually has a variation to attach it to.
+    if (variation_content && variation) {
       // Check if already exists
       const { data: existingVar } = await supabase
         .from('tour_variation_versions')
@@ -199,7 +192,7 @@ export async function POST(
       const { data: existingTmp } = await supabase
         .from('tour_template_versions')
         .select('id')
-        .eq('template_id', variation.template_id)
+        .eq('template_id', target.template_id)
         .eq('language', language)
         .single()
 
@@ -228,7 +221,7 @@ export async function POST(
         const { data, error } = await supabase
           .from('tour_template_versions')
           .insert({
-            template_id: variation.template_id,
+            template_id: target.template_id,
             language,
             template_name: template_content.template_name || 'Untitled Tour',
             short_description: template_content.short_description || null,

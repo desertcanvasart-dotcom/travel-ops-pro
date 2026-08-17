@@ -14,51 +14,36 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Helper to resolve variation from code
-async function resolveVariation(code: string) {
-  // First, try to find by variation_code
+// Resolve code to its target. A programme without variations is still a valid
+// translation target — the imported A.T.S catalogue is variation-less and its
+// content lives at the template level (see ../route.ts resolveTarget).
+async function resolveTarget(code: string) {
   const { data: varByCode } = await supabase
     .from('tour_variations')
     .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
     .eq('variation_code', code)
     .single()
 
-  if (varByCode) return varByCode
+  if (varByCode) return { template_id: varByCode.template_id as string, variation: varByCode }
 
-  // Check if it's a UUID
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
+  const { data: template } = await supabase
+    .from('tour_templates')
+    .select('id')
+    .eq(isUUID ? 'id' : 'template_code', code)
+    .single()
 
-  if (isUUID) {
-    const { data: varByTemplateId } = await supabase
-      .from('tour_variations')
-      .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
-      .eq('template_id', code)
-      .order('tier', { ascending: true })
-      .limit(1)
-      .single()
+  if (!template) return null
 
-    if (varByTemplateId) return varByTemplateId
-  } else {
-    const { data: template } = await supabase
-      .from('tour_templates')
-      .select('id')
-      .eq('template_code', code)
-      .single()
+  const { data: variation } = await supabase
+    .from('tour_variations')
+    .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
+    .eq('template_id', template.id)
+    .order('tier', { ascending: true })
+    .limit(1)
+    .single()
 
-    if (template) {
-      const { data: varByTemplate } = await supabase
-        .from('tour_variations')
-        .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
-        .eq('template_id', template.id)
-        .order('tier', { ascending: true })
-        .limit(1)
-        .single()
-
-      if (varByTemplate) return varByTemplate
-    }
-  }
-
-  return null
+  return { template_id: template.id as string, variation: variation ?? null }
 }
 
 // Helper to translate daily itinerary items
@@ -106,14 +91,14 @@ export async function POST(
       )
     }
 
-    // Resolve to variation
-    const variation = await resolveVariation(code)
-    if (!variation) {
+    const target = await resolveTarget(code)
+    if (!target) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },
         { status: 404 }
       )
     }
+    const variation = target.variation
 
     const sourceLanguage: Language = targetLanguage === 'en' ? 'ja' : 'en'
     const results: {
@@ -122,7 +107,8 @@ export async function POST(
       translatedDailyItinerary?: unknown[]
     } = {}
 
-    // ===== VARIATION VERSION =====
+    // ===== VARIATION VERSION ===== (only when the programme has one)
+    if (variation) {
     // Check if target variation version already exists
     const { data: existingVarVersion } = await supabase
       .from('tour_variation_versions')
@@ -177,12 +163,14 @@ export async function POST(
       }
     }
 
+    }
+
     // ===== TEMPLATE VERSION =====
     // Check if target template version already exists
     const { data: existingTmpVersion } = await supabase
       .from('tour_template_versions')
       .select('id')
-      .eq('template_id', variation.template_id)
+      .eq('template_id', target.template_id)
       .eq('language', targetLanguage)
       .single()
 
@@ -191,14 +179,14 @@ export async function POST(
       const { data: template } = await supabase
         .from('tour_templates')
         .select('template_name, short_description, long_description, highlights, main_attractions, best_for, inclusions, exclusions')
-        .eq('id', variation.template_id)
+        .eq('id', target.template_id)
         .single()
 
       // Try to get source version first
       const { data: sourceTmpVersion } = await supabase
         .from('tour_template_versions')
         .select('*')
-        .eq('template_id', variation.template_id)
+        .eq('template_id', target.template_id)
         .eq('language', sourceLanguage)
         .single()
 
@@ -218,7 +206,7 @@ export async function POST(
         const { data: newTmpVersion, error: tmpError } = await supabase
           .from('tour_template_versions')
           .insert({
-            template_id: variation.template_id,
+            template_id: target.template_id,
             language: targetLanguage,
             template_name: translatedTmpContent.template_name || tmpSourceContent.template_name || 'Untitled Tour',
             short_description: translatedTmpContent.short_description || tmpSourceContent.short_description || null,
@@ -241,12 +229,31 @@ export async function POST(
     }
 
     // ===== DAILY ITINERARY =====
-    // Fetch and translate variation daily itinerary
-    const { data: dailyItinerary } = await supabase
-      .from('variation_daily_itinerary')
-      .select('*')
-      .eq('variation_id', variation.id)
-      .order('day_number', { ascending: true })
+    // Variation itinerary when one exists; otherwise the template's own days
+    // (imported programmes keep their day-by-day in tour_templates.itinerary).
+    let dailyItinerary: any[] | null = null
+    if (variation) {
+      const { data } = await supabase
+        .from('variation_daily_itinerary')
+        .select('*')
+        .eq('variation_id', variation.id)
+        .order('day_number', { ascending: true })
+      dailyItinerary = data
+    } else {
+      const { data: tpl } = await supabase
+        .from('tour_templates')
+        .select('itinerary')
+        .eq('id', target.template_id)
+        .single()
+      const days = Array.isArray(tpl?.itinerary) ? tpl!.itinerary : []
+      dailyItinerary = days.map((day: any) => ({
+        day_number: day.day,
+        day_title: day.title,
+        day_description: day.description,
+        city: day.city,
+        overnight_city: day.overnight_city
+      }))
+    }
 
     if (dailyItinerary && dailyItinerary.length > 0) {
       // Note: Daily itinerary doesn't have a separate versions table in the current schema
