@@ -44,7 +44,6 @@ import {
   UserCog,
   Shield,
   BookOpen,
-  Wand2,
   Handshake,
   Send,
   Route,
@@ -132,7 +131,6 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
       { labelKey: 'emailInbox', href: '/inbox', icon: Mail },
-      { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: Wand2 },
       { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
       { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
