@@ -263,7 +263,8 @@
     "bookings": "Bookings",
     "capacity": "Capacity",
     "integrations": "Integrations",
-    "departments": "Departments"
+    "departments": "Departments",
+    "activityLog": "Activity Log"
   },
   "roles": {
     "admin": "Admin",
@@ -6929,5 +6930,21 @@
     "create": "Create",
     "delete": "Delete",
     "deleteConfirm": "Delete department \"{name}\"? Only possible while nothing references it."
+  },
+  "activity": {
+    "title": "Activity Log",
+    "subtitle": "Every change made in the system: who, what, and when. Records cannot be edited or deleted.",
+    "filterUser": "Filter by user email",
+    "filterEntity": "Filter by area (e.g. rates, bookings)",
+    "allActions": "All actions",
+    "actionCreate": "Create",
+    "actionUpdate": "Update",
+    "actionDelete": "Delete",
+    "colWhen": "When",
+    "colWho": "Who",
+    "colAction": "Action",
+    "colTarget": "Target",
+    "empty": "No activity recorded yet.",
+    "total": "{count} entries"
   }
 }

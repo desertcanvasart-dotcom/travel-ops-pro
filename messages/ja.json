@@ -263,7 +263,8 @@
     "bookings": "予約管理",
     "capacity": "稼働状況",
     "integrations": "外部連携",
-    "departments": "部署"
+    "departments": "部署",
+    "activityLog": "操作ログ"
   },
   "roles": {
     "admin": "管理者",
@@ -7515,5 +7516,21 @@
     "create": "作成",
     "delete": "削除",
     "deleteConfirm": "部署「{name}」を削除しますか？メンバーやタスクが紐づいていない場合のみ削除できます。"
+  },
+  "activity": {
+    "title": "操作ログ",
+    "subtitle": "システム内のすべての変更履歴：誰が・何を・いつ。記録の編集・削除はできません。",
+    "filterUser": "ユーザーのメールで絞り込み",
+    "filterEntity": "対象で絞り込み（例：rates、bookings）",
+    "allActions": "すべての操作",
+    "actionCreate": "作成",
+    "actionUpdate": "更新",
+    "actionDelete": "削除",
+    "colWhen": "日時",
+    "colWho": "ユーザー",
+    "colAction": "操作",
+    "colTarget": "対象",
+    "empty": "まだ記録がありません。",
+    "total": "{count}件"
   }
 }
