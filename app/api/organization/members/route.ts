@@ -17,21 +17,33 @@ export async function GET() {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const { data, error } = await supabaseAdmin
+    // Two plain queries stitched in code: the embed this used to attempt
+    // (user_profiles!user_id) needs a foreign key that does not exist, so it
+    // failed PGRST200 on every call and the page showed "No members yet"
+    // under a count that said otherwise.
+    const { data: memberships, error } = await supabaseAdmin
       .from('organization_members')
-      .select(`
-        org_id,
-        user_id,
-        role,
-        created_at,
-        user:user_profiles!user_id(id, full_name, email, role, is_active)
-      `)
+      .select('org_id, user_id, role, created_at')
       .eq('org_id', orgId)
       .order('created_at', { ascending: true })
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data: data ?? [] })
+    const userIds = (memberships ?? []).map(m => m.user_id).filter(Boolean)
+    const { data: profiles } = userIds.length
+      ? await supabaseAdmin
+          .from('user_profiles')
+          .select('id, full_name, email, role, is_active')
+          .in('id', userIds)
+      : { data: [] }
+    const byId = new Map((profiles ?? []).map(p => [p.id, p]))
+
+    const data = (memberships ?? []).map(m => ({
+      ...m,
+      user: byId.get(m.user_id) ?? null,
+    }))
+
+    return NextResponse.json({ success: true, data })
   } catch (err) {
     console.error('Error fetching org members:', err)
     return NextResponse.json({ success: false, error: 'Failed to fetch members' }, { status: 500 })
