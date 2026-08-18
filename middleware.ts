@@ -17,6 +17,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/team-members': ['admin', 'manager'],
   '/departments': ['admin', 'manager'],
   '/financial-reports': ['admin', 'manager'],
+  '/receipts': ['admin', 'manager'],
+  '/supplier-invoices': ['admin', 'manager'],
+  '/commissions': ['admin', 'manager'],
   '/profit-loss': ['admin', 'manager'],
   '/accounts-receivable': ['admin', 'manager'],
   '/accounts-payable': ['admin', 'manager'],
@@ -39,12 +42,12 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/contacts': ['admin', 'manager', 'agent'],
   '/followups': ['admin', 'manager', 'agent'],
   '/tours': ['admin', 'manager', 'agent'],
-  '/expenses': ['admin', 'manager', 'agent'],
+  '/expenses': ['admin', 'manager'],
   '/reminders': ['admin', 'manager', 'agent'],
   
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
-  '/analytics': ['admin', 'manager', 'agent', 'viewer'],
+  '/analytics': ['admin', 'manager'],
   '/calendar': ['admin', 'manager', 'agent', 'viewer'],
   '/notifications': ['admin', 'manager', 'agent', 'viewer'],
 }
@@ -67,6 +70,20 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
 // commission rows) are NOT covered here — those guard themselves in-route via
 // requireRole() from lib/auth/current-org.ts. Keep both in sync.
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+// Financial data is manager-and-above, READS INCLUDED — a blocked page over an
+// open API is theater. /api/invoices and /api/payments stay agent-accessible
+// on purpose: reservation staff issue invoices and record customer payments.
+const FINANCIAL_API_PREFIXES = [
+  '/api/profit-loss',
+  '/api/financial-reports',
+  '/api/expenses',
+  '/api/commissions',
+  '/api/supplier-invoices',
+  '/api/accounts-receivable',
+  '/api/accounts-payable',
+  '/api/analytics',
+]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // NEVER trust a client-supplied copy of the internal verified-user header —
@@ -195,6 +212,27 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
 
   // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
   // service-role key, so this is the authorization layer for them).
+  if (
+    isApiRoute &&
+    user &&
+    FINANCIAL_API_PREFIXES.some(p => request.nextUrl.pathname.startsWith(p))
+  ) {
+    const { data: membership } = await createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    )
+      .from('organization_members')
+      .select('role')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle()
+    const financialRole = (membership as { role?: string } | null)?.role ?? 'viewer'
+    if (!roleAllows(financialRole, ['admin', 'manager'])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
   if (isApiRoute && user && MUTATING_METHODS.has(request.method)) {
     // AUDIT TRAIL: every authenticated mutating API call is recorded here —
     // the one chokepoint no screen or code path can route around. Deferred

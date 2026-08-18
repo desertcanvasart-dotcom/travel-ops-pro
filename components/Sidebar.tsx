@@ -110,7 +110,7 @@ const navigationConfig: NavConfig[] = [
     key: 'main',
     items: [
       { labelKey: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { labelKey: 'analytics', href: '/analytics', icon: TrendingUp },
+      { labelKey: 'analytics', href: '/analytics', icon: TrendingUp, roles: ['admin', 'manager'] },
     ]
   },
   {
