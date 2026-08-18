@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Building2, Loader2, Check, Plus } from 'lucide-react'
+import { Building2, Loader2, Check, Plus, Trash2 } from 'lucide-react'
 import { SERVICE_TYPE_ROUTING } from '@/lib/departments'
 
 interface Department {
@@ -89,6 +89,19 @@ export default function DepartmentsPage() {
       setError(err.message || 'Failed to save')
     } finally {
       setSavingId(null)
+    }
+  }
+
+  const remove = async (dept: Department) => {
+    if (!confirm(t('deleteConfirm', { name: dept.name }))) return
+    setError(null)
+    try {
+      const res = await fetch(`/api/departments/${dept.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setDepartments(prev => prev.filter(d => d.id !== dept.id))
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete')
     }
   }
 
@@ -206,14 +219,26 @@ export default function DepartmentsPage() {
                   )
                 })}
               </div>
-              <button
-                onClick={() => save(dept)}
-                disabled={savingId === dept.id}
-                className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg text-sm font-medium hover:bg-[#4a5c35] disabled:opacity-50"
-              >
-                {savingId === dept.id ? <Loader2 className="w-4 h-4 animate-spin" /> : savedId === dept.id ? <Check className="w-4 h-4" /> : null}
-                {savedId === dept.id ? t('saved') : t('save')}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => save(dept)}
+                  disabled={savingId === dept.id}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg text-sm font-medium hover:bg-[#4a5c35] disabled:opacity-50"
+                >
+                  {savingId === dept.id ? <Loader2 className="w-4 h-4 animate-spin" /> : savedId === dept.id ? <Check className="w-4 h-4" /> : null}
+                  {savedId === dept.id ? t('saved') : t('save')}
+                </button>
+                {/* Delete only offers itself when no member references the
+                    department; the server re-checks members AND tasks. */}
+                {(members[dept.id] ?? 0) === 0 && (
+                  <button
+                    onClick={() => remove(dept)}
+                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> {t('delete')}
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}

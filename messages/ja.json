@@ -7512,6 +7512,8 @@
     "save": "保存",
     "saved": "保存しました",
     "newPlaceholder": "新しい部署名",
-    "create": "作成"
+    "create": "作成",
+    "delete": "削除",
+    "deleteConfirm": "部署「{name}」を削除しますか？メンバーやタスクが紐づいていない場合のみ削除できます。"
   }
 }

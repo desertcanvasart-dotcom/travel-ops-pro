@@ -9,8 +9,9 @@ const supabaseAdmin = createClient(
 )
 
 // PUT — rename, redescribe, re-route service types, activate/deactivate.
-// No DELETE: tasks and team members reference departments by id, so a
-// department retires (is_active=false) rather than vanishing under them.
+// DELETE — only for a department NOTHING references: zero team members and
+// zero tasks, checked server-side. Anything with history retires
+// (is_active=false) instead, so past work keeps pointing at a real name.
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const forbidden = await requireRole(['admin'])
@@ -61,5 +62,36 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) {
     console.error('Error in department PUT:', error)
     return NextResponse.json({ success: false, error: 'Failed to update department' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const forbidden = await requireRole(['admin'])
+    if (forbidden) return forbidden
+
+    const { id } = await params
+
+    const [{ count: memberCount }, { count: taskCount }] = await Promise.all([
+      supabaseAdmin.from('team_members').select('id', { count: 'exact', head: true }).eq('department_id', id),
+      supabaseAdmin.from('tasks').select('id', { count: 'exact', head: true }).eq('department_id', id),
+    ])
+
+    if ((memberCount ?? 0) > 0 || (taskCount ?? 0) > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Department is referenced (${memberCount ?? 0} members, ${taskCount ?? 0} tasks) — deactivate it instead`,
+        },
+        { status: 409 }
+      )
+    }
+
+    const { error } = await supabaseAdmin.from('departments').delete().eq('id', id)
+    if (error) throw error
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error in department DELETE:', error)
+    return NextResponse.json({ success: false, error: 'Failed to delete department' }, { status: 500 })
   }
 }
