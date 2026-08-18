@@ -60,6 +60,7 @@ import {
   CalendarDays,
   Plug,
   Building2,
+  ScrollText,
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -232,6 +233,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'settings', href: '/settings', icon: Settings },
       { labelKey: 'integrations', href: '/settings/integrations', icon: Plug },
       { labelKey: 'userManagement', href: '/users', icon: Shield },
+      { labelKey: 'activityLog', href: '/activity', icon: ScrollText },
     ]
   }
 ]

@@ -3,11 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { roleAllows } from '@/lib/auth/roles'
 import { VERIFIED_USER_HEADER, signVerifiedUserHeader } from '@/lib/auth/verified-user-header'
+import type { NextFetchEvent } from 'next/server'
+import { recordActivity } from '@/lib/activity-log'
 
 // Define route permissions - which roles can access which routes
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin only
   '/settings': ['admin'],
+  '/activity': ['admin'],
   '/users': ['admin'],
   
   // Admin and Manager
@@ -65,7 +68,7 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
 // requireRole() from lib/auth/current-org.ts. Keep both in sync.
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // NEVER trust a client-supplied copy of the internal verified-user header —
   // strip it from every forwarded request. Middleware re-adds it (HMAC-signed)
   // below only after the session is actually verified.
@@ -193,6 +196,22 @@ export async function middleware(request: NextRequest) {
   // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
   // service-role key, so this is the authorization layer for them).
   if (isApiRoute && user && MUTATING_METHODS.has(request.method)) {
+    // AUDIT TRAIL: every authenticated mutating API call is recorded here —
+    // the one chokepoint no screen or code path can route around. Deferred
+    // via waitUntil so the request never waits on the log write.
+    event.waitUntil(
+      recordActivity({
+        user_id: user.id,
+        user_email: user.email ?? null,
+        method: request.method,
+        path: request.nextUrl.pathname,
+        ip:
+          request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+          request.headers.get('x-real-ip'),
+        user_agent: request.headers.get('user-agent'),
+      })
+    )
+
     const matched = API_MUTATION_PERMISSIONS.find(p =>
       request.nextUrl.pathname.startsWith(p.prefix)
     )
