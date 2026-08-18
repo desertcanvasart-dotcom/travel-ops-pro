@@ -228,15 +228,20 @@ export default function DepartmentsPage() {
                   {savingId === dept.id ? <Loader2 className="w-4 h-4 animate-spin" /> : savedId === dept.id ? <Check className="w-4 h-4" /> : null}
                   {savedId === dept.id ? t('saved') : t('save')}
                 </button>
-                {/* Delete only offers itself when no member references the
-                    department; the server re-checks members AND tasks. */}
-                {(members[dept.id] ?? 0) === 0 && (
+                {/* Delete is always visible; a department with members shows
+                    WHY it cannot be deleted instead of hiding the option (the
+                    server re-checks members AND tasks regardless). */}
+                {(members[dept.id] ?? 0) === 0 ? (
                   <button
                     onClick={() => remove(dept)}
                     className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> {t('delete')}
                   </button>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs text-gray-400" title={t('deleteBlockedHint', { count: members[dept.id] })}>
+                    <Trash2 className="w-3.5 h-3.5" /> {t('deleteBlocked', { count: members[dept.id] })}
+                  </span>
                 )}
               </div>
             </div>

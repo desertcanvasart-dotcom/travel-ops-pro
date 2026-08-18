@@ -6929,7 +6929,9 @@
     "newPlaceholder": "New department name",
     "create": "Create",
     "delete": "Delete",
-    "deleteConfirm": "Delete department \"{name}\"? Only possible while nothing references it."
+    "deleteConfirm": "Delete department \"{name}\"? Only possible while nothing references it.",
+    "deleteBlocked": "Delete — blocked: {count} members",
+    "deleteBlockedHint": "Reassign this department's {count} member(s) on the Team Members page first; departments with task history can only be deactivated."
   },
   "activity": {
     "title": "Activity Log",
