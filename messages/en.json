@@ -6926,6 +6926,8 @@
     "save": "Save",
     "saved": "Saved",
     "newPlaceholder": "New department name",
-    "create": "Create"
+    "create": "Create",
+    "delete": "Delete",
+    "deleteConfirm": "Delete department \"{name}\"? Only possible while nothing references it."
   }
 }
