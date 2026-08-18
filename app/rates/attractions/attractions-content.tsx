@@ -9,6 +9,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Building2, Sparkles
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -497,6 +498,15 @@ export default function AttractionsContent() {
     }
   }
 
+  const bulk = useBulkSelect()
+  const handleBulkDelete = async () => {
+    const [ok, failed] = await bulkDeleteByIds([...bulk.selected], id => `/api/rates/attractions/${id}`)
+    bulk.clear()
+    fetchAttractions()
+    if (failed) showToast('error', `Deleted ${ok}, failed ${failed}`)
+    else showToast('success', `Deleted ${ok}`)
+  }
+
   // Get supplier name by ID
   const getSupplierName = (supplierId?: string) => {
     if (!supplierId) return null
@@ -746,11 +756,17 @@ export default function AttractionsContent() {
         </div>
 
         {/* Attractions Table - UPDATED with Add-on column */}
+        <BulkDeleteBar count={bulk.selected.size} label="attractions" onDelete={handleBulkDelete} onClear={bulk.clear} />
         <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-3 py-2 w-8">
+                    <input type="checkbox" aria-label="select all"
+                      checked={paginatedAttractions.length > 0 && bulk.selected.size === paginatedAttractions.length}
+                      onChange={() => bulk.toggleAll(paginatedAttractions.map(a => a.id))} />
+                  </th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.attraction')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.supplier')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.category')}</th>
@@ -774,6 +790,7 @@ export default function AttractionsContent() {
                       ? 'bg-orange-50/50 hover:bg-orange-50' 
                       : index % 2 === 0 ? 'bg-white hover:bg-gray-100' : 'bg-gray-50 hover:bg-gray-100'
                   } transition-colors`}>
+                    <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(attraction.id)} onChange={() => bulk.toggle(attraction.id)} /></td>
                     <td className="px-4 py-3">
                       <div>
                         <p className="text-sm font-medium text-gray-900">{attraction.attraction_name}</p>
@@ -858,7 +875,7 @@ export default function AttractionsContent() {
                 ))}
                 {paginatedAttractions.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={10} className="px-4 py-12 text-center text-gray-500">
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-3xl text-gray-400">🎫</span>
                         <p className="text-sm font-medium">{t('noAttractionsFound')}</p>

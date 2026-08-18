@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import {
   Building2,
@@ -200,6 +201,7 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
   const textColor = toast.type === 'success' ? 'text-green-800' :
                     toast.type === 'error' ? 'text-red-800' :
                     'text-blue-800'
+
 
   return (
     <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg ${bgColor} animate-slide-in`}>
@@ -774,6 +776,13 @@ export default function HotelsContent() {
     )
   }
 
+  const bulk = useBulkSelect()
+  const handleBulkDelete = async () => {
+    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/hotels/${id}`)
+    bulk.clear()
+    fetchRates()
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Toast Container */}
@@ -974,9 +983,11 @@ export default function HotelsContent() {
         {viewMode === 'table' && (
           <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
+              <BulkDeleteBar count={bulk.selected.size} label="hotel rates" onDelete={handleBulkDelete} onClear={bulk.clear} />
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
+                    <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('hotel')}</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('company')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('tier')}</th>
@@ -991,6 +1002,7 @@ export default function HotelsContent() {
                 <tbody className="divide-y divide-gray-100">
                   {paginatedRates.map((rate, index) => (
                     <tr key={rate.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors`}>
+                      <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(rate.id)} onChange={() => bulk.toggle(rate.id)} /></td>
                       <td className="px-4 py-3">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{rate.property_name}</p>
@@ -1064,7 +1076,7 @@ export default function HotelsContent() {
                   ))}
                   {paginatedRates.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
+                      <td colSpan={10} className="px-4 py-12 text-center text-gray-500">
                         <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                         <p className="text-sm font-medium">{t('noRatesFound')}</p>
                         <button

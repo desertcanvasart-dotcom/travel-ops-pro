@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -72,6 +73,7 @@ function Pagination({
   const goToPage = (page: number) => {
     onPageChange(Math.max(1, Math.min(page, totalPages)))
   }
+
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
@@ -366,6 +368,13 @@ export default function HotelServicesPage() {
     )
   }
 
+  const bulk = useBulkSelect()
+  const handleBulkDelete = async () => {
+    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/hotel-services/${id}`)
+    bulk.clear()
+    fetchRates()
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Toasts */}
@@ -488,9 +497,11 @@ export default function HotelServicesPage() {
         {/* Table */}
         <div className="bg-white rounded-lg shadow-md border overflow-hidden">
           <div className="overflow-x-auto">
+            <BulkDeleteBar count={bulk.selected.size} label="hotel service rates" onDelete={handleBulkDelete} onClear={bulk.clear} />
             <table className="w-full">
               <thead className="bg-rose-50 border-b border-rose-100">
                 <tr>
+                  <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-rose-800">{t('table.serviceType')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-rose-800">{t('table.hotelCategory')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-rose-800">{t('table.destination')}</th>
@@ -503,6 +514,7 @@ export default function HotelServicesPage() {
               <tbody className="divide-y divide-gray-100">
                 {paginatedRates.map((rate, idx) => (
                   <tr key={rate.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-rose-50 transition-colors`}>
+                    <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(rate.id)} onChange={() => bulk.toggle(rate.id)} /></td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                         rate.service_type === 'concierge' ? 'bg-amber-100 text-amber-800' :
@@ -564,7 +576,7 @@ export default function HotelServicesPage() {
                 ))}
                 {paginatedRates.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                       <ConciergeBell className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p className="font-medium">{t('emptyState.noRatesFound')}</p>
                       <button type="button" onClick={handleAddNew} className="mt-2 text-sm text-rose-600 hover:underline">
