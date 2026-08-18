@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import {
@@ -509,6 +510,13 @@ export default function MealRatesContent() {
     )
   }
 
+  const bulk = useBulkSelect()
+  const handleBulkDelete = async () => {
+    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/meals/${id}`)
+    bulk.clear()
+    fetchRates()
+  }
+
   return (
     <div className="p-4 lg:p-6 space-y-4 bg-gray-50 min-h-screen">
       
@@ -795,9 +803,11 @@ export default function MealRatesContent() {
           </div>
         ) : viewMode === 'table' ? (
           <div className="overflow-x-auto">
+            <BulkDeleteBar count={bulk.selected.size} label="meal rates" onDelete={handleBulkDelete} onClear={bulk.clear} />
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('restaurant')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('mealType')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('city')}</th>
@@ -811,6 +821,7 @@ export default function MealRatesContent() {
               <tbody className="divide-y divide-gray-100">
                 {paginatedRates.map((rate) => (
                   <tr key={rate.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(rate.id)} onChange={() => bulk.toggle(rate.id)} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Utensils className="w-4 h-4 text-orange-500" />

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import {
   Search,
@@ -501,6 +502,13 @@ export default function FlightsContent() {
     )
   }
 
+  const bulk = useBulkSelect()
+  const handleBulkDelete = async () => {
+    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/flights/${id}`)
+    bulk.clear()
+    fetchRates()
+  }
+
   return (
     <div className="p-6 space-y-4">
       {/* Header */}
@@ -663,9 +671,11 @@ export default function FlightsContent() {
 
       {/* Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <BulkDeleteBar count={bulk.selected.size} label="flight rates" onDelete={handleBulkDelete} onClear={bulk.clear} />
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('route')}</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('airline')}</th>
               <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-2">{t('flight')}</th>
@@ -680,13 +690,14 @@ export default function FlightsContent() {
           <tbody className="divide-y divide-gray-100">
             {paginatedRates.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500">
                   {t('noFlightsFound')}
                 </td>
               </tr>
             ) : (
               paginatedRates.map((rate) => (
                 <tr key={rate.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(rate.id)} onChange={() => bulk.toggle(rate.id)} /></td>
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-1.5 text-sm">
                       <span className="font-medium text-gray-900">{rate.route_from}</span>

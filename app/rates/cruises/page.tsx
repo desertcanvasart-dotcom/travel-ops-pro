@@ -8,6 +8,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
@@ -182,6 +183,7 @@ interface CruiseFormData {
 
 function TierBadge({ tier, t }: { tier: string | null; t: (key: string) => string }) {
   const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === tier) || TIER_OPTIONS_CONFIG[1]
+
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
       {t(`tiers.${tierConfig.labelKey}`)}
@@ -859,6 +861,13 @@ export default function CruisesPage() {
     )
   }
 
+  const bulk = useBulkSelect()
+  const handleBulkDelete = async () => {
+    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/cruises/${id}`)
+    bulk.clear()
+    fetchCruises()
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Toasts */}
@@ -990,9 +999,11 @@ export default function CruisesPage() {
         {/* Table */}
         <div className="bg-white rounded-lg shadow-md border overflow-hidden">
           <div className="overflow-x-auto">
+            <BulkDeleteBar count={bulk.selected.size} label="cruises" onDelete={handleBulkDelete} onClear={bulk.clear} />
             <table className="w-full">
               <thead className="bg-blue-50 border-b border-blue-100">
                 <tr>
+                  <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedCruises.length > 0 && bulk.selected.size === paginatedCruises.length} onChange={() => bulk.toggleAll(paginatedCruises.map(r => r.id))} /></th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{t('table.shipCode')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.category')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{t('table.route')}</th>
@@ -1009,6 +1020,7 @@ export default function CruisesPage() {
               <tbody className="divide-y divide-gray-100">
                 {paginatedCruises.map((cruise, idx) => (
                   <tr key={cruise.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                    <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(cruise.id)} onChange={() => bulk.toggle(cruise.id)} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {cruise.is_preferred && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
@@ -1077,7 +1089,7 @@ export default function CruisesPage() {
                 ))}
                 {paginatedCruises.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={12} className="px-4 py-12 text-center text-gray-500">
                       <Ship className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p className="font-medium">{t('empty.noCruises')}</p>
                       <button onClick={handleAddNew} className="mt-2 text-sm text-blue-600 hover:underline">

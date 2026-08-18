@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import {
   BedDouble,
@@ -354,6 +355,13 @@ export default function SleepingTrainRatesContent() {
     )
   }
 
+  const bulk = useBulkSelect()
+  const handleBulkDelete = async () => {
+    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/sleeping-trains/${id}`)
+    bulk.clear()
+    fetchRates()
+  }
+
   return (
     <div className="p-4 lg:p-6 space-y-4 bg-gray-50 min-h-screen">
       
@@ -625,9 +633,11 @@ export default function SleepingTrainRatesContent() {
           </div>
         ) : viewMode === 'table' ? (
           <div className="overflow-x-auto">
+            <BulkDeleteBar count={bulk.selected.size} label="sleeping-train rates" onDelete={handleBulkDelete} onClear={bulk.clear} />
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('route')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('cabin')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('schedule')}</th>
@@ -640,6 +650,7 @@ export default function SleepingTrainRatesContent() {
               <tbody className="divide-y divide-gray-100">
                 {paginatedRates.map((rate) => (
                   <tr key={rate.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(rate.id)} onChange={() => bulk.toggle(rate.id)} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <BedDouble className="w-4 h-4 text-indigo-500" />
