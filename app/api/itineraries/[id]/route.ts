@@ -96,6 +96,9 @@ export async function PUT(
     if (body.client_email !== undefined) updateData.client_email = body.client_email
     if (body.client_phone !== undefined) updateData.client_phone = body.client_phone
     if (body.trip_name !== undefined) updateData.trip_name = body.trip_name
+    // The programme this trip follows, so its 日程表 can be generated from the
+    // record. Null clears the link.
+    if (body.template_id !== undefined) updateData.template_id = body.template_id || null
     if (body.start_date !== undefined) updateData.start_date = body.start_date
     if (body.end_date !== undefined) updateData.end_date = body.end_date
     if (body.num_adults !== undefined) updateData.num_adults = body.num_adults

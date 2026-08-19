@@ -1764,6 +1764,25 @@
       "createFailed": "共有リンクを作成できませんでした。",
       "revokeFailed": "共有リンクを無効化できませんでした。",
       "copyFailed": "コピーできませんでした。リンクを選択して手動でコピーしてください。"
+    },
+    "nittei": {
+      "button": "日程表",
+      "title": "日程表を作成",
+      "hint": "この旅程から自動入力されます。入力欄の内容がそのまま印刷されます。選んだプログラムは次回以降も保持されます。",
+      "programme": "プログラム",
+      "pickProgramme": "プログラムを選択…",
+      "loading": "プログラムを読み込み中…",
+      "loadFailed": "プログラム一覧を読み込めませんでした。",
+      "linkNotSaved": "書類は作成されましたが、プログラムを旅程に保存できませんでした。",
+      "customerName": "お客様名（「様」は自動で付きます）",
+      "departureDate": "出発日（1日目）",
+      "cairoGuide": "カイロガイド",
+      "southGuide": "南部ガイド",
+      "author": "作成者",
+      "created": "作成日",
+      "saving": "保存中…",
+      "pdf": "日程表PDF",
+      "print": "印刷"
     }
   },
   "payments": {
@@ -6021,11 +6040,12 @@
       "printItinerary": "印刷",
       "itineraryDoc": "日程表",
       "nitteiTitle": "日程表を作成",
-      "nitteiHint": "すべて任意です。空欄のままならテンプレートをそのまま印刷します。出発日を入れると各日の日付が入ります。",
+      "nitteiHint": "すべて任意です。空欄のままならテンプレートをそのまま印刷します。出発日を入れると各日の日付とホテルのチェックイン・アウトが入ります。",
       "departureDate": "出発日（1日目）",
       "cairoGuide": "カイロガイド",
       "southGuide": "南部ガイド",
-      "docAuthor": "作成者"
+      "docAuthor": "作成者",
+      "docCreated": "作成日"
     },
     "views": {
       "grid": "グリッド",

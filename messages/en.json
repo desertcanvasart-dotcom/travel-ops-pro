@@ -1337,6 +1337,25 @@
       "createFailed": "Could not create the share link.",
       "revokeFailed": "Could not revoke the share link.",
       "copyFailed": "Could not copy — select the link and copy it manually."
+    },
+    "nittei": {
+      "button": "Itinerary Doc (日程表)",
+      "title": "Generate 日程表",
+      "hint": "Prefilled from this trip — whatever is in the boxes is what prints. The programme is remembered for next time.",
+      "programme": "Programme",
+      "pickProgramme": "Choose a programme…",
+      "loading": "Loading programmes…",
+      "loadFailed": "Could not load the programme list.",
+      "linkNotSaved": "The document was generated, but the programme could not be saved to this trip.",
+      "customerName": "Customer name (様 is added automatically)",
+      "departureDate": "Departure date (Day 1)",
+      "cairoGuide": "Cairo guide",
+      "southGuide": "Southern guide",
+      "author": "Author (作成者)",
+      "created": "Created (作成日)",
+      "saving": "Saving…",
+      "pdf": "Itinerary PDF",
+      "print": "Print"
     }
   },
   "payments": {
@@ -5888,11 +5907,12 @@
       "printItinerary": "Print",
       "itineraryDoc": "Itinerary Doc (日程表)",
       "nitteiTitle": "Generate 日程表",
-      "nitteiHint": "All fields optional — leave blank to print the template as-is. Filling the departure date puts real dates on every day.",
+      "nitteiHint": "All fields optional — leave blank to print the template as-is. Filling the departure date puts real dates on every day and on the hotel check-in/out.",
       "departureDate": "Departure date (Day 1)",
       "cairoGuide": "Cairo guide",
       "southGuide": "Southern guide",
-      "docAuthor": "Author (作成者)"
+      "docAuthor": "Author (作成者)",
+      "docCreated": "Created (作成日)"
     }
   },
   "b2bQuotes": {

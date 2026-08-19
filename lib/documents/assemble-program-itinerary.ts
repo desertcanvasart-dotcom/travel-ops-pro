@@ -102,7 +102,25 @@ export interface AssembleProgramInput {
     cairo_guide: string | null
     south_guide: string | null
     author: string | null
+    /** The traveller this copy is for. Carries an honorific if the caller
+     *  supplied one; gets 様 if not. */
+    customer_name?: string | null
   }
+}
+
+/** Japanese honorifics a name may already end with. A name carrying one is
+ *  printed as written — 「ご一行様」 and 「御中」 are deliberate choices about a
+ *  group or a company, and appending 様 to either would be wrong. */
+const HONORIFICS = ['様', '御中', 'さま', 'サマ']
+
+/** 「山田」→「山田様」. A document addressed to a Japanese traveller without an
+ *  honorific reads as brusque, and the name reaching us from the trip record is
+ *  a bare client_name, so the honorific is added here rather than expected of
+ *  whoever typed the booking. Anything already carrying one is left alone. */
+function withHonorific(name: string): string {
+  const trimmed = name.trim()
+  if (!trimmed) return ''
+  return HONORIFICS.some(h => trimmed.endsWith(h)) ? trimmed : `${trimmed}様`
 }
 
 const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土']
@@ -118,6 +136,59 @@ function dateLabel(startDate: string, dayNumber: number): { md: string; wd: stri
     md: `${d.getUTCMonth() + 1}/${d.getUTCDate()}`,
     wd: WEEKDAYS_JA[d.getUTCDay()],
   }
+}
+
+/** A stretch of consecutive nights spent in one place — one hotel's stay.
+ *
+ *  `overnight_city` on day N means the night AFTER day N is spent there, so a
+ *  run ending on day 3 checks out on the morning of day 4.
+ *
+ *  Nights not spent in a bed ashore split two ways: a cruise cabin, a sleeper
+ *  train or a coach IS a stay the office lists in 利用ホテル (ナイル川クルーズ船,
+ *  寝台列車), while a night in the air is not. Consecutive nights merge only
+ *  when they are the same place — two Cairo stays either side of a cruise are
+ *  two separate hotel rows, and the office lists them as two.
+ */
+function overnightRuns(days: SourceProgramDay[]): Array<{ startDay: number; endDay: number }> {
+  const runs: Array<{ key: string; startDay: number; endDay: number }> = []
+  for (const day of days) {
+    const kind = day.overnight_kind ?? (day.is_cruise_day ? 'cruise' : null)
+    if (kind === 'flight' || kind === 'none') continue
+    const key = day.overnight_city || (kind ? `KIND:${kind}` : '')
+    if (!key) continue
+    const last = runs[runs.length - 1]
+    if (last && last.key === key && last.endDay === day.day - 1) last.endDay = day.day
+    else runs.push({ key, startDay: day.day, endDay: day.day })
+  }
+  return runs.map(({ startDay, endDay }) => ({ startDay, endDay }))
+}
+
+/** Fill 利用ホテル check-in/check-out from the departure date.
+ *
+ *  The hotel rows the importer captured are in itinerary order, one per stay,
+ *  so they pair positionally with the overnight runs. That pairing is the whole
+ *  basis for the dates, which makes its arity the thing to check: if the source
+ *  document listed a different number of hotels than the programme has stays,
+ *  the rows no longer line up and every date after the discrepancy would land
+ *  on the wrong hotel. A customer document with confidently wrong dates is
+ *  worse than one with blanks the office fills by hand, so a mismatch fills
+ *  nothing — same rule as the rest of this file.
+ */
+function withStayDates<T extends { check_in: string; check_out: string }>(
+  hotelRows: T[],
+  days: SourceProgramDay[],
+  startDate: string | null
+): T[] {
+  if (!startDate) return hotelRows
+  const runs = overnightRuns(days)
+  if (runs.length !== hotelRows.length) return hotelRows
+
+  return hotelRows.map((row, i) => {
+    const checkIn = dateLabel(startDate, runs[i].startDay)
+    const checkOut = dateLabel(startDate, runs[i].endDay + 1)
+    if (!checkIn || !checkOut) return row
+    return { ...row, check_in: checkIn.md, check_out: checkOut.md }
+  })
 }
 
 export function assembleProgramItinerary(input: AssembleProgramInput): DailyItineraryContext {
@@ -141,22 +212,29 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
   }))
 
   // The programme's standard hotels, exactly as the source document lists
-  // them: names/phones/addresses filled, check-in/out blank (per-departure).
-  const hotelRows = (input.hotels ?? [])
-    .filter(h => (h.hotel ?? '').trim())
-    .map(h => ({
-      hotel: (h.hotel ?? '').trim(),
-      check_in: (h.check_in ?? '').trim(),
-      check_out: (h.check_out ?? '').trim(),
-      phone: (h.phone ?? '').trim(),
-      address: (h.address ?? '').trim(),
-    }))
+  // them: names/phones/addresses filled. Check-in/out are per-departure — the
+  // source holds only the office's blank mark ("/") — so they are computed
+  // from the departure date, and left exactly as found without one.
+  const hotelRows = withStayDates(
+    (input.hotels ?? [])
+      .filter(h => (h.hotel ?? '').trim())
+      .map(h => ({
+        hotel: (h.hotel ?? '').trim(),
+        check_in: (h.check_in ?? '').trim(),
+        check_out: (h.check_out ?? '').trim(),
+        phone: (h.phone ?? '').trim(),
+        address: (h.address ?? '').trim(),
+      })),
+    days,
+    startDate
+  )
 
   const org = input.org
   const contacts = org?.document_contacts ?? {}
 
   return {
     program_code: input.template_code,
+    customer_name: withHonorific(input.departure?.customer_name ?? ''),
     created_date: input.created_date,
     days: contextDays,
     hotel_rows: hotelRows,
