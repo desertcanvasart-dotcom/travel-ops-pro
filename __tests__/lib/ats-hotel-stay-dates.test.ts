@@ -16,7 +16,8 @@ import {
 function assemble(
   itinerary: SourceProgramDay[],
   hotels: SourceProgramHotel[],
-  start_date: string | null
+  start_date: string | null,
+  customer_name: string | null = null
 ) {
   return assembleProgramItinerary({
     template_code: 'TEST',
@@ -25,7 +26,7 @@ function assemble(
     created_date: '17 August 2026',
     font_face_css: '',
     org: null,
-    departure: { start_date, cairo_guide: null, south_guide: null, author: null },
+    departure: { start_date, cairo_guide: null, south_guide: null, author: null, customer_name },
   })
 }
 
@@ -201,5 +202,40 @@ describe('day dates — the column the stay dates are computed alongside', () =>
       'Steigenberger Cairo Pyramids:10/31→11/1',
       'Sonesta ST.George:11/1→11/2',
     ])
+  })
+})
+
+describe('customer name — whose copy this is', () => {
+  const name = (n: string | null) => assemble(NEK502, NEK502_HOTELS, '2026-10-05', n).customer_name
+
+  it('adds 様 to a bare name', () => {
+    expect(name('山田')).toBe('山田様')
+    expect(name('Yamada')).toBe('Yamada様')
+  })
+
+  it('leaves a name that already carries an honorific alone', () => {
+    // ご一行様 and 御中 are deliberate choices about a group or a company —
+    // 山田ご一行様様 would be the cost of not checking.
+    expect(name('山田様')).toBe('山田様')
+    expect(name('山田ご一行様')).toBe('山田ご一行様')
+    expect(name('株式会社エイチ・アイ・エス御中')).toBe('株式会社エイチ・アイ・エス御中')
+    expect(name('やまださま')).toBe('やまださま')
+  })
+
+  it('trims, and prints nothing at all for a blank name', () => {
+    expect(name('  山田  ')).toBe('山田様')
+    expect(name('')).toBe('')
+    expect(name('   ')).toBe('')
+    expect(name(null)).toBe('')
+  })
+
+  it('leaves the rest of the document untouched', () => {
+    // The name is the only thing that changes between a customer's copy and
+    // the bare programme — same days, same hotels, same dates.
+    const bare = assemble(NEK502, NEK502_HOTELS, '2026-10-05', null)
+    const theirs = assemble(NEK502, NEK502_HOTELS, '2026-10-05', '山田')
+    expect(theirs.days).toEqual(bare.days)
+    expect(theirs.hotel_rows).toEqual(bare.hotel_rows)
+    expect(bare.customer_name).toBe('')
   })
 })

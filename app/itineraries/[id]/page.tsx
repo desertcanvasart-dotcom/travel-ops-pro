@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
+import GenerateNitteiButton from '@/components/GenerateNitteiButton'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
@@ -36,6 +37,8 @@ interface Itinerary {
   client_email: string
   client_phone: string
   trip_name: string
+  /** The programme this trip follows, when it follows one. */
+  template_id?: string | null
   start_date: string
   end_date: string
   total_days: number
@@ -1536,6 +1539,17 @@ export default function ViewItineraryPage() {
               <FileText className="w-4 h-4" />
               {t('opsSheet')}
             </a>
+            {/* The customer-facing 日程表, generated from this trip: programme
+                text from the linked programme, traveller and dates from here. */}
+            <GenerateNitteiButton
+              itineraryId={itinerary.id}
+              clientName={itinerary.client_name}
+              startDate={itinerary.start_date}
+              templateId={itinerary.template_id}
+              onLinked={tid =>
+                setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))
+              }
+            />
             <Link
               href={`/documents/contract/${itinerary.id}`}
               className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"

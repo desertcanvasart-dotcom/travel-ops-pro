@@ -34,6 +34,10 @@ export interface DailyItineraryDay {
 
 export interface DailyItineraryContext {
   program_code: string
+  /** 「山田様」— the traveller this copy is for, printed opposite the programme
+   *  code. Empty string on the bare programme document, which is how the
+   *  office's own masters read. */
+  customer_name: string
   /** 作成日 as the office writes it, e.g. "17 August 2026". */
   created_date: string
   days: DailyItineraryDay[]
@@ -202,7 +206,12 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   .office .l { width: 22%; background: #f3f3f3; }
   .office .v { width: 28%; }
 
-  .codeline { text-align: right; font-size: 11pt; font-weight: 700; margin: 8pt 0 3pt; letter-spacing: 0.05em; }
+  /* The traveller's name sits opposite the programme code. With no name the
+     span is empty and the code stays hard right, exactly as the bare
+     programme document has always printed it. */
+  .codeline { display: flex; justify-content: space-between; align-items: baseline;
+              font-size: 11pt; font-weight: 700; margin: 8pt 0 3pt; letter-spacing: 0.05em; }
+  .codeline .cust { letter-spacing: 0.02em; }
 
   .itin th { background: #f3f3f3; font-weight: 700; text-align: center; }
   .itin .num { width: 5%; text-align: center; font-weight: 700; }
@@ -232,7 +241,10 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
     <tr><td class="l">緊急連絡先（日本）</td><td class="v">${esc(ctx.office_contacts.emergency_japan)}</td><td class="l">カイロ</td><td class="v">${esc(ctx.office_contacts.cairo_office)}</td></tr>
   </table>
 
-  <div class="codeline">${esc(ctx.program_code)}</div>
+  <div class="codeline">
+    <span class="cust">${esc(ctx.customer_name)}</span>
+    <span>${esc(ctx.program_code)}</span>
+  </div>
 
   <table class="itin">
     <thead>

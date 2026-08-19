@@ -102,7 +102,25 @@ export interface AssembleProgramInput {
     cairo_guide: string | null
     south_guide: string | null
     author: string | null
+    /** The traveller this copy is for. Carries an honorific if the caller
+     *  supplied one; gets 様 if not. */
+    customer_name?: string | null
   }
+}
+
+/** Japanese honorifics a name may already end with. A name carrying one is
+ *  printed as written — 「ご一行様」 and 「御中」 are deliberate choices about a
+ *  group or a company, and appending 様 to either would be wrong. */
+const HONORIFICS = ['様', '御中', 'さま', 'サマ']
+
+/** 「山田」→「山田様」. A document addressed to a Japanese traveller without an
+ *  honorific reads as brusque, and the name reaching us from the trip record is
+ *  a bare client_name, so the honorific is added here rather than expected of
+ *  whoever typed the booking. Anything already carrying one is left alone. */
+function withHonorific(name: string): string {
+  const trimmed = name.trim()
+  if (!trimmed) return ''
+  return HONORIFICS.some(h => trimmed.endsWith(h)) ? trimmed : `${trimmed}様`
 }
 
 const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土']
@@ -216,6 +234,7 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
 
   return {
     program_code: input.template_code,
+    customer_name: withHonorific(input.departure?.customer_name ?? ''),
     created_date: input.created_date,
     days: contextDays,
     hotel_rows: hotelRows,
