@@ -7,10 +7,12 @@
 //   - auth user  E2E_EMAIL (password E2E_PASSWORD, email pre-confirmed)
 //   - organization "E2E Smoke Org" + owner membership  → org-scoped writes from
 //     the suite can never touch the real operator org
-//   - client  "Smoke Tester" (E2E-CLIENT-001) — NOTE: the clients table has no
-//     org_id, so this row IS visible in the real clients list; it is named to
-//     be unmistakably synthetic
 //   - itinerary E2E-SMOKE-001 ("E2E Smoke Trip") + Day 1, in the E2E org
+//
+// It deliberately creates NO client. `clients` has no org_id, so a permanent
+// one would sit in the operator's real list looking like junk to tidy away —
+// and tidying it away red-lit CI across two merges. The specs that need a
+// client now mint their own per run (e2e/fixtures.ts createTestClient).
 //
 // Usage:
 //   node scripts/seed-e2e.mjs             # create/ensure everything
@@ -136,20 +138,12 @@ async function seed() {
     console.log('= membership exists — role enforced to owner')
   }
 
-  // 4. Client (global table — no org_id column; named to be obviously
-  // synthetic). A DB trigger assigns client_code and a CHECK constrains
-  // status (live rows use 'prospect'), so we key on email instead.
-  let [client] = await select('clients', `email=eq.${encodeURIComponent(email)}&select=id`)
-  if (!client) {
-    ;[client] = await insert('clients', {
-      first_name: 'Smoke',
-      last_name: 'Tester',
-      email,
-      status: 'prospect',
-    })
-    console.log('✓ client created: Smoke Tester')
-  } else {
-    console.log('= client exists')
+  // 4. No client — see the header. Any left by an older seed is swept, so the
+  // operator's list does not keep one forever just because it once ran.
+  const staleClients = await select('clients', `email=eq.${encodeURIComponent(email)}&select=id`)
+  if (staleClients?.length) {
+    await del('clients', `email=eq.${encodeURIComponent(email)}`)
+    console.log('✓ removed the old permanent client (specs now mint their own)')
   }
 
   // 5. Itinerary in the E2E org (+ Day 1)

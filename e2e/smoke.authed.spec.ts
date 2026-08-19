@@ -1,6 +1,12 @@
 import { test, expect, type Page } from '@playwright/test'
 import { STORAGE_STATE } from './helpers'
-import { SEEDED_ITINERARY_CODE, isFixtureCode } from './fixtures'
+import {
+  SEEDED_ITINERARY_CODE,
+  isFixtureCode,
+  createTestClient,
+  destroyTestClient,
+  type TestClient,
+} from './fixtures'
 
 // Tier 2 — authenticated journeys as the seeded E2E user (own test org, so
 // nothing here can touch real operator data). Each journey asserts the page
@@ -60,16 +66,29 @@ test('itinerary EDIT page loads (regression: "Itinerary not found")', async ({ p
   })
 })
 
+// The client these two assert on is created per run and removed afterwards.
+// `clients` has no org_id, so a permanent fixture would sit in the operator's
+// real list — and deleting it from there is what broke both of these before.
+let client: TestClient | null = null
+test.beforeAll(async () => {
+  if (!HAVE_CREDS) return
+  client = await createTestClient('CLIENTS')
+})
+test.afterAll(async () => {
+  await destroyTestClient(client)
+  client = null
+})
+
 test('clients page shows the seeded client', async ({ page }) => {
   const errorsOf = watchConsole(page)
   await page.goto('/clients')
-  await expect(page.getByText('Smoke Tester').first()).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(client!.displayName).first()).toBeVisible({ timeout: 20_000 })
   expect(errorsOf()).toEqual([])
 })
 
 test('contacts directory includes clients (regression: zero-clients bug)', async ({ page }) => {
   await page.goto('/contacts')
-  await expect(page.getByText('Smoke Tester').first()).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText(client!.displayName).first()).toBeVisible({ timeout: 20_000 })
 })
 
 test('payments page renders its stats without errors', async ({ page }) => {
