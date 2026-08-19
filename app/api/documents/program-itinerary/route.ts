@@ -1,7 +1,9 @@
 // GET /api/documents/program-itinerary?template_id=…&format=pdf|html[&print=1]
 //   [&departure_date=YYYY-MM-DD&cairo_guide=…&south_guide=…&author=…]
+//   [&created_date=YYYY-MM-DD]
 // Departure params fill the date column, the guide cells and 作成者 — the
 // office-held facts of one departure. Absent params render the blank template.
+// created_date overrides 作成日, which otherwise defaults to today.
 //
 // Renders the customer-facing 日程表 for one programme, in the office's own
 // document layout. `format=html` is the same document the PDF is made from —
@@ -18,6 +20,20 @@ import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { inlineImage } from '@/lib/documents/inline-image'
 
 const TEMPLATE_SLUG = 'ats-daily-itinerary'
+
+/** 作成日 as the office writes it — "19 August 2026". An absent or unparseable
+ *  date falls back to today, so the field stays optional like every other one
+ *  in the dialog. */
+function formatCreatedDate(raw: string | null): string {
+  const explicit = raw ? new Date(`${raw.slice(0, 10)}T00:00:00Z`) : null
+  const valid = explicit && !Number.isNaN(explicit.getTime())
+  return (valid ? explicit : new Date()).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    ...(valid ? { timeZone: 'UTC' } : {}),
+  })
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,11 +76,13 @@ export async function GET(request: NextRequest) {
       .eq('id', org_id)
       .maybeSingle()
 
-    const createdDate = new Date().toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    })
+    // 作成日 — the day the office wrote this document, which is today only the
+    // first time it is generated. Re-issuing a departure's paperwork months
+    // later must not restamp it with the day it was reprinted, so the operator
+    // can supply the original. An explicit date is read as UTC and formatted
+    // as UTC: parsed as local, "2026-08-19" would render as the 18th for any
+    // office west of Greenwich.
+    const createdDate = formatCreatedDate(params.get('created_date'))
 
     // The renderer must never make a network request — see lib/documents/
     // inline-image.ts. The logo travels inside the document.

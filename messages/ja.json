@@ -6021,11 +6021,12 @@
       "printItinerary": "印刷",
       "itineraryDoc": "日程表",
       "nitteiTitle": "日程表を作成",
-      "nitteiHint": "すべて任意です。空欄のままならテンプレートをそのまま印刷します。出発日を入れると各日の日付が入ります。",
+      "nitteiHint": "すべて任意です。空欄のままならテンプレートをそのまま印刷します。出発日を入れると各日の日付とホテルのチェックイン・アウトが入ります。",
       "departureDate": "出発日（1日目）",
       "cairoGuide": "カイロガイド",
       "southGuide": "南部ガイド",
-      "docAuthor": "作成者"
+      "docAuthor": "作成者",
+      "docCreated": "作成日"
     },
     "views": {
       "grid": "グリッド",

@@ -135,6 +135,15 @@ interface VersionData {
 
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', EGP: 'E£', JPY: '¥' }
 
+/** Today on the operator's own calendar, as the value a date input wants.
+ *  Built from local parts, not toISOString() — that returns UTC, which in
+ *  Cairo or Tokyo names yesterday for part of every evening. */
+function todayLocalISO(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 export default function TourDetailPage() {
   const params = useParams()
   const t = useTranslations('tours')
@@ -162,7 +171,15 @@ export default function TourDetailPage() {
   const [pricing, setPricing] = useState<PricingResult | null>(null)
   // 日程表 generation dialog — departure-specific facts, all optional
   const [showNitteiDialog, setShowNitteiDialog] = useState(false)
-  const [nittei, setNittei] = useState({ departure_date: '', cairo_guide: '', south_guide: '', author: '' })
+  // 作成日 starts at today — the common case — but stays editable so a
+  // departure's paperwork can be re-issued carrying its original date.
+  const [nittei, setNittei] = useState({
+    departure_date: '',
+    created_date: todayLocalISO(),
+    cairo_guide: '',
+    south_guide: '',
+    author: '',
+  })
   const [pricingLoading, setPricingLoading] = useState(false)
   const [pricingError, setPricingError] = useState<string | null>(null)
   const [showBreakdown, setShowBreakdown] = useState(false)
@@ -919,17 +936,29 @@ export default function TourDetailPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('detail.docAuthor')}</label>
-                <input value={nittei.author}
-                  onChange={e => setNittei(prev => ({ ...prev, author: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              {/* 作成者 and 作成日 sit side by side on the document, so they do
+                  here too. The date defaults to today and is only changed when
+                  re-issuing older paperwork. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('detail.docAuthor')}</label>
+                  <input value={nittei.author}
+                    onChange={e => setNittei(prev => ({ ...prev, author: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('detail.docCreated')}</label>
+                  <input type="date" value={nittei.created_date}
+                    onChange={e => setNittei(prev => ({ ...prev, created_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                </div>
               </div>
             </div>
             <div className="flex gap-2 px-5 py-4 border-t border-gray-200">
               {(() => {
                 const qs = new URLSearchParams({ template_id: tour.template_id })
                 if (nittei.departure_date) qs.set('departure_date', nittei.departure_date)
+                if (nittei.created_date) qs.set('created_date', nittei.created_date)
                 if (nittei.cairo_guide) qs.set('cairo_guide', nittei.cairo_guide)
                 if (nittei.south_guide) qs.set('south_guide', nittei.south_guide)
                 if (nittei.author) qs.set('author', nittei.author)
