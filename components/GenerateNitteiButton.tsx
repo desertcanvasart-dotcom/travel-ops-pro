@@ -34,6 +34,15 @@ interface Props {
   onLinked?: (templateId: string) => void
 }
 
+/** Most template_names already open with the code ("NEK502-LND — 5 days: …"),
+ *  so prefixing it again reads as a stutter. Prefix only when it is missing. */
+function programmeLabel(p: Programme): string {
+  const name = (p.template_name ?? '').trim()
+  const code = (p.template_code ?? '').trim()
+  if (!name) return code
+  return name.startsWith(code) ? name : `${code} — ${name}`
+}
+
 /** Today on the operator's own calendar. Built from local parts — toISOString()
  *  returns UTC, which names yesterday for part of every evening east of it. */
 function todayLocalISO(): string {
@@ -75,7 +84,10 @@ export default function GenerateNitteiButton({
       .then(r => r.json())
       .then(j => {
         if (cancelled) return
-        setProgrammes(Array.isArray(j?.templates) ? j.templates : [])
+        // The route answers { success, data, count } — NOT { templates }.
+        const list = Array.isArray(j?.data) ? j.data : []
+        setProgrammes(list)
+        if (!list.length) setError(t('loadFailed'))
       })
       .catch(() => !cancelled && setError(t('loadFailed')))
       .finally(() => !cancelled && setLoading(false))
@@ -166,7 +178,7 @@ export default function GenerateNitteiButton({
                     <option value="">{t('pickProgramme')}</option>
                     {programmes.map(p => (
                       <option key={p.id} value={p.id}>
-                        {p.template_code} — {p.template_name}
+                        {programmeLabel(p)}
                       </option>
                     ))}
                   </select>
