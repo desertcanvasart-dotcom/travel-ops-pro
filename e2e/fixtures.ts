@@ -136,3 +136,44 @@ export async function destroyTestItinerary(itin: TestItinerary | null): Promise<
   await rest(`itinerary_days?itinerary_id=eq.${itin.id}`, { method: 'DELETE' })
   await rest(`itineraries?id=eq.${itin.id}`, { method: 'DELETE' })
 }
+
+// ---------------------------------------------------------------------------
+// A disposable client
+// ---------------------------------------------------------------------------
+// `clients` has no org_id (the deferred G1 gate), so a client fixture cannot be
+// hidden inside the E2E org the way an itinerary can — it shows up in the
+// operator's real clients list. A PERMANENT one there is an invitation to tidy
+// it away, and tidying it away breaks the two specs that assert on it: that is
+// exactly what happened, and CI stayed red across two merges before anyone
+// tied the deletion to the failure.
+//
+// So the client the smoke suite asserts on is created and destroyed per run.
+// The operator's list is only ever transiently polluted, and a stray row from
+// an abandoned run is unmistakably labelled and blocks nothing.
+
+export interface TestClient {
+  id: string
+  /** The name the specs look for on screen. */
+  displayName: string
+}
+
+export async function createTestClient(suffix: string): Promise<TestClient> {
+  // A DB trigger assigns client_code and a CHECK constrains status, so neither
+  // is set here — see scripts/seed-e2e.mjs, which learned the same lesson.
+  const last = `Tester-${RUN_ID}`
+  const [client] = await rest('clients', {
+    method: 'POST',
+    body: JSON.stringify({
+      first_name: 'Smoke',
+      last_name: last,
+      email: `e2e-${RUN_ID}-${suffix}@travelops.test`,
+      status: 'prospect',
+    }),
+  })
+  return { id: client.id, displayName: `Smoke ${last}` }
+}
+
+export async function destroyTestClient(client: TestClient | null): Promise<void> {
+  if (!client) return
+  await rest(`clients?id=eq.${client.id}`, { method: 'DELETE' })
+}
