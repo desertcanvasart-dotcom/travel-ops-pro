@@ -120,6 +120,59 @@ function dateLabel(startDate: string, dayNumber: number): { md: string; wd: stri
   }
 }
 
+/** A stretch of consecutive nights spent in one place — one hotel's stay.
+ *
+ *  `overnight_city` on day N means the night AFTER day N is spent there, so a
+ *  run ending on day 3 checks out on the morning of day 4.
+ *
+ *  Nights not spent in a bed ashore split two ways: a cruise cabin, a sleeper
+ *  train or a coach IS a stay the office lists in 利用ホテル (ナイル川クルーズ船,
+ *  寝台列車), while a night in the air is not. Consecutive nights merge only
+ *  when they are the same place — two Cairo stays either side of a cruise are
+ *  two separate hotel rows, and the office lists them as two.
+ */
+function overnightRuns(days: SourceProgramDay[]): Array<{ startDay: number; endDay: number }> {
+  const runs: Array<{ key: string; startDay: number; endDay: number }> = []
+  for (const day of days) {
+    const kind = day.overnight_kind ?? (day.is_cruise_day ? 'cruise' : null)
+    if (kind === 'flight' || kind === 'none') continue
+    const key = day.overnight_city || (kind ? `KIND:${kind}` : '')
+    if (!key) continue
+    const last = runs[runs.length - 1]
+    if (last && last.key === key && last.endDay === day.day - 1) last.endDay = day.day
+    else runs.push({ key, startDay: day.day, endDay: day.day })
+  }
+  return runs.map(({ startDay, endDay }) => ({ startDay, endDay }))
+}
+
+/** Fill 利用ホテル check-in/check-out from the departure date.
+ *
+ *  The hotel rows the importer captured are in itinerary order, one per stay,
+ *  so they pair positionally with the overnight runs. That pairing is the whole
+ *  basis for the dates, which makes its arity the thing to check: if the source
+ *  document listed a different number of hotels than the programme has stays,
+ *  the rows no longer line up and every date after the discrepancy would land
+ *  on the wrong hotel. A customer document with confidently wrong dates is
+ *  worse than one with blanks the office fills by hand, so a mismatch fills
+ *  nothing — same rule as the rest of this file.
+ */
+function withStayDates<T extends { check_in: string; check_out: string }>(
+  hotelRows: T[],
+  days: SourceProgramDay[],
+  startDate: string | null
+): T[] {
+  if (!startDate) return hotelRows
+  const runs = overnightRuns(days)
+  if (runs.length !== hotelRows.length) return hotelRows
+
+  return hotelRows.map((row, i) => {
+    const checkIn = dateLabel(startDate, runs[i].startDay)
+    const checkOut = dateLabel(startDate, runs[i].endDay + 1)
+    if (!checkIn || !checkOut) return row
+    return { ...row, check_in: checkIn.md, check_out: checkOut.md }
+  })
+}
+
 export function assembleProgramItinerary(input: AssembleProgramInput): DailyItineraryContext {
   const days = [...(input.itinerary ?? [])].sort((a, b) => (a.day ?? 0) - (b.day ?? 0))
 
@@ -141,16 +194,22 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
   }))
 
   // The programme's standard hotels, exactly as the source document lists
-  // them: names/phones/addresses filled, check-in/out blank (per-departure).
-  const hotelRows = (input.hotels ?? [])
-    .filter(h => (h.hotel ?? '').trim())
-    .map(h => ({
-      hotel: (h.hotel ?? '').trim(),
-      check_in: (h.check_in ?? '').trim(),
-      check_out: (h.check_out ?? '').trim(),
-      phone: (h.phone ?? '').trim(),
-      address: (h.address ?? '').trim(),
-    }))
+  // them: names/phones/addresses filled. Check-in/out are per-departure — the
+  // source holds only the office's blank mark ("/") — so they are computed
+  // from the departure date, and left exactly as found without one.
+  const hotelRows = withStayDates(
+    (input.hotels ?? [])
+      .filter(h => (h.hotel ?? '').trim())
+      .map(h => ({
+        hotel: (h.hotel ?? '').trim(),
+        check_in: (h.check_in ?? '').trim(),
+        check_out: (h.check_out ?? '').trim(),
+        phone: (h.phone ?? '').trim(),
+        address: (h.address ?? '').trim(),
+      })),
+    days,
+    startDate
+  )
 
   const org = input.org
   const contacts = org?.document_contacts ?? {}
