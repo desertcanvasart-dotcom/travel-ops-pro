@@ -14,6 +14,27 @@ export async function GET(request: NextRequest) {
     const tourType = searchParams.get('tour_type')
     const isActive = searchParams.get('is_active')
 
+    // `slim=1` — just enough to name a programme in a picker. The full shape
+    // carries every programme's day-by-day JSONB plus its variations and
+    // language versions: 153KB against 5KB here, for a dropdown that shows a
+    // code and a length. Ordered by code, which is how the office refers to
+    // them.
+    if (searchParams.get('slim') === '1') {
+      const { data, error } = await supabaseAdmin
+        .from('tour_templates')
+        .select('id, template_code, template_name, duration_days, is_active')
+        .order('template_code', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching templates (slim):', error)
+        return NextResponse.json(
+          { success: false, error: 'Failed to fetch templates' },
+          { status: 500 }
+        )
+      }
+      return NextResponse.json({ success: true, data: data ?? [], count: data?.length ?? 0 })
+    }
+
     // First get templates
     let query = supabaseAdmin
       .from('tour_templates')

@@ -1640,7 +1640,13 @@
       "searchAttractionsPlaceholder": "アトラクションを検索...",
       "allCities": "すべての都市",
       "eurNonEur": "EUR / 非EUR",
-      "noAttractionsFound": "アトラクションが見つかりません"
+      "noAttractionsFound": "アトラクションが見つかりません",
+      "programme": "プログラム",
+      "programmeHint": "この旅行の元となるプログラムです。お客様ページには、これをもとに作成した日程表が表示されます。",
+      "programmeNone": "未設定",
+      "programmeLengthMismatch": "プログラムは{programmeDays}日間ですが、この旅行は{tripDays}日間です。日程表が販売内容と一致しません。",
+      "programmePreview": "日程表をプレビュー",
+      "programmeUnlinkedNote": "プログラムが未設定の場合、お客様ページには通常の日程リストが表示されます。"
     },
     "delete": "削除",
     "clickToConfirm": "確認のためもう一度クリック",

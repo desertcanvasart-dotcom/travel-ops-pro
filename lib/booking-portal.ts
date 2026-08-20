@@ -36,6 +36,20 @@ export function generatePortalToken(): string {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+/** Invoice statuses a traveller is allowed to see. The full vocabulary is
+ *  draft | sent | paid | partial | overdue | cancelled (lib/validation.ts);
+ *  the two left out are the two that were never handed over. An ALLOW-list
+ *  rather than a deny-list: a status nobody has thought about yet must not
+ *  reach the traveller by default.
+ *
+ *  Lives here because the portal PAGE (which lists documents) and the document
+ *  ROUTE (which serves them) must not be able to disagree about it. */
+const CUSTOMER_FACING_INVOICE_STATUSES = new Set(['sent', 'paid', 'partial', 'overdue'])
+
+export function isCustomerFacingInvoice(status: unknown): boolean {
+  return CUSTOMER_FACING_INVOICE_STATUSES.has(String(status ?? ''))
+}
+
 /** Tokens we mint are 32 chars of base64url; reject anything else up front. */
 export function isValidPortalToken(token: string | null | undefined): boolean {
   return typeof token === 'string' && /^[A-Za-z0-9_-]{32}$/.test(token)
@@ -156,7 +170,9 @@ export interface PortalBooking {
   payment: PortalPayment
   travellers: PortalTraveller[]
   documents: PortalDocument[]
-  /** The trip itself, through the itinerary-share allowlist. */
+  /** The trip as a day list, through the itinerary-share allowlist. Populated
+   *  ONLY when the trip has no programme link and therefore no 日程表 to offer:
+   *  a traveller must never be shown two itineraries drawn from two tables. */
   itinerary: ClientItinerary | null
   /** Once locked the form is read-only: the manifest has gone to Cairo. */
   detailsLocked: boolean

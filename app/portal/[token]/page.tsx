@@ -32,6 +32,7 @@ import {
   type PortalDocument,
   portalVerifyCookieName,
   isPortalVerified,
+  isCustomerFacingInvoice,
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
@@ -97,8 +98,18 @@ async function resolve(token: string): Promise<{
     .order('is_lead_passenger', { ascending: false })
     .order('created_at', { ascending: true })
 
-  // The trip itself, through the itinerary-share allowlist rather than a second
-  // projection that could drift from it.
+  // The trip is shown as the office's OWN 日程表, not as a second rendering of
+  // itinerary_days. Two layouts of one trip, drawn from two tables, is two
+  // chances to tell the traveller different things — and the document the
+  // office already sends is the one they recognise. It is generated from the
+  // PROGRAMME the trip was sold from, so all that is needed here is the link.
+  //
+  // ONE OR THE OTHER, NEVER BOTH. A trip with no programme link falls back to
+  // the day list, because a portal with no itinerary at all is worse than one
+  // in the older format — and today most trips have no link, since nothing in
+  // the UI sets itineraries.template_id yet. Linking the programme is what
+  // upgrades a trip to the real document.
+  let programmeTemplateId: string | null = null
   let itinerary = null
   if (booking.itinerary_id) {
     const { data: itin } = await supabase
@@ -106,27 +117,48 @@ async function resolve(token: string): Promise<{
       .select('*')
       .eq('id', booking.itinerary_id)
       .maybeSingle()
-    const { data: days } = await supabase
-      .from('itinerary_days')
-      .select('*')
-      .eq('itinerary_id', booking.itinerary_id)
-      .order('day_number', { ascending: true })
-    if (itin) itinerary = toClientItinerary(itin, days ?? [])
+    programmeTemplateId = (itin?.template_id as string | null) ?? null
+
+    if (itin && !programmeTemplateId) {
+      const { data: days } = await supabase
+        .from('itinerary_days')
+        .select('*')
+        .eq('itinerary_id', booking.itinerary_id)
+        .order('day_number', { ascending: true })
+      itinerary = toClientItinerary(itin, days ?? [])
+    }
   }
 
-  // The documents a traveller can actually be handed today: their invoices.
-  // Deposit before final, oldest first, so the list reads in the order the
-  // money is asked for.
+  // The documents a traveller can actually be handed today.
   const documents: PortalDocument[] = []
+
+  // The 日程表 leads: it is what somebody opens this link to read. Generated on
+  // demand rather than stored, so a correction to the programme reaches the
+  // traveller without anybody reissuing a file.
+  if (programmeTemplateId) {
+    documents.push({
+      key: 'nittei',
+      title: '旅行日程表',
+      note: booking.start_date ? `${jpDate(booking.start_date)} ご出発` : 'PDF',
+    })
+  }
+
+  // Then the invoices — deposit before final, oldest first, so the list reads
+  // in the order the money is asked for.
   if (booking.itinerary_id) {
     const { data: invoices } = await supabase
       .from('invoices')
-      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency')
+      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency, status')
       .eq('itinerary_id', booking.itinerary_id)
       .order('created_at', { ascending: true })
 
     for (const inv of invoices ?? []) {
-      // A draft is not something to hand a customer — it has not been sent.
+      // A draft is not something to hand a customer — it has not been sent —
+      // and neither is a cancelled one. An ALLOW-list rather than a deny-list:
+      // a status nobody has thought about yet must not reach the traveller by
+      // default. Invoices are created as 'draft', so this is the common case,
+      // not an edge one.
+      if (!isCustomerFacingInvoice(inv.status)) continue
       documents.push({
         key: `invoice:${inv.id}`,
         title:
@@ -370,6 +402,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       )}
 
       {/* ---------------- the trip ---------------- */}
+      {/* Only when the trip has no programme link — see resolve(). */}
       {booking.itinerary && (
         <section>
           <h2>ご旅行日程</h2>

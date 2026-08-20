@@ -12,8 +12,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { isValidPortalToken, portalLinkState, portalVerifyCookieName, isPortalVerified } from '@/lib/booking-portal'
+import { isValidPortalToken, portalLinkState, portalVerifyCookieName, isPortalVerified, isCustomerFacingInvoice } from '@/lib/booking-portal'
 import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { renderHtmlToPdf } from '@/lib/documents/render'
+import {
+  buildProgramItineraryHtml,
+  ProgramItineraryError,
+} from '@/lib/documents/program-itinerary-doc'
 import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 
@@ -56,15 +61,59 @@ export async function GET(
   if (!portalLinkState(link).usable) return notFound()
 
   const [kind, id] = decodeURIComponent(key).split(':')
-  if (kind !== 'invoice' || !id) return notFound()
+  if (kind !== 'invoice' && kind !== 'nittei') return notFound()
+  if (kind === 'invoice' && !id) return notFound()
 
   const { data: booking } = await supabase
     .from('bookings')
-    .select('itinerary_id, org_id, balance_due_date')
+    .select('itinerary_id, org_id, balance_due_date, start_date, client_name')
     .eq('id', link!.booking_id)
     .maybeSingle()
 
   if (!booking?.itinerary_id) return notFound()
+
+  // ---------- 日程表 ----------
+  // The same document, from the same builder, as the office's own button. The
+  // departure date and the traveller come from the booking rather than from the
+  // query string: a customer's own URL must not be able to restate the facts of
+  // their trip. The office-held fields (guides, 作成者) are left blank — there is
+  // nowhere on a booking that holds them yet.
+  if (kind === 'nittei') {
+    const { data: itinerary } = await supabase
+      .from('itineraries')
+      .select('template_id, client_name')
+      .eq('id', booking.itinerary_id)
+      .eq('org_id', booking.org_id)
+      .maybeSingle()
+
+    if (!itinerary?.template_id) return notFound()
+
+    try {
+      const built = await buildProgramItineraryHtml({
+        supabase,
+        orgId: booking.org_id,
+        templateId: itinerary.template_id as string,
+        departure: {
+          start_date: booking.start_date ?? null,
+          cairo_guide: null,
+          south_guide: null,
+          author: null,
+          customer_name: (itinerary.client_name as string | null) ?? booking.client_name ?? null,
+        },
+      })
+      const pdf = await renderHtmlToPdf(built.html, built.page)
+      return new NextResponse(new Uint8Array(pdf), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${built.templateCode}-nittei.pdf"`,
+        },
+      })
+    } catch (err) {
+      if (err instanceof ProgramItineraryError) return notFound()
+      console.error('portal 日程表 render failed:', err)
+      return NextResponse.json({ success: false, error: 'Failed to generate' }, { status: 500 })
+    }
+  }
 
   // Scoped to the trip this link belongs to. Without the itinerary_id filter a
   // valid token would fetch any invoice whose id somebody guessed.
@@ -77,6 +126,10 @@ export async function GET(
     .maybeSingle()
 
   if (!invoice) return notFound()
+
+  // The page stopped listing drafts and cancellations; this route has to agree,
+  // or an old URL (or a guessed id inside this trip) still serves one.
+  if (!isCustomerFacingInvoice(invoice.status)) return notFound()
 
   const { data: org } = await supabase
     .from('organizations')
