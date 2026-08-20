@@ -228,8 +228,8 @@
     "restaurants": "Restaurants",
     "transportation": "Transportation",
     "activities": "Activities",
-    "airportServices": "Airport Services",
-    "hotelServices": "Hotel Services",
+    "airportServices": "Airport Assistants",
+    "hotelServices": "Hotel Assistants",
     "tipping": "Tipping",
     "fixedCosts": "Fixed Costs",
     "guides": "Guides",
@@ -2748,8 +2748,8 @@
       "transportation": "Transportation",
       "entrance": "Entrance Fees",
       "meal": "Meals",
-      "airport_staff": "Airport Staff",
-      "hotel_staff": "Hotel Staff",
+      "airport_staff": "Airport Assistant",
+      "hotel_staff": "Hotel Assistant",
       "ground_handler": "Ground Handler",
       "tipping": "Tipping",
       "permits": "Permits/Permissions",
@@ -2764,8 +2764,8 @@
       "hotel": "Hotel",
       "restaurant": "Restaurant",
       "transport_company": "Transport Company",
-      "airport_staff": "Airport Staff",
-      "hotel_staff": "Hotel Staff",
+      "airport_staff": "Airport Assistant",
+      "hotel_staff": "Hotel Assistant",
       "ground_handler": "Ground Handler",
       "government": "Government/Authority",
       "other": "Other"
@@ -4158,7 +4158,7 @@
         "driver": "Driver",
         "boat_crew": "Boat Crew",
         "porter": "Porter",
-        "hotel_staff": "Hotel Staff",
+        "hotel_assistant": "Hotel Assistant",
         "restaurant": "Restaurant",
         "other": "Other"
       },
@@ -4186,7 +4186,7 @@
       }
     },
     "airportServices": {
-      "title": "Airport Services",
+      "title": "Airport Assistants",
       "loading": "Loading airport service rates...",
       "ratesHub": "Rates Hub",
       "stats": {
@@ -4259,7 +4259,7 @@
       "searchPlaceholder": "Search airport services..."
     },
     "hotelServices": {
-      "title": "Hotel Services",
+      "title": "Hotel Assistants",
       "loading": "Loading hotel service rates...",
       "ratesHub": "Rates Hub",
       "stats": {
@@ -4555,8 +4555,8 @@
         "cruises": "Cruises",
         "sleepTrain": "Sleep Train",
         "trains": "Trains",
-        "airport": "Airport",
-        "hotelSvc": "Hotel Svc",
+        "airport": "Airport Asst.",
+        "hotelSvc": "Hotel Asst.",
         "tips": "Tips",
         "seasons": "Seasons"
       },
@@ -4765,8 +4765,8 @@
         "transportation": "Transportation",
         "entrance": "Entrance Fees",
         "meal": "Meals",
-        "airport_staff": "Airport Staff",
-        "hotel_staff": "Hotel Staff",
+        "airport_staff": "Airport Assistant",
+        "hotel_staff": "Hotel Assistant",
         "ground_handler": "Ground Handler",
         "tipping": "Tipping",
         "permits": "Permits",
@@ -4952,8 +4952,8 @@
     "hotels": "Hotels",
     "restaurants": "Restaurants",
     "nileCruises": "Nile Cruises",
-    "airportStaff": "Airport Staff",
-    "hotelStaff": "Hotel Staff",
+    "airportStaff": "Airport Assistants",
+    "hotelStaff": "Hotel Assistants",
     "schedulingConflictsDetected": "Scheduling Conflicts Detected",
     "isAlsoBookedFor": "is also booked for {itinerary} ({dates})",
     "sendWhatsAppNotification": "Send WhatsApp notification",

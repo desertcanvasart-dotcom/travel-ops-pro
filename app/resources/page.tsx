@@ -636,7 +636,7 @@ export default function ResourcesPage() {
               }`}
             >
               <span className="text-gray-400">✈️</span>
-              Airport Staff ({filteredResources.airportStaff.length})
+              Airport Assistants ({filteredResources.airportStaff.length})
             </button>
             <button
               onClick={() => setActiveTab('hotelStaff')}
@@ -647,7 +647,7 @@ export default function ResourcesPage() {
               }`}
             >
               <span className="text-gray-400">🛎️</span>
-              Hotel Staff ({filteredResources.hotelStaff.length})
+              Hotel Assistants ({filteredResources.hotelStaff.length})
             </button>
           </div>
         </div>
@@ -1023,7 +1023,7 @@ export default function ResourcesPage() {
               </table>
             )}
 
-            {/* Airport Staff Table */}
+            {/* Airport Assistants Table */}
             {activeTab === 'airportStaff' && (
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -1102,7 +1102,7 @@ export default function ResourcesPage() {
                       <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                         <div className="flex flex-col items-center gap-2">
                           <span className="text-3xl text-gray-400">✈️</span>
-                          <p className="text-sm font-medium">No airport staff found</p>
+                          <p className="text-sm font-medium">No airport assistants found</p>
                         </div>
                       </td>
                     </tr>
@@ -1111,7 +1111,7 @@ export default function ResourcesPage() {
               </table>
             )}
 
-            {/* Hotel Staff Table */}
+            {/* Hotel Assistants Table */}
             {activeTab === 'hotelStaff' && (
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -1192,7 +1192,7 @@ export default function ResourcesPage() {
                       <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                         <div className="flex flex-col items-center gap-2">
                           <span className="text-3xl text-gray-400">🛎️</span>
-                          <p className="text-sm font-medium">No hotel staff found</p>
+                          <p className="text-sm font-medium">No hotel assistants found</p>
                         </div>
                       </td>
                     </tr>

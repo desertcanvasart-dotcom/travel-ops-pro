@@ -1261,7 +1261,7 @@ export default function RatesPage() {
               </table>
             )}
 
-            {/* Airport Staff Table */}
+            {/* Airport Assistants Table */}
             {activeTab === 'airportStaff' && (
               <table className="w-full">
                 <thead className="bg-cyan-50 border-b border-cyan-200">
@@ -1320,7 +1320,7 @@ export default function RatesPage() {
               </table>
             )}
 
-            {/* Hotel Staff Table */}
+            {/* Hotel Assistants Table */}
             {activeTab === 'hotelStaff' && (
               <table className="w-full">
                 <thead className="bg-pink-50 border-b border-pink-200">

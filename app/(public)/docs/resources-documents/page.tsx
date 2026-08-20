@@ -18,7 +18,7 @@ export default function ResourcesDocumentsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Resources</h2>
         <p className="text-gray-600 mb-4">
-          Manage your operational contacts: guides, vehicles, hotels, restaurants, attractions, and airport staff.
+          Manage your operational contacts: guides, vehicles, hotels, restaurants, attractions, and airport assistant.
         </p>
 
         <h3 className="text-lg font-medium text-gray-900 mb-3">Guides</h3>
@@ -49,7 +49,7 @@ export default function ResourcesDocumentsPage() {
           <li><strong>Hotels</strong> &mdash; Property contacts and details</li>
           <li><strong>Restaurants</strong> &mdash; Restaurant information for meal bookings</li>
           <li><strong>Attractions</strong> &mdash; Contact info for attractions and sites</li>
-          <li><strong>Airport Staff</strong> &mdash; Personnel for airport services</li>
+          <li><strong>Airport Assistant</strong> &mdash; Personnel for airport services</li>
         </ul>
         <ScreenshotPlaceholder caption="Resources overview page with tabs for Guides, Vehicles, Hotels, Restaurants, Attractions" />
       </section>

@@ -75,8 +75,8 @@ const SERVICE_CATEGORIES = [
   { value: 'transportation', label: 'Transportation' },
   { value: 'entrance', label: 'Entrance Fees' },
   { value: 'meal', label: 'Meals' },
-  { value: 'airport_staff', label: 'Airport Staff' },
-  { value: 'hotel_staff', label: 'Hotel Staff' },
+  { value: 'airport_staff', label: 'Airport Assistant' },
+  { value: 'hotel_staff', label: 'Hotel Assistant' },
   { value: 'ground_handler', label: 'Ground Handler' },
   { value: 'tipping', label: 'Tipping' },
   { value: 'permits', label: 'Permits' },
@@ -225,8 +225,8 @@ export default function SupplierInvoicesPage() {
     transportation: ['transport', 'local_operator', 'driver'],
     entrance: ['attraction', 'government'],
     meal: ['restaurant'],
-    airport_staff: ['airport_staff', 'ground_handler'],
-    hotel_staff: ['hotel_staff', 'hotel'],
+    airport_staff: ['airport_assistant', 'ground_handler'],
+    hotel_staff: ['hotel_assistant', 'hotel'],
     ground_handler: ['ground_handler'],
   }
 
