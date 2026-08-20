@@ -67,75 +67,35 @@ export function seasonForDate(
   return best
 }
 
-/**
- * Service types the premium never applies to.
- *
- * The operator's rule: a fixed base somebody else sets is passed through, not
- * marked up. Airport tax, visa fees and the insurance premium are already
- * outside this — they are invoice lines, not priced services — so what is left
- * to name here are the two the engine DOES price and that are equally fixed.
- * Nobody tips 15% more because it is Obon, and the Supreme Council of
- * Antiquities does not raise its entrance fee because a tour sold out.
- */
-export const PASS_THROUGH_SERVICE_TYPES = new Set(['tips', 'entrance'])
-
-/**
- * What the pass-throughs inside a selling price come to, at that price's margin.
- *
- * A priced service row carries a PER-PERSON amount when it scales with the group
- * (an entrance fee is one ticket) and a whole-group amount when it does not (the
- * day's tips are one envelope). Multiplying the first kind by the headcount is
- * the whole job, and getting it wrong is expensive in one direction only: a
- * premium charged on tickets the operator merely passes on.
- *
- * `personEquivalents` is a count, not a headcount: a child at half price carries
- * half a person's entrance fees into the price. `groupShare` is the fraction of
- * the group-fixed pass-throughs the price actually contains — one whole share
- * unless a discount has amortised them differently.
- */
-export function passThroughSelling(input: {
-  services: Array<{ serviceType: string; lineTotal: number | null | undefined; isPerPax: boolean }>
-  personEquivalents: number
-  groupShare?: number
-  marginPercent: number
-}): number {
-  const heads = Math.max(0, input.personEquivalents)
-  const groupShare = input.groupShare ?? 1
-  let cost = 0
-  for (const service of input.services) {
-    if (!PASS_THROUGH_SERVICE_TYPES.has(service.serviceType)) continue
-    const lineTotal = Number(service.lineTotal) || 0
-    cost += service.isPerPax ? lineTotal * heads : lineTotal * groupShare
-  }
-  return cost * (1 + (input.marginPercent || 0) / 100)
-}
-
 export interface UpliftBreakdown {
   /** The premium in currency, already rounded by the caller's rules. */
   amount: number
-  /** What the premium was charged on — selling price less pass-throughs. */
+  /** What the premium was charged on — the whole selling price. */
   base: number
   percent: number
   seasonName: string | null
 }
 
 /**
- * Split a selling price into the part a premium applies to and the part that is
- * passed straight through, then compute the premium.
+ * The premium on a selling price.
  *
- * `passThroughTotal` is the client-price share of the services named above. It
- * is subtracted rather than the premium being applied service by service,
- * because the operator sets one percentage against one price and should be able
- * to check the arithmetic on paper.
+ * ON THE WHOLE PRICE, nothing carved out. An earlier version exempted tips and
+ * entrance fees as pass-throughs somebody else prices — but the engine already
+ * applies the operator's MARGIN to both, so the exemption only ever held for
+ * half the markup on the same lines. One rule applied consistently beats a
+ * principle that contradicts the code beside it, and a premium on the final
+ * total is a number the operator can check on paper: 408.75 × 1.15 = 470.06.
+ *
+ * AFTER MARGIN, by convention rather than arithmetic: cost × (1+m) × (1+p) and
+ * cost × (1+p) × (1+m) are the same money. Doing it in this order is what keeps
+ * `marginAmount` meaning margin and leaves the premium as its own line.
  */
 export function computeUplift(input: {
   sellingPrice: number
-  passThroughTotal?: number
   season: SeasonMatch | null
 }): UpliftBreakdown {
   const percent = input.season?.upliftPercent ?? 0
-  const passThrough = Math.max(0, input.passThroughTotal ?? 0)
-  const base = Math.max(0, input.sellingPrice - passThrough)
+  const base = Math.max(0, input.sellingPrice)
 
   return {
     amount: percent > 0 ? (base * percent) / 100 : 0,

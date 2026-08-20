@@ -17,6 +17,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildTransportTierIndex,
   calculatePaxRange,
+  calculateGrandTotals,
 } from '@/app/pricing-grid/lib/calculator'
 import type {
   GridConfig, GridDay, RateOption, SelectedItem, SlotValue,
@@ -180,5 +181,69 @@ describe('calculatePaxRange — non-tiered transport priced flat', () => {
     // No group/per-person here → totalCost = flat 500 at every pax.
     expect(rowAt(result, 2).withoutLeader.totalCost).toBe(500)
     expect(rowAt(result, 10).withoutLeader.totalCost).toBe(500)
+  })
+})
+
+// ============================================
+// The operator's seasonal premium, in the grid
+// ============================================
+// The grid is the other screen that quotes a departure. If it ignored the
+// calendar the B2B engine reads, the same trip would carry two different prices
+// depending on which screen produced it.
+
+const GOLDEN_WEEK = [{
+  seasonId: 'gw', name: 'ゴールデンウィーク', upliftPercent: 15,
+  startDate: '2027-04-29', endDate: '2027-05-06',
+}]
+
+describe('calculateGrandTotals — seasonal premium', () => {
+  // 2 pax: GroupFixed 120 + Sedan 100 + PerPerson 110×2 = 440 ; ×1.25 = 550.
+  const days = [tripDay()]
+
+  it('leaves an ordinary departure alone', () => {
+    const t = calculateGrandTotals(days, cfg({ startDate: '2027-06-03' }), GOLDEN_WEEK)
+    expect(t.sellingPriceTotal).toBe(550)
+    expect(t.seasonUplift).toBe(0)
+    expect(t.seasonName).toBeNull()
+  })
+
+  it('charges the premium on the WHOLE selling price, entrance fees included', () => {
+    // The €30/person entrance fee is inside the 550 and is uplifted with it:
+    // 550 × 1.15 = 632.50, not 550 − 75 carved out first.
+    const t = calculateGrandTotals(days, cfg({ startDate: '2027-05-03' }), GOLDEN_WEEK)
+    expect(t.baseSellingPriceTotal).toBe(550)
+    expect(t.seasonUplift).toBe(82.5)
+    expect(t.sellingPriceTotal).toBe(632.5)
+    expect(t.seasonName).toBe('ゴールデンウィーク')
+    expect(t.seasonPercent).toBe(15)
+  })
+
+  it('leaves cost and margin untouched — the premium is neither', () => {
+    const t = calculateGrandTotals(days, cfg({ startDate: '2027-05-03' }), GOLDEN_WEEK)
+    expect(t.totalCost).toBe(440)
+    expect(t.marginAmount).toBe(110)
+  })
+
+  it('divides the uplifted total by pax, so per-person multiplies back', () => {
+    const t = calculateGrandTotals(days, cfg({ startDate: '2027-05-03' }), GOLDEN_WEEK)
+    expect(t.sellingPricePerPerson).toBe(316.25)
+    expect(t.sellingPricePerPerson * 2).toBe(t.sellingPriceTotal)
+  })
+
+  it('charges nothing when the operator keeps no calendar', () => {
+    const t = calculateGrandTotals(days, cfg({ startDate: '2027-05-03' }))
+    expect(t.sellingPriceTotal).toBe(550)
+    expect(t.seasonName).toBeNull()
+  })
+
+  it('carries the same premium into every rate-sheet row', () => {
+    const sheet = calculatePaxRange(days, cfg({ startDate: '2027-05-03' }), TIER_INDEX, {
+      paxFrom: 1, paxTo: 6, seasonWindows: GOLDEN_WEEK,
+    })
+    // 5 pax: 1025 × 1.15 = 1178.75 ; /5 = 235.75
+    const r = rowAt(sheet, 5).withoutLeader
+    expect(r.sellingPrice).toBe(1178.75)
+    expect(r.pricePerPerson).toBe(235.75)
+    expect(r.totalCost).toBe(820)
   })
 })

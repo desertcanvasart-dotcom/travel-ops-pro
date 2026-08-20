@@ -69,6 +69,21 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
         <SummaryCell label="Selling Total" value={cv(totals.sellingPriceTotal)} symbol={sym} color="text-green-700" highlight />
       </div>
 
+      {/* The operator's own high dates. Shown whenever a premium is inside the
+          selling figures above, so the number is never unexplainable from the
+          screen that produced it. */}
+      {totals.seasonName && totals.seasonPercent > 0 && (
+        <div className="px-5 py-2.5 bg-[#647C47]/10 border-t border-[#647C47]/25 flex items-baseline justify-between gap-4 flex-wrap">
+          <span className="text-sm font-semibold text-[#4a5c35]">
+            {totals.seasonName} +{totals.seasonPercent}%
+          </span>
+          <span className="text-xs text-[#4a5c35]">
+            +{sym}{fmt(cv(totals.seasonUplift))}
+            {' \u00B7 '}on an ordinary date {sym}{fmt(cv(totals.baseSellingPriceTotal))}
+          </span>
+        </div>
+      )}
+
       {/* Save Actions */}
       {onSave && (
         <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">

@@ -9,8 +9,6 @@ import { describe, it, expect } from 'vitest'
 import {
   seasonForDate,
   computeUplift,
-  passThroughSelling,
-  PASS_THROUGH_SERVICE_TYPES,
   type SeasonWindow,
 } from '@/lib/pricing/season-uplift'
 
@@ -78,17 +76,19 @@ describe('seasonForDate', () => {
 describe('computeUplift', () => {
   const season = { seasonId: 'gw', name: 'ゴールデンウィーク', upliftPercent: 15 }
 
-  it('charges the premium on the whole selling price when nothing is passed through', () => {
+  it('charges the premium on the whole selling price', () => {
     const u = computeUplift({ sellingPrice: 1_000_000, season })
     expect(u.base).toBe(1_000_000)
     expect(u.amount).toBe(150_000)
   })
 
-  it('never charges it on fixed pass-throughs', () => {
-    // ¥60,000 of tips and entrance fees are somebody else's fixed price.
-    const u = computeUplift({ sellingPrice: 1_000_000, passThroughTotal: 60_000, season })
-    expect(u.base).toBe(940_000)
-    expect(u.amount).toBe(141_000)
+  it('charges tips and entrance fees like everything else', () => {
+    // They were exempt once. The engine applies the operator's MARGIN to both,
+    // so exempting them from the premium alone was half a rule — and a premium
+    // on the final total is what an operator can check on paper.
+    const u = computeUplift({ sellingPrice: 408.75, season })
+    expect(u.base).toBe(408.75)
+    expect(Math.round(u.amount * 100) / 100).toBe(61.31)
   })
 
   it('is zero on an ordinary date', () => {
@@ -107,74 +107,18 @@ describe('computeUplift', () => {
     expect(u.seasonName).toBe('観察中')
   })
 
-  it('cannot go negative when pass-throughs exceed the price', () => {
-    const u = computeUplift({ sellingPrice: 10_000, passThroughTotal: 25_000, season })
+  it('cannot go negative on a price that somehow arrives below zero', () => {
+    const u = computeUplift({ sellingPrice: -10_000, season })
     expect(u.base).toBe(0)
     expect(u.amount).toBe(0)
   })
 
-  it('names the pass-through services explicitly', () => {
-    expect(PASS_THROUGH_SERVICE_TYPES.has('tips')).toBe(true)
-    expect(PASS_THROUGH_SERVICE_TYPES.has('entrance')).toBe(true)
-    expect(PASS_THROUGH_SERVICE_TYPES.has('accommodation')).toBe(false)
-  })
-})
-
-describe('passThroughSelling', () => {
-  // A priced service row states a PER-PERSON amount when it scales with the
-  // group (one entrance ticket) and a whole-group amount when it does not (the
-  // day's tips are one envelope). These are real rows from the engine.
-  const SERVICES = [
-    { serviceType: 'entrance', lineTotal: 25, isPerPax: true },
-    { serviceType: 'tips', lineTotal: 40, isPerPax: false },
-    { serviceType: 'accommodation', lineTotal: 300, isPerPax: true },
-    { serviceType: 'guide', lineTotal: 120, isPerPax: false },
-  ]
-
-  it('counts one entrance ticket per person, not one for the group', () => {
-    // The bug this exists to prevent: ten travellers passed on ten tickets and
-    // the premium was charged on nine of them.
-    expect(passThroughSelling({ services: SERVICES, personEquivalents: 10, marginPercent: 0 }))
-      .toBe(40 + 25 * 10)
-  })
-
-  it('carries the margin, because the base it leaves is a selling price', () => {
-    expect(passThroughSelling({ services: SERVICES, personEquivalents: 2, marginPercent: 25 }))
-      .toBe((40 + 25 * 2) * 1.25)
-  })
-
-  it('ignores everything that is not passed through', () => {
-    // Accommodation and the guide are priced services and carry the premium.
-    expect(passThroughSelling({ services: SERVICES, personEquivalents: 1, marginPercent: 0 }))
-      .toBe(65)
-  })
-
-  it('counts a half-price child as half a person', () => {
-    // Their entrance fee is discounted with everything else, so only half of it
-    // is inside the selling price to be excluded from the premium.
-    expect(passThroughSelling({ services: SERVICES, personEquivalents: 2.5, marginPercent: 0 }))
-      .toBe(40 + 25 * 2.5)
-  })
-
-  it('takes only the share of the group-fixed rows the price actually contains', () => {
-    expect(passThroughSelling({
-      services: SERVICES, personEquivalents: 2, groupShare: 0.75, marginPercent: 0,
-    })).toBe(40 * 0.75 + 25 * 2)
-  })
-
-  it('is zero when nothing is passed through', () => {
-    expect(passThroughSelling({
-      services: [{ serviceType: 'guide', lineTotal: 120, isPerPax: false }],
-      personEquivalents: 4,
-      marginPercent: 25,
-    })).toBe(0)
-  })
-
-  it('treats a missing line total as nothing rather than as NaN', () => {
-    expect(passThroughSelling({
-      services: [{ serviceType: 'entrance', lineTotal: null, isPerPax: true }],
-      personEquivalents: 4,
-      marginPercent: 0,
-    })).toBe(0)
+  it('is the same money whichever side of margin it is applied', () => {
+    // cost × (1+m) × (1+p) === cost × (1+p) × (1+m). The ordering is a
+    // REPORTING choice — after margin keeps marginAmount meaning margin.
+    const cost = 327
+    const afterMargin = computeUplift({ sellingPrice: cost * 1.25, season }).amount + cost * 1.25
+    const beforeMargin = (computeUplift({ sellingPrice: cost, season }).amount + cost) * 1.25
+    expect(Math.round(afterMargin * 100)).toBe(Math.round(beforeMargin * 100))
   })
 })
