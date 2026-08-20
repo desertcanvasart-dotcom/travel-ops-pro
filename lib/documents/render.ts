@@ -15,13 +15,17 @@ import type { DocumentPage } from './types'
 /**
  * How long to wait for one attempt's content to settle.
  *
- * Deliberately well under the old 60s: the FIRST render on a freshly started
- * container is slow — Chromium's binary is not in the page cache and the
- * document carries a ~7MB inline font — and at 60s that attempt consumed the
- * whole request before failing. A shorter ceiling turns the cold attempt into a
- * fast failure that leaves room to try again warm.
+ * Tuned against production, twice. At 60s a cold attempt consumed the whole
+ * request before failing, leaving no room to retry. At 25s it left plenty of
+ * room — but roughly half of all renders then took ~32s, the signature of a
+ * viable attempt being abandoned at 25s and paying for a retry it did not need.
+ * Warm renders finish in 5-8s, so anything reaching 45s is genuinely stuck
+ * rather than merely slow, and abandoning it is the right call.
+ *
+ * Worst case is 45s of waiting plus a ~6s retry. That is the price of the cold
+ * container's first document; every render after it is the fast path.
  */
-const SETTLE_TIMEOUT_MS = 25_000
+const SETTLE_TIMEOUT_MS = 45_000
 
 export async function renderHtmlToPdf(html: string, page: DocumentPage): Promise<Buffer> {
   // Observed in production the minute after a deploy: the first request timed
