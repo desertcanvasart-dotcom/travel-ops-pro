@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { formatMoney, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
 import Link from 'next/link'
 import {
   Search,
@@ -37,6 +38,7 @@ interface ClientReceivable {
   client_id: string
   client_name: string
   client_email: string
+  currency: string
   total_invoiced: number
   total_paid: number
   total_outstanding: number
@@ -63,15 +65,24 @@ interface Invoice {
   is_overdue: boolean
 }
 
+interface AgingTotals {
+  current: CurrencyTotals
+  days30: CurrencyTotals
+  days60: CurrencyTotals
+  days90Plus: CurrencyTotals
+}
+
 interface Summary {
-  total_outstanding: number
-  total_invoiced: number
-  total_paid: number
+  // Per currency: an operator billing in yen and euro is owed two amounts, not
+  // one sum. The tiles render "¥879,917" or "¥879,917 + €1,200".
+  total_outstanding: CurrencyTotals
+  total_invoiced: CurrencyTotals
+  total_paid: CurrencyTotals
   client_count: number
   invoice_count: number
-  aging: AgingBucket
+  aging: AgingTotals
   overdue_count: number
-  overdue_amount: number
+  overdue_amount: CurrencyTotals
 }
 
 const ITEMS_PER_PAGE = 15
@@ -157,6 +168,13 @@ export default function AccountsReceivablePage() {
     window.open(`mailto:${invoice.client_email}?subject=${subject}&body=${body}`, '_blank')
     setSendingReminder(null)
   }
+
+  // The currency this page is mostly denominated in — used for the proportional
+  // aging bar, which needs ONE denominator and cannot mix currencies.
+  const dominantCurrency = (t?: CurrencyTotals) =>
+    Object.entries(t || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] || 'EUR'
+  const listCurrency = dominantCurrency(summary?.total_outstanding)
+  const inList = (t?: CurrencyTotals) => (t?.[listCurrency] ?? 0)
 
   const getCurrencySymbol = (currency: string = 'EUR') => {
     const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
@@ -254,9 +272,9 @@ export default function AccountsReceivablePage() {
               exportFinancePDF({
                 title: 'Accounts Receivable Report',
                 summary: summary ? [
-                  { label: 'Total Outstanding', value: `€${summary.total_outstanding.toLocaleString()}` },
+                  { label: 'Total Outstanding', value: formatTotals(summary.total_outstanding, { defaultCurrency: listCurrency }) },
                   { label: 'Client Count', value: String(summary.client_count) },
-                  { label: 'Overdue Amount', value: `€${summary.overdue_amount.toLocaleString()}` },
+                  { label: 'Overdue Amount', value: formatTotals(summary.overdue_amount, { defaultCurrency: listCurrency }) },
                 ] : [],
                 data: filteredClients as unknown as Record<string, unknown>[],
                 columns: cols,
@@ -280,7 +298,7 @@ export default function AccountsReceivablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Total Outstanding</p>
-            <p className="text-2xl font-semibold text-blue-600">€{summary.total_outstanding.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-blue-600">{formatTotals(summary.total_outstanding, { defaultCurrency: listCurrency })}</p>
             <p className="text-xs text-gray-400 mt-1">{summary.invoice_count} invoices</p>
           </div>
 
@@ -290,7 +308,7 @@ export default function AccountsReceivablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Overdue</p>
-            <p className="text-2xl font-semibold text-red-600">€{summary.overdue_amount.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-red-600">{formatTotals(summary.overdue_amount, { defaultCurrency: listCurrency })}</p>
             <p className="text-xs text-gray-400 mt-1">{summary.overdue_count} invoices</p>
           </div>
 
@@ -300,7 +318,7 @@ export default function AccountsReceivablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Current</p>
-            <p className="text-2xl font-semibold text-green-600">€{summary.aging.current.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-green-600">{formatTotals(summary.aging.current, { defaultCurrency: listCurrency })}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -309,7 +327,7 @@ export default function AccountsReceivablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">1-30 Days</p>
-            <p className="text-2xl font-semibold text-yellow-600">€{summary.aging.days30.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-yellow-600">{formatTotals(summary.aging.days30, { defaultCurrency: listCurrency })}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -318,7 +336,7 @@ export default function AccountsReceivablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">31-60 Days</p>
-            <p className="text-2xl font-semibold text-orange-600">€{summary.aging.days60.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-orange-600">{formatTotals(summary.aging.days60, { defaultCurrency: listCurrency })}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -327,50 +345,50 @@ export default function AccountsReceivablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">90+ Days</p>
-            <p className="text-2xl font-semibold text-red-600">€{summary.aging.days90Plus.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-red-600">{formatTotals(summary.aging.days90Plus, { defaultCurrency: listCurrency })}</p>
           </div>
         </div>
       )}
 
       {/* Aging Report Visual */}
-      {summary && summary.total_outstanding > 0 && (
+      {summary && inList(summary.total_outstanding) > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Aging Report</h3>
           <div className="flex h-8 rounded-lg overflow-hidden">
-            {summary.aging.current > 0 && (
+            {inList(summary.aging.current) > 0 && (
               <div 
                 className="bg-green-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.current / summary.total_outstanding) * 100}%` }}
-                title={`Current: €${summary.aging.current.toLocaleString()}`}
+                style={{ width: `${(inList(summary.aging.current) / inList(summary.total_outstanding)) * 100}%` }}
+                title={`Current: ${formatMoney(inList(summary.aging.current), listCurrency)}`}
               >
-                {((summary.aging.current / summary.total_outstanding) * 100).toFixed(0)}%
+                {((inList(summary.aging.current) / inList(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
-            {summary.aging.days30 > 0 && (
+            {inList(summary.aging.days30) > 0 && (
               <div 
                 className="bg-yellow-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.days30 / summary.total_outstanding) * 100}%` }}
-                title={`1-30 Days: €${summary.aging.days30.toLocaleString()}`}
+                style={{ width: `${(inList(summary.aging.days30) / inList(summary.total_outstanding)) * 100}%` }}
+                title={`1-30 Days: ${formatMoney(inList(summary.aging.days30), listCurrency)}`}
               >
-                {((summary.aging.days30 / summary.total_outstanding) * 100).toFixed(0)}%
+                {((inList(summary.aging.days30) / inList(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
-            {summary.aging.days60 > 0 && (
+            {inList(summary.aging.days60) > 0 && (
               <div 
                 className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.days60 / summary.total_outstanding) * 100}%` }}
-                title={`31-60 Days: €${summary.aging.days60.toLocaleString()}`}
+                style={{ width: `${(inList(summary.aging.days60) / inList(summary.total_outstanding)) * 100}%` }}
+                title={`31-60 Days: ${formatMoney(inList(summary.aging.days60), listCurrency)}`}
               >
-                {((summary.aging.days60 / summary.total_outstanding) * 100).toFixed(0)}%
+                {((inList(summary.aging.days60) / inList(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
-            {summary.aging.days90Plus > 0 && (
+            {inList(summary.aging.days90Plus) > 0 && (
               <div 
                 className="bg-red-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.days90Plus / summary.total_outstanding) * 100}%` }}
-                title={`90+ Days: €${summary.aging.days90Plus.toLocaleString()}`}
+                style={{ width: `${(inList(summary.aging.days90Plus) / inList(summary.total_outstanding)) * 100}%` }}
+                title={`90+ Days: ${formatMoney(inList(summary.aging.days90Plus), listCurrency)}`}
               >
-                {((summary.aging.days90Plus / summary.total_outstanding) * 100).toFixed(0)}%
+                {((inList(summary.aging.days90Plus) / inList(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
           </div>
@@ -468,7 +486,7 @@ export default function AccountsReceivablePage() {
                   
                   <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-900">€{client.total_outstanding.toLocaleString()}</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatMoney(client.total_outstanding, client.currency)}</p>
                       <p className="text-xs text-gray-500">{client.invoice_count} invoice{client.invoice_count !== 1 ? 's' : ''}</p>
                     </div>
                     
@@ -476,22 +494,22 @@ export default function AccountsReceivablePage() {
                     <div className="hidden md:flex items-center gap-1">
                       {client.aging.current > 0 && (
                         <div className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
-                          €{client.aging.current.toLocaleString()}
+                          {formatMoney(client.aging.current, client.currency)}
                         </div>
                       )}
                       {client.aging.days30 > 0 && (
                         <div className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded">
-                          €{client.aging.days30.toLocaleString()}
+                          {formatMoney(client.aging.days30, client.currency)}
                         </div>
                       )}
                       {client.aging.days60 > 0 && (
                         <div className="px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded">
-                          €{client.aging.days60.toLocaleString()}
+                          {formatMoney(client.aging.days60, client.currency)}
                         </div>
                       )}
                       {client.aging.days90Plus > 0 && (
                         <div className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
-                          €{client.aging.days90Plus.toLocaleString()}
+                          {formatMoney(client.aging.days90Plus, client.currency)}
                         </div>
                       )}
                     </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +18,9 @@ interface ClientReceivable {
   client_id: string
   client_name: string
   client_email: string
+  /** What this row is denominated in. A client billed in two currencies is two
+   *  rows, because their outstanding balance is two amounts and not a sum. */
+  currency: string
   total_invoiced: number
   total_paid: number
   total_outstanding: number
@@ -97,13 +101,17 @@ export async function GET(request: NextRequest) {
     const clientMap = new Map<string, ClientReceivable>()
 
     filteredInvoices.forEach(inv => {
-      const clientKey = inv.client_id || inv.client_name || 'unknown'
-      
+      const invoiceCurrency = (inv.currency || 'EUR').toUpperCase()
+      // Grouped by client AND currency: adding a yen balance to a euro one
+      // produces a number that is owed in neither.
+      const clientKey = `${inv.client_id || inv.client_name || 'unknown'}::${invoiceCurrency}`
+
       if (!clientMap.has(clientKey)) {
         clientMap.set(clientKey, {
           client_id: inv.client_id,
           client_name: inv.client_name,
           client_email: inv.client_email,
+          currency: invoiceCurrency,
           total_invoiced: 0,
           total_paid: 0,
           total_outstanding: 0,
@@ -142,23 +150,36 @@ export async function GET(request: NextRequest) {
     const clientReceivables = Array.from(clientMap.values())
       .sort((a, b) => b.total_outstanding - a.total_outstanding)
 
-    // Calculate summary
+    // Summary totals stay SEPARATED BY CURRENCY for the same reason: the
+    // tiles show "¥879,917" — or "¥879,917 + €1,200" — never a merged fiction.
+    const sumField = (get: (c: ClientReceivable) => number): CurrencyTotals => {
+      const totals = emptyTotals()
+      for (const c of clientReceivables) addToTotals(totals, get(c), c.currency)
+      return totals
+    }
+    const overdueAmount = emptyTotals()
+    for (const inv of filteredInvoices.filter(i => i.is_overdue)) {
+      addToTotals(overdueAmount, inv.balance_due, inv.currency)
+    }
+
+    // How many distinct clients, regardless of how many currencies each is
+    // billed in — the row count would double-count someone billed in two.
+    const clientCount = new Set(clientReceivables.map(c => c.client_id || c.client_name)).size
+
     const summary = {
-      total_outstanding: clientReceivables.reduce((sum, c) => sum + c.total_outstanding, 0),
-      total_invoiced: clientReceivables.reduce((sum, c) => sum + c.total_invoiced, 0),
-      total_paid: clientReceivables.reduce((sum, c) => sum + c.total_paid, 0),
-      client_count: clientReceivables.length,
+      total_outstanding: sumField(c => c.total_outstanding),
+      total_invoiced: sumField(c => c.total_invoiced),
+      total_paid: sumField(c => c.total_paid),
+      client_count: clientCount,
       invoice_count: filteredInvoices.length,
       aging: {
-        current: clientReceivables.reduce((sum, c) => sum + c.aging.current, 0),
-        days30: clientReceivables.reduce((sum, c) => sum + c.aging.days30, 0),
-        days60: clientReceivables.reduce((sum, c) => sum + c.aging.days60, 0),
-        days90Plus: clientReceivables.reduce((sum, c) => sum + c.aging.days90Plus, 0)
+        current: sumField(c => c.aging.current),
+        days30: sumField(c => c.aging.days30),
+        days60: sumField(c => c.aging.days60),
+        days90Plus: sumField(c => c.aging.days90Plus)
       },
       overdue_count: filteredInvoices.filter(inv => inv.is_overdue).length,
-      overdue_amount: filteredInvoices
-        .filter(inv => inv.is_overdue)
-        .reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0)
+      overdue_amount: overdueAmount
     }
 
     return NextResponse.json({
