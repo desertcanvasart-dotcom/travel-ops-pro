@@ -12,7 +12,32 @@
 import puppeteer from 'puppeteer'
 import type { DocumentPage } from './types'
 
+/**
+ * How long to wait for one attempt's content to settle.
+ *
+ * Deliberately well under the old 60s: the FIRST render on a freshly started
+ * container is slow — Chromium's binary is not in the page cache and the
+ * document carries a ~7MB inline font — and at 60s that attempt consumed the
+ * whole request before failing. A shorter ceiling turns the cold attempt into a
+ * fast failure that leaves room to try again warm.
+ */
+const SETTLE_TIMEOUT_MS = 25_000
+
 export async function renderHtmlToPdf(html: string, page: DocumentPage): Promise<Buffer> {
+  // Observed in production the minute after a deploy: the first request timed
+  // out at the ceiling and returned a 500, and the very next one rendered in
+  // 7s. Whoever taps a document first should not be the one who pays for the
+  // container being cold, so one failed attempt is retried — by then Chromium
+  // is warm and the retry is the ordinary path.
+  try {
+    return await renderOnce(html, page)
+  } catch (error) {
+    console.warn('PDF render failed, retrying once on a warm browser:', error)
+    return await renderOnce(html, page)
+  }
+}
+
+async function renderOnce(html: string, page: DocumentPage): Promise<Buffer> {
   const browser = await puppeteer.launch({
     headless: true,
     args: [
@@ -32,7 +57,7 @@ export async function renderHtmlToPdf(html: string, page: DocumentPage): Promise
     // it resolves silently ships with fallback metrics.
     await tab.setContent(html, {
       waitUntil: ['domcontentloaded', 'networkidle0'],
-      timeout: 60_000,
+      timeout: SETTLE_TIMEOUT_MS,
     })
     await tab.evaluateHandle('document.fonts.ready')
 
