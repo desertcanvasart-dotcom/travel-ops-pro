@@ -1213,7 +1213,13 @@
           "name": "Shore Excursions",
           "desc": "Day tours for cruise passengers"
         }
-      }
+      },
+      "programme": "Programme",
+      "programmeHint": "Which programme this trip was sold from. The customer's portal shows the 日程表 generated from it.",
+      "programmeNone": "Not linked",
+      "programmeLengthMismatch": "This programme is {programmeDays} days but the trip has {tripDays}. The 日程表 will not match what was sold.",
+      "programmePreview": "Preview the 日程表",
+      "programmeUnlinkedNote": "Without a programme, the portal falls back to the plain day list."
     },
     "delete": "Delete",
     "clickToConfirm": "Click again to confirm",
@@ -2612,7 +2618,10 @@
       "officePostal": "〒 Postal code",
       "officeAddress": "Address",
       "removeOffice": "Remove",
-      "addOffice": "Add office"
+      "addOffice": "Add office",
+      "billingCurrency": "Billing currency",
+      "billingCurrencyUnset": "Not set",
+      "billingCurrencyHint": "What this company invoices in. Colleagues who have set no preference of their own inherit it."
     }
   },
   "translate": {

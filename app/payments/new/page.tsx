@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, FileText, MapPin, DollarSign } from 'lucide-react'
+import { usePreferences } from '@/app/contexts/PreferencesContext'
 
 interface Invoice {
   id: string
@@ -50,7 +51,7 @@ export default function RecordPaymentPage() {
     target_id: '',
     payment_type: 'deposit_30',
     amount: '',
-    currency: 'EUR',
+    currency: '',
     payment_method: 'bank_transfer',
     payment_status: 'completed',
     transaction_reference: '',
@@ -58,6 +59,20 @@ export default function RecordPaymentPage() {
     due_date: '',
     notes: ''
   })
+
+  // The billing currency is the operator's, not this form's. Left hardcoded to
+  // EUR, an A.T.S user recording a yen payment against a yen invoice filed it
+  // in euro. Applied once, when preferences arrive, and never over a choice the
+  // user has already made.
+  const { preferences, loading: prefsLoading } = usePreferences()
+  useEffect(() => {
+    // WAIT for the real preference. The context seeds itself with a 'USD'
+    // placeholder while it fetches, so firing on that would pin every form to
+    // USD and then decline to correct itself, the field no longer being empty.
+    if (!prefsLoading && preferences?.default_currency) {
+      setFormData(f => (f.currency ? f : { ...f, currency: preferences.default_currency }))
+    }
+  }, [prefsLoading, preferences?.default_currency])
 
   useEffect(() => {
     fetchInvoices()

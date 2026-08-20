@@ -32,9 +32,11 @@ import {
   type PortalDocument,
   portalVerifyCookieName,
   isPortalVerified,
+  isCustomerFacingInvoice,
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
+import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
 
 export const dynamic = 'force-dynamic'
@@ -62,7 +64,12 @@ interface Operator {
   tagline: string | null
 }
 
-async function resolve(token: string): Promise<{ booking: PortalBooking; operator: Operator } | null> {
+async function resolve(token: string): Promise<{
+  booking: PortalBooking
+  operator: Operator
+  insuranceBands: PremiumBand[]
+  tripDays: number | null
+} | null> {
   if (!isValidPortalToken(token)) return null
   const supabase = admin()
 
@@ -91,8 +98,18 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
     .order('is_lead_passenger', { ascending: false })
     .order('created_at', { ascending: true })
 
-  // The trip itself, through the itinerary-share allowlist rather than a second
-  // projection that could drift from it.
+  // The trip is shown as the office's OWN 日程表, not as a second rendering of
+  // itinerary_days. Two layouts of one trip, drawn from two tables, is two
+  // chances to tell the traveller different things — and the document the
+  // office already sends is the one they recognise. It is generated from the
+  // PROGRAMME the trip was sold from, so all that is needed here is the link.
+  //
+  // ONE OR THE OTHER, NEVER BOTH. A trip with no programme link falls back to
+  // the day list, because a portal with no itinerary at all is worse than one
+  // in the older format — and today most trips have no link, since nothing in
+  // the UI sets itineraries.template_id yet. Linking the programme is what
+  // upgrades a trip to the real document.
+  let programmeTemplateId: string | null = null
   let itinerary = null
   if (booking.itinerary_id) {
     const { data: itin } = await supabase
@@ -100,27 +117,48 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
       .select('*')
       .eq('id', booking.itinerary_id)
       .maybeSingle()
-    const { data: days } = await supabase
-      .from('itinerary_days')
-      .select('*')
-      .eq('itinerary_id', booking.itinerary_id)
-      .order('day_number', { ascending: true })
-    if (itin) itinerary = toClientItinerary(itin, days ?? [])
+    programmeTemplateId = (itin?.template_id as string | null) ?? null
+
+    if (itin && !programmeTemplateId) {
+      const { data: days } = await supabase
+        .from('itinerary_days')
+        .select('*')
+        .eq('itinerary_id', booking.itinerary_id)
+        .order('day_number', { ascending: true })
+      itinerary = toClientItinerary(itin, days ?? [])
+    }
   }
 
-  // The documents a traveller can actually be handed today: their invoices.
-  // Deposit before final, oldest first, so the list reads in the order the
-  // money is asked for.
+  // The documents a traveller can actually be handed today.
   const documents: PortalDocument[] = []
+
+  // The 日程表 leads: it is what somebody opens this link to read. Generated on
+  // demand rather than stored, so a correction to the programme reaches the
+  // traveller without anybody reissuing a file.
+  if (programmeTemplateId) {
+    documents.push({
+      key: 'nittei',
+      title: '旅行日程表',
+      note: booking.start_date ? `${jpDate(booking.start_date)} ご出発` : 'PDF',
+    })
+  }
+
+  // Then the invoices — deposit before final, oldest first, so the list reads
+  // in the order the money is asked for.
   if (booking.itinerary_id) {
     const { data: invoices } = await supabase
       .from('invoices')
-      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency')
+      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency, status')
       .eq('itinerary_id', booking.itinerary_id)
       .order('created_at', { ascending: true })
 
     for (const inv of invoices ?? []) {
-      // A draft is not something to hand a customer — it has not been sent.
+      // A draft is not something to hand a customer — it has not been sent —
+      // and neither is a cancelled one. An ALLOW-list rather than a deny-list:
+      // a status nobody has thought about yet must not reach the traveller by
+      // default. Invoices are created as 'draft', so this is the common case,
+      // not an edge one.
+      if (!isCustomerFacingInvoice(inv.status)) continue
       documents.push({
         key: `invoice:${inv.id}`,
         title:
@@ -132,6 +170,55 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
         note: inv.due_date ? `お支払い期限 ${jpDate(inv.due_date)}` : inv.invoice_number,
       })
     }
+  }
+
+  // The 掛金表 for the chooser. Sent to the browser because the premium depends
+  // on the traveller's own age, which is being typed on that screen — computing
+  // it here would mean a round trip per keystroke. These are published rates,
+  // not anybody's private data.
+  //
+  // The newest rate year the operator has loaded wins. A missing table is not
+  // an error: the plan chooser simply shows no prices, which is what the paper
+  // form does today.
+  let insuranceBands: PremiumBand[] = []
+  const { data: premiumRows } = await supabase
+    .from('insurance_premiums')
+    .select('id, rate_year, max_days, band_label, premium_jpy, max_age, insurance_plans!inner(plan_code)')
+    .eq('org_id', link!.org_id)
+    .order('rate_year', { ascending: false })
+
+  if (premiumRows?.length) {
+    const newest = Math.max(...premiumRows.map(r => Number(r.rate_year) || 0))
+    insuranceBands = premiumRows
+      .filter(r => Number(r.rate_year) === newest)
+      .map(r => ({
+        id: String(r.id),
+        planCode: String((r.insurance_plans as unknown as { plan_code: string })?.plan_code ?? ''),
+        maxDays: Number(r.max_days),
+        bandLabel: String(r.band_label),
+        premiumJpy: Number(r.premium_jpy),
+        maxAge: r.max_age == null ? null : Number(r.max_age),
+      }))
+      .filter(b => b.planCode)
+  }
+
+  // The insurer's own brochure, when the operator has put one there. Storage
+  // keys must be ASCII, so the object has a fixed English name and the title
+  // the customer reads lives here — 「4.2025年版海外保険.pdf」 is not a filename
+  // Supabase will accept.
+  //
+  // Offered to everyone, not only to those who already said yes: it is what a
+  // customer reads in order to DECIDE.
+  const { data: guide } = await supabase.storage
+    .from('documents')
+    .list(`portal-documents/${link!.org_id}`, { search: 'insurance-guide.pdf' })
+
+  if (guide?.some(o => o.name === 'insurance-guide.pdf')) {
+    documents.push({
+      key: 'insurance-guide',
+      title: '海外旅行傷害保障のご案内',
+      note: '共済金額表・掛金表（PDF）',
+    })
   }
 
   const { data: org } = await supabase
@@ -152,6 +239,8 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
     .then(undefined, () => {})
 
   return {
+    insuranceBands,
+    tripDays: tripDays(booking.start_date, booking.end_date),
     booking: toPortalBooking({
       booking,
       passengers: passengers ?? [],
@@ -182,7 +271,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const resolved = await resolve(token)
   if (!resolved) notFound()
 
-  const { booking, operator } = resolved
+  const { booking, operator, insuranceBands, tripDays: days } = resolved
 
   // CONFIRMATION GATE: the link alone shows nothing. One fact the traveller
   // knows (booking number or the lead family name) sets the cookie; until
@@ -308,6 +397,8 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
             index={i}
             departureDate={booking.startDate}
             locked={booking.detailsLocked}
+            insuranceBands={insuranceBands}
+            tripDays={days}
           />
         ))}
       </section>
@@ -330,6 +421,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       )}
 
       {/* ---------------- the trip ---------------- */}
+      {/* Only when the trip has no programme link — see resolve(). */}
       {booking.itinerary && (
         <section>
           <h2>ご旅行日程</h2>

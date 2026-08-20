@@ -20,6 +20,7 @@ import {
 import Link from 'next/link'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
+import { usePreferences } from '@/app/contexts/PreferencesContext'
 
 interface Invoice {
   id: string
@@ -109,7 +110,7 @@ const initialFormData: FormData = {
   tax_amount: 0,
   discount_amount: 0,
   total_amount: 0,
-  currency: 'EUR',
+  currency: '',
   issue_date: new Date().toISOString().split('T')[0],
   due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   notes: '',
@@ -145,6 +146,20 @@ export default function InvoicesContent() {
   const [typeFilter, setTypeFilter] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formData, setFormData] = useState<FormData>(initialFormData)
+
+  // An invoice is denominated in what the operator bills in. initialFormData is
+  // a module constant and cannot read a hook, so the currency is filled in when
+  // preferences arrive — and never over a choice already made, including the
+  // one carried by a form reset.
+  const { preferences, loading: prefsLoading } = usePreferences()
+  useEffect(() => {
+    // WAIT for the real preference. The context seeds itself with a 'USD'
+    // placeholder while it fetches, so firing on that would pin every form to
+    // USD and then decline to correct itself, the field no longer being empty.
+    if (!prefsLoading && preferences?.default_currency) {
+      setFormData(f => (f.currency ? f : { ...f, currency: preferences.default_currency }))
+    }
+  }, [prefsLoading, preferences?.default_currency])
   const [saving, setSaving] = useState(false)
 
   const getStatusLabel = (status: string) => {
@@ -451,7 +466,7 @@ export default function InvoicesContent() {
   }
 
   const openAddModal = () => {
-    setFormData(initialFormData)
+    setFormData({ ...initialFormData, currency: preferences?.default_currency || '' })
     setIsModalOpen(true)
   }
 
