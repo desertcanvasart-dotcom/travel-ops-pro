@@ -59,6 +59,9 @@ export interface CompanyInfo {
   /** When the operator keeps offices, they are what goes on the paper — the
    *  single `address` line is the fallback for one that does not. */
   offices?: CompanyOffice[]
+  /** The letterhead logo as a data URI. A URL is no use here: jsPDF draws from
+   *  bytes it already has and never fetches. */
+  logoDataUrl?: string | null
 }
 
 // The fallback when no caller supplies company info is BLANK, deliberately.
@@ -156,72 +159,51 @@ export function generateInvoicePDF(
   // HEADER SECTION
   // ============================================
   
-  // Company Name (left)
-  doc.setFontSize(24)
+  // ---------- letterhead ----------
+  // The contact block lives in the FOOTER, not here. It used to sit under the
+  // company name, running the full width — straight through the right-aligned
+  // "Balance After 20% Deposit" badge, which overprinted the Tokyo office's fax
+  // number. Two things competing for the same band of the page is a layout
+  // problem, not a spacing one, so they no longer share it.
+  let nameX = margin
+  if (company.logoDataUrl) {
+    try {
+      const props = doc.getImageProperties(company.logoDataUrl)
+      const logoH = 12
+      const logoW = props.width && props.height ? (props.width / props.height) * logoH : logoH
+      doc.addImage(company.logoDataUrl, margin, y - 4, logoW, logoH)
+      nameX = margin + logoW + 4
+    } catch {
+      // An unreadable logo must not cost the customer their invoice.
+      nameX = margin
+    }
+  }
+
+  // Company Name (left, beside the logo when there is one)
+  doc.setFontSize(company.name.length > 26 ? 16 : 20)
   doc.setTextColor(...primaryColor)
   doc.setFont(FONT, 'bold')
-  doc.text(company.name, margin, y)
+  doc.text(company.name, nameX, y + 4)
 
   // INVOICE label with type (right)
-  doc.setFontSize(24)
+  doc.setFontSize(20)
   doc.setTextColor(...typeConfig.color)
-  doc.text(typeConfig.label, pageWidth - margin, y, { align: 'right' })
+  doc.text(typeConfig.label, pageWidth - margin, y + 4, { align: 'right' })
 
-  y += 8
+  y += 10
 
   // Invoice type badge (for deposit/final)
   if (invoiceType !== 'standard' && invoice.deposit_percent) {
-    doc.setFontSize(10)
+    doc.setFontSize(9)
     doc.setTextColor(...typeConfig.color)
     doc.setFont(FONT, 'normal')
-    const badgeText = invoiceType === 'deposit' 
+    const badgeText = invoiceType === 'deposit'
       ? `${invoice.deposit_percent}% Booking Deposit`
       : `Balance After ${invoice.deposit_percent}% Deposit`
     doc.text(badgeText, pageWidth - margin, y, { align: 'right' })
-    y += 2
   }
 
-  // Company details — only the lines that exist; blanks don't leave gaps.
-  doc.setFontSize(9)
-  doc.setTextColor(...mediumGray)
-  doc.setFont(FONT, 'normal')
-  const cityCountry = [company.city, company.country].filter(Boolean).join(', ')
-
-  // Offices first, when there are any. An operator who fills in Tokyo, Osaka
-  // and Cairo means those to appear on customer paper — the flat `address`
-  // line is what a company with a single office has instead, not a summary of
-  // the offices. Long lines are wrapped rather than run off the page.
-  const officeLines: string[] = []
-  for (const office of company.offices ?? []) {
-    const place = [office.postal_code, office.address].map(v => (v ?? '').trim()).filter(Boolean).join(' ')
-    const phones = [
-      office.tel ? `TEL：${office.tel}` : '',
-      office.fax ? `FAX：${office.fax}` : '',
-    ].filter(Boolean).join('　')
-    const line = [office.label, place, phones].map(v => (v ?? '').trim()).filter(Boolean).join('　')
-    if (line) officeLines.push(...(doc.splitTextToSize(line, pageWidth - margin * 2) as string[]))
-  }
-
-  // company.phone is dropped when an office already carries it, or the head
-  // office's number prints twice — once in its own line, once on its own.
-  const phoneShownInOffices = (company.offices ?? []).some(
-    o => (o.tel ?? '').replace(/\D/g, '') === (company.phone ?? '').replace(/\D/g, '') && company.phone
-  )
-  const companyLines = [
-    ...officeLines,
-    ...(officeLines.length ? [] : [company.address, cityCountry]),
-    company.email,
-    phoneShownInOffices ? '' : company.phone,
-    company.website,
-  ]
-    .map(l => (l ?? '').trim())
-    .filter(Boolean)
-  for (const line of companyLines) {
-    doc.text(line, margin, y)
-    y += 4
-  }
-
-  y += 15 - (companyLines.length ? 4 : 0)
+  y += 6
 
   // Divider line
   doc.setDrawColor(...primaryColor)
@@ -652,7 +634,13 @@ export function generateInvoicePDF(
     doc.setFont(FONT, 'normal')
     doc.setFontSize(8)
     doc.setTextColor(6, 95, 70)
-    doc.text('This invoice represents the remaining balance after your deposit. Payable in cash upon arrival in Cairo.', margin + 5, y + 14)
+    // "Payable in cash upon arrival in Cairo" was hardcoded — a payment method
+    // and a place this operator does not use, on an invoice whose own due date
+    // is 60 days before departure.
+    const balanceWhen = invoice.balance_due_date
+      ? ` Payable by ${formatDate(invoice.balance_due_date)}.`
+      : ''
+    doc.text(`This invoice represents the remaining balance after your deposit.${balanceWhen}`, margin + 5, y + 14)
     
     y += 25
   }
@@ -661,17 +649,57 @@ export function generateInvoicePDF(
   // FOOTER
   // ============================================
 
-  const footerY = doc.internal.pageSize.getHeight() - 15
-  
-  doc.setFontSize(8)
+  // Where to reach the operator, at the bottom where a reader looks for it, and
+  // out of the way of the badge it used to collide with. Each office on one
+  // line; a long one wraps rather than running off the page.
+  const cityCountry = [company.city, company.country].filter(Boolean).join(', ')
+  const contactLines: string[] = []
+  for (const office of company.offices ?? []) {
+    const line = [
+      office.label,
+      [office.postal_code, office.address].map(v => (v ?? '').trim()).filter(Boolean).join(' '),
+      [office.tel ? `TEL ${office.tel}` : '', office.fax ? `FAX ${office.fax}` : '']
+        .filter(Boolean).join('  '),
+    ].map(v => (v ?? '').trim()).filter(Boolean).join('   ')
+    if (line) contactLines.push(...(doc.splitTextToSize(line, contentWidth) as string[]))
+  }
+  if (!contactLines.length) {
+    for (const line of [company.address, cityCountry]) {
+      if ((line ?? '').trim()) contactLines.push(line.trim())
+    }
+  }
+  // company.phone is dropped when an office already carries it, or the head
+  // office's number prints twice.
+  const digits = (v: string | undefined) => (v ?? '').replace(/\D/g, '')
+  const phoneInOffices = (company.offices ?? []).some(o => digits(o.tel) && digits(o.tel) === digits(company.phone))
+  const tailLine = [company.email, phoneInOffices ? '' : company.phone, company.website]
+    .map(v => (v ?? '').trim()).filter(Boolean).join('   ')
+  if (tailLine) contactLines.push(tailLine)
+
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const lineGap = 3.4
+  // Grows upward from the bottom, so adding an office never pushes the footer
+  // off the page.
+  let footerY = pageHeight - 12 - (contactLines.length + (company.name.trim() ? 1 : 0)) * lineGap
+
+  doc.setDrawColor(...lightGray)
+  doc.setLineWidth(0.4)
+  doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5)
+
+  if (company.name.trim()) {
+    doc.setFontSize(8)
+    doc.setTextColor(...primaryColor)
+    doc.setFont(FONT, 'bold')
+    doc.text(company.name.trim(), pageWidth / 2, footerY, { align: 'center' })
+    footerY += lineGap
+  }
+
+  doc.setFontSize(7)
   doc.setTextColor(...mediumGray)
   doc.setFont(FONT, 'normal')
-  // The company name comes from the caller. A different operator's name was
-  // hardcoded here, so every A.T.S invoice thanked the customer on behalf of
-  // Travel2Egypt — the same placeholder that was already removed from
-  // DEFAULT_COMPANY but survived in this line. Blank name, no line.
-  if (company.name.trim()) {
-    doc.text(`Thank you for choosing ${company.name.trim()}!`, pageWidth / 2, footerY, { align: 'center' })
+  for (const line of contactLines) {
+    doc.text(line, pageWidth / 2, footerY, { align: 'center' })
+    footerY += lineGap
   }
   doc.text(
     `Generated on ${formatDate(new Date().toISOString())}`,
