@@ -202,6 +202,25 @@ async function resolve(token: string): Promise<{
       .filter(b => b.planCode)
   }
 
+  // The insurer's own brochure, when the operator has put one there. Storage
+  // keys must be ASCII, so the object has a fixed English name and the title
+  // the customer reads lives here — 「4.2025年版海外保険.pdf」 is not a filename
+  // Supabase will accept.
+  //
+  // Offered to everyone, not only to those who already said yes: it is what a
+  // customer reads in order to DECIDE.
+  const { data: guide } = await supabase.storage
+    .from('documents')
+    .list(`portal-documents/${link!.org_id}`, { search: 'insurance-guide.pdf' })
+
+  if (guide?.some(o => o.name === 'insurance-guide.pdf')) {
+    documents.push({
+      key: 'insurance-guide',
+      title: '海外旅行傷害保障のご案内',
+      note: '共済金額表・掛金表（PDF）',
+    })
+  }
+
   const { data: org } = await supabase
     .from('organizations')
     .select('name, primary_color, contact_email, company_phone, logo_url, company_address, tagline')

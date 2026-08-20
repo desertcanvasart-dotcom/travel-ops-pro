@@ -60,9 +60,32 @@ export async function GET(
 
   if (!portalLinkState(link).usable) return notFound()
 
-  const [kind, id] = decodeURIComponent(key).split(':')
-  if (kind !== 'invoice' && kind !== 'nittei') return notFound()
+  const decoded = decodeURIComponent(key)
+  const colon = decoded.indexOf(':')
+  const kind = colon === -1 ? decoded : decoded.slice(0, colon)
+  const id = colon === -1 ? '' : decoded.slice(colon + 1)
+  if (kind !== 'invoice' && kind !== 'nittei' && kind !== 'insurance-guide') return notFound()
   if (kind === 'invoice' && !id) return notFound()
+
+  // ---------- the insurer's own brochure ----------
+  // A fixed object per org, streamed through here rather than linked directly,
+  // so every row of 書類 behaves the same way and the storage layout stays an
+  // implementation detail. The file is the insurer's public leaflet — the
+  // 共済金額表 and 掛金表 a customer reads before choosing — not customer data.
+  if (kind === 'insurance-guide') {
+    const { data: file, error } = await supabase.storage
+      .from('documents')
+      .download(`portal-documents/${link!.org_id}/insurance-guide.pdf`)
+    if (error || !file) return notFound()
+    return new NextResponse(new Uint8Array(await file.arrayBuffer()), {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'inline; filename="insurance-guide.pdf"',
+        // It changes once a year, not once a request.
+        'Cache-Control': 'private, max-age=3600',
+      },
+    })
+  }
 
   const { data: booking } = await supabase
     .from('bookings')

@@ -121,15 +121,74 @@ export async function POST(request: NextRequest) {
     let totalAmount = body.total_amount || 0
     let lineItems = body.line_items || []
     const depositPercent = body.deposit_percent || 10
-    const fullTripCost = body.full_trip_cost || totalAmount // Store original trip cost
+    let fullTripCost = body.full_trip_cost || totalAmount // Store original trip cost
     // Every derived amount below is rounded to THIS currency's minor unit.
     // Without it a 20% deposit on ¥1,854,367 bills ¥370,873.4, and a yen with a
     // decimal place is not an amount of money that exists.
     const currency = body.currency || 'EUR'
     const moneyDp = currencyDecimals(currency)
 
+    // ---------- confirmed travel insurance ----------
+    // Added HERE rather than by each caller, so every invoice for a trip picks
+    // the premiums up the same way. Only CONFIRMED ones: a traveller's choice
+    // in the portal is a request until the office says otherwise.
+    //
+    // The premium is a yen figure published by the insurer. It is not
+    // converted — a rate applied to somebody else's tariff invents a precision
+    // they never quoted — so an invoice in another currency is refused rather
+    // than fudged. A.T.S bill in JPY; anything else here is a mistake worth
+    // stopping.
+    let insuranceLines: Array<{ description: string; quantity: number; unit_price: number; amount: number }> = []
+    if (body.itinerary_id) {
+      const { data: insured } = await supabaseAdmin
+        .from('booking_passengers')
+        .select('first_name, last_name, family_name_kanji, given_name_kanji, insurance_plan_code, insurance_premium_jpy, bookings!inner(itinerary_id, org_id)')
+        .eq('bookings.itinerary_id', body.itinerary_id)
+        .eq('bookings.org_id', orgId)
+        .not('insurance_confirmed_at', 'is', null)
+        .gt('insurance_premium_jpy', 0)
+
+      insuranceLines = (insured ?? []).map(p => {
+        const name =
+          [p.family_name_kanji, p.given_name_kanji].filter(Boolean).join(' ') ||
+          [p.last_name, p.first_name].filter(Boolean).join(' ')
+        const amount = Number(p.insurance_premium_jpy)
+        return {
+          description: `海外旅行傷害保障 トラベルセーフティプラン ${p.insurance_plan_code}${name ? `（${name}）` : ''}`,
+          quantity: 1,
+          unit_price: amount,
+          amount,
+        }
+      })
+
+      if (insuranceLines.length && currency !== 'JPY') {
+        return NextResponse.json(
+          {
+            error:
+              'This trip has confirmed travel insurance, which is priced in JPY. ' +
+              `Invoice this booking in JPY (it is currently ${currency}) rather than converting the premium.`,
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    const insuranceTotal = insuranceLines.reduce((sum, l) => sum + l.amount, 0)
+    if (insuranceTotal) {
+      // The premium is part of what the trip costs, so full_trip_cost tells the
+      // truth about the total. What it is NOT is part of the deposit base: a
+      // deposit is a percentage on account against the tour, while the premium
+      // is a fixed pass-through the insurer charges in full. Taking 20% of a
+      // ¥12,200 premium bills ¥2,440 for cover that costs ¥12,200.
+      //
+      // So it is settled with the BALANCE, and appears on exactly one document:
+      // the final invoice, or a standard one. Adding it to both a deposit and a
+      // final would bill it twice.
+      fullTripCost += insuranceTotal
+    }
+
     if (invoiceType === 'deposit') {
-      totalAmount = roundToCurrency((fullTripCost * depositPercent) / 100, currency)
+      totalAmount = roundToCurrency(((fullTripCost - insuranceTotal) * depositPercent) / 100, currency)
 
       // The itemisation is KEPT. This used to replace every line with a single
       // "Booking Deposit (20%)", which discarded the fuel surcharge, the airport
@@ -159,7 +218,9 @@ export async function POST(request: NextRequest) {
       // deposit_percent on the parent, so the final could under- or
       // over-charge by the rounding/override delta. Prefer the linked
       // deposit invoice's actual total_amount.
-      let depositAmount = roundToCurrency((fullTripCost * depositPercent) / 100, currency)
+      // Same base as the deposit invoice used — the tour without the premium —
+      // or the two documents disagree about what was already paid.
+      let depositAmount = roundToCurrency(((fullTripCost - insuranceTotal) * depositPercent) / 100, currency)
       let depositSource: 'percent' | 'parent' = 'percent'
       let depositReconciles = true
       let reconcileNote = ''
@@ -176,7 +237,7 @@ export async function POST(request: NextRequest) {
           // Surface a mismatch between the recomputed percent and the
           // actual parent amount; don't fail the request — the caller may
           // intentionally have a manual deposit — but record the delta.
-          const expected = roundToCurrency((fullTripCost * depositPercent) / 100, currency)
+          const expected = roundToCurrency(((fullTripCost - insuranceTotal) * depositPercent) / 100, currency)
           if (Math.abs(expected - depositAmount) > 0.01) {
             depositReconciles = false
             reconcileNote = ` (parent deposit ${parent.currency || ''}${depositAmount.toFixed(moneyDp)} differs from ${depositPercent}% of trip ${expected.toFixed(moneyDp)})`
@@ -185,12 +246,30 @@ export async function POST(request: NextRequest) {
       }
       totalAmount = roundToCurrency(Math.max(0, fullTripCost - depositAmount), currency)
       const headerPrefix = depositSource === 'parent' ? 'Final Balance (parent-deposit-based)' : 'Final Balance'
+      // The balance LINE covers the tour only, because the premium is listed
+      // separately below. Rolling it into this line would make the document
+      // total correct while saying nothing about what the extra money is for.
+      const tourBalance = roundToCurrency(Math.max(0, totalAmount - insuranceTotal), currency)
       lineItems = [{
         description: `${headerPrefix} - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${currency} ${fullTripCost.toFixed(moneyDp)} minus deposit ${currency} ${depositAmount.toFixed(moneyDp)})${depositReconciles ? '' : reconcileNote}`,
         quantity: 1,
-        unit_price: totalAmount,
-        amount: totalAmount
+        unit_price: tourBalance,
+        amount: tourBalance
       }]
+    }
+
+    // A standard invoice is whatever the caller said, PLUS anything added here.
+    // Without this the document lists a premium line it does not bill.
+    if (invoiceType === 'standard' && insuranceTotal) {
+      totalAmount = roundToCurrency(totalAmount + insuranceTotal, currency)
+    }
+
+    // Appended LAST: the final branch rebuilds lineItems from scratch, so
+    // anything added before it is silently dropped. Not on the deposit — the
+    // premium is settled with the balance, and listing it on both documents
+    // would say it is owed twice.
+    if (insuranceTotal && invoiceType !== 'deposit') {
+      lineItems = [...lineItems, ...insuranceLines]
     }
 
     const baseInvoice = {
