@@ -23,7 +23,10 @@ import { Building2 } from 'lucide-react'
 export interface PickableSupplier {
   id: string
   name: string
+  /** Primary role, used only for display fallbacks. */
   type: string | null
+  /** Every role this supplier fills — what the grouping actually asks. */
+  types?: string[] | null
   city?: string | null
 }
 
@@ -52,7 +55,7 @@ export default function SupplierPicker({
         const data = await res.json()
         if (cancelled) return
         const rows: PickableSupplier[] = (data.data || data.suppliers || data || [])
-          .map((s: any) => ({ id: s.id, name: s.name, type: s.type ?? null, city: s.city ?? null }))
+          .map((s: any) => ({ id: s.id, name: s.name, type: s.type ?? null, types: s.types ?? null, city: s.city ?? null }))
           .filter((s: PickableSupplier) => s.id && s.name)
         rows.sort((a, b) => a.name.localeCompare(b.name))
         setSuppliers(rows)
@@ -66,8 +69,11 @@ export default function SupplierPicker({
     return () => { cancelled = true }
   }, [])
 
-  const preferred = suppliers.filter(s => s.type === preferredType)
-  const others = suppliers.filter(s => s.type !== preferredType)
+  // A driver who also meets clients airside belongs in the airport group too,
+  // which is the whole point of a supplier having more than one role.
+  const fills = (s: PickableSupplier) => (s.types?.length ? s.types : s.type ? [s.type] : [])
+  const preferred = suppliers.filter(s => fills(s).includes(preferredType))
+  const others = suppliers.filter(s => !fills(s).includes(preferredType))
   const describe = (s: PickableSupplier) => (s.city ? `${s.name} — ${s.city}` : s.name)
 
   return (
