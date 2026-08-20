@@ -125,6 +125,43 @@ interface FormData {
   minibus_rate_non_eur: string
   bus_rate_eur: string
   bus_rate_non_eur: string
+  // Capacity per vehicle, per route. An agency that never uses a sedan leaves
+  // its rate blank and starts the minivan at 1 — the engine then picks the
+  // minivan for a couple, because it is the smallest vehicle they actually run.
+  sedan_capacity_min: string
+  sedan_capacity_max: string
+  minivan_capacity_min: string
+  minivan_capacity_max: string
+  van_capacity_min: string
+  van_capacity_max: string
+  minibus_capacity_min: string
+  minibus_capacity_max: string
+  bus_capacity_min: string
+  bus_capacity_max: string
+}
+
+type CapacityFields = Pick<
+  FormData,
+  | 'sedan_capacity_min' | 'sedan_capacity_max'
+  | 'minivan_capacity_min' | 'minivan_capacity_max'
+  | 'van_capacity_min' | 'van_capacity_max'
+  | 'minibus_capacity_min' | 'minibus_capacity_max'
+  | 'bus_capacity_min' | 'bus_capacity_max'
+>
+
+/**
+ * The capacity bands to show for a rate: what the row stores, or the
+ * conventional band for a row saved before these were editable.
+ */
+function capacityFieldsFor(rate: TransportationRate | null): CapacityFields {
+  const fields: Record<string, string> = {}
+  for (const tier of VEHICLE_TIERS) {
+    const min = rate ? (rate[`${tier.key}_capacity_min` as keyof TransportationRate] as number | null) : null
+    const max = rate ? (rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number | null) : null
+    fields[`${tier.key}_capacity_min`] = String(min ?? tier.defaultMin)
+    fields[`${tier.key}_capacity_max`] = String(max ?? tier.defaultMax)
+  }
+  return fields as CapacityFields
 }
 
 const initialFormData: FormData = {
@@ -151,6 +188,16 @@ const initialFormData: FormData = {
   minibus_rate_non_eur: '',
   bus_rate_eur: '',
   bus_rate_non_eur: '',
+  sedan_capacity_min: '1',
+  sedan_capacity_max: '2',
+  minivan_capacity_min: '3',
+  minivan_capacity_max: '7',
+  van_capacity_min: '8',
+  van_capacity_max: '12',
+  minibus_capacity_min: '13',
+  minibus_capacity_max: '20',
+  bus_capacity_min: '21',
+  bus_capacity_max: '45',
 }
 
 // Canonical service_type taxonomy (B3, locked-in 2026-06-23).
@@ -401,6 +448,7 @@ export default function TransportationContent() {
       minibus_rate_non_eur: rate.minibus_rate_non_eur?.toString() || '',
       bus_rate_eur: rate.bus_rate_eur?.toString() || '',
       bus_rate_non_eur: rate.bus_rate_non_eur?.toString() || '',
+      ...capacityFieldsFor(rate),
     })
     setIsModalOpen(true)
   }
@@ -420,6 +468,25 @@ export default function TransportationContent() {
       setError('Please select a destination city for intercity/city transfer services')
       setSaving(false)
       return
+    }
+
+    // A band that runs backwards would silently match nothing: the selector
+    // looks for pax >= min && pax <= max, so 7–3 is a vehicle nobody can book.
+    for (const tier of VEHICLE_TIERS) {
+      const rateVal = formData[`${tier.key}_rate_eur` as keyof FormData] as string
+      if (!rateVal || parseFloat(rateVal) <= 0) continue
+      const min = parseInt(formData[`${tier.key}_capacity_min` as keyof FormData] as string)
+      const max = parseInt(formData[`${tier.key}_capacity_max` as keyof FormData] as string)
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1) {
+        setError(`${t(tier.labelKey)}: capacity must be a number of passengers`)
+        setSaving(false)
+        return
+      }
+      if (max < min) {
+        setError(`${t(tier.labelKey)}: maximum capacity cannot be below the minimum`)
+        setSaving(false)
+        return
+      }
     }
 
     // Check at least one tier has a rate
@@ -461,6 +528,11 @@ export default function TransportationContent() {
         const nonEurVal = formData[`${tier.key}_rate_non_eur` as keyof FormData] as string
         submitData[`${tier.key}_rate_eur`] = eurVal ? parseFloat(eurVal) : null
         submitData[`${tier.key}_rate_non_eur`] = nonEurVal ? parseFloat(nonEurVal) : null
+
+        const minVal = formData[`${tier.key}_capacity_min` as keyof FormData] as string
+        const maxVal = formData[`${tier.key}_capacity_max` as keyof FormData] as string
+        submitData[`${tier.key}_capacity_min`] = minVal ? parseInt(minVal) : null
+        submitData[`${tier.key}_capacity_max`] = maxVal ? parseInt(maxVal) : null
       }
 
       const response = await fetch(url, {
@@ -1487,10 +1559,34 @@ export default function TransportationContent() {
                         <tr key={tier.key} className="border-t border-gray-200">
                           <td className="px-3 py-2">
                             <span className="text-sm font-medium text-gray-700">{t(tier.labelKey)}</span>
-                            <span className="text-xs text-gray-400 ml-1">({tier.defaultMin}-{tier.defaultMax} pax)</span>
                           </td>
-                          <td className="px-3 py-2 text-center">
-                            <span className="text-xs text-gray-500">{tier.defaultMin}-{tier.defaultMax}</span>
+                          <td className="px-3 py-2">
+                            {/* Editable, because the bands are the agency's own.
+                                An agency that never runs a sedan leaves its rate
+                                blank and starts the minivan at 1 — and a couple
+                                is then priced in the smallest vehicle they
+                                actually own. */}
+                            <div className="flex items-center justify-center gap-1">
+                              <input
+                                type="number"
+                                value={formData[`${tier.key}_capacity_min` as keyof FormData] as string}
+                                onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_capacity_min`]: e.target.value }))}
+                                min="1"
+                                step="1"
+                                aria-label={`${t(tier.labelKey)} minimum pax`}
+                                className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                              />
+                              <span className="text-xs text-gray-400">–</span>
+                              <input
+                                type="number"
+                                value={formData[`${tier.key}_capacity_max` as keyof FormData] as string}
+                                onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_capacity_max`]: e.target.value }))}
+                                min="1"
+                                step="1"
+                                aria-label={`${t(tier.labelKey)} maximum pax`}
+                                className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                              />
+                            </div>
                           </td>
                           <td className="px-3 py-2">
                             <input
@@ -1519,7 +1615,9 @@ export default function TransportationContent() {
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-gray-400">Leave empty for vehicle types not available for this service.</p>
+                <p className="text-xs text-gray-400">
+                  Leave the rate empty for a vehicle you do not run — it is then never used to price a trip, and the next vehicle up takes the group. Capacity is yours to set: if you carry couples in a minivan rather than a sedan, start the minivan at 1.
+                </p>
               </div>
 
               {/* Validity & Notes */}

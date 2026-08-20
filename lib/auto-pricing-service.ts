@@ -303,17 +303,21 @@ export interface CruisePackageInfo {
 // Generate pax counts 1-40 (supports solo travelers through large groups)
 export const PAX_COUNTS = Array.from({ length: 40 }, (_, i) => i + 1)
 
-// Vehicle capacity tiers
-export const VEHICLE_CAPACITY = {
-  'Sedan': { min: 1, max: 2 },
-  'Minivan': { min: 3, max: 7 },
-  'Van': { min: 8, max: 14 },
-  'Minibus': { min: 15, max: 20 },
-  'Bus': { min: 21, max: 45 },
-  'Horse Carriage': { min: 1, max: 4 }  // Special for Edfu
-} as const
+// The vehicles this system knows how to name.
+//
+// CAPACITY IS NOT HERE. It belongs to the rate row — each transportation rate
+// carries its own `<tier>_capacity_min/max`, editable on the rates screen —
+// because the bands are the agency's own: one that never runs a sedan starts
+// its minivan at 1 pax. There used to be a capacity map at this spot claiming
+// Van 8-14 and Minibus 15-20, disagreeing with the defaults in
+// lib/transport-rate-utils.ts that actually select the vehicle. It selected
+// nothing and was believed by nobody, which is the worst state for a constant.
+export const VEHICLE_TYPES = [
+  'Sedan', 'Minivan', 'Van', 'Minibus', 'Bus',
+  'Horse Carriage',  // Special for Edfu
+] as const
 
-export type VehicleType = keyof typeof VEHICLE_CAPACITY
+export type VehicleType = (typeof VEHICLE_TYPES)[number]
 
 // Area to attractions mapping (for auto-detection)
 const AREA_ATTRACTIONS: Record<string, string[]> = {
@@ -361,7 +365,12 @@ const SPECIAL_VEHICLE_CITIES: Record<string, VehicleType> = {
 // ============================================
 
 /**
- * Get vehicle type based on pax count (including tour leader if applicable)
+ * A LABEL for a group size — not the vehicle selection rule.
+ *
+ * What actually gets booked comes from the rate row: getTransportRateForPax
+ * considers only vehicles this route has priced, within the capacity bands the
+ * operator set. This function knows neither, so it must never decide a price.
+ * It survives as the fallback text when a rate row has no vehicle_type.
  */
 export function getVehicleTypeByPax(totalPax: number, city?: string): VehicleType {
   // Check for special vehicle cities first
