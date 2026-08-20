@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
+import { usableRate } from '@/lib/pricing/usable-rate'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -135,8 +136,13 @@ async function selectVehicleFromB2CTable(numPax: number, tier: string = 'standar
 
   if (!selectedVehicle) return null
 
+  // A vehicle on file with no daily rate is not a €0 vehicle — it is a vehicle
+  // nobody has priced yet, and the caller must keep the cost it already had.
+  const rate = usableRate(selectedVehicle.daily_rate)
+  if (rate === null) return null
+
   return {
-    rate: selectedVehicle.daily_rate || 0,
+    rate,
     vehicle: selectedVehicle.vehicle_type || selectedVehicle.name || 'Vehicle',
     id: selectedVehicle.id
   }
@@ -160,17 +166,25 @@ async function selectGuideFromB2CTable(language: string = 'English', tier: strin
 
     if (!anyGuide || anyGuide.length === 0) return null
 
+    const anyRate = usableRate(anyGuide[0].daily_rate)
+    if (anyRate === null) return null
+
     return {
-      rate: anyGuide[0].daily_rate || 0,
+      rate: anyRate,
       name: anyGuide[0].name || 'Guide',
       id: anyGuide[0].id
     }
   }
 
-  let selectedGuide = guides.find((g: any) => g.tier === tier) || guides[0]
+  // Prefer a guide of the right tier who HAS a rate. Most of this table has no
+  // daily_rate at all, and picking the first name in the list handed the caller
+  // a zero that wiped the itinerary's own guide cost.
+  const priced = guides.filter((g: any) => usableRate(g.daily_rate) !== null)
+  if (priced.length === 0) return null
+  const selectedGuide = priced.find((g: any) => g.tier === tier) || priced[0]
 
   return {
-    rate: selectedGuide.daily_rate || 0,
+    rate: usableRate(selectedGuide.daily_rate)!,
     name: selectedGuide.name || 'Guide',
     id: selectedGuide.id
   }
@@ -188,8 +202,9 @@ async function getEntranceFee(attractionName: string, isEurPassport: boolean): P
 
   const fee = fees[0]
   const rate = isEurPassport
-    ? (fee.eur_rate || 0)
-    : (fee.non_eur_rate || fee.eur_rate || 0)
+    ? usableRate(fee.eur_rate)
+    : usableRate(fee.non_eur_rate) ?? usableRate(fee.eur_rate)
+  if (rate === null) return null
 
   return {
     rate,
@@ -213,9 +228,14 @@ async function getHotelRate(
     .order('created_at', { ascending: false })
     .limit(1)
 
-  if (!error && hotels && hotels.length > 0) {
-    const ppd = isEurPassport ? (hotels[0].pp_double_eur || 0) : (hotels[0].pp_double_non_eur || 0)
-    const singleSupp = isEurPassport ? (hotels[0].single_supp_eur || 0) : (hotels[0].single_supp_non_eur || 0)
+  const ppdOf = (row: any) =>
+    usableRate(isEurPassport ? row.pp_double_eur : row.pp_double_non_eur)
+
+  // A property row with no per-person rate falls through to the tier fallback
+  // below, and then to null — never out as a free room.
+  if (!error && hotels && hotels.length > 0 && ppdOf(hotels[0]) !== null) {
+    const ppd = ppdOf(hotels[0])!
+    const singleSupp = (isEurPassport ? hotels[0].single_supp_eur : hotels[0].single_supp_non_eur) || 0
     return {
       rate: ppd,
       singleRate: ppd + singleSupp,
@@ -243,9 +263,9 @@ async function getHotelRate(
       .order('created_at', { ascending: false })
       .limit(1)
 
-    if (fbHotels && fbHotels.length > 0) {
-      const ppd = isEurPassport ? (fbHotels[0].pp_double_eur || 0) : (fbHotels[0].pp_double_non_eur || 0)
-      const singleSupp = isEurPassport ? (fbHotels[0].single_supp_eur || 0) : (fbHotels[0].single_supp_non_eur || 0)
+    if (fbHotels && fbHotels.length > 0 && ppdOf(fbHotels[0]) !== null) {
+      const ppd = ppdOf(fbHotels[0])!
+      const singleSupp = (isEurPassport ? fbHotels[0].single_supp_eur : fbHotels[0].single_supp_non_eur) || 0
       console.warn(`⚠️ No ${tier} hotel for ${city} — using ${fbTier} tier: ${fbHotels[0].property_name}`)
       return {
         rate: ppd,
@@ -397,12 +417,18 @@ export async function POST(request: NextRequest) {
         const serviceType = svc.service_type || ''
         const serviceName = svc.service_name || ''
 
+        // Every branch below re-prices a line the ITINERARY already priced.
+        // The invariant: a lookup may only override that price when it comes
+        // back with a rate somebody can charge. A half-filled rate table used
+        // to overwrite a real cost with zero and the line silently became free.
+        //
         // Try B2B-specific pricing for activities/entrance fees
         if (serviceType === 'entrance' || serviceType === 'activity') {
           // Check B2B pricing rules first (tiered pricing like felucca)
           const b2bRule = await getB2BPricingRule(serviceName)
-          if (b2bRule) {
-            const priceResult = applyB2BPricingRule(b2bRule, numPax)
+          const ruleResult = b2bRule ? applyB2BPricingRule(b2bRule, numPax) : null
+          if (ruleResult && usableRate(ruleResult.lineTotal) !== null) {
+            const priceResult = ruleResult
             unitCost = priceResult.unitCost
             lineTotal = priceResult.lineTotal
             quantityMode = priceResult.quantityMode
