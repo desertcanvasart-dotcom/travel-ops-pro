@@ -17,7 +17,7 @@ import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 // CONSTANTS
 // ============================================
 
-const ROLE_TYPES = ['guide', 'driver', 'boat_crew', 'porter', 'hotel_staff', 'restaurant', 'other']
+const ROLE_TYPES = ['guide', 'driver', 'boat_crew', 'porter', 'hotel_assistant', 'restaurant', 'other']
 const CONTEXTS = ['day_tour', 'half_day_tour', 'cruise', 'transfer', 'airport', 'hotel', 'restaurant', 'felucca', 'motorboat']
 const RATE_UNITS = ['per_day', 'per_service', 'per_cruise', 'per_night', 'per_person']
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
@@ -494,7 +494,7 @@ export default function TippingPage() {
                         rate.role_type === 'driver' ? 'bg-orange-100 text-orange-800' :
                         rate.role_type === 'boat_crew' ? 'bg-cyan-100 text-cyan-800' :
                         rate.role_type === 'porter' ? 'bg-purple-100 text-purple-800' :
-                        rate.role_type === 'hotel_staff' ? 'bg-pink-100 text-pink-800' :
+                        rate.role_type === 'hotel_assistant' ? 'bg-pink-100 text-pink-800' :
                         rate.role_type === 'restaurant' ? 'bg-amber-100 text-amber-800' :
                         'bg-gray-100 text-gray-700'
                       }`}>

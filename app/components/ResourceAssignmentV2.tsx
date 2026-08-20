@@ -385,7 +385,7 @@ export default function ResourceAssignmentV2({
         })
       
       case 'airport':
-        // For airport staff - filter by airport_location
+        // For airport assistants - filter by airport_location
         if (modalAirportFilter === 'all') return resources
         return resources.filter(r => {
           const location = r.airport_location?.toLowerCase() || ''
@@ -393,7 +393,7 @@ export default function ResourceAssignmentV2({
         })
       
       case 'hotelCity':
-        // For hotel staff - filter by hotel.city
+        // For hotel assistants - filter by hotel.city
         if (modalCityFilter === 'all') return resources
         return resources.filter(r => {
           const hotelCity = r.hotel?.city?.toLowerCase() || ''
@@ -989,7 +989,7 @@ export default function ResourceAssignmentV2({
                 </div>
               )}
 
-              {/* Airport Location Filter - for airport staff */}
+              {/* Airport Location Filter - for airport assistants */}
               {activeTypeConfig.filterType === 'airport' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1018,7 +1018,7 @@ export default function ResourceAssignmentV2({
                 </div>
               )}
 
-              {/* Hotel City Filter - for hotel staff */}
+              {/* Hotel City Filter - for hotel assistants */}
               {activeTypeConfig.filterType === 'hotelCity' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

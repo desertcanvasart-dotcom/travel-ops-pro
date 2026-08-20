@@ -8,7 +8,7 @@ const supabaseAdmin = createClient(
 
 // All valid supplier fields (including new ones from migration)
 const VALID_FIELDS = [
-  'name', 'type', 'contact_name', 'contact_email', 'contact_phone',
+  'name', 'type', 'types', 'contact_name', 'contact_email', 'contact_phone',
   'phone2', 'whatsapp', 'website', 'address', 'city', 'country',
   'default_commission_rate', 'commission_type', 'payment_terms',
   'bank_details', 'status', 'notes',
@@ -60,6 +60,13 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
+
+    // Same rule as create: the primary type is always one of the roles held.
+    if (Array.isArray(body.types) && body.types.length > 0) {
+      body.type = body.type && body.types.includes(body.type) ? body.type : body.types[0]
+    } else if (body.type) {
+      body.types = [body.type]
+    }
 
     // Filter to only valid fields to prevent database errors
     const updateData = filterValidFields(body)

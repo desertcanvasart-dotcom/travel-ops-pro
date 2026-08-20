@@ -228,8 +228,8 @@
     "restaurants": "レストラン",
     "transportation": "交通",
     "activities": "アクティビティ",
-    "airportServices": "空港サービス",
-    "hotelServices": "ホテルサービス",
+    "airportServices": "空港アシスタント",
+    "hotelServices": "ホテルアシスタント",
     "tipping": "チップ",
     "fixedCosts": "固定費用",
     "guides": "ガイド",
@@ -591,8 +591,8 @@
       "transportation": "交通費",
       "entrance": "入場料",
       "meal": "食事",
-      "airport_staff": "空港スタッフ",
-      "hotel_staff": "ホテルスタッフ",
+      "airport_staff": "空港アシスタント",
+      "hotel_staff": "ホテルアシスタント",
       "ground_handler": "グランドハンドラー",
       "tipping": "チップ",
       "permits": "許可証/許可",
@@ -607,8 +607,8 @@
       "hotel": "ホテル",
       "restaurant": "レストラン",
       "transport_company": "運送会社",
-      "airport_staff": "空港スタッフ",
-      "hotel_staff": "ホテルスタッフ",
+      "airport_staff": "空港アシスタント",
+      "hotel_staff": "ホテルアシスタント",
       "ground_handler": "グランドハンドラー",
       "government": "政府/当局",
       "other": "その他"
@@ -3947,8 +3947,8 @@
       "cruises": "クルーズ料金が見つかりません",
       "sleepingTrains": "寝台列車料金が見つかりません",
       "trains": "電車料金が見つかりません",
-      "airportStaff": "空港スタッフ料金が見つかりません",
-      "hotelStaff": "ホテルスタッフ料金が見つかりません",
+      "airportStaff": "空港アシスタント料金が見つかりません",
+      "hotelStaff": "ホテルアシスタント料金が見つかりません",
       "tipping": "チップ料金が見つかりません"
     },
     "pagination": {
@@ -4951,7 +4951,7 @@
       }
     },
     "airportServices": {
-      "title": "空港サービス",
+      "title": "空港アシスタント",
       "loading": "空港サービス料金を読み込み中...",
       "ratesHub": "料金ハブ",
       "stats": {
@@ -5024,7 +5024,7 @@
       "searchPlaceholder": "空港サービスを検索..."
     },
     "hotelServices": {
-      "title": "ホテルサービス",
+      "title": "ホテルアシスタント",
       "loading": "ホテルサービス料金を読み込み中...",
       "ratesHub": "料金ハブ",
       "stats": {
@@ -5142,7 +5142,7 @@
         "driver": "ドライバー",
         "boat_crew": "船員",
         "porter": "ポーター",
-        "hotel_staff": "ホテルスタッフ",
+        "hotel_assistant": "ホテルアシスタント",
         "restaurant": "レストラン",
         "other": "その他"
       },
@@ -5389,8 +5389,8 @@
         "cruises": "クルーズ",
         "sleepTrain": "寝台列車",
         "trains": "列車",
-        "airport": "空港",
-        "hotelSvc": "ホテルサービス",
+        "airport": "空港アシスタント",
+        "hotelSvc": "ホテルアシスタント",
         "tips": "チップ",
         "seasons": "季節料金"
       },
@@ -5447,8 +5447,8 @@
         "cruises": "クルーズ料金が見つかりません",
         "sleepingTrains": "寝台列車料金が見つかりません",
         "trains": "列車料金が見つかりません",
-        "airportStaff": "空港スタッフ料金が見つかりません",
-        "hotelStaff": "ホテルスタッフ料金が見つかりません",
+        "airportStaff": "空港アシスタント料金が見つかりません",
+        "hotelStaff": "ホテルアシスタント料金が見つかりません",
         "tipping": "チップ料金が見つかりません"
       }
     },
@@ -5599,8 +5599,8 @@
         "transportation": "交通",
         "entrance": "入場料",
         "meal": "食事",
-        "airport_staff": "空港スタッフ",
-        "hotel_staff": "ホテルスタッフ",
+        "airport_staff": "空港アシスタント",
+        "hotel_staff": "ホテルアシスタント",
         "ground_handler": "グランドハンドラー",
         "tipping": "チップ",
         "permits": "許可証",
@@ -6377,8 +6377,8 @@
     "hotels": "ホテル",
     "restaurants": "レストラン",
     "nileCruises": "ナイルクルーズ",
-    "airportStaff": "空港スタッフ",
-    "hotelStaff": "ホテルスタッフ",
+    "airportStaff": "空港アシスタント",
+    "hotelStaff": "ホテルアシスタント",
     "schedulingConflictsDetected": "スケジュールの競合が検出されました",
     "isAlsoBookedFor": "は{itinerary}（{dates}）にも予約されています",
     "sendWhatsAppNotification": "WhatsApp通知を送信",

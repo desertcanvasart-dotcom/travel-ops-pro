@@ -43,13 +43,15 @@ export async function GET(request: NextRequest) {
       .select('*')
       .order('name', { ascending: true })
 
-    // Support comma-separated types (e.g., type=transport,local_operator,driver)
+    // Support comma-separated types (e.g., type=transport,local_operator,driver).
+    // Matched against `types`, the full set of roles a supplier fills — asking
+    // `type` alone would hide the driver who also meets clients at the airport.
     if (type) {
       const types = type.split(',').map(t => t.trim()).filter(Boolean)
       if (types.length === 1) {
-        query = query.eq('type', types[0])
+        query = query.contains('types', [types[0]])
       } else if (types.length > 1) {
-        query = query.in('type', types)
+        query = query.overlaps('types', types)
       }
     }
     
@@ -86,6 +88,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+
+    // `types` is the set, `type` the primary. A caller may send either; the
+    // column CHECK requires the primary to be one of the set.
+    if (Array.isArray(body.types) && body.types.length > 0) {
+      body.type = body.type && body.types.includes(body.type) ? body.type : body.types[0]
+    } else if (body.type) {
+      body.types = [body.type]
+    }
 
     if (!body.name || !body.type) {
       return NextResponse.json(

@@ -2358,7 +2358,7 @@ function ComposeModal({
                         <option value="hotel">🏨 Hotels</option>
                         <option value="guide">🧭 Tour Guides</option>
                         <option value="restaurant">🍽️ Restaurants</option>
-                        <option value="airport_staff">✈️ Airport Staff</option>
+                        <option value="airport_staff">✈️ Airport Assistant</option>
                       </select>
                     </div>
 

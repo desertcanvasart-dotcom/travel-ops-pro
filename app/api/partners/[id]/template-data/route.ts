@@ -118,7 +118,7 @@ export async function GET(
         
         partner = staff
         placeholderData = {
-          partner_type: 'Airport Staff',
+          partner_type: 'Airport Assistant',
           partner_name: staff.name || '',
           staff_name: staff.name || '',
           staff_role: staff.role || '',

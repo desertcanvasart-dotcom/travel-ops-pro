@@ -23,7 +23,7 @@ export default function ExpensesCommissionsPage() {
           <li>Click <strong>Add Expense</strong></li>
           <li>Fill in:
             <ul className="list-disc list-inside ml-6 mt-2 space-y-1 text-gray-600">
-              <li><strong>Category</strong> &mdash; Guide, Driver, Hotel, Transportation, Entrance Fees, Meals, Airport Staff, Permits, Fuel, Office, Marketing, Software, etc.</li>
+              <li><strong>Category</strong> &mdash; Guide, Driver, Hotel, Transportation, Entrance Fees, Meals, Airport Assistant, Permits, Fuel, Office, Marketing, Software, etc.</li>
               <li><strong>Description</strong> of the expense</li>
               <li><strong>Amount</strong> and <strong>currency</strong></li>
               <li><strong>Expense date</strong></li>

@@ -125,7 +125,7 @@ const CATEGORIES: DocCategory[] = [
     items: [
       { href: '/docs/tours-rates', icon: Globe, title: 'Tours & Rates', description: 'Pre-built tour templates and comprehensive rate management across 15 categories.' },
       { href: '/docs/content-library', icon: BookOpen, title: 'Content Library', description: 'Reusable attraction and activity descriptions with per-tier variations, AI prompts, and writing rules.' },
-      { href: '/docs/resources-documents', icon: FolderOpen, title: 'Resources & Documents', description: 'Manage guides, vehicles, hotels, restaurants, and airport staff. Generate invoices, contracts, vouchers, and receipts.' },
+      { href: '/docs/resources-documents', icon: FolderOpen, title: 'Resources & Documents', description: 'Manage guides, vehicles, hotels, restaurants, and airport assistants. Generate invoices, contracts, vouchers, and receipts.' },
     ],
   },
   {

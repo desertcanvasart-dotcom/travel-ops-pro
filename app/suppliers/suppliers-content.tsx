@@ -16,7 +16,11 @@ import {
 interface Supplier {
   id: string
   name: string
+  /** The primary role, shown on the badge. */
   type: string
+  /** Every role this supplier fills — a driver who also meets clients airside
+   *  carries both, and each picker finds them by the role it cares about. */
+  types?: string[] | null
   contact_name?: string
   contact_email?: string
   contact_phone?: string
@@ -301,7 +305,8 @@ export default function SuppliersContent() {
   // Filter and sort
   const filteredSuppliers = suppliers
     .filter(supplier => {
-      const matchesType = selectedType === 'all' || supplier.type === selectedType
+      const roles = supplier.types?.length ? supplier.types : [supplier.type]
+      const matchesType = selectedType === 'all' || roles.includes(selectedType)
       const matchesStatus = selectedStatus === 'all' || supplier.status === selectedStatus
       const matchesSearch = !searchQuery || 
         supplier.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -334,7 +339,11 @@ export default function SuppliersContent() {
   useEffect(() => { setCurrentPage(1) }, [searchQuery, selectedType, selectedStatus, itemsPerPage, showPropertiesOnly, showCompaniesOnly])
 
   const stats = suppliers.reduce((acc, s) => {
-    acc[s.type] = (acc[s.type] || 0) + 1
+    // Counted once per role: the totals on the chips answer "how many people
+    // do this?", which is the question the chip asks.
+    for (const role of (s.types?.length ? s.types : [s.type])) {
+      acc[role] = (acc[role] || 0) + 1
+    }
     acc.all = (acc.all || 0) + 1
     if (s.is_property) acc.properties = (acc.properties || 0) + 1
     return acc
@@ -503,10 +512,14 @@ export default function SuppliersContent() {
   }
 
   // Get form fields based on supplier type
-  const getFormFields = (type: string) => {
+  const getFormFields = (roles: string[]) => {
+    // A supplier who drives AND meets clients needs both sets of fields, so the
+    // extras are the union of every role's — de-duplicated by key, because two
+    // roles asking for Languages is still one Languages field.
+    const type = roles[0] || 'hotel'
     const baseFields = [
       { name: 'Supplier Name', key: 'name', type: 'text', required: true },
-      { name: 'Type', key: 'type', type: 'select', required: true, options: Object.keys(TYPE_CONFIG).filter(k => k !== 'other') },
+      { name: 'Type(s)', key: 'types', type: 'multiselect', required: true, options: Object.keys(TYPE_CONFIG).filter(k => k !== 'other'), hint: 'Pick every role this supplier fills — someone can drive transfers and meet clients at the airport.' },
     ]
     
     // Add hierarchical fields for supported types
@@ -576,7 +589,12 @@ export default function SuppliersContent() {
       ],
     }
 
-    const extraFields = typeFields[type] || []
+    const seen = new Set<string>()
+    const extraFields = roles.flatMap(role => typeFields[role] || []).filter(f => {
+      if (seen.has(f.key)) return false
+      seen.add(f.key)
+      return true
+    })
     
     return [
       ...baseFields, 
@@ -1080,7 +1098,9 @@ export default function SuppliersContent() {
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {getFormFields(formData.type || 'hotel').map((field) => (
+                {getFormFields(
+                  formData.types?.length ? formData.types : (formData.type ? [formData.type] : ['hotel'])
+                ).map((field) => (
                   <div key={field.key} className={field.type === 'textarea' || field.key === 'is_property' || field.key === 'parent_supplier_id' ? 'md:col-span-2' : ''}>
                     {field.type !== 'checkbox' && (
                       <label className="block text-sm font-medium text-gray-700 mb-1">

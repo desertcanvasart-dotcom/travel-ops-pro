@@ -12,7 +12,11 @@
 
 // ---- Types ----
 
-export type TipRoleType = 'guide' | 'driver' | 'boat_crew' | 'porter' | 'hotel_staff' | 'restaurant' | 'other'
+// 'hotel_assistant' was 'hotel_staff' until the vocabulary was unified: the
+// suppliers screen, the rate screens and the expense categories now all call
+// this person an assistant, and a tip role that said otherwise was the last
+// place the old word survived. tipping_rates was empty, so no data moved.
+export type TipRoleType = 'guide' | 'driver' | 'boat_crew' | 'porter' | 'hotel_assistant' | 'restaurant' | 'other'
 export type TipContext = 'day_tour' | 'half_day_tour' | 'cruise' | 'transfer' | 'airport' | 'hotel' | 'restaurant' | 'felucca' | 'motorboat'
 
 export interface ItemizedTipRate {
@@ -218,7 +222,7 @@ export function determineTipRolesForDay(ctx: DayTipContext): DayTipRole[] {
   // Hotel staff tip (when staying at a hotel tonight)
   if (ctx.hasHotelNight) {
     tips.push({
-      role: 'hotel_staff',
+      role: 'hotel_assistant',
       context: 'hotel',
       quantity: 1,
     })
@@ -243,7 +247,7 @@ const ROLE_DISPLAY_NAMES: Record<TipRoleType, string> = {
   driver: 'Driver Tip',
   porter: 'Porter Tip',
   boat_crew: 'Boat Crew Tip',
-  hotel_staff: 'Hotel Staff Tip',
+  hotel_assistant: 'Hotel Assistant Tip',
   restaurant: 'Restaurant Tip',
   other: 'Tips',
 }

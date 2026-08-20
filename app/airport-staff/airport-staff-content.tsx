@@ -95,7 +95,7 @@ export default function AirportStaffContent() {
       }
       setLoading(false)
     } catch (error) {
-      console.error('Error fetching airport staff:', error)
+      console.error('Error fetching airport assistant:', error)
       setLoading(false)
     }
   }
@@ -265,7 +265,7 @@ export default function AirportStaffContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading airport staff...</p>
+          <p className="text-sm text-gray-600">Loading airport assistant...</p>
         </div>
       </div>
     )
@@ -280,7 +280,7 @@ export default function AirportStaffContent() {
         <div className="container mx-auto px-4 lg:px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">Airport Staff</h1>
+              <h1 className="text-xl font-bold text-gray-900">Airport Assistant</h1>
               <div className="w-1.5 h-1.5 rounded-full bg-teal-600" />
             </div>
             <div className="flex items-center gap-2">
@@ -501,7 +501,7 @@ export default function AirportStaffContent() {
                   <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-3xl text-gray-400">✈️</span>
-                      <p className="text-sm font-medium">No airport staff found</p>
+                      <p className="text-sm font-medium">No airport assistant found</p>
                       <button
                         onClick={handleAddNew}
                         className="mt-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -523,7 +523,7 @@ export default function AirportStaffContent() {
           <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">
-                {editingStaff ? 'Edit Airport Staff' : 'Add New Airport Staff'}
+                {editingStaff ? 'Edit Airport Assistant' : 'Add New Airport Assistant'}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
