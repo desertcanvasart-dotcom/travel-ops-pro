@@ -761,6 +761,12 @@ export default function HotelsContent() {
     : '0'
 
   // Prevent hydration mismatch
+  // Hooks run before any early return: this page returns a spinner while it
+  // loads, and a hook called after that runs on the second render but not the
+  // first. React counts them and throws "Rendered more hooks than during the
+  // previous render" — the page died as soon as its data arrived.
+  const bulk = useBulkSelect()
+
   if (!mounted) {
     return null
   }
@@ -776,7 +782,6 @@ export default function HotelsContent() {
     )
   }
 
-  const bulk = useBulkSelect()
   const handleBulkDelete = async () => {
     await bulkDeleteByIds([...bulk.selected], id => `/api/rates/hotels/${id}`)
     bulk.clear()

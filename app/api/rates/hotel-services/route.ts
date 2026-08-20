@@ -36,6 +36,10 @@ export async function POST(request: NextRequest) {
       body.destination = null
     }
 
+    // An unpicked supplier arrives from the form as '' and the column is a
+    // uuid, which would fail the insert. Absent is null, not empty.
+    const payload = { ...body, supplier_id: body.supplier_id || null }
+
     // Check for existing rate with same natural key
     let existingQuery = supabase
       .from('hotel_staff_rates')
@@ -55,6 +59,13 @@ export async function POST(request: NextRequest) {
     } else {
       existingQuery = existingQuery.is('destination', null)
     }
+    // A rate belongs to a supplier: two companies may quote the same service,
+    // and a key that ignores the supplier makes the second overwrite the first.
+    if (payload.supplier_id) {
+      existingQuery = existingQuery.eq('supplier_id', payload.supplier_id)
+    } else {
+      existingQuery = existingQuery.is('supplier_id', null)
+    }
     const { data: existing } = await existingQuery.limit(1)
 
     let data, error
@@ -62,7 +73,7 @@ export async function POST(request: NextRequest) {
       // Update existing record
       const result = await supabase
         .from('hotel_staff_rates')
-        .update({ ...body, updated_at: new Date().toISOString() })
+        .update({ ...payload, updated_at: new Date().toISOString() })
         .eq('id', existing[0].id)
         .select()
         .single()
@@ -72,7 +83,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabase
         .from('hotel_staff_rates')
-        .insert([body])
+        .insert([payload])
         .select()
         .single()
       data = result.data

@@ -494,6 +494,12 @@ export default function FlightsContent() {
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`
   }
 
+  // Hooks run before any early return: this page returns a spinner while it
+  // loads, and a hook called after that runs on the second render but not the
+  // first. React counts them and throws "Rendered more hooks than during the
+  // previous render" — the page died as soon as its data arrived.
+  const bulk = useBulkSelect()
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -502,7 +508,6 @@ export default function FlightsContent() {
     )
   }
 
-  const bulk = useBulkSelect()
   const handleBulkDelete = async () => {
     await bulkDeleteByIds([...bulk.selected], id => `/api/rates/flights/${id}`)
     bulk.clear()

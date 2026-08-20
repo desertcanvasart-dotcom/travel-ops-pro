@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -33,6 +34,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 // ============================================
 
 interface AirportStaffRate {
+  supplier_id?: string | null
   id: string
   service_code: string
   airport_code: string
@@ -212,6 +214,7 @@ export default function AirportServicesPage() {
     rate_eur: 0,
     description: '',
     notes: '',
+    supplier_id: '',
     is_active: true
   })
 
@@ -267,6 +270,7 @@ export default function AirportServicesPage() {
       rate_eur: 0,
       description: '',
       notes: '',
+      supplier_id: '',
       is_active: true
     })
     setShowModal(true)
@@ -282,6 +286,7 @@ export default function AirportServicesPage() {
       rate_eur: rate.rate_eur,
       description: rate.description || '',
       notes: rate.notes || '',
+      supplier_id: rate.supplier_id || '',
       is_active: rate.is_active
     })
     setShowModal(true)
@@ -369,6 +374,12 @@ export default function AirportServicesPage() {
       : 0
   }
 
+  // Hooks run before any early return: this page returns a spinner while it
+  // loads, and a hook called after that runs on the second render but not the
+  // first. React counts them and throws "Rendered more hooks than during the
+  // previous render" — the page died as soon as its data arrived.
+  const bulk = useBulkSelect()
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -380,7 +391,6 @@ export default function AirportServicesPage() {
     )
   }
 
-  const bulk = useBulkSelect()
   const handleBulkDelete = async () => {
     await bulkDeleteByIds([...bulk.selected], id => `/api/rates/airport-services/${id}`)
     bulk.clear()
@@ -616,6 +626,12 @@ export default function AirportServicesPage() {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              <SupplierPicker
+                value={formData.supplier_id}
+                onChange={(supplier_id) => setFormData(prev => ({ ...prev, supplier_id }))}
+                preferredType="airport_assistant"
+                preferredLabel="Airport Assistants"
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.airport')} *</label>
