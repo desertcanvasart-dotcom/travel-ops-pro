@@ -1,10 +1,8 @@
-import { Suspense } from 'react'
-import AirportStaffContent from './airport-staff-content'
+import { redirect } from 'next/navigation'
 
+// The airport-staff roster is gone: an assistant is a supplier, even when they
+// are on the company payroll, because the company buys the service either way.
+// Anyone with the old link lands on the same people, filed where they now live.
 export default function AirportStaffPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>}>
-      <AirportStaffContent />
-    </Suspense>
-  )
+  redirect('/suppliers?type=airport_assistant')
 }
