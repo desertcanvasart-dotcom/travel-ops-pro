@@ -59,8 +59,15 @@ async function renderOnce(html: string, page: DocumentPage): Promise<Buffer> {
     // the settled-fonts signal that actually matters is document.fonts.ready
     // (the pattern proven by the b2b quote PDF route). A PDF captured before
     // it resolves silently ships with fallback metrics.
+    // NOT networkidle0. Templates inline everything — the logo is a data URI
+    // and the Japanese @font-face is ~7MB of base64 — so there is no network to
+    // go idle, and waiting for it buys nothing. In the production container it
+    // cost everything: setContent timed out on every 日程表, twice per request,
+    // while the identical code rendered in 5-8s locally. The settled signal
+    // that actually matters is document.fonts.ready; a PDF captured before it
+    // resolves ships with fallback metrics.
     await tab.setContent(html, {
-      waitUntil: ['domcontentloaded', 'networkidle0'],
+      waitUntil: 'domcontentloaded',
       timeout: SETTLE_TIMEOUT_MS,
     })
     await tab.evaluateHandle('document.fonts.ready')
