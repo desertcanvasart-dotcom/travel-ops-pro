@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT } from '@/lib/auto-pricing-service'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -513,6 +514,7 @@ export async function POST(request: NextRequest) {
       if (usePassengerBreakdown && (effectiveNumChildren > 0 || effectiveNumInfants > 0)) {
         console.log('🧒 Using age-based pricing with child/infant discounts')
         autoPriceResult = await calculatePricingWithPassengerBreakdown({
+      orgId: await getCurrentOrgId() ?? undefined,
           templateId,
           tier: effectiveTier,
           numPax: effectiveTotalPax,
@@ -532,6 +534,7 @@ export async function POST(request: NextRequest) {
       } else {
         // Call standard auto-pricing service
         autoPriceResult = await calculateAutoPricing({
+      orgId: await getCurrentOrgId() ?? undefined,
           templateId,
           tier: effectiveTier,
           numPax: effectiveTotalPax,

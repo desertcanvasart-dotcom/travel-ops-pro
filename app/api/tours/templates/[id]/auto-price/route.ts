@@ -16,6 +16,7 @@ import {
   getTemplatePriceRange,
   ServiceTier 
 } from '@/lib/auto-pricing-service'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 export async function POST(
   request: NextRequest,
@@ -93,6 +94,7 @@ export async function POST(
 
     // Single tier pricing
     const result = await calculateAutoPricing({
+      orgId: await getCurrentOrgId() ?? undefined,
       templateId,
       tier: tier as ServiceTier,
       numPax: num_pax,
@@ -142,6 +144,7 @@ export async function GET(
 
     // Quick pricing with defaults
     const result = await calculateAutoPricing({
+      orgId: await getCurrentOrgId() ?? undefined,
       templateId,
       tier,
       numPax,

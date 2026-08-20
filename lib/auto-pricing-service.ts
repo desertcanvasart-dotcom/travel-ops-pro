@@ -26,6 +26,14 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { roundToCurrency } from '@/lib/currency-totals'
+import {
+  seasonForDate,
+  computeUplift,
+  PASS_THROUGH_SERVICE_TYPES,
+  type SeasonWindow,
+  type UpliftBreakdown,
+} from '@/lib/pricing/season-uplift'
 import { debugLog } from '@/lib/debug-log'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
@@ -135,6 +143,9 @@ export interface DayPricingParams {
   isEurPassport: boolean
   language?: string
   travelDate?: string
+  /** Whose season calendar to read. Omitted, no premium is applied — the engine
+   *  is otherwise org-blind and must not guess whose dates these are. */
+  orgId?: string
   marginPercent?: number
 }
 
@@ -2692,6 +2703,9 @@ export interface PricingParams {
   isEurPassport: boolean
   language?: string
   travelDate?: string
+  /** Whose season calendar to read. Omitted, no premium is applied — the engine
+   *  is otherwise org-blind and must not guess whose dates these are. */
+  orgId?: string
   marginPercent?: number
   mealPlan?: 'none' | 'breakfast_only' | 'lunch_only' | 'dinner_only' | 'half_board' | 'full_board'
   includeAccommodation?: boolean
@@ -2769,6 +2783,12 @@ export interface PricingResult {
   tourLeaderCost: number
   marginPercent: number
   marginAmount: number
+  /** Cost + margin, BEFORE the operator's seasonal premium. Kept so a quote can
+   *  show what the trip costs on an ordinary date beside what this date costs. */
+  baseSellingPrice: number
+  /** Null on an ordinary departure. Named rather than folded into the total, so
+   *  a customer reading a quote sees WHY the number is bigger. */
+  seasonUplift: UpliftBreakdown | null
   sellingPrice: number
   pricePerPerson: number
   currency: string
@@ -2790,6 +2810,42 @@ export interface PricingResult {
 /**
  * BACKWARD COMPATIBLE FUNCTION
  */
+/**
+ * The operator's season windows that CONTAIN this departure date.
+ *
+ * Filtered in the query rather than in memory: the answer is at most a couple of
+ * rows, and a pricing call should not drag a year of calendar across the wire.
+ * An org without a calendar simply gets none, and the premium is zero.
+ */
+async function loadSeasonWindows(
+  orgId: string | undefined,
+  travelDate: string | undefined
+): Promise<SeasonWindow[]> {
+  if (!orgId || !travelDate) return []
+  const on = travelDate.slice(0, 10)
+
+  const { data, error } = await supabaseAdmin
+    .from('pricing_season_dates')
+    .select('season_id, start_date, end_date, pricing_seasons!inner(name, uplift_percent, is_active)')
+    .eq('org_id', orgId)
+    .lte('start_date', on)
+    .gte('end_date', on)
+    .eq('pricing_seasons.is_active', true)
+
+  if (error || !data) return []
+
+  return data.map(row => {
+    const season = row.pricing_seasons as unknown as { name: string; uplift_percent: number }
+    return {
+      seasonId: String(row.season_id),
+      name: String(season?.name ?? ''),
+      upliftPercent: Number(season?.uplift_percent) || 0,
+      startDate: String(row.start_date),
+      endDate: String(row.end_date),
+    }
+  })
+}
+
 export async function calculateAutoPricing(params: PricingParams): Promise<PricingResult> {
   const {
     templateId,
@@ -2831,6 +2887,8 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
       tourLeaderCost: 0,
       marginPercent,
       marginAmount: 0,
+      baseSellingPrice: 0,
+      seasonUplift: null,
       sellingPrice: 0,
       pricePerPerson: 0,
       currency: 'EUR',
@@ -2895,6 +2953,30 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     }
   }
 
+  // ---------- the operator's seasonal premium ----------
+  // AFTER margin, on the selling price, and never on a fixed pass-through. The
+  // supplier's own seasonality is already inside totalCost — it moved when the
+  // hotel's high-season rate was picked up — so applying this to cost as well
+  // would charge the customer twice for the same season.
+  const seasonWindows = await loadSeasonWindows(params.orgId, params.travelDate)
+  const season = seasonForDate(seasonWindows, params.travelDate ?? null)
+
+  // Tips and entrance fees are somebody else's fixed price. They carry margin
+  // like everything else, so what leaves the base is their share of the SELLING
+  // price, not their cost.
+  const passThroughCost = dayResult.services
+    .filter(s => PASS_THROUGH_SERVICE_TYPES.has(s.serviceType))
+    .reduce((sum, s) => sum + (Number(s.lineTotal) || 0), 0)
+  const passThroughSelling = passThroughCost * (1 + (dayResult.marginPercent || 0) / 100)
+
+  const uplift = computeUplift({
+    sellingPrice: pricing.sellingPrice,
+    passThroughTotal: passThroughSelling,
+    season,
+  })
+  const upliftAmount = roundToCurrency(uplift.amount, dayResult.currency)
+  const sellingWithSeason = roundToCurrency(pricing.sellingPrice + upliftAmount, dayResult.currency)
+
   return {
     success: true,
     templateId: dayResult.templateId,
@@ -2919,8 +3001,12 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     tourLeaderCost: tourLeaderIncluded ? paxResult.withLeader.tourLeaderCost : 0,
     marginPercent: dayResult.marginPercent,
     marginAmount: pricing.marginAmount,
-    sellingPrice: pricing.sellingPrice,
-    pricePerPerson: pricing.pricePerPerson,
+    baseSellingPrice: pricing.sellingPrice,
+    seasonUplift: season ? { ...uplift, amount: upliftAmount } : null,
+    sellingPrice: sellingWithSeason,
+    pricePerPerson: numPax > 0
+      ? roundToCurrency(sellingWithSeason / numPax, dayResult.currency)
+      : pricing.pricePerPerson,
     currency: dayResult.currency,
     ratesUsed,
     warnings: dayResult.warnings,
@@ -3223,6 +3309,8 @@ export async function calculatePricingWithPassengerBreakdown(
       tourLeaderCost: 0,
       marginPercent,
       marginAmount: 0,
+      baseSellingPrice: 0,
+      seasonUplift: null,
       sellingPrice: 0,
       pricePerPerson: 0,
       currency: 'EUR',
@@ -3292,6 +3380,23 @@ export async function calculatePricingWithPassengerBreakdown(
   debugLog(`   Infant rate: FREE`)
   debugLog(`   Selling price: €${ageBasedPricing.sellingPrice}`)
 
+  // Same premium, same rule, on the age-broken-down path — a family quote and a
+  // headcount quote for the same departure must not disagree about what Golden
+  // Week costs.
+  const seasonWindows = await loadSeasonWindows(params.orgId, params.travelDate)
+  const season = seasonForDate(seasonWindows, params.travelDate ?? null)
+  const passThroughCost = dayResult.services
+    .filter(s => PASS_THROUGH_SERVICE_TYPES.has(s.serviceType))
+    .reduce((sum, s) => sum + (Number(s.lineTotal) || 0), 0)
+  const passThroughSelling = passThroughCost * (1 + (marginPercent || 0) / 100)
+  const uplift = computeUplift({
+    sellingPrice: composed.sellingPrice,
+    passThroughTotal: passThroughSelling,
+    season,
+  })
+  const upliftAmount = roundToCurrency(uplift.amount, dayResult.currency)
+  const sellingWithSeason = roundToCurrency(composed.sellingPrice + upliftAmount, dayResult.currency)
+
   return {
     success: true,
     templateId: dayResult.templateId,
@@ -3309,8 +3414,15 @@ export async function calculatePricingWithPassengerBreakdown(
     tourLeaderCost: Math.round(tourLeaderCost * 100) / 100,
     marginPercent,
     marginAmount: Math.round(composed.marginAmount * 100) / 100,
-    sellingPrice: Math.round(composed.sellingPrice * 100) / 100,
-    pricePerPerson: Math.round(pricePerPerson * 100) / 100,
+    baseSellingPrice: Math.round(composed.sellingPrice * 100) / 100,
+    seasonUplift: season ? { ...uplift, amount: upliftAmount } : null,
+    sellingPrice: sellingWithSeason,
+    // Recomputed from the price that includes the premium: leaving the base
+    // figure here would show a per-person number that does not multiply back to
+    // the total the customer is quoted.
+    pricePerPerson: payingPassengers > 0
+      ? roundToCurrency(sellingWithSeason / payingPassengers, dayResult.currency)
+      : Math.round(pricePerPerson * 100) / 100,
     currency: 'EUR',
     ratesUsed,
     warnings: dayResult.warnings,
