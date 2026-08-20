@@ -35,6 +35,7 @@ import {
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
+import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
 
 export const dynamic = 'force-dynamic'
@@ -62,7 +63,12 @@ interface Operator {
   tagline: string | null
 }
 
-async function resolve(token: string): Promise<{ booking: PortalBooking; operator: Operator } | null> {
+async function resolve(token: string): Promise<{
+  booking: PortalBooking
+  operator: Operator
+  insuranceBands: PremiumBand[]
+  tripDays: number | null
+} | null> {
   if (!isValidPortalToken(token)) return null
   const supabase = admin()
 
@@ -134,6 +140,36 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
     }
   }
 
+  // The 掛金表 for the chooser. Sent to the browser because the premium depends
+  // on the traveller's own age, which is being typed on that screen — computing
+  // it here would mean a round trip per keystroke. These are published rates,
+  // not anybody's private data.
+  //
+  // The newest rate year the operator has loaded wins. A missing table is not
+  // an error: the plan chooser simply shows no prices, which is what the paper
+  // form does today.
+  let insuranceBands: PremiumBand[] = []
+  const { data: premiumRows } = await supabase
+    .from('insurance_premiums')
+    .select('id, rate_year, max_days, band_label, premium_jpy, max_age, insurance_plans!inner(plan_code)')
+    .eq('org_id', link!.org_id)
+    .order('rate_year', { ascending: false })
+
+  if (premiumRows?.length) {
+    const newest = Math.max(...premiumRows.map(r => Number(r.rate_year) || 0))
+    insuranceBands = premiumRows
+      .filter(r => Number(r.rate_year) === newest)
+      .map(r => ({
+        id: String(r.id),
+        planCode: String((r.insurance_plans as unknown as { plan_code: string })?.plan_code ?? ''),
+        maxDays: Number(r.max_days),
+        bandLabel: String(r.band_label),
+        premiumJpy: Number(r.premium_jpy),
+        maxAge: r.max_age == null ? null : Number(r.max_age),
+      }))
+      .filter(b => b.planCode)
+  }
+
   const { data: org } = await supabase
     .from('organizations')
     .select('name, primary_color, contact_email, company_phone, logo_url, company_address, tagline')
@@ -152,6 +188,8 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
     .then(undefined, () => {})
 
   return {
+    insuranceBands,
+    tripDays: tripDays(booking.start_date, booking.end_date),
     booking: toPortalBooking({
       booking,
       passengers: passengers ?? [],
@@ -182,7 +220,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const resolved = await resolve(token)
   if (!resolved) notFound()
 
-  const { booking, operator } = resolved
+  const { booking, operator, insuranceBands, tripDays: days } = resolved
 
   // CONFIRMATION GATE: the link alone shows nothing. One fact the traveller
   // knows (booking number or the lead family name) sets the cookie; until
@@ -308,6 +346,8 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
             index={i}
             departureDate={booking.startDate}
             locked={booking.detailsLocked}
+            insuranceBands={insuranceBands}
+            tripDays={days}
           />
         ))}
       </section>

@@ -85,6 +85,26 @@ const CSS = `
 .radios{display:flex;flex-wrap:wrap;gap:16px;margin:6px 0 12px;font-size:14px}
 .radios label{display:flex;align-items:center;gap:6px;cursor:pointer}
 
+.paxbody h5{font-size:13px;margin:16px 0 6px;color:var(--soft);font-weight:700}
+.ins{margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:8px;background:#fafbf9}
+.ins h4{margin-top:0}
+.tell{margin:10px 0}
+.tell .q{font-size:14px;margin:0 0 2px;font-weight:600}
+.plans{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0 12px}
+@media(max-width:560px){.plans{grid-template-columns:1fr 1fr}}
+.plan{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;cursor:pointer;
+  border:1px solid var(--line);border-radius:7px;background:#fff;text-align:center}
+.plan.on{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand) inset}
+.plan.off{opacity:.5;cursor:not-allowed}
+.plan b{font-size:15px}
+.plan .amt{font-size:14px;font-weight:700}
+.plan .band{font-size:11px;color:var(--soft)}
+.plan .why{font-size:10px;color:var(--soft);line-height:1.3}
+/* NOT .total — the payment block already owns .money .total, and a bare
+   .total rule here restyled the ご旅行代金 row. */
+.instotal{font-size:14px;margin:4px 0 0}
+.instotal b{font-size:16px}
+.instotal em{font-style:normal;font-size:12px;color:var(--soft);margin-left:8px}
 .issues{margin:14px 0 0;padding:12px 14px 12px 30px;border-radius:6px;background:#fdf6f5;
   border:1px solid #f0d8d5;font-size:13px}
 .issues li{margin:3px 0}
@@ -125,6 +145,8 @@ const CSS = `
     --err:#f2b8b5;--warn:#d6ac58;--ok:#8fb795}
   .money .total,.money .due{background:#191d19}
   .f input,.f select{background:#141714;color:var(--ink)}
+  .ins{background:#131613}
+  .plan{background:#141714}
   .issues{background:#241a19;border-color:#3a2422}
   .actions .ghost{background:#1b1f1b}
   .locked{background:#1b1f1b}

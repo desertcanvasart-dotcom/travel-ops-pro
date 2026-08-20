@@ -121,6 +121,19 @@ export interface PortalTraveller {
 
   insuranceRequested: boolean | null
   insurancePlanCode: string | null
+  insuranceApplicationDate: string | null
+  insurancePurpose: string | null
+  insurancePurposeOther: string | null
+  insuranceHazardous: boolean | null
+  insuranceHazardousDetail: string | null
+  insuranceUnderTreatment: boolean | null
+  insuranceTreatmentDetail: string | null
+  insuranceDisability: boolean | null
+  insuranceDisabilityDetail: string | null
+  insuranceOtherPolicy: boolean | null
+  insuranceOtherPolicyKinds: string[]
+  insuranceOtherPolicyInsurer: string | null
+  insuranceOtherPolicyDeathBenefit: number | null
   specialRequests: string | null
 }
 
@@ -216,6 +229,10 @@ export function toPortalBooking(input: {
   }
 }
 
+/** A 告知事項 answer is yes, no, or NOT YET ANSWERED — and the third must not
+ *  collapse into "no", or an unfilled form reads as a clean declaration. */
+const tri = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null)
+
 function toPortalTraveller(p: Record<string, unknown>): PortalTraveller {
   return {
     id: String(p.id ?? ''),
@@ -261,6 +278,21 @@ function toPortalTraveller(p: Record<string, unknown>): PortalTraveller {
 
     insuranceRequested: typeof p.insurance_requested === 'boolean' ? p.insurance_requested : null,
     insurancePlanCode: str(p.insurance_plan_code),
+    insuranceApplicationDate: str(p.insurance_application_date),
+    insurancePurpose: str(p.insurance_purpose),
+    insurancePurposeOther: str(p.insurance_purpose_other),
+    insuranceHazardous: tri(p.insurance_hazardous),
+    insuranceHazardousDetail: str(p.insurance_hazardous_detail),
+    insuranceUnderTreatment: tri(p.insurance_under_treatment),
+    insuranceTreatmentDetail: str(p.insurance_treatment_detail),
+    insuranceDisability: tri(p.insurance_disability),
+    insuranceDisabilityDetail: str(p.insurance_disability_detail),
+    insuranceOtherPolicy: tri(p.insurance_other_policy),
+    insuranceOtherPolicyKinds: Array.isArray(p.insurance_other_policy_kinds)
+      ? p.insurance_other_policy_kinds.filter((k): k is string => typeof k === 'string')
+      : [],
+    insuranceOtherPolicyInsurer: str(p.insurance_other_policy_insurer),
+    insuranceOtherPolicyDeathBenefit: num(p.insurance_other_policy_death_benefit),
     specialRequests: str(p.special_requests),
   }
 }
@@ -299,6 +331,21 @@ export const TRAVELLER_WRITABLE_FIELDS = [
   'emergency_contact_relationship',
   'insurance_requested',
   'insurance_plan_code',
+  'insurance_application_date',
+  // 告知事項. The insurer requires these with the application, and two of them
+  // are health facts — see migrations/20260820_travel_insurance_plans.sql.
+  'insurance_purpose',
+  'insurance_purpose_other',
+  'insurance_hazardous',
+  'insurance_hazardous_detail',
+  'insurance_under_treatment',
+  'insurance_treatment_detail',
+  'insurance_disability',
+  'insurance_disability_detail',
+  'insurance_other_policy',
+  'insurance_other_policy_kinds',
+  'insurance_other_policy_insurer',
+  'insurance_other_policy_death_benefit',
   'special_requests',
 ] as const
 
