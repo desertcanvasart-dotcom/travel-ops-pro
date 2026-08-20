@@ -32,6 +32,7 @@ import {
   type PortalDocument,
   portalVerifyCookieName,
   isPortalVerified,
+  isCustomerFacingInvoice,
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
@@ -115,12 +116,17 @@ async function resolve(token: string): Promise<{ booking: PortalBooking; operato
   if (booking.itinerary_id) {
     const { data: invoices } = await supabase
       .from('invoices')
-      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency')
+      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency, status')
       .eq('itinerary_id', booking.itinerary_id)
       .order('created_at', { ascending: true })
 
     for (const inv of invoices ?? []) {
-      // A draft is not something to hand a customer — it has not been sent.
+      // A draft is not something to hand a customer — it has not been sent —
+      // and neither is a cancelled one. An ALLOW-list rather than a deny-list:
+      // a status nobody has thought about yet must not reach the traveller by
+      // default. Invoices are created as 'draft', so this is the common case,
+      // not an edge one.
+      if (!isCustomerFacingInvoice(inv.status)) continue
       documents.push({
         key: `invoice:${inv.id}`,
         title:

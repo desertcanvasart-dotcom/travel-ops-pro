@@ -157,12 +157,12 @@ export default function TravellerForm({ token, traveller, index, departureDate, 
             <h4>お名前</h4>
             <p className="hint">パスポートと同じローマ字でご記入ください。</p>
             <div className="g2">
-              <Field label="ローマ字（姓）" value={form.last_name} onChange={set('last_name')} issue={errorFor('last_name')} placeholder="NAKAJIMA" />
-              <Field label="ローマ字（名）" value={form.first_name} onChange={set('first_name')} issue={errorFor('first_name')} placeholder="SOTOO" />
-              <Field label="漢字（姓）" value={form.family_name_kanji} onChange={set('family_name_kanji')} issue={errorFor('family_name_kanji')} placeholder="中嶋" />
-              <Field label="漢字（名）" value={form.given_name_kanji} onChange={set('given_name_kanji')} placeholder="宗生" />
-              <Field label="フリガナ（姓）" value={form.family_name_kana} onChange={set('family_name_kana')} issue={errorFor('family_name_kana')} placeholder="ナカジマ" />
-              <Field label="フリガナ（名）" value={form.given_name_kana} onChange={set('given_name_kana')} issue={errorFor('given_name_kana')} placeholder="ソトオ" />
+              <Field label="ローマ字（姓）" value={form.last_name} onChange={set('last_name')} issue={errorFor('last_name')} placeholder="YAMADA" />
+              <Field label="ローマ字（名）" value={form.first_name} onChange={set('first_name')} issue={errorFor('first_name')} placeholder="TARO" />
+              <Field label="漢字（姓）" value={form.family_name_kanji} onChange={set('family_name_kanji')} issue={errorFor('family_name_kanji')} placeholder="山田" />
+              <Field label="漢字（名）" value={form.given_name_kanji} onChange={set('given_name_kanji')} placeholder="太郎" />
+              <Field label="フリガナ（姓）" value={form.family_name_kana} onChange={set('family_name_kana')} issue={errorFor('family_name_kana')} placeholder="ヤマダ" />
+              <Field label="フリガナ（名）" value={form.given_name_kana} onChange={set('given_name_kana')} issue={errorFor('given_name_kana')} placeholder="タロウ" />
             </div>
 
             <h4>ご本人様情報</h4>

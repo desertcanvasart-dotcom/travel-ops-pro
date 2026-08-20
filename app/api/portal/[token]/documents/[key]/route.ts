@@ -12,7 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { isValidPortalToken, portalLinkState, portalVerifyCookieName, isPortalVerified } from '@/lib/booking-portal'
+import { isValidPortalToken, portalLinkState, portalVerifyCookieName, isPortalVerified, isCustomerFacingInvoice } from '@/lib/booking-portal'
 import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
@@ -77,6 +77,10 @@ export async function GET(
     .maybeSingle()
 
   if (!invoice) return notFound()
+
+  // The page stopped listing drafts and cancellations; this route has to agree,
+  // or an old URL (or a guessed id inside this trip) still serves one.
+  if (!isCustomerFacingInvoice(invoice.status)) return notFound()
 
   const { data: org } = await supabase
     .from('organizations')
