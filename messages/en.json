@@ -4642,7 +4642,7 @@
       "howItWorksTitle": "How the premium is charged",
       "howItWorksDeparture": "The departure date decides it. A trip that runs into a season without departing in it is priced as an ordinary departure.",
       "howItWorksOverlap": "Where two seasons cover the same day, the higher premium applies — they are never added together.",
-      "howItWorksPassThrough": "Tips and entrance fees are left out: a fixed price somebody else sets is passed through, not marked up.",
+      "howItWorksPassThrough": "It applies to the whole tour price — every service, tips and entrance fees included. Airport tax, visas and insurance are invoice lines rather than tour services, so they are untouched.",
       "deleteSeasonConfirm": "Delete “{name}” and its dates? Prices already quoted are unaffected.",
       "deleteDatesConfirm": "Delete these dates?",
       "seasonSaved": "Season saved",
@@ -6033,7 +6033,8 @@
     "convertFailed": "Failed to convert quote. Please try again.",
     "quoteConverted": "Quote Converted",
     "convertedDescription": "This quote has been converted to an itinerary. Review and confirm the itinerary to create a booking.",
-    "viewItinerary": "View Itinerary"
+    "viewItinerary": "View Itinerary",
+    "seasonPremium": "{season} premium ({percent}%)"
   },
   "b2bPricingRules": {
     "title": "B2B Pricing Rules",
@@ -6296,7 +6297,7 @@
     "resetChanges": "Reset",
     "failedToSaveItinerary": "Failed to save itinerary changes",
     "seasonPremium": "{season} premium +{percent}%",
-    "seasonPremiumNote": "€{amount} on €{base}. On an ordinary date this trip sells for €{base_price}. Tips and entrance fees are excluded.",
+    "seasonPremiumNote": "€{amount} on €{base}. On an ordinary date this trip sells for €{base_price}.",
     "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {

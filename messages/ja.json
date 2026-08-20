@@ -5476,7 +5476,7 @@
       "howItWorksTitle": "割増の計算方法",
       "howItWorksDeparture": "判定は出発日です。旅行期間が繁忙期に重なっても、出発日が期間外であれば通常料金です。",
       "howItWorksOverlap": "同じ日に複数のシーズンが重なる場合は、高い方の割増率だけを適用します（合算しません）。",
-      "howItWorksPassThrough": "チップと入場料は対象外です。他者が決めた定額は、そのまま実費としてお預かりします。",
+      "howItWorksPassThrough": "割増はツアー代金の全額に適用されます（チップ・入場料を含む）。空港税・ビザ・保険は請求書の別項目のため対象外です。",
       "deleteSeasonConfirm": "「{name}」と登録された日程を削除しますか？作成済みの見積金額は変わりません。",
       "deleteDatesConfirm": "この日程を削除しますか？",
       "seasonSaved": "保存しました",
@@ -6619,7 +6619,8 @@
     "convertFailed": "見積もりの変換に失敗しました。もう一度お試しください。",
     "quoteConverted": "見積もり変換済み",
     "convertedDescription": "この見積もりは旅程に変換されました。旅程を確認して予約を作成してください。",
-    "viewItinerary": "旅程を表示"
+    "viewItinerary": "旅程を表示",
+    "seasonPremium": "{season}割増（{percent}%）"
   },
   "b2bPricingRules": {
     "title": "B2B料金ルール",
@@ -6882,7 +6883,7 @@
     "resetChanges": "リセット",
     "failedToSaveItinerary": "旅程の保存に失敗しました",
     "seasonPremium": "{season}割増 +{percent}%",
-    "seasonPremiumNote": "€{base}に対して€{amount}。通常日程であれば€{base_price}です。チップと入場料は対象外です。",
+    "seasonPremiumNote": "€{base}に対して€{amount}。通常日程であれば€{base_price}です。",
     "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {

@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
-import { computeUplift, seasonForDate, PASS_THROUGH_SERVICE_TYPES } from '@/lib/pricing/season-uplift'
+import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // ============================================
@@ -945,16 +945,7 @@ export async function POST(request: NextRequest) {
       await loadSeasonWindows(await getCurrentOrgId() ?? undefined, travel_date),
       travel_date
     )
-    // Tips and entrance fees are passed through, so what leaves the premium base
-    // is their share of the SELLING price — the same rule the engine applies.
-    const passThroughCost = calculatedServices
-      .filter(svc => PASS_THROUGH_SERVICE_TYPES.has(String(svc.service_category || '').toLowerCase()))
-      .reduce((sum, svc) => sum + svc.line_total, 0)
-    const uplift = computeUplift({
-      sellingPrice: baseSellingPrice,
-      passThroughTotal: passThroughCost * (1 + effectiveMargin / 100),
-      season: demandSeason,
-    })
+    const uplift = computeUplift({ sellingPrice: baseSellingPrice, season: demandSeason })
     const upliftAmount = Math.round(uplift.amount * 100) / 100
     const sellingPrice = baseSellingPrice + upliftAmount
     const pricePerPerson = sellingPrice / num_pax

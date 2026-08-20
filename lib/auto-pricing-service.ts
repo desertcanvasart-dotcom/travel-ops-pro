@@ -29,10 +29,8 @@ import { createClient } from '@supabase/supabase-js'
 import { roundToCurrency } from '@/lib/currency-totals'
 import {
   seasonForDate,
-  passThroughSelling,
   type SeasonMatch,
   computeUplift,
-  PASS_THROUGH_SERVICE_TYPES,
   type SeasonWindow,
   type UpliftBreakdown,
 } from '@/lib/pricing/season-uplift'
@@ -2851,42 +2849,22 @@ export async function loadSeasonWindows(
 /**
  * The rate sheet, carrying the same premium as the headline price.
  *
- * A partner is sent this table; the operator quotes one line of it. Left at the
- * ordinary-date price it would disagree with the headline about the same
- * departure — the exact failure the premium was wired into both pricing paths
- * to avoid.
- *
- * The base is computed per row, because the pass-throughs excluded from it
- * scale with the group: a ten-person Golden Week departure passes on ten
- * entrance tickets, not one. Cost and margin are untouched — the premium is
- * neither of them.
+ * A partner is sent this table and the operator quotes one line of it; left at
+ * the ordinary-date price the two would disagree about the same departure.
+ * Cost and margin are untouched — the premium is neither of them.
  */
 function paxTableWithSeason(
   rows: PaxPricingResult[],
-  args: {
-    services: PricedService[]
-    marginPercent: number
-    season: SeasonMatch | null
-    currency: string
-  }
+  args: { season: SeasonMatch | null; currency: string }
 ): PaxPricingResult[] {
   const season = args.season
   if (!season || season.upliftPercent <= 0) return rows
 
   const upliftCell = <T extends { sellingPrice: number; pricePerPerson: number }>(
     cell: T,
-    numPax: number,
-    heads: number
+    numPax: number
   ): T => {
-    const { amount } = computeUplift({
-      sellingPrice: cell.sellingPrice,
-      passThroughTotal: passThroughSelling({
-        services: args.services,
-        personEquivalents: heads,
-        marginPercent: args.marginPercent,
-      }),
-      season,
-    })
+    const { amount } = computeUplift({ sellingPrice: cell.sellingPrice, season })
     const selling = roundToCurrency(cell.sellingPrice + amount, args.currency)
     return {
       ...cell,
@@ -2897,10 +2875,8 @@ function paxTableWithSeason(
 
   return rows.map(row => ({
     ...row,
-    withoutLeader: upliftCell(row.withoutLeader, row.numPax, row.numPax),
-    // The leader is in the price too — their own entrance fees sit inside
-    // tourLeaderCost — so they count as one more person of pass-through.
-    withLeader: upliftCell(row.withLeader, row.numPax, row.numPax + 1),
+    withoutLeader: upliftCell(row.withoutLeader, row.numPax),
+    withLeader: upliftCell(row.withLeader, row.numPax),
   }))
 }
 
@@ -3019,23 +2995,7 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
   const seasonWindows = await loadSeasonWindows(params.orgId, params.travelDate)
   const season = seasonForDate(seasonWindows, params.travelDate ?? null)
 
-  // Tips and entrance fees are somebody else's fixed price. They carry margin
-  // like everything else, so what leaves the base is their share of the SELLING
-  // price, not their cost — and an entrance fee's line total is ONE ticket, so
-  // it only leaves the base once per person who is in the price. The tour
-  // leader is one of them: their entrance fees are inside tourLeaderCost.
-  const upliftHeads = numPax + (tourLeaderIncluded ? 1 : 0)
-  const passThrough = passThroughSelling({
-    services: dayResult.services,
-    personEquivalents: upliftHeads,
-    marginPercent: dayResult.marginPercent || 0,
-  })
-
-  const uplift = computeUplift({
-    sellingPrice: pricing.sellingPrice,
-    passThroughTotal: passThrough,
-    season,
-  })
+  const uplift = computeUplift({ sellingPrice: pricing.sellingPrice, season })
   const upliftAmount = roundToCurrency(uplift.amount, dayResult.currency)
   const sellingWithSeason = roundToCurrency(pricing.sellingPrice + upliftAmount, dayResult.currency)
 
@@ -3072,12 +3032,7 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     currency: dayResult.currency,
     ratesUsed,
     warnings: dayResult.warnings,
-    paxPricingTable: paxTableWithSeason(dayResult.paxPricing, {
-      services: dayResult.services,
-      marginPercent: dayResult.marginPercent || 0,
-      season,
-      currency: dayResult.currency,
-    }),
+    paxPricingTable: paxTableWithSeason(dayResult.paxPricing, { season, currency: dayResult.currency }),
     singleSupplement: dayResult.singleSupplement,
     complete: dayResult.complete,
     holes: dayResult.holes
@@ -3452,22 +3407,7 @@ export async function calculatePricingWithPassengerBreakdown(
   // Week costs.
   const seasonWindows = await loadSeasonWindows(params.orgId, params.travelDate)
   const season = seasonForDate(seasonWindows, params.travelDate ?? null)
-  // A child at half price carries half a person's entrance fees into the price,
-  // and an infant carries none — so the pass-throughs to exclude are counted in
-  // person-equivalents rather than in bodies. The group-fixed tips are amortised
-  // over the paying pax by the same discount, so only that share is in here.
-  const discountedHeads =
-    passengers.numAdults + passengers.numChildren * (1 - CHILD_DISCOUNT_PERCENT / 100)
-  const uplift = computeUplift({
-    sellingPrice: composed.sellingPrice,
-    passThroughTotal: passThroughSelling({
-      services: dayResult.services,
-      personEquivalents: discountedHeads + (tourLeaderIncluded ? 1 : 0),
-      groupShare: payingPax > 0 ? discountedHeads / payingPax : 0,
-      marginPercent: marginPercent || 0,
-    }),
-    season,
-  })
+  const uplift = computeUplift({ sellingPrice: composed.sellingPrice, season })
   const upliftAmount = roundToCurrency(uplift.amount, dayResult.currency)
   const sellingWithSeason = roundToCurrency(composed.sellingPrice + upliftAmount, dayResult.currency)
 
@@ -3500,14 +3440,7 @@ export async function calculatePricingWithPassengerBreakdown(
     currency: 'EUR',
     ratesUsed,
     warnings: dayResult.warnings,
-    // A headcount rate sheet even on this path: the table prices whole adults,
-    // so the premium's base counts whole people too.
-    paxPricingTable: paxTableWithSeason(dayResult.paxPricing, {
-      services: dayResult.services,
-      marginPercent: marginPercent || 0,
-      season,
-      currency: dayResult.currency,
-    }),
+    paxPricingTable: paxTableWithSeason(dayResult.paxPricing, { season, currency: dayResult.currency }),
     singleSupplement: dayResult.singleSupplement,
     ageBasedPricing,
     complete: dayResult.complete,
