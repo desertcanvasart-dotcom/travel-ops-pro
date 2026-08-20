@@ -3,6 +3,7 @@
 // fallback is blank, never a placeholder company.
 
 import type { CompanyInfo } from '@/lib/invoice-pdf-generator'
+import { customerFacingOrgName } from '@/lib/org-name'
 
 /**
  * An organizations row → the letterhead an invoice prints.
@@ -15,7 +16,7 @@ import type { CompanyInfo } from '@/lib/invoice-pdf-generator'
 export function toCompanyInfo(org: Record<string, unknown> | null | undefined): CompanyInfo | undefined {
   if (!org) return undefined
   return {
-    name: (org.name as string) ?? '',
+    name: customerFacingOrgName(org.name as string | undefined),
     address: (org.company_address as string) ?? '',
     city: '',
     country: '',

@@ -7,6 +7,7 @@
 // or an ×, not as a guess.
 
 import type { DailyItineraryContext, DailyItineraryDay } from './templates/ats-daily-itinerary'
+import { customerFacingOrgName } from '@/lib/org-name'
 
 /** The reverse of the importer's OVERNIGHT map — city back to the label the
  *  office writes in the 宿泊地 column. */
@@ -241,7 +242,7 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
     font_face_css: input.font_face_css,
     letterhead: {
       logo_url: org?.logo_url ?? null,
-      company_name: org?.name ?? '',
+      company_name: customerFacingOrgName(org?.name as string | undefined),
       offices: (org?.offices ?? [])
         .map(o => ({
           label: (o.label ?? '').trim(),

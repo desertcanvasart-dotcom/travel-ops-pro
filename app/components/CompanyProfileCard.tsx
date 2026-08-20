@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Building2, Loader2, Check, Upload } from 'lucide-react'
+import { isPlaceholderOrgName } from '@/lib/org-name'
 
 interface Office {
   label: string
@@ -225,6 +226,12 @@ export default function CompanyProfileCard() {
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('website')}</label>
           <input className={inputClass} value={form.company_website} onChange={e => set('company_website', e.target.value)} />
         </div>
+        {isPlaceholderOrgName(form.name) && (
+          <div className="sm:col-span-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {t('nameStillPlaceholder')}
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('billingCurrency')}</label>
           <select

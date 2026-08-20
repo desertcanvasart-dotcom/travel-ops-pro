@@ -38,6 +38,7 @@ import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
 import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
+import { customerFacingOrgName } from '@/lib/org-name'
 
 export const dynamic = 'force-dynamic'
 
@@ -260,7 +261,7 @@ async function resolve(token: string): Promise<{
       documents,
     }),
     operator: {
-      name: org?.name ?? '',
+      name: customerFacingOrgName(org?.name),
       brandHex: org?.primary_color || '#647C47',
       email: org?.contact_email ?? null,
       phone: org?.company_phone ?? null,
@@ -310,7 +311,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
             // eslint-disable-next-line @next/next/no-img-element
             <img className="oplogo" src={operator.logoUrl} alt={operator.name} />
           )}
-          <p className="op">{operator.name}</p>
+          {operator.name && <p className="op">{operator.name}</p>}
           <h1>ご本人確認</h1>
           <p className="sub">お客様の情報を守るため、ご予約の確認をお願いいたします。</p>
         </header>
@@ -330,7 +331,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           // eslint-disable-next-line @next/next/no-img-element
           <img className="oplogo" src={operator.logoUrl} alt={operator.name} />
         )}
-        <p className="op">{operator.name}</p>
+        {operator.name && <p className="op">{operator.name}</p>}
         {operator.tagline && <p className="optag">{operator.tagline}</p>}
         <h1>{booking.tripName}</h1>
         <p className="sub">
@@ -466,7 +467,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       )}
 
       <footer>
-        <p className="opname">{operator.name}</p>
+        {operator.name && <p className="opname">{operator.name}</p>}
 
         {operator.offices.length > 0 ? (
           <ul className="offices">
