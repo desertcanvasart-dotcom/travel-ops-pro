@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js'
 import { isValidPortalToken, portalLinkState, portalVerifyCookieName, isPortalVerified, isCustomerFacingInvoice } from '@/lib/booking-portal'
 import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { toCompanyInfo } from '@/lib/company-info-client'
+import { inlineImage } from '@/lib/documents/inline-image'
 import { renderHtmlToPdf } from '@/lib/documents/render'
 import {
   buildProgramItineraryHtml,
@@ -157,7 +158,7 @@ export async function GET(
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('name, contact_email, company_phone, company_website, company_address, offices')
+    .select('name, contact_email, company_phone, company_website, company_address, offices, logo_url')
     .eq('id', booking.org_id)
     .maybeSingle()
 
@@ -175,8 +176,10 @@ export async function GET(
     const doc = generateInvoicePDF(
       withSchedule as never,
       // Through the shared mapper, so the customer's copy of an invoice carries
-      // the same letterhead as the office's copy of the same invoice.
-      toCompanyInfo(org),
+      // the same letterhead as the office's copy of the same invoice. The logo
+      // is inlined here — the same reason as the 日程表: the renderer draws from
+      // bytes, and a URL would be a network fetch mid-render.
+      toCompanyInfo({ ...(org ?? {}), logo_data_url: await inlineImage((org as any)?.logo_url) }),
       { font }
     )
     const pdf = Buffer.from(doc.output('arraybuffer'))

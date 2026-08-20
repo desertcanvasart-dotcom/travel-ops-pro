@@ -137,11 +137,21 @@ const CSS = `
 .days .ov{color:var(--soft);font-size:13px;margin-top:4px}
 
 .portal .opname{font-weight:700}
-.offices{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px;
-  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));text-align:left}
+.offices{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:10px 14px;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));text-align:left;
+  /* A shade smaller than the rest of the footer so each office holds three
+     lines at this column width instead of wrapping into four. */
+  font-size:11px;line-height:1.45}
 .offices li{display:flex;flex-direction:column;gap:1px}
-.offices b{font-weight:600}
-@media(max-width:560px){.offices{text-align:center}.offices li{align-items:center}}
+.offices b{font-weight:600;font-size:11.5px}
+.offices em{font-style:normal}
+.offices .l1{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.offices .tel{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:560px){
+  .offices{text-align:center;grid-template-columns:1fr;font-size:12px}
+  .offices li{align-items:center}
+  .offices .l1,.offices .tel{justify-content:center}
+}
 footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
   font-size:12px;color:var(--soft)}
 .portal footer p{margin:2px 0}
