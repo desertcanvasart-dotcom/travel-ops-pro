@@ -41,7 +41,6 @@ import {
   BedDouble,
   Ship,
   Building,
-  UserCog,
   Shield,
   BookOpen,
   Handshake,
@@ -120,7 +119,6 @@ const navigationConfig: NavConfig[] = [
     roles: ['admin', 'manager', 'agent'],
     items: [
       { labelKey: 'clients', href: '/clients', icon: Users },
-      { labelKey: 'staff', href: '/contacts?type=staff', icon: UserCog },
       { labelKey: 'followups', href: '/followups', icon: CheckSquare },
       { labelKey: 'calendar', href: '/calendar', icon: Calendar },
     ]

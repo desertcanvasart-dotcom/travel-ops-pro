@@ -14,7 +14,7 @@ import {
 // Types
 interface Contact {
   id: string
-  type: 'client' | 'staff'
+  type: 'client'
   name: string
   subtype?: string
   email?: string
@@ -32,14 +32,12 @@ type SortDirection = 'asc' | 'desc'
 
 // Config (will be initialized inside component with translations)
 
-const STAFF_LOCATIONS = ['Cairo (CAI)', 'Luxor (LXR)', 'Aswan (ASW)', 'Hurghada (HRG)', 'Sharm El Sheikh (SSH)', 'Alexandria (HBE)', 'Office', 'Remote']
 const CLIENT_STATUS_OPTIONS = ['prospect', 'active', 'inactive', 'vip']
 
 // Form fields and other configs will be initialized inside component with translations
 
 const TABLE_NAMES = {
   client: 'clients',
-  staff: 'airport_staff',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -63,16 +61,8 @@ export default function ContactsContent() {
       color: 'bg-primary-100 text-primary-700',
       borderColor: 'border-primary-200'
     },
-    staff: {
-      icon: UserCog,
-      label: t('typeConfig.staffPlural'),
-      singular: t('typeConfig.staff'),
-      color: 'bg-purple-100 text-purple-700',
-      borderColor: 'border-purple-200'
-    },
   }
 
-  const STAFF_ROLES = [t('roles.meetGreet'), t('roles.transferCoordinator'), t('roles.vipAssistant'), t('roles.hotelRep'), t('roles.tourLeader'), t('roles.officeStaff'), t('roles.driver'), t('roles.operationsManager')]
   const CLIENT_STATUS = CLIENT_STATUS_OPTIONS
   const LANGUAGES = [t('languages.english'), t('languages.spanish'), t('languages.japanese'), t('languages.chinese'), t('languages.russian'), t('languages.german'), t('languages.french'), t('languages.italian'), t('languages.arabic')]
 
@@ -88,23 +78,12 @@ export default function ContactsContent() {
       { name: t('fields.preferredLanguage'), key: 'preferred_language', type: 'text' },
       { name: t('fields.notes'), key: 'internal_notes', type: 'textarea' },
     ],
-    staff: [
-      { name: t('fields.fullName'), key: 'name', type: 'text', required: true },
-      { name: t('fields.role'), key: 'role', type: 'select', options: STAFF_ROLES },
-      { name: t('fields.location'), key: 'airport_location', type: 'select', options: STAFF_LOCATIONS },
-      { name: t('fields.email'), key: 'email', type: 'email' },
-      { name: t('fields.phone'), key: 'phone', type: 'tel' },
-      { name: t('fields.whatsapp'), key: 'whatsapp', type: 'tel' },
-      { name: t('fields.languages'), key: 'languages', type: 'text' },
-      { name: t('fields.shiftTimes'), key: 'shift_times', type: 'text' },
-      { name: t('fields.notes'), key: 'notes', type: 'textarea' },
-    ],
   }
 
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedType, setSelectedType] = useState<'all' | 'client' | 'staff'>('all')
+  const [selectedType, setSelectedType] = useState<'all' | 'client'>('all')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
@@ -117,7 +96,7 @@ export default function ContactsContent() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
-  const [newContactType, setNewContactType] = useState<'client' | 'staff'>('client')
+  const [newContactType, setNewContactType] = useState<'client'>('client')
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -125,13 +104,15 @@ export default function ContactsContent() {
 
   // URL sync
   useEffect(() => {
-    const typeParam = searchParams.get('type') as 'client' | 'staff' | null
-    if (typeParam && ['client', 'staff'].includes(typeParam)) {
+    const typeParam = searchParams.get('type') as 'client' | null
+    // ?type=staff was the old airport-staff roster; those people are suppliers
+    // now, so the parameter is ignored rather than showing an empty tab.
+    if (typeParam && ['client'].includes(typeParam)) {
       setSelectedType(typeParam)
     }
   }, [searchParams])
 
-  const handleTypeChange = (type: 'all' | 'client' | 'staff') => {
+  const handleTypeChange = (type: 'all' | 'client') => {
     setSelectedType(type)
     setCurrentPage(1)
     router.push(type === 'all' ? '/contacts' : `/contacts?type=${type}`, { scroll: false })
@@ -165,25 +146,6 @@ export default function ContactsContent() {
         })))
       }
 
-      // Fetch staff
-      const staffRes = await fetch('/api/airport-staff')
-      if (staffRes.ok) {
-        const result = await staffRes.json()
-        const staff = result.data || []
-        allContacts.push(...staff.map((s: any) => ({
-          id: s.id,
-          type: 'staff' as const,
-          name: s.name,
-          subtype: s.role,
-          email: s.email,
-          phone: s.phone,
-          whatsapp: s.whatsapp || s.phone,
-          city: s.airport_location,
-          notes: s.notes,
-          extra: { role: s.role, languages: s.languages, shift_times: s.shift_times },
-          rawData: s
-        })))
-      }
 
       setContacts(allContacts)
     } catch (error) {
@@ -223,7 +185,6 @@ export default function ContactsContent() {
   const stats = {
     all: contacts.length,
     client: contacts.filter(c => c.type === 'client').length,
-    staff: contacts.filter(c => c.type === 'staff').length,
   }
 
   const handleSort = (field: SortField) => {
@@ -243,7 +204,7 @@ export default function ContactsContent() {
   // CRUD
   const handleAdd = () => {
     const defaultType = selectedType !== 'all' ? selectedType : 'client'
-    setNewContactType(defaultType as 'client' | 'staff')
+    setNewContactType('client')
     setFormData({})
     setError(null)
     setShowAddModal(true)
@@ -273,7 +234,7 @@ export default function ContactsContent() {
     setSaving(true)
     setError(null)
     try {
-      const endpoint = newContactType === 'client' ? '/api/clients' : '/api/airport-staff'
+      const endpoint = '/api/clients'
       const body = newContactType === 'client' 
         ? { ...formData }
         : { ...formData, is_active: true }
@@ -301,7 +262,7 @@ export default function ContactsContent() {
     try {
       const endpoint = selectedContact.type === 'client' 
         ? `/api/clients/${selectedContact.id}`
-        : `/api/airport-staff/${selectedContact.id}`
+        : `/api/clients/${selectedContact.id}`
       
       const response = await fetch(endpoint, {
         method: 'PUT',
@@ -327,7 +288,7 @@ export default function ContactsContent() {
     try {
       const endpoint = selectedContact.type === 'client'
         ? `/api/clients/${selectedContact.id}`
-        : `/api/airport-staff/${selectedContact.id}`
+        : `/api/clients/${selectedContact.id}`
       
       const response = await fetch(endpoint, { method: 'DELETE' })
       if (!response.ok) throw new Error((await response.json()).error || 'Failed to delete')
@@ -410,7 +371,7 @@ export default function ContactsContent() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-semibold text-gray-900">
-                {selectedType === 'all' ? t('title') : selectedType === 'client' ? t('clients') : t('staff')}
+                {selectedType === 'all' ? t('title') : t('clients')}
               </h1>
               <p className="text-sm text-gray-500">{t('subtitle')}</p>
             </div>
@@ -453,14 +414,6 @@ export default function ContactsContent() {
             >
               <Users className="w-3.5 h-3.5" /> {t('clients')}
               <span className={`px-1.5 py-0.5 rounded-full ${selectedType === 'client' ? 'bg-white/30' : 'bg-gray-200'}`}>{stats.client}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTypeChange('staff')}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${selectedType === 'staff' ? TYPE_CONFIG.staff.color : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            >
-              <UserCog className="w-3.5 h-3.5" /> {t('staff')}
-              <span className={`px-1.5 py-0.5 rounded-full ${selectedType === 'staff' ? 'bg-white/30' : 'bg-gray-200'}`}>{stats.staff}</span>
             </button>
           </div>
 
@@ -656,24 +609,6 @@ export default function ContactsContent() {
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               {error && <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
-
-              {/* Type selector */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-2">{t('contactType')}</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['client', 'staff'] as const).map(type => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => { setNewContactType(type); setFormData({}) }}
-                      className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${newContactType === type ? TYPE_CONFIG[type].color + ' ' + TYPE_CONFIG[type].borderColor : 'border-gray-200 hover:bg-gray-50'}`}
-                    >
-                      {type === 'client' ? <Users className="w-5 h-5" /> : <UserCog className="w-5 h-5" />}
-                      <span className="font-medium">{type === 'client' ? t('client') : t('staff')}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 {FORM_FIELDS[newContactType].map(field => (
