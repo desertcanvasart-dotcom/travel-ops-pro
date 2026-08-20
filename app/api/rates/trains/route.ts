@@ -87,6 +87,13 @@ export async function POST(request: NextRequest) {
     } else {
       existingQuery = existingQuery.is('class_type', null)
     }
+    // A rate belongs to a supplier: two companies may quote the same service,
+    // and a key that ignores the supplier makes the second overwrite the first.
+    if (body.supplier_id) {
+      existingQuery = existingQuery.eq('supplier_id', body.supplier_id)
+    } else {
+      existingQuery = existingQuery.is('supplier_id', null)
+    }
     const { data: existing } = await existingQuery.limit(1)
 
     let data, error

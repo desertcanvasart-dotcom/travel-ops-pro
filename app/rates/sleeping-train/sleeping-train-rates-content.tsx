@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -152,6 +153,7 @@ export default function SleepingTrainRatesContent() {
     season: '',
     operator_name: '',
     description: '',
+    supplier_id: '',
     notes: '',
     is_active: true
   })
@@ -209,6 +211,7 @@ export default function SleepingTrainRatesContent() {
       season: '',
       operator_name: '',
       description: '',
+      supplier_id: '',
       notes: '',
       is_active: true
     })
@@ -231,6 +234,7 @@ export default function SleepingTrainRatesContent() {
       season: rate.season || '',
       operator_name: rate.operator_name || '',
       description: rate.description || '',
+      supplier_id: rate.supplier_id || '',
       notes: rate.notes || '',
       is_active: rate.is_active
     })
@@ -909,6 +913,13 @@ export default function SleepingTrainRatesContent() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+              <SupplierPicker
+                value={formData.supplier_id}
+                onChange={(supplier_id: string) => setFormData(prev => ({ ...prev, supplier_id }))}
+                preferredType="train_operator"
+                preferredLabel="Train Operators"
+                className="mb-4"
+              />
               {/* Route Info */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">

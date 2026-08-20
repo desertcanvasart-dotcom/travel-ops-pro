@@ -8,7 +8,8 @@ import {
   ShoppingBag, MapPin, Users, Briefcase, X, Edit, Trash2, Eye, Loader2, AlertCircle,
   Phone, Mail, MessageCircle, Percent, LayoutGrid, List, Table2, ChevronUp, ChevronDown,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, Download,
-  Star, Globe, DollarSign, FileText, Calendar, Check, Link2, Building
+  Star, Globe, DollarSign, FileText, Calendar, Check, Link2, Building,
+  TrainFront, Plane, ConciergeBell, BellRing
 } from 'lucide-react'
 
 // Types
@@ -85,6 +86,9 @@ const CUISINE_TYPES = [
 ]
 
 const CRUISE_ROUTES = ['Luxor to Aswan', 'Aswan to Luxor', 'Round Trip', 'Esna to Aswan', 'Lake Nasser']
+// The overnight and daytime lines this operator actually books.
+const TRAIN_ROUTES = ['Cairo to Luxor', 'Cairo to Aswan', 'Luxor to Aswan', 'Cairo to Alexandria', 'Aswan to Cairo', 'Luxor to Cairo']
+const FLIGHT_ROUTES = ['Cairo to Luxor', 'Cairo to Aswan', 'Cairo to Abu Simbel', 'Cairo to Hurghada', 'Cairo to Sharm El Sheikh', 'Luxor to Cairo', 'Aswan to Abu Simbel', 'Aswan to Cairo', 'Hurghada to Cairo']
 
 // Supplier type configuration
   const TYPE_CONFIG: Record<string, { icon: any; label: string; singular: string; color: string; borderColor: string }> = {
@@ -98,6 +102,10 @@ const CRUISE_ROUTES = ['Luxor to Aswan', 'Aswan to Luxor', 'Round Trip', 'Esna t
   attraction: { icon: MapPin, label: 'Attractions', singular: 'Attraction', color: 'bg-pink-100 text-pink-700', borderColor: 'border-pink-200' },
   tour_operator: { icon: Globe, label: 'Tour Operators', singular: 'Tour Operator', color: 'bg-amber-100 text-amber-700', borderColor: 'border-amber-200' },
   ground_handler: { icon: Briefcase, label: 'Ground Handlers', singular: 'Ground Handler', color: 'bg-slate-100 text-slate-700', borderColor: 'border-slate-200' },
+  train_operator: { icon: TrainFront, label: 'Train Operators', singular: 'Train Operator', color: 'bg-sky-100 text-sky-700', borderColor: 'border-sky-200' },
+  air_carrier: { icon: Plane, label: 'Air Carriers', singular: 'Air Carrier', color: 'bg-violet-100 text-violet-700', borderColor: 'border-violet-200' },
+  airport_assistant: { icon: ConciergeBell, label: 'Airport Assistants', singular: 'Airport Assistant', color: 'bg-lime-100 text-lime-700', borderColor: 'border-lime-200' },
+  hotel_assistant: { icon: BellRing, label: 'Hotel Assistants', singular: 'Hotel Assistant', color: 'bg-fuchsia-100 text-fuchsia-700', borderColor: 'border-fuchsia-200' },
   restaurant: { icon: Utensils, label: 'Restaurants', singular: 'Restaurant', color: 'bg-orange-100 text-orange-700', borderColor: 'border-orange-200' },
   shop: { icon: ShoppingBag, label: 'Shops', singular: 'Shop', color: 'bg-rose-100 text-rose-700', borderColor: 'border-rose-200' },
   other: { icon: Briefcase, label: 'Other', singular: 'Supplier', color: 'bg-gray-100 text-gray-700', borderColor: 'border-gray-200' }
@@ -548,6 +556,23 @@ export default function SuppliersContent() {
       restaurant: [
         { name: 'Cuisine Types', key: 'cuisine_types', type: 'multiselect', options: CUISINE_TYPES },
         { name: 'Capacity', key: 'capacity', type: 'number' },
+      ],
+      // A railway sells routes, not vehicles.
+      train_operator: [
+        { name: 'Routes', key: 'routes', type: 'multiselect', options: TRAIN_ROUTES },
+      ],
+      air_carrier: [
+        { name: 'Routes', key: 'routes', type: 'multiselect', options: FLIGHT_ROUTES },
+      ],
+      // The assistants are usually people: what matters is where they work,
+      // which languages they meet a client in, and what a day of them costs.
+      airport_assistant: [
+        { name: 'Languages', key: 'languages', type: 'multiselect', options: LANGUAGES },
+        { name: 'Daily Rate (EUR)', key: 'daily_rate', type: 'number' },
+      ],
+      hotel_assistant: [
+        { name: 'Languages', key: 'languages', type: 'multiselect', options: LANGUAGES },
+        { name: 'Daily Rate (EUR)', key: 'daily_rate', type: 'number' },
       ],
     }
 

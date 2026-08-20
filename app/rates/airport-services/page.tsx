@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -33,6 +34,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 // ============================================
 
 interface AirportStaffRate {
+  supplier_id?: string | null
   id: string
   service_code: string
   airport_code: string
@@ -212,6 +214,7 @@ export default function AirportServicesPage() {
     rate_eur: 0,
     description: '',
     notes: '',
+    supplier_id: '',
     is_active: true
   })
 
@@ -267,6 +270,7 @@ export default function AirportServicesPage() {
       rate_eur: 0,
       description: '',
       notes: '',
+      supplier_id: '',
       is_active: true
     })
     setShowModal(true)
@@ -282,6 +286,7 @@ export default function AirportServicesPage() {
       rate_eur: rate.rate_eur,
       description: rate.description || '',
       notes: rate.notes || '',
+      supplier_id: rate.supplier_id || '',
       is_active: rate.is_active
     })
     setShowModal(true)
@@ -621,6 +626,12 @@ export default function AirportServicesPage() {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              <SupplierPicker
+                value={formData.supplier_id}
+                onChange={(supplier_id) => setFormData(prev => ({ ...prev, supplier_id }))}
+                preferredType="airport_assistant"
+                preferredLabel="Airport Assistants"
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.airport')} *</label>
