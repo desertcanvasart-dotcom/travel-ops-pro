@@ -64,12 +64,15 @@ export default function RecordPaymentPage() {
   // EUR, an A.T.S user recording a yen payment against a yen invoice filed it
   // in euro. Applied once, when preferences arrive, and never over a choice the
   // user has already made.
-  const { preferences } = usePreferences()
+  const { preferences, loading: prefsLoading } = usePreferences()
   useEffect(() => {
-    if (preferences?.default_currency) {
+    // WAIT for the real preference. The context seeds itself with a 'USD'
+    // placeholder while it fetches, so firing on that would pin every form to
+    // USD and then decline to correct itself, the field no longer being empty.
+    if (!prefsLoading && preferences?.default_currency) {
       setFormData(f => (f.currency ? f : { ...f, currency: preferences.default_currency }))
     }
-  }, [preferences?.default_currency])
+  }, [prefsLoading, preferences?.default_currency])
 
   useEffect(() => {
     fetchInvoices()

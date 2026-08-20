@@ -151,12 +151,15 @@ export default function InvoicesContent() {
   // a module constant and cannot read a hook, so the currency is filled in when
   // preferences arrive — and never over a choice already made, including the
   // one carried by a form reset.
-  const { preferences } = usePreferences()
+  const { preferences, loading: prefsLoading } = usePreferences()
   useEffect(() => {
-    if (preferences?.default_currency) {
+    // WAIT for the real preference. The context seeds itself with a 'USD'
+    // placeholder while it fetches, so firing on that would pin every form to
+    // USD and then decline to correct itself, the field no longer being empty.
+    if (!prefsLoading && preferences?.default_currency) {
       setFormData(f => (f.currency ? f : { ...f, currency: preferences.default_currency }))
     }
-  }, [preferences?.default_currency])
+  }, [prefsLoading, preferences?.default_currency])
   const [saving, setSaving] = useState(false)
 
   const getStatusLabel = (status: string) => {

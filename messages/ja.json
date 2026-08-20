@@ -3357,7 +3357,10 @@
       "officePostal": "〒 郵便番号",
       "officeAddress": "住所",
       "removeOffice": "削除",
-      "addOffice": "オフィスを追加"
+      "addOffice": "オフィスを追加",
+      "billingCurrency": "請求通貨",
+      "billingCurrencyUnset": "未設定",
+      "billingCurrencyHint": "貴社が請求に使用する通貨です。個人設定のないメンバーはこの通貨を引き継ぎます。"
     }
   },
   "translate": {

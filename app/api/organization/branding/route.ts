@@ -31,6 +31,10 @@ const FIELDS = [
   'company_address',
   'document_contacts',
   'offices',
+  // What the company bills in. It belongs with the other company-level facts
+  // rather than in a settings page of its own — and it is what a colleague with
+  // no preference of their own inherits.
+  'default_currency',
 ] as const
 
 /** Offices arrive as arbitrary JSON; keep only the known string fields, cap

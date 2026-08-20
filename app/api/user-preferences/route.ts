@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -22,6 +23,31 @@ async function createClient() {
       },
     }
   )
+}
+
+/**
+ * The currency to fall back on when a user has expressed no preference: their
+ * ORGANISATION'S, and only then a constant.
+ *
+ * Resolved here rather than in the client because this is where the caller's
+ * org is known. 'USD' survives as a last resort for an org that has never set
+ * one — it is not a good answer, which is the point: it should be visibly wrong
+ * rather than quietly plausible.
+ */
+async function orgDefaultCurrency(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<string> {
+  // getCurrentOrgId is the one authority on which org a request belongs to —
+  // reading organization_members directly here would pick an arbitrary
+  // membership for anyone who belongs to two.
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return 'USD'
+  const { data } = await supabase
+    .from('organizations')
+    .select('default_currency')
+    .eq('id', orgId)
+    .maybeSingle()
+  return (data as { default_currency?: string | null } | null)?.default_currency || 'USD'
 }
 
 export async function GET(request: NextRequest) {
@@ -52,7 +78,7 @@ export async function GET(request: NextRequest) {
       default_cost_mode: 'auto',
       default_tier: 'standard',
       default_margin_percent: 25,
-      default_currency: 'USD'
+      default_currency: await orgDefaultCurrency(supabase),
     }
 
     return NextResponse.json({
@@ -87,7 +113,7 @@ export async function PUT(request: NextRequest) {
       default_cost_mode: body.default_cost_mode || 'auto',
       default_tier: body.default_tier || 'standard',
       default_margin_percent: body.default_margin_percent || 25,
-      default_currency: body.default_currency || 'USD',
+      default_currency: body.default_currency || (await orgDefaultCurrency(supabase)),
       updated_at: new Date().toISOString()
     }
 
