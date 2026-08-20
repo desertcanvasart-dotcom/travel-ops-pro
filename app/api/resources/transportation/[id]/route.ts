@@ -85,6 +85,11 @@ export async function PUT(
       season: body.season || null,
       rate_valid_from: body.rate_valid_from,
       rate_valid_to: body.rate_valid_to,
+      // supplier_id was missing here while POST has always written it: editing a
+      // rate saved the company's NAME and dropped the link, so the form reported
+      // success and the row stayed unlinked. Rate dedup keys are built from
+      // supplier_id, so a lost link is not cosmetic.
+      supplier_id: body.supplier_id || null,
       supplier_name: body.supplier_name || null,
       notes: body.notes || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
