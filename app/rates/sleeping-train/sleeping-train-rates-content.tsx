@@ -340,6 +340,12 @@ export default function SleepingTrainRatesContent() {
   }
 
   // Prevent hydration mismatch
+  // Hooks run before any early return: this page shows a spinner while it loads,
+  // and a hook called after that spinner runs on the second render but not the
+  // first. React counts them and throws "Rendered more hooks than during the
+  // previous render" — the page died the moment its data arrived.
+  const bulk = useBulkSelect()
+
   if (!mounted) {
     return null
   }
@@ -355,7 +361,6 @@ export default function SleepingTrainRatesContent() {
     )
   }
 
-  const bulk = useBulkSelect()
   const handleBulkDelete = async () => {
     await bulkDeleteByIds([...bulk.selected], id => `/api/rates/sleeping-trains/${id}`)
     bulk.clear()
