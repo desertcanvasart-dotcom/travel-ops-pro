@@ -64,6 +64,9 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/commissions', roles: ['admin', 'manager'] },
   { prefix: '/api/supplier-invoices', roles: ['admin', 'manager'] },
   { prefix: '/api/expenses', roles: ['admin', 'manager', 'agent'] },
+  // The season calendar sets what customers are charged on the operator's own
+  // high dates — a pricing decision, same audience as the rate tables.
+  { prefix: '/api/pricing', roles: ['admin', 'manager'] },
 ]
 // NOTE: this gate matches by path PREFIX, so financial mutations on NESTED
 // action routes (e.g. /api/itineraries/[id]/generate-commissions, which creates
@@ -86,6 +89,30 @@ const FINANCIAL_API_PREFIXES = [
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
+  // The caller's role in their organisation — organization_members is the one
+  // authority (see lib/auth/roles.ts). Resolved at most once per request and
+  // shared by every gate below, since a request crosses two of them at most.
+  let membershipRolePromise: Promise<string | null> | null = null
+  const membershipRole = async (userId: string): Promise<string | null> => {
+    if (!membershipRolePromise) {
+      membershipRolePromise = (async () => {
+        const { data } = await createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { persistSession: false } }
+        )
+          .from('organization_members')
+          .select('role')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        return (data as { role?: string } | null)?.role ?? null
+      })()
+    }
+    return membershipRolePromise
+  }
+
   // NEVER trust a client-supplied copy of the internal verified-user header —
   // strip it from every forwarded request. Middleware re-adds it (HMAC-signed)
   // below only after the session is actually verified.
@@ -217,18 +244,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     user &&
     FINANCIAL_API_PREFIXES.some(p => request.nextUrl.pathname.startsWith(p))
   ) {
-    const { data: membership } = await createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { persistSession: false } }
-    )
-      .from('organization_members')
-      .select('role')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle()
-    const financialRole = (membership as { role?: string } | null)?.role ?? 'viewer'
-    if (!roleAllows(financialRole, ['admin', 'manager'])) {
+    if (!roleAllows(await membershipRole(user.id), ['admin', 'manager'])) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
   }
@@ -254,16 +270,22 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
       request.nextUrl.pathname.startsWith(p.prefix)
     )
     if (matched) {
+      // is_active is account-level and stays on the profile: a deactivated
+      // person is deactivated in every organisation.
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('role, is_active')
+        .select('is_active')
         .eq('id', user.id)
         .single()
       if (profile && profile.is_active === false) {
         return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
       }
-      const userRole = profile?.role || 'viewer'
-      if (!matched.roles.includes(userRole)) {
+      // The ROLE comes from membership, via roleAllows — same authority as the
+      // financial read gate above. This block used to read user_profiles.role
+      // and compare it with a plain includes(), which is both of the failures
+      // lib/auth/roles.ts warns about: it gated on the display mirror, and an
+      // OWNER — named in no allowed-list — was refused every mutation here.
+      if (!roleAllows(await membershipRole(user.id), matched.roles)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
