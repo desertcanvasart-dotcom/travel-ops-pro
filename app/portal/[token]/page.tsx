@@ -54,6 +54,14 @@ function admin() {
   )
 }
 
+interface Office {
+  label: string
+  postal_code: string
+  address: string
+  tel: string
+  fax: string
+}
+
 interface Operator {
   name: string
   brandHex: string
@@ -62,6 +70,9 @@ interface Operator {
   logoUrl: string | null
   address: string | null
   tagline: string | null
+  /** The offices as they appear on the 日程表 letterhead. A customer who needs
+   *  to phone somebody should find the same list here as on their paperwork. */
+  offices: Office[]
 }
 
 async function resolve(token: string): Promise<{
@@ -223,7 +234,7 @@ async function resolve(token: string): Promise<{
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('name, primary_color, contact_email, company_phone, logo_url, company_address, tagline')
+    .select('name, primary_color, contact_email, company_phone, logo_url, company_address, tagline, offices')
     .eq('id', link!.org_id)
     .maybeSingle()
 
@@ -256,6 +267,20 @@ async function resolve(token: string): Promise<{
       logoUrl: (org as any)?.logo_url ?? null,
       address: (org as any)?.company_address ?? null,
       tagline: (org as any)?.tagline ?? null,
+      // Same source the letterhead reads. The portal used to show only
+      // company_address, so an operator who filled in their offices — which is
+      // what the company profile actually asks for — saw nothing here.
+      offices: Array.isArray((org as any)?.offices)
+        ? ((org as any).offices as Array<Record<string, unknown>>)
+            .map(o => ({
+              label: String(o?.label ?? ''),
+              postal_code: String(o?.postal_code ?? ''),
+              address: String(o?.address ?? ''),
+              tel: String(o?.tel ?? ''),
+              fax: String(o?.fax ?? ''),
+            }))
+            .filter(o => o.address || o.tel)
+        : [],
     },
   }
 }
@@ -441,9 +466,33 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       )}
 
       <footer>
-        <p>{operator.name}</p>
-        {operator.address && <p>{operator.address}</p>}
-        {operator.phone && <p>{operator.phone}</p>}
+        <p className="opname">{operator.name}</p>
+
+        {operator.offices.length > 0 ? (
+          <ul className="offices">
+            {operator.offices.map((o, i) => (
+              <li key={i}>
+                {o.label && <b>{o.label}</b>}
+                {(o.postal_code || o.address) && (
+                  <span>{[o.postal_code, o.address].filter(Boolean).join(' ')}</span>
+                )}
+                {(o.tel || o.fax) && (
+                  <span>
+                    {o.tel && `TEL：${o.tel}`}
+                    {o.tel && o.fax && '　'}
+                    {o.fax && `FAX：${o.fax}`}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <>
+            {operator.address && <p>{operator.address}</p>}
+            {operator.phone && <p>{operator.phone}</p>}
+          </>
+        )}
+
         {operator.email && <p>{operator.email}</p>}
       </footer>
     </main>

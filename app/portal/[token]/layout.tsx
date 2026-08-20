@@ -136,7 +136,13 @@ const CSS = `
 .days p{margin:0;font-size:14px;white-space:pre-line}
 .days .ov{color:var(--soft);font-size:13px;margin-top:4px}
 
-.portal footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
+.portal .opname{font-weight:700}
+.offices{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px;
+  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));text-align:left}
+.offices li{display:flex;flex-direction:column;gap:1px}
+.offices b{font-weight:600}
+@media(max-width:560px){.offices{text-align:center}.offices li{align-items:center}}
+footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
   font-size:12px;color:var(--soft)}
 .portal footer p{margin:2px 0}
 
