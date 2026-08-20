@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { isValidPortalToken, portalLinkState, portalVerifyCookieName, isPortalVerified, isCustomerFacingInvoice } from '@/lib/booking-portal'
 import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { toCompanyInfo } from '@/lib/company-info-client'
 import { renderHtmlToPdf } from '@/lib/documents/render'
 import {
   buildProgramItineraryHtml,
@@ -156,7 +157,7 @@ export async function GET(
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('name, contact_email, company_phone, company_website, company_address')
+    .select('name, contact_email, company_phone, company_website, company_address, offices')
     .eq('id', booking.org_id)
     .maybeSingle()
 
@@ -173,17 +174,9 @@ export async function GET(
 
     const doc = generateInvoicePDF(
       withSchedule as never,
-      org
-        ? {
-            name: org.name,
-            address: (org as any).company_address ?? '',
-            city: '',
-            country: '',
-            email: org.contact_email ?? '',
-            phone: org.company_phone ?? '',
-            website: org.company_website ?? '',
-          }
-        : undefined,
+      // Through the shared mapper, so the customer's copy of an invoice carries
+      // the same letterhead as the office's copy of the same invoice.
+      toCompanyInfo(org),
       { font }
     )
     const pdf = Buffer.from(doc.output('arraybuffer'))

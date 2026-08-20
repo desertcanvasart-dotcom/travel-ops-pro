@@ -37,6 +37,16 @@ interface Invoice {
   payment_instructions: string | null
 }
 
+/** One office as the company profile stores it, and as the 日程表 letterhead
+ *  prints it. */
+export interface CompanyOffice {
+  label?: string
+  postal_code?: string
+  address?: string
+  tel?: string
+  fax?: string
+}
+
 export interface CompanyInfo {
   name: string
   address: string
@@ -46,6 +56,9 @@ export interface CompanyInfo {
   phone: string
   website?: string
   taxId?: string
+  /** When the operator keeps offices, they are what goes on the paper — the
+   *  single `address` line is the fallback for one that does not. */
+  offices?: CompanyOffice[]
 }
 
 // The fallback when no caller supplies company info is BLANK, deliberately.
@@ -173,7 +186,34 @@ export function generateInvoicePDF(
   doc.setTextColor(...mediumGray)
   doc.setFont(FONT, 'normal')
   const cityCountry = [company.city, company.country].filter(Boolean).join(', ')
-  const companyLines = [company.address, cityCountry, company.email, company.phone, company.website]
+
+  // Offices first, when there are any. An operator who fills in Tokyo, Osaka
+  // and Cairo means those to appear on customer paper — the flat `address`
+  // line is what a company with a single office has instead, not a summary of
+  // the offices. Long lines are wrapped rather than run off the page.
+  const officeLines: string[] = []
+  for (const office of company.offices ?? []) {
+    const place = [office.postal_code, office.address].map(v => (v ?? '').trim()).filter(Boolean).join(' ')
+    const phones = [
+      office.tel ? `TEL：${office.tel}` : '',
+      office.fax ? `FAX：${office.fax}` : '',
+    ].filter(Boolean).join('　')
+    const line = [office.label, place, phones].map(v => (v ?? '').trim()).filter(Boolean).join('　')
+    if (line) officeLines.push(...(doc.splitTextToSize(line, pageWidth - margin * 2) as string[]))
+  }
+
+  // company.phone is dropped when an office already carries it, or the head
+  // office's number prints twice — once in its own line, once on its own.
+  const phoneShownInOffices = (company.offices ?? []).some(
+    o => (o.tel ?? '').replace(/\D/g, '') === (company.phone ?? '').replace(/\D/g, '') && company.phone
+  )
+  const companyLines = [
+    ...officeLines,
+    ...(officeLines.length ? [] : [company.address, cityCountry]),
+    company.email,
+    phoneShownInOffices ? '' : company.phone,
+    company.website,
+  ]
     .map(l => (l ?? '').trim())
     .filter(Boolean)
   for (const line of companyLines) {
@@ -584,7 +624,15 @@ export function generateInvoicePDF(
     doc.setFont(FONT, 'normal')
     doc.setFontSize(8)
     doc.setTextColor(146, 64, 14)
-    doc.text('This deposit is required to confirm your booking. The remaining balance is payable upon arrival.', margin + 5, y + 14)
+    // "Payable upon arrival" was hardcoded, and contradicted both this
+    // operator's terms — balance due 60 days before departure — and the
+    // "Balance by <date>" printed at the top of this very invoice. Say the date
+    // the document already knows, and fall back to naming no date at all rather
+    // than inventing a term.
+    const balanceWhen = invoice.balance_due_date
+      ? `The remaining balance is due by ${formatDate(invoice.balance_due_date)}.`
+      : 'The remaining balance is payable per the agreed payment terms.'
+    doc.text(`This deposit is required to confirm your booking. ${balanceWhen}`, margin + 5, y + 14)
     
     y += 25
   }
@@ -618,7 +666,13 @@ export function generateInvoicePDF(
   doc.setFontSize(8)
   doc.setTextColor(...mediumGray)
   doc.setFont(FONT, 'normal')
-  doc.text('Thank you for choosing Travel2Egypt!', pageWidth / 2, footerY, { align: 'center' })
+  // The company name comes from the caller. A different operator's name was
+  // hardcoded here, so every A.T.S invoice thanked the customer on behalf of
+  // Travel2Egypt — the same placeholder that was already removed from
+  // DEFAULT_COMPANY but survived in this line. Blank name, no line.
+  if (company.name.trim()) {
+    doc.text(`Thank you for choosing ${company.name.trim()}!`, pageWidth / 2, footerY, { align: 'center' })
+  }
   doc.text(
     `Generated on ${formatDate(new Date().toISOString())}`,
     pageWidth / 2,
