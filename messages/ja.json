@@ -3360,7 +3360,8 @@
       "addOffice": "オフィスを追加",
       "billingCurrency": "請求通貨",
       "billingCurrencyUnset": "未設定",
-      "billingCurrencyHint": "貴社が請求に使用する通貨です。個人設定のないメンバーはこの通貨を引き継ぎます。"
+      "billingCurrencyHint": "貴社が請求に使用する通貨です。個人設定のないメンバーはこの通貨を引き継ぎます。",
+      "nameStillPlaceholder": "組織名が初期設定のままです。そのためお客様向けの書類には会社名が表示されません。こちらでご設定いただくと、請求書・日程表・お客様ページに反映されます。"
     }
   },
   "translate": {

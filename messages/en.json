@@ -2621,7 +2621,8 @@
       "addOffice": "Add office",
       "billingCurrency": "Billing currency",
       "billingCurrencyUnset": "Not set",
-      "billingCurrencyHint": "What this company invoices in. Colleagues who have set no preference of their own inherit it."
+      "billingCurrencyHint": "What this company invoices in. Colleagues who have set no preference of their own inherit it.",
+      "nameStillPlaceholder": "Your organization still has its default name, so customer documents show no company name at all. Set it here and it appears on invoices, the 日程表 and the customer portal."
     }
   },
   "translate": {
