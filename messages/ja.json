@@ -6056,10 +6056,6 @@
       "nonEuropeanPassport": "その他のパスポート",
       "affectsEntranceFees": "一部の入場料に影響します",
       "pricePerPerson": "1名様あたりの料金",
-      "season": "シーズン",
-      "lowSeason": "ローシーズン",
-      "highSeason": "ハイシーズン",
-      "peakSeason": "ピークシーズン",
       "totalFor": "合計",
       "person": "名様",
       "people": "名様",
@@ -6092,7 +6088,8 @@
       "cairoGuide": "カイロガイド",
       "southGuide": "南部ガイド",
       "docAuthor": "作成者",
-      "docCreated": "作成日"
+      "docCreated": "作成日",
+      "seasonBadge": "{season} +{percent}%"
     },
     "views": {
       "grid": "グリッド",
@@ -6789,7 +6786,6 @@
     "generating": "生成中...",
     "generateRateSheet": "料金表を生成（1-10名）",
     "tourLeaderBadge": "+1 ツアーリーダー",
-    "season": "シーズン",
     "group": "グループ",
     "totalPax": "合計{total}名（支払いゲスト{paying}名 + ツアーリーダー1名）",
     "tlCost": "TL費用",
@@ -6886,7 +6882,8 @@
     "resetChanges": "リセット",
     "failedToSaveItinerary": "旅程の保存に失敗しました",
     "seasonPremium": "{season}割増 +{percent}%",
-    "seasonPremiumNote": "€{base}に対して€{amount}。通常日程であれば€{base_price}です。チップと入場料は対象外です。"
+    "seasonPremiumNote": "€{base}に対して€{amount}。通常日程であれば€{base_price}です。チップと入場料は対象外です。",
+    "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {
     "title": "予約管理",

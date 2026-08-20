@@ -54,7 +54,6 @@ interface PriceCalculationResult {
   num_children?: number      // NEW: Ages 4-12 (50% discount)
   num_infants?: number       // NEW: Ages 0-3 (FREE except flights)
   travel_date: string
-  season: string
   is_eur_passport: boolean
   tour_leader_included: boolean
   services: CalculatedService[]
@@ -101,13 +100,6 @@ interface PriceCalculationResult {
   // deliverable only when complete; holes are surfaced, never fabricated away.
   complete?: boolean
   holes?: { kind: string; message: string }[]
-}
-
-function getSeason(date: Date): 'low' | 'high' | 'peak' {
-  const month = date.getMonth() + 1
-  if ([12, 1, 2, 3, 4].includes(month)) return 'high'
-  if ([7, 8].includes(month)) return 'peak'
-  return 'low'
 }
 
 // Check for B2B pricing rules for an activity (kept for tiered pricing like felucca)
@@ -570,9 +562,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Convert auto-pricing result to B2B format
-      const travelDate = new Date(travel_date)
-      const season = getSeason(travelDate)
-
       const convertedServices: CalculatedService[] = autoPriceResult.services.map(s => ({
         service_id: s.id,
         service_name: s.serviceName,
@@ -615,7 +604,6 @@ export async function POST(request: NextRequest) {
         num_children: usePassengerBreakdown ? effectiveNumChildren : undefined,
         num_infants: usePassengerBreakdown ? effectiveNumInfants : undefined,
         travel_date,
-        season,
         is_eur_passport,
         tour_leader_included,
         services: convertedServices,
@@ -679,9 +667,6 @@ export async function POST(request: NextRequest) {
     // ============================================
     // ORIGINAL LOGIC: Process tour_variation_services
     // ============================================
-
-    const travelDate = new Date(travel_date)
-    const season = getSeason(travelDate)
 
     // Determine effective margin (partner override)
     let effectiveMargin = margin_percent
@@ -980,7 +965,6 @@ export async function POST(request: NextRequest) {
       template_name: template?.template_name || '',
       num_pax,
       travel_date,
-      season,
       is_eur_passport,
       tour_leader_included,  // NEW
       services: calculatedServices,

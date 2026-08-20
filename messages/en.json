@@ -5923,10 +5923,6 @@
       "nonEuropeanPassport": "Non-European Passport",
       "affectsEntranceFees": "Affects entrance fees at some sites",
       "pricePerPerson": "Price per person",
-      "season": "Season",
-      "lowSeason": "Low Season",
-      "highSeason": "High Season",
-      "peakSeason": "Peak Season",
       "totalFor": "Total for",
       "person": "person",
       "people": "people",
@@ -5959,7 +5955,8 @@
       "cairoGuide": "Cairo guide",
       "southGuide": "Southern guide",
       "docAuthor": "Author (作成者)",
-      "docCreated": "Created (作成日)"
+      "docCreated": "Created (作成日)",
+      "seasonBadge": "{season} +{percent}%"
     }
   },
   "b2bQuotes": {
@@ -6203,7 +6200,6 @@
     "generating": "Generating...",
     "generateRateSheet": "Generate Rate Sheet (1-10 pax)",
     "tourLeaderBadge": "+1 Tour Leader",
-    "season": "Season",
     "group": "Group",
     "totalPax": "{total} total ({paying} paying guests + 1 tour leader)",
     "tlCost": "TL Cost",
@@ -6300,7 +6296,8 @@
     "resetChanges": "Reset",
     "failedToSaveItinerary": "Failed to save itinerary changes",
     "seasonPremium": "{season} premium +{percent}%",
-    "seasonPremiumNote": "€{amount} on €{base}. On an ordinary date this trip sells for €{base_price}. Tips and entrance fees are excluded."
+    "seasonPremiumNote": "€{amount} on €{base}. On an ordinary date this trip sells for €{base_price}. Tips and entrance fees are excluded.",
+    "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {
     "title": "Bookings",

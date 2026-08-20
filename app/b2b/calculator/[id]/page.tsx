@@ -27,7 +27,6 @@ interface PricingResult {
   tour_leader_included?: boolean
   tour_leader_cost?: number
   travel_date: string
-  season: string
   is_eur_passport: boolean
   services: Array<{
     service_id: string
@@ -474,7 +473,9 @@ export default function TourPriceCalculator() {
           tour_leader_cost: result.tour_leader_cost || null,
           single_supplement: result.single_supplement || null,
           is_eur_passport: isEurPassport,
-          season: result.season,
+          // What the quote was priced in, if anything — the operator's own
+          // season, not a guess from the month.
+          season: result.season_uplift?.season_name ?? null,
           notes: quoteForm.notes || null
         })
       })
@@ -526,15 +527,6 @@ export default function TourPriceCalculator() {
     a.download = `rate-sheet-${result?.variation_name || 'tour'}${tourLeaderSuffix}-${travelDate}.csv`
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  const getSeasonBadge = (season: string) => {
-    const styles: Record<string, string> = {
-      low: 'bg-green-100 text-green-700',
-      high: 'bg-amber-100 text-amber-700',
-      peak: 'bg-red-100 text-red-700'
-    }
-    return styles[season] || 'bg-gray-100 text-gray-700'
   }
 
   // Group services by day for cost breakdown
@@ -1067,9 +1059,14 @@ export default function TourPriceCalculator() {
                         {t('tourLeaderBadge')}
                       </span>
                     )}
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getSeasonBadge(result.season)}`}>
-                      {result.season.charAt(0).toUpperCase() + result.season.slice(1)} {t('season')}
-                    </span>
+                    {result.season_uplift && result.season_uplift.percent > 0 && (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#647C47]/15 text-[#4a5c35]">
+                        {t('seasonBadge', {
+                          season: result.season_uplift.season_name,
+                          percent: result.season_uplift.percent,
+                        })}
+                      </span>
+                    )}
                   </div>
                 </div>
 
