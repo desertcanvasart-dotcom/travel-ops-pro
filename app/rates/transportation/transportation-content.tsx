@@ -248,6 +248,9 @@ function getMinRate(rate: TransportationRate): number {
 
 export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
+  // The banner lives at the top of a long modal; the save button is at the
+  // bottom. Without this, a refusal is written where nobody is looking.
+  const errorRef = useRef<HTMLDivElement | null>(null)
   const tCommon = useTranslations('rates.common')
   const tCities = useTranslations('tourBuilder.cities')
   const dialog = useConfirmDialog()
@@ -458,15 +461,31 @@ export default function TransportationContent() {
     setSaving(true)
     setError(null)
 
-    if (!formData.city) {
-      setError('Please select a city')
+    // Every required field is checked here rather than by the browser, so the
+    // reason a save did not happen is always visible and always specific.
+    const refuse = (message: string) => {
+      setError(message)
       setSaving(false)
+      requestAnimationFrame(() => errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    }
+
+    if (!formData.supplier_id) {
+      refuse('Please choose the transport company that provides this service')
+      return
+    }
+
+    if (!formData.service_type) {
+      refuse('Please choose a service type')
+      return
+    }
+
+    if (!formData.city) {
+      refuse(needsDestinationCity(formData.service_type) ? 'Please select a departure city' : 'Please select a city')
       return
     }
 
     if (needsDestinationCity(formData.service_type) && !formData.destination_city) {
-      setError('Please select a destination city for intercity/city transfer services')
-      setSaving(false)
+      refuse('Please select a destination city for intercity/city transfer services')
       return
     }
 
@@ -478,13 +497,11 @@ export default function TransportationContent() {
       const min = parseInt(formData[`${tier.key}_capacity_min` as keyof FormData] as string)
       const max = parseInt(formData[`${tier.key}_capacity_max` as keyof FormData] as string)
       if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1) {
-        setError(`${t(tier.labelKey)}: capacity must be a number of passengers`)
-        setSaving(false)
+        refuse(`${t(tier.labelKey)}: capacity must be a number of passengers`)
         return
       }
       if (max < min) {
-        setError(`${t(tier.labelKey)}: maximum capacity cannot be below the minimum`)
-        setSaving(false)
+        refuse(`${t(tier.labelKey)}: maximum capacity cannot be below the minimum`)
         return
       }
     }
@@ -495,8 +512,7 @@ export default function TransportationContent() {
       return val && parseFloat(val) > 0
     })
     if (!hasAnyRate) {
-      setError('Please enter at least one vehicle tier rate')
-      setSaving(false)
+      refuse('Please enter a rate for at least one vehicle')
       return
     }
 
@@ -1277,9 +1293,16 @@ export default function TransportationContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {/* noValidate: the browser's own bubble points at a control that
+                may be scrolled out of sight in this modal, so the submit did
+                nothing and said nothing. Every rule below is checked in
+                handleSubmit instead, where the message lands in the banner. */}
+            <form onSubmit={handleSubmit} noValidate className="p-6 space-y-6">
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+                <div
+                  ref={errorRef}
+                  className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm"
+                >
                   {error}
                 </div>
               )}
@@ -1288,7 +1311,7 @@ export default function TransportationContent() {
               <div className="space-y-3">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-cyan-600" />
-                  Transport Company (Supplier)
+                  Transport Company (Supplier) <span className="text-red-500">*</span>
                 </h3>
                 <select
                   required
