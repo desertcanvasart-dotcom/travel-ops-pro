@@ -66,6 +66,25 @@ test('itinerary EDIT page loads (regression: "Itinerary not found")', async ({ p
   })
 })
 
+test('the editor offers a programme to link the trip to', async ({ page }) => {
+  // Linking a programme is what lets the customer portal show the office's own
+  // 日程表 rather than falling back to a plain day list, and until this picker
+  // existed nothing in the UI could set itineraries.template_id at all.
+  await page.goto('/itineraries')
+  const row = page.getByRole('row').filter({ hasText: 'E2E-SMOKE-001' })
+  await expect(row).toBeVisible({ timeout: 20_000 })
+  await row.getByTitle('Edit').click()
+  await expect(page).toHaveURL(/\/itineraries\/[0-9a-f-]+\/edit/, { timeout: 20_000 })
+
+  const picker = page.locator('select').filter({ hasText: 'Not linked' })
+  await expect(picker).toBeVisible({ timeout: 20_000 })
+  // Populated from /api/tours/templates?slim=1 — more than just the empty
+  // option means the list actually arrived.
+  await expect
+    .poll(async () => await picker.locator('option').count(), { timeout: 20_000 })
+    .toBeGreaterThan(1)
+})
+
 // The client these two assert on is created per run and removed afterwards.
 // `clients` has no org_id, so a permanent fixture would sit in the operator's
 // real list — and deleting it from there is what broke both of these before.

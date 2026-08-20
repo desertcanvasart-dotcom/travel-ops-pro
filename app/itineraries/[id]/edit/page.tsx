@@ -132,6 +132,9 @@ interface Itinerary {
   // (Concierge brief in Phase 1; WhatsApp later). NULL for manually-created
   // itineraries.
   thread_id?: string | null
+  // The programme this trip was sold from. Drives the 日程表 — both the office's
+  // own copy and the one the customer portal offers.
+  template_id?: string | null
 }
 
 interface ItineraryService {
@@ -235,6 +238,14 @@ const getServiceIcon = (type: string) => {
 // MAIN COMPONENT
 // ============================================
 
+interface Programme {
+  id: string
+  template_code: string
+  template_name: string | null
+  duration_days: number | null
+  is_active: boolean | null
+}
+
 export default function ItineraryEditorPage() {
   const t = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
@@ -281,6 +292,10 @@ export default function ItineraryEditorPage() {
 
   // Suppliers state
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  // The programmes a trip can be linked to. Linking one is what lets the
+  // customer portal show the office's own 日程表 instead of a second rendering
+  // of the day list — see app/portal/[token]/page.tsx.
+  const [programmes, setProgrammes] = useState<Programme[]>([])
   const [supplierSearch, setSupplierSearch] = useState('')
 
   // Track base (English) service data for language-aware saving
@@ -299,6 +314,7 @@ export default function ItineraryEditorPage() {
     loadItinerary()
     loadAttractions()
     loadSuppliers()
+    loadProgrammes()
   }, [itineraryId, activeLanguage])
 
   const loadItinerary = async () => {
@@ -420,6 +436,21 @@ export default function ItineraryEditorPage() {
     }
   }
 
+  const loadProgrammes = async () => {
+    try {
+      // Through the API rather than the browser's supabase client: RLS keeps
+      // tour_templates out of reach of a client-side read, and `slim=1` fetches
+      // 5KB instead of every programme's full day-by-day.
+      const res = await fetch('/api/tours/templates?slim=1')
+      if (!res.ok) return
+      const json = await res.json()
+      setProgrammes(Array.isArray(json.data) ? json.data : [])
+    } catch (error) {
+      // A picker that cannot load is not a reason to fail the editor.
+      console.error('Could not load programmes:', error)
+    }
+  }
+
   const loadAttractions = async () => {
     try {
       // Load both entrance fees and activities in parallel
@@ -528,6 +559,12 @@ export default function ItineraryEditorPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suppliers])
+
+  /** The programme this trip is linked to, for the length check below. */
+  const linkedProgramme = useMemo(
+    () => programmes.find(p => p.id === itinerary?.template_id) ?? null,
+    [programmes, itinerary?.template_id]
+  )
 
   const checkExistingInvoice = async () => {
     try {
@@ -759,6 +796,7 @@ export default function ItineraryEditorPage() {
           profit: clientTotal - supplierCost,
           status: itinerary.status, // Preserve the current status
           cabin_allocation: itinerary.cabin_allocation || null,
+          template_id: itinerary.template_id || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', itineraryId)
@@ -2046,6 +2084,51 @@ export default function ItineraryEditorPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* PROGRAMME LINK — what the customer's 日程表 is generated from */}
+          <div className="bg-white rounded-xl p-5 mb-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">{t('programme')}</h3>
+            <p className="text-xs text-gray-500 mb-3">{t('programmeHint')}</p>
+            <select
+              value={itinerary.template_id || ''}
+              onChange={(e) => setItinerary({ ...itinerary, template_id: e.target.value || null })}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#647C47]"
+            >
+              <option value="">{t('programmeNone')}</option>
+              {programmes.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.template_code}
+                  {p.duration_days ? ` — ${t('daysCount', { count: p.duration_days })}` : ''}
+                </option>
+              ))}
+            </select>
+
+            {/* A programme of a different length produces a document whose day
+                rows do not match the trip that was sold. Worth saying out loud
+                rather than discovering on the customer's copy. */}
+            {linkedProgramme?.duration_days != null && linkedProgramme.duration_days !== days.length && (
+              <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                {t('programmeLengthMismatch', {
+                  programmeDays: linkedProgramme.duration_days,
+                  tripDays: days.length,
+                })}
+              </p>
+            )}
+
+            {itinerary.template_id ? (
+              <a
+                href={`/api/documents/program-itinerary?itinerary_id=${itineraryId}&format=html`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2 text-sm text-[#647C47] hover:text-[#4a5c35] font-medium"
+              >
+                <FileText size={14} />
+                {t('programmePreview')}
+              </a>
+            ) : (
+              <p className="mt-3 text-xs text-gray-500">{t('programmeUnlinkedNote')}</p>
+            )}
           </div>
 
           {/* Route Map */}
