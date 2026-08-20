@@ -8,6 +8,7 @@ import type {
   DayCalc, GridTotals, PaxRangeResult, SLOT_DEFINITIONS,
 } from '../types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
+import { computeUplift, seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
 
 // --- Helpers ---
 
@@ -86,7 +87,14 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
 
 // --- Grand Totals ---
 
-export function calculateGrandTotals(days: GridDay[], config: GridConfig): GridTotals {
+export function calculateGrandTotals(
+  days: GridDay[],
+  config: GridConfig,
+  // The operator's own high dates. Passed in rather than fetched, because this
+  // file is pure arithmetic — the page loads the calendar once and hands it
+  // down. No calendar means no premium, which is what an ordinary date is.
+  seasonWindows: SeasonWindow[] = [],
+): GridTotals {
   const { pax, marginPercent } = config
 
   let costPerPerson = 0
@@ -99,16 +107,28 @@ export function calculateGrandTotals(days: GridDay[], config: GridConfig): GridT
   // Clamp margin to reasonable range (0-200%)
   const safeMargin = Math.max(0, Math.min(isNaN(marginPercent) ? 0 : marginPercent, 200))
   const marginMultiplier = 1 + safeMargin / 100
-  const sellingPricePerPerson = round2(costPerPerson * marginMultiplier)
-  const sellingPriceTotal = round2(sellingPricePerPerson * pax)
-  const marginAmount = round2(sellingPriceTotal - totalCost)
+  const basePerPerson = round2(costPerPerson * marginMultiplier)
+  const baseSellingPriceTotal = round2(basePerPerson * pax)
+  const marginAmount = round2(baseSellingPriceTotal - totalCost)
+
+  // The premium rides on top of the selling price, on the whole of it, and the
+  // DEPARTURE date decides — the same rule the B2B engine follows, so the same
+  // trip cannot be quoted two ways depending on which screen produced it.
+  const season = seasonForDate(seasonWindows, config.startDate)
+  const uplift = computeUplift({ sellingPrice: baseSellingPriceTotal, season })
+  const seasonUplift = round2(uplift.amount)
+  const sellingPriceTotal = round2(baseSellingPriceTotal + seasonUplift)
 
   return {
     costPerPerson: round2(costPerPerson),
     totalCost: round2(totalCost),
     marginAmount,
-    sellingPricePerPerson,
+    sellingPricePerPerson: pax > 0 ? round2(sellingPriceTotal / pax) : basePerPerson,
     sellingPriceTotal,
+    baseSellingPriceTotal,
+    seasonName: season?.name ?? null,
+    seasonPercent: season?.upliftPercent ?? 0,
+    seasonUplift,
   }
 }
 
@@ -269,7 +289,7 @@ export function calculatePaxRange(
   days: GridDay[],
   config: GridConfig,
   tierIndex: TransportTierIndex,
-  opts?: { paxFrom?: number; paxTo?: number },
+  opts?: { paxFrom?: number; paxTo?: number; seasonWindows?: SeasonWindow[] },
 ): PaxRangeResult {
   const safeMargin = Math.max(0, Math.min(isNaN(config.marginPercent) ? 0 : config.marginPercent, MARGIN_CAP))
   const { groupFixed, perPerson, singleSupplement } = aggregateNonTransport(days, config)
@@ -287,8 +307,23 @@ export function calculatePaxRange(
     paxTo: opts?.paxTo,
   })
 
+  // Every row carries the premium the single quote carries — a rate sheet that
+  // disagreed with the headline would be two prices for one departure.
+  const season = seasonForDate(opts?.seasonWindows ?? [], config.startDate)
+  const upliftCell = <T extends { sellingPrice: number; pricePerPerson: number }>(cell: T, pax: number): T => {
+    const { amount } = computeUplift({ sellingPrice: cell.sellingPrice, season })
+    const selling = round2(cell.sellingPrice + amount)
+    return { ...cell, sellingPrice: selling, pricePerPerson: pax > 0 ? round2(selling / pax) : cell.pricePerPerson }
+  }
+
   return {
-    paxPricing,
+    paxPricing: season && season.upliftPercent > 0
+      ? paxPricing.map(row => ({
+          ...row,
+          withoutLeader: upliftCell(row.withoutLeader, row.numPax),
+          withLeader: upliftCell(row.withLeader, row.numPax),
+        }))
+      : paxPricing,
     singleSupplement: round2(singleSupplement),
     currency: config.currency,
   }

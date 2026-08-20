@@ -15,6 +15,9 @@ interface B2CQuote {
   total_cost: number
   margin_percent: number
   margin_amount: number
+  season_name: string | null
+  season_uplift_percent: number | null
+  season_uplift_amount: number | null
   selling_price: number
   price_per_person: number
   currency: string
@@ -133,6 +136,12 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-400">Total cost</span><p className="font-medium">{money(quote.total_cost)}</p></div>
               <div><span className="text-gray-400">Margin</span><p className="font-medium">{quote.margin_percent}% ({money(quote.margin_amount)})</p></div>
+              {quote.season_uplift_amount != null && quote.season_uplift_amount > 0 && (
+                <div>
+                  <span className="text-gray-400">{quote.season_name} premium ({quote.season_uplift_percent}%)</span>
+                  <p className="font-medium text-[#4a5c35]">{money(quote.season_uplift_amount)}</p>
+                </div>
+              )}
               <div><span className="text-gray-400">Selling price</span><p className="font-bold text-[#647C47]">{money(quote.selling_price)}</p></div>
               <div><span className="text-gray-400">Per person</span><p className="font-medium">{money(quote.price_per_person)} × {quote.num_travelers}</p></div>
             </div>

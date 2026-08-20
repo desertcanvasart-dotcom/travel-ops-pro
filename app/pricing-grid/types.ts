@@ -226,8 +226,15 @@ export interface GridTotals {
   costPerPerson: number
   totalCost: number
   marginAmount: number
+  // Selling figures INCLUDE the operator's seasonal premium, because they are
+  // what the customer is quoted. The base figures below say what the same trip
+  // costs on an ordinary date, so a quote can show both.
   sellingPricePerPerson: number
   sellingPriceTotal: number
+  baseSellingPriceTotal: number
+  seasonName: string | null
+  seasonPercent: number
+  seasonUplift: number
 }
 
 // --- Multi-Pax Rate Sheet (B2B shape of the one grid engine) ---

@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { loadSeasonWindows } from '@/lib/auto-pricing-service'
+import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -18,13 +21,6 @@ const supabaseAdmin = createClient(
 // ============================================
 // HELPER FUNCTIONS (same as calculate-price/route.ts)
 // ============================================
-
-function getSeason(date: Date): 'low' | 'high' | 'peak' {
-  const month = date.getMonth() + 1
-  if ([12, 1, 2, 3, 4].includes(month)) return 'high'
-  if ([7, 8].includes(month)) return 'peak'
-  return 'low'
-}
 
 async function getB2BPricingRule(serviceName: string): Promise<any | null> {
   const { data, error } = await supabaseAdmin
@@ -338,10 +334,20 @@ export async function POST(request: NextRequest) {
 
     const tier = itinerary.tier || 'standard'
     const numPax = (itinerary.num_adults || 2) + (itinerary.num_children || 0)
-    const travelDate = itinerary.start_date ? new Date(itinerary.start_date) : new Date()
-    const season = getSeason(travelDate)
 
-    console.log('📊 Pricing context:', { tier, numPax, season, effectiveMargin })
+    // The operator's own high dates, judged on the itinerary's DEPARTURE — the
+    // same calendar and the same rule as the template engine, so a quote built
+    // from an itinerary cannot disagree with one built from a programme.
+    const orgId = await getCurrentOrgId()
+    const departureDate: string | null = itinerary.start_date
+      ? String(itinerary.start_date).slice(0, 10)
+      : null
+    const season = seasonForDate(
+      await loadSeasonWindows(orgId ?? undefined, departureDate ?? undefined),
+      departureDate
+    )
+
+    console.log('📊 Pricing context:', { tier, numPax, season: season?.name ?? null, effectiveMargin })
 
     // 4. Re-price each service using B2B rate tables
     // Meal rates fetched ONCE here (was a query per meal service inside the
@@ -535,8 +541,12 @@ export async function POST(request: NextRequest) {
     // 7. Calculate final pricing
     const totalCost = Math.round(subtotalCost * 100) / 100
     const marginAmount = Math.round(totalCost * (effectiveMargin / 100) * 100) / 100
-    const sellingPrice = Math.round((totalCost + marginAmount) * 100) / 100
-    const pricePerPerson = Math.round((sellingPrice / numPax) * 100) / 100
+    const baseSellingPrice = Math.round((totalCost + marginAmount) * 100) / 100
+    // On top of the selling price, on the whole of it. marginAmount keeps
+    // meaning margin; the premium is its own line.
+    const seasonUplift = Math.round(computeUplift({ sellingPrice: baseSellingPrice, season }).amount * 100) / 100
+    const sellingPrice = Math.round((baseSellingPrice + seasonUplift) * 100) / 100
+    const pricePerPerson = numPax > 0 ? Math.round((sellingPrice / numPax) * 100) / 100 : 0
 
     console.log('💰 B2B Pricing calculated:', {
       totalCost,
@@ -577,7 +587,9 @@ export async function POST(request: NextRequest) {
         tour_leader_cost: tourLeaderCost,
         single_supplement: singleSupplement,
         is_eur_passport,
-        season,
+        season_name: season?.name ?? null,
+        season_uplift_percent: season?.upliftPercent ?? 0,
+        season_uplift_amount: seasonUplift,
         // Every line in services_snapshot is EUR (B2B rate tables + the
         // EUR-normalized kept lines above) — saving the itinerary's display
         // currency here mislabeled the amounts whenever it wasn't EUR.
@@ -635,7 +647,9 @@ export async function POST(request: NextRequest) {
         single_supplement: singleSupplement,
         currency: itinerary.currency || 'EUR',
         num_pax: numPax,
-        season,
+        season_name: season?.name ?? null,
+        season_uplift_percent: season?.upliftPercent ?? 0,
+        season_uplift_amount: seasonUplift,
         services_count: servicesSnapshot.length,
       }
     }, { status: 201 })

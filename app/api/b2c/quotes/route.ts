@@ -8,6 +8,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
+import { loadSeasonWindows } from '@/lib/auto-pricing-service'
+import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
     // The itinerary is the source of truth for cost + org + client.
     const { data: itinerary, error: itinErr } = await supabaseAdmin
       .from('itineraries')
-      .select('id, org_id, total_cost, supplier_cost, currency, client_name, client_email')
+      .select('id, org_id, start_date, total_cost, supplier_cost, currency, client_name, client_email')
       .eq('id', itinerary_id)
       .single()
 
@@ -80,8 +82,22 @@ export async function POST(request: NextRequest) {
     const totalCost = Number(itinerary.supplier_cost) || Number(itinerary.total_cost) || 0
     const marginPct = Number(margin_percent) || 0
     const marginAmount = totalCost * (marginPct / 100)
-    const sellingPrice = totalCost + marginAmount
-    const pricePerPerson = sellingPrice / travelers
+    const baseSellingPrice = totalCost + marginAmount
+
+    // The operator's own high dates, on the DEPARTURE — the same calendar and
+    // the same rule the B2B paths follow, because a trip leaving in Golden Week
+    // is worth what it is worth whoever it is sold to. The org comes from the
+    // itinerary rather than the session: a quote belongs to the trip's owner.
+    const departureDate: string | null = itinerary.start_date
+      ? String(itinerary.start_date).slice(0, 10)
+      : null
+    const season = seasonForDate(
+      await loadSeasonWindows(itinerary.org_id ?? undefined, departureDate ?? undefined),
+      departureDate
+    )
+    const seasonUplift = Math.round(computeUplift({ sellingPrice: baseSellingPrice, season }).amount * 100) / 100
+    const sellingPrice = Math.round((baseSellingPrice + seasonUplift) * 100) / 100
+    const pricePerPerson = travelers > 0 ? Math.round((sellingPrice / travelers) * 100) / 100 : 0
 
     const validUntil = new Date()
     validUntil.setDate(validUntil.getDate() + (Number(valid_days) || 30))
@@ -100,6 +116,9 @@ export async function POST(request: NextRequest) {
         margin_amount: marginAmount,
         selling_price: sellingPrice,
         price_per_person: pricePerPerson,
+        season_name: season?.name ?? null,
+        season_uplift_percent: season?.upliftPercent ?? 0,
+        season_uplift_amount: seasonUplift,
         currency: currency || itinerary.currency || 'EUR',
         status: 'draft',
         valid_until: validUntil.toISOString().split('T')[0],

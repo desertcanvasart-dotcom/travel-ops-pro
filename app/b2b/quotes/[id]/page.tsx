@@ -40,6 +40,9 @@ interface Quote {
   single_supplement: number | null
   is_eur_passport: boolean
   season: string | null
+  season_name: string | null
+  season_uplift_percent: number | null
+  season_uplift_amount: number | null
   services_snapshot: any[]
   total_cost: number
   margin_percent: number
@@ -376,7 +379,7 @@ export default function QuoteDetailPage() {
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">{t('season')}</p>
-                <p className="text-sm font-semibold">{quote.season ? quote.season.charAt(0).toUpperCase() + quote.season.slice(1) : '-'}</p>
+                <p className="text-sm font-semibold">{quote.season_name || '-'}</p>
               </div>
             </div>
           </div>
@@ -453,6 +456,19 @@ export default function QuoteDetailPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">{t('tourLeaderCost')}</span>
                   <span className="text-blue-600">€{quote.tour_leader_cost.toFixed(2)}</span>
+                </div>
+              )}
+              {/* Without this line the three figures above do not add up to the
+                  selling price below, and nothing on the page says why. */}
+              {quote.season_uplift_amount != null && quote.season_uplift_amount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">
+                    {t('seasonPremium', {
+                      season: quote.season_name ?? '',
+                      percent: quote.season_uplift_percent ?? 0,
+                    })}
+                  </span>
+                  <span className="text-[#4a5c35]">€{quote.season_uplift_amount.toFixed(2)}</span>
                 </div>
               )}
               <div className="pt-3 border-t">

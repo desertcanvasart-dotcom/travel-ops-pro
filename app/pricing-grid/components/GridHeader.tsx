@@ -242,6 +242,17 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
                 <div className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">Margin ({config.marginPercent}%)</div>
                 <div className={`text-sm font-bold ${totals.marginAmount > 0 ? 'text-amber-600' : 'text-red-500'}`}>{sym}{fmt(cv(totals.marginAmount))}</div>
               </div>
+              {/* The premium sits between margin and the selling figures, or the
+                  strip shows a Sell Total that the two numbers to its left do
+                  not add up to, with nothing here to say why. */}
+              {totals.seasonName && totals.seasonPercent > 0 && (
+                <div className="px-3 py-2 bg-[#647C47]/10">
+                  <div className="text-[10px] text-[#4a5c35] uppercase tracking-wider font-medium truncate max-w-[9rem]">
+                    {totals.seasonName} +{totals.seasonPercent}%
+                  </div>
+                  <div className="text-sm font-bold text-[#4a5c35]">{sym}{fmt(cv(totals.seasonUplift))}</div>
+                </div>
+              )}
               <div className="px-3 py-2 bg-green-50/50">
                 <div className="text-[10px] text-green-600 uppercase tracking-wider font-medium">Sell/PP</div>
                 <div className="text-sm font-extrabold text-green-700">{sym}{fmt(cv(totals.sellingPricePerPerson))}</div>

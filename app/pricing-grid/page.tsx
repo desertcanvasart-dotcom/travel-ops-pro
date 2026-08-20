@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay } from './lib/calculator'
+import type { SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
 import GridHeader from './components/GridHeader'
 import ClientInfoBar from './components/ClientInfoBar'
@@ -104,6 +105,9 @@ function PricingGridContent() {
     loadFromStorage(STORAGE_KEY_DAYS, [])
   )
   const [rates, setRates] = useState<AllRates | null>(null)
+  // The operator's own high dates, loaded once. The grid is the other screen
+  // that quotes a departure, so it reads the same calendar the B2B engine does.
+  const [seasonWindows, setSeasonWindows] = useState<SeasonWindow[]>([])
   const [loading, setLoading] = useState(true)
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -126,6 +130,31 @@ function PricingGridContent() {
 
   useEffect(() => {
     isInitialLoad.current = false
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/pricing/seasons')
+        const data = await res.json()
+        if (cancelled || !data.success) return
+        setSeasonWindows(
+          (data.data || []).flatMap((season: any) =>
+            (season.pricing_season_dates || []).map((w: any) => ({
+              seasonId: season.id,
+              name: season.name,
+              upliftPercent: Number(season.uplift_percent) || 0,
+              startDate: w.start_date,
+              endDate: w.end_date,
+            }))
+          )
+        )
+      } catch {
+        // A calendar we cannot read is an ordinary date, never a guessed premium.
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // Load user preferences as defaults (tier, margin, currency) on first load
@@ -666,8 +695,12 @@ function PricingGridContent() {
 
   // --- Calculate Totals ---
   const totals: GridTotals = days.length > 0
-    ? calculateGrandTotals(days, config)
-    : { costPerPerson: 0, totalCost: 0, marginAmount: 0, sellingPricePerPerson: 0, sellingPriceTotal: 0 }
+    ? calculateGrandTotals(days, config, seasonWindows)
+    : {
+        costPerPerson: 0, totalCost: 0, marginAmount: 0,
+        sellingPricePerPerson: 0, sellingPriceTotal: 0, baseSellingPriceTotal: 0,
+        seasonName: null, seasonPercent: 0, seasonUplift: 0,
+      }
 
   // --- Render ---
   if (loading && !rates) {
