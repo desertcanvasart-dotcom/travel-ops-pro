@@ -79,6 +79,37 @@ export function seasonForDate(
  */
 export const PASS_THROUGH_SERVICE_TYPES = new Set(['tips', 'entrance'])
 
+/**
+ * What the pass-throughs inside a selling price come to, at that price's margin.
+ *
+ * A priced service row carries a PER-PERSON amount when it scales with the group
+ * (an entrance fee is one ticket) and a whole-group amount when it does not (the
+ * day's tips are one envelope). Multiplying the first kind by the headcount is
+ * the whole job, and getting it wrong is expensive in one direction only: a
+ * premium charged on tickets the operator merely passes on.
+ *
+ * `personEquivalents` is a count, not a headcount: a child at half price carries
+ * half a person's entrance fees into the price. `groupShare` is the fraction of
+ * the group-fixed pass-throughs the price actually contains — one whole share
+ * unless a discount has amortised them differently.
+ */
+export function passThroughSelling(input: {
+  services: Array<{ serviceType: string; lineTotal: number | null | undefined; isPerPax: boolean }>
+  personEquivalents: number
+  groupShare?: number
+  marginPercent: number
+}): number {
+  const heads = Math.max(0, input.personEquivalents)
+  const groupShare = input.groupShare ?? 1
+  let cost = 0
+  for (const service of input.services) {
+    if (!PASS_THROUGH_SERVICE_TYPES.has(service.serviceType)) continue
+    const lineTotal = Number(service.lineTotal) || 0
+    cost += service.isPerPax ? lineTotal * heads : lineTotal * groupShare
+  }
+  return cost * (1 + (input.marginPercent || 0) / 100)
+}
+
 export interface UpliftBreakdown {
   /** The premium in currency, already rounded by the caller's rules. */
   amount: number

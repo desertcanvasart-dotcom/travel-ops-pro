@@ -51,6 +51,15 @@ interface PricingResult {
   price_per_person: number
   single_supplement?: number
   currency: string
+  // selling_price already includes the premium; these say what it was and what
+  // the same trip costs on an ordinary date.
+  base_selling_price?: number
+  season_uplift?: {
+    season_name: string
+    percent: number
+    amount: number
+    base: number
+  } | null
 }
 
 interface RateSheetRow {
@@ -1091,6 +1100,29 @@ export default function TourPriceCalculator() {
                     <p className="text-xl font-bold text-[#647C47]">&euro;{result.price_per_person.toFixed(2)}</p>
                   </div>
                 </div>
+
+                {/* The operator's own high dates. Shown whenever a premium is in
+                    the price: a number the customer is quoted should never be
+                    unexplainable from the screen that produced it. */}
+                {result.season_uplift && result.season_uplift.percent > 0 && (
+                  <div className="mt-4 p-3 bg-[#647C47]/10 border border-[#647C47]/30 rounded-lg">
+                    <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                      <span className="text-sm font-semibold text-[#4a5c35]">
+                        {t('seasonPremium', {
+                          season: result.season_uplift.season_name,
+                          percent: result.season_uplift.percent,
+                        })}
+                      </span>
+                      <span className="text-sm text-[#4a5c35]">
+                        {t('seasonPremiumNote', {
+                          amount: result.season_uplift.amount.toFixed(2),
+                          base: result.season_uplift.base.toFixed(2),
+                          base_price: (result.base_selling_price ?? 0).toFixed(2),
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Single Supplement Display */}
                 {result.single_supplement && result.single_supplement > 0 && (

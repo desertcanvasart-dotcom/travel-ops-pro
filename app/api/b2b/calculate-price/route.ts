@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT } from '@/lib/auto-pricing-service'
+import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
+import { computeUplift, seasonForDate, PASS_THROUGH_SERVICE_TYPES } from '@/lib/pricing/season-uplift'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // ============================================
@@ -68,6 +69,16 @@ interface PriceCalculationResult {
   price_per_person: number
   single_supplement: number
   currency: string
+  // What the trip costs on an ordinary date, and the operator's own premium for
+  // this departure. selling_price and price_per_person already INCLUDE the
+  // premium — these two are here so a quote can show why they differ.
+  base_selling_price?: number
+  season_uplift?: {
+    season_name: string
+    percent: number
+    amount: number
+    base: number
+  } | null
   pax_pricing_table?: any[]
   // NEW: Age-based pricing breakdown
   age_based_pricing?: {
@@ -514,7 +525,10 @@ export async function POST(request: NextRequest) {
       if (usePassengerBreakdown && (effectiveNumChildren > 0 || effectiveNumInfants > 0)) {
         console.log('🧒 Using age-based pricing with child/infant discounts')
         autoPriceResult = await calculatePricingWithPassengerBreakdown({
-      orgId: await getCurrentOrgId() ?? undefined,
+          // Whose calendar, and which departure — the premium needs both, and
+          // the engine charges nothing without them.
+          orgId: await getCurrentOrgId() ?? undefined,
+          travelDate: travel_date,
           templateId,
           tier: effectiveTier,
           numPax: effectiveTotalPax,
@@ -534,7 +548,8 @@ export async function POST(request: NextRequest) {
       } else {
         // Call standard auto-pricing service
         autoPriceResult = await calculateAutoPricing({
-      orgId: await getCurrentOrgId() ?? undefined,
+          orgId: await getCurrentOrgId() ?? undefined,
+          travelDate: travel_date,
           templateId,
           tier: effectiveTier,
           numPax: effectiveTotalPax,
@@ -615,6 +630,15 @@ export async function POST(request: NextRequest) {
         price_per_person: autoPriceResult.pricePerPerson,
         single_supplement: autoPriceResult.singleSupplement ?? 0,
         currency: autoPriceResult.currency,
+        base_selling_price: autoPriceResult.baseSellingPrice,
+        season_uplift: autoPriceResult.seasonUplift
+          ? {
+              season_name: autoPriceResult.seasonUplift.seasonName ?? '',
+              percent: autoPriceResult.seasonUplift.percent,
+              amount: autoPriceResult.seasonUplift.amount,
+              base: autoPriceResult.seasonUplift.base,
+            }
+          : null,
         pax_pricing_table: autoPriceResult.paxPricingTable,
         // Include age-based pricing breakdown if available
         age_based_pricing: ageBasedPricingData ? {
@@ -927,7 +951,27 @@ export async function POST(request: NextRequest) {
     // Calculate totals
     const totalCost = subtotalCost + (include_optionals ? optionalTotal : 0)
     const marginAmount = totalCost * (effectiveMargin / 100)
-    const sellingPrice = totalCost + marginAmount
+    const baseSellingPrice = totalCost + marginAmount
+
+    // The operator's demand premium, on this path too. A variation that happens
+    // to carry its own service rows must not quote Golden Week at the ordinary
+    // price while the day-builder path charges 15% more for the same departure.
+    const demandSeason = seasonForDate(
+      await loadSeasonWindows(await getCurrentOrgId() ?? undefined, travel_date),
+      travel_date
+    )
+    // Tips and entrance fees are passed through, so what leaves the premium base
+    // is their share of the SELLING price — the same rule the engine applies.
+    const passThroughCost = calculatedServices
+      .filter(svc => PASS_THROUGH_SERVICE_TYPES.has(String(svc.service_category || '').toLowerCase()))
+      .reduce((sum, svc) => sum + svc.line_total, 0)
+    const uplift = computeUplift({
+      sellingPrice: baseSellingPrice,
+      passThroughTotal: passThroughCost * (1 + effectiveMargin / 100),
+      season: demandSeason,
+    })
+    const upliftAmount = Math.round(uplift.amount * 100) / 100
+    const sellingPrice = baseSellingPrice + upliftAmount
     const pricePerPerson = sellingPrice / num_pax
 
     const result: PriceCalculationResult = {
@@ -950,7 +994,16 @@ export async function POST(request: NextRequest) {
       selling_price: Math.round(sellingPrice * 100) / 100,
       price_per_person: Math.round(pricePerPerson * 100) / 100,
       single_supplement: 0,  // Not calculated in legacy mode
-      currency: 'EUR'
+      currency: 'EUR',
+      base_selling_price: Math.round(baseSellingPrice * 100) / 100,
+      season_uplift: demandSeason
+        ? {
+            season_name: demandSeason.name,
+            percent: demandSeason.upliftPercent,
+            amount: upliftAmount,
+            base: Math.round(uplift.base * 100) / 100,
+          }
+        : null,
     }
 
     console.log('🎉 B2B Price calculated:', {

@@ -6298,7 +6298,9 @@
     "saveChanges": "Save Changes",
     "savingChanges": "Saving...",
     "resetChanges": "Reset",
-    "failedToSaveItinerary": "Failed to save itinerary changes"
+    "failedToSaveItinerary": "Failed to save itinerary changes",
+    "seasonPremium": "{season} premium +{percent}%",
+    "seasonPremiumNote": "€{amount} on €{base}. On an ordinary date this trip sells for €{base_price}. Tips and entrance fees are excluded."
   },
   "bookings": {
     "title": "Bookings",

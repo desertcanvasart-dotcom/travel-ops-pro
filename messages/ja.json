@@ -6884,7 +6884,9 @@
     "saveChanges": "変更を保存",
     "savingChanges": "保存中...",
     "resetChanges": "リセット",
-    "failedToSaveItinerary": "旅程の保存に失敗しました"
+    "failedToSaveItinerary": "旅程の保存に失敗しました",
+    "seasonPremium": "{season}割増 +{percent}%",
+    "seasonPremiumNote": "€{base}に対して€{amount}。通常日程であれば€{base_price}です。チップと入場料は対象外です。"
   },
   "bookings": {
     "title": "予約管理",
