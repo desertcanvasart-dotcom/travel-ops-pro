@@ -471,16 +471,21 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
         {operator.offices.length > 0 ? (
           <ul className="offices">
             {operator.offices.map((o, i) => (
+              // Three lines each, always: name and postcode, then the street,
+              // then the numbers. The postcode rides with the name because the
+              // street alone is what needs the room — with both on one line the
+              // Osaka address wrapped and that office stood a line taller than
+              // its neighbours.
               <li key={i}>
-                {o.label && <b>{o.label}</b>}
-                {(o.postal_code || o.address) && (
-                  <span>{[o.postal_code, o.address].filter(Boolean).join(' ')}</span>
-                )}
+                <span className="l1">
+                  {o.label && <b>{o.label}</b>}
+                  {o.postal_code && <em>{o.postal_code}</em>}
+                </span>
+                {o.address && <span>{o.address}</span>}
                 {(o.tel || o.fax) && (
-                  <span>
-                    {o.tel && `TEL：${o.tel}`}
-                    {o.tel && o.fax && '　'}
-                    {o.fax && `FAX：${o.fax}`}
+                  <span className="tel">
+                    {o.tel && <em>TEL {o.tel}</em>}
+                    {o.fax && <em>FAX {o.fax}</em>}
                   </span>
                 )}
               </li>
