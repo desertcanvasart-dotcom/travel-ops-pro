@@ -157,7 +157,9 @@ export interface PortalBooking {
   payment: PortalPayment
   travellers: PortalTraveller[]
   documents: PortalDocument[]
-  /** The trip itself, through the itinerary-share allowlist. */
+  /** The trip as a day list, through the itinerary-share allowlist. Populated
+   *  ONLY when the trip has no programme link and therefore no 日程表 to offer:
+   *  a traveller must never be shown two itineraries drawn from two tables. */
   itinerary: ClientItinerary | null
   /** Once locked the form is read-only: the manifest has gone to Cairo. */
   detailsLocked: boolean
