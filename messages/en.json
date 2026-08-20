@@ -264,7 +264,8 @@
     "capacity": "Capacity",
     "integrations": "Integrations",
     "departments": "Departments",
-    "activityLog": "Activity Log"
+    "activityLog": "Activity Log",
+    "seasonalPremiums": "Seasonal Premiums"
   },
   "roles": {
     "admin": "Admin",
@@ -4556,7 +4557,8 @@
         "trains": "Trains",
         "airport": "Airport",
         "hotelSvc": "Hotel Svc",
-        "tips": "Tips"
+        "tips": "Tips",
+        "seasons": "Seasons"
       },
       "table": {
         "service": "Service",
@@ -4615,6 +4617,41 @@
         "hotelStaff": "No hotel staff rates found",
         "tipping": "No tipping rates found"
       }
+    },
+    "seasons": {
+      "title": "Seasonal Premiums",
+      "subtitle": "Your own high dates — the ones you know sell out. This premium is added on top of the selling price, separately from the higher rates suppliers charge you in their own high seasons.",
+      "ratesHub": "Rates",
+      "addSeason": "Add Season",
+      "addFirstSeason": "Add First Season",
+      "seasonName": "Season name",
+      "seasonNamePlaceholder": "Golden Week, Obon, New Year…",
+      "premium": "Premium",
+      "colour": "Colour",
+      "addDates": "Add dates",
+      "from": "First day",
+      "to": "Last day",
+      "labelOptional": "Label (optional)",
+      "labelPlaceholder": "Golden Week 2027",
+      "noDates": "No dates yet",
+      "noDatesWarning": "This season has no dates, so it never changes a price.",
+      "windowCount": "{count, plural, one {# period} other {# periods}}",
+      "pastWindow": "Past",
+      "noSeasons": "No seasonal premiums yet",
+      "noSeasonsHint": "Name the dates that sell out — Golden Week, Obon, New Year — and every quote departing in them is priced higher automatically.",
+      "howItWorksTitle": "How the premium is charged",
+      "howItWorksDeparture": "The departure date decides it. A trip that runs into a season without departing in it is priced as an ordinary departure.",
+      "howItWorksOverlap": "Where two seasons cover the same day, the higher premium applies — they are never added together.",
+      "howItWorksPassThrough": "Tips and entrance fees are left out: a fixed price somebody else sets is passed through, not marked up.",
+      "deleteSeasonConfirm": "Delete “{name}” and its dates? Prices already quoted are unaffected.",
+      "deleteDatesConfirm": "Delete these dates?",
+      "seasonSaved": "Season saved",
+      "seasonDeleted": "Season deleted",
+      "datesSaved": "Dates added",
+      "datesDeleted": "Dates deleted",
+      "failedToLoad": "Failed to load seasons",
+      "failedToSave": "Failed to save",
+      "failedToDelete": "Failed to delete"
     }
   },
   "profitLoss": {
@@ -5886,10 +5923,6 @@
       "nonEuropeanPassport": "Non-European Passport",
       "affectsEntranceFees": "Affects entrance fees at some sites",
       "pricePerPerson": "Price per person",
-      "season": "Season",
-      "lowSeason": "Low Season",
-      "highSeason": "High Season",
-      "peakSeason": "Peak Season",
       "totalFor": "Total for",
       "person": "person",
       "people": "people",
@@ -5922,7 +5955,8 @@
       "cairoGuide": "Cairo guide",
       "southGuide": "Southern guide",
       "docAuthor": "Author (作成者)",
-      "docCreated": "Created (作成日)"
+      "docCreated": "Created (作成日)",
+      "seasonBadge": "{season} +{percent}%"
     }
   },
   "b2bQuotes": {
@@ -6166,7 +6200,6 @@
     "generating": "Generating...",
     "generateRateSheet": "Generate Rate Sheet (1-10 pax)",
     "tourLeaderBadge": "+1 Tour Leader",
-    "season": "Season",
     "group": "Group",
     "totalPax": "{total} total ({paying} paying guests + 1 tour leader)",
     "tlCost": "TL Cost",
@@ -6261,7 +6294,10 @@
     "saveChanges": "Save Changes",
     "savingChanges": "Saving...",
     "resetChanges": "Reset",
-    "failedToSaveItinerary": "Failed to save itinerary changes"
+    "failedToSaveItinerary": "Failed to save itinerary changes",
+    "seasonPremium": "{season} premium +{percent}%",
+    "seasonPremiumNote": "€{amount} on €{base}. On an ordinary date this trip sells for €{base_price}. Tips and entrance fees are excluded.",
+    "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {
     "title": "Bookings",

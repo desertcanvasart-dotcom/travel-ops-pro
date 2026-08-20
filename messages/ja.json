@@ -264,7 +264,8 @@
     "capacity": "稼働状況",
     "integrations": "外部連携",
     "departments": "部署",
-    "activityLog": "操作ログ"
+    "activityLog": "操作ログ",
+    "seasonalPremiums": "季節料金"
   },
   "roles": {
     "admin": "管理者",
@@ -5390,7 +5391,8 @@
         "trains": "列車",
         "airport": "空港",
         "hotelSvc": "ホテルサービス",
-        "tips": "チップ"
+        "tips": "チップ",
+        "seasons": "季節料金"
       },
       "table": {
         "service": "サービス",
@@ -5449,6 +5451,41 @@
         "hotelStaff": "ホテルスタッフ料金が見つかりません",
         "tipping": "チップ料金が見つかりません"
       }
+    },
+    "seasons": {
+      "title": "季節料金（繁忙期割増）",
+      "subtitle": "自社で決める繁忙期の割増です。仕入先の高い時期の料金とは別に、販売価格に上乗せします。",
+      "ratesHub": "料金管理",
+      "addSeason": "シーズンを追加",
+      "addFirstSeason": "最初のシーズンを追加",
+      "seasonName": "シーズン名",
+      "seasonNamePlaceholder": "ゴールデンウィーク、お盆、年末年始…",
+      "premium": "割増率",
+      "colour": "色",
+      "addDates": "日程を追加",
+      "from": "開始日",
+      "to": "終了日",
+      "labelOptional": "メモ（任意）",
+      "labelPlaceholder": "2027年ゴールデンウィーク",
+      "noDates": "日程が未設定",
+      "noDatesWarning": "このシーズンには日程がないため、料金には反映されません。",
+      "windowCount": "{count}期間",
+      "pastWindow": "終了",
+      "noSeasons": "季節料金はまだ登録されていません",
+      "noSeasonsHint": "ゴールデンウィーク・お盆・年末年始など、売り切れる日程を登録すると、その期間に出発する見積は自動で割増されます。",
+      "howItWorksTitle": "割増の計算方法",
+      "howItWorksDeparture": "判定は出発日です。旅行期間が繁忙期に重なっても、出発日が期間外であれば通常料金です。",
+      "howItWorksOverlap": "同じ日に複数のシーズンが重なる場合は、高い方の割増率だけを適用します（合算しません）。",
+      "howItWorksPassThrough": "チップと入場料は対象外です。他者が決めた定額は、そのまま実費としてお預かりします。",
+      "deleteSeasonConfirm": "「{name}」と登録された日程を削除しますか？作成済みの見積金額は変わりません。",
+      "deleteDatesConfirm": "この日程を削除しますか？",
+      "seasonSaved": "保存しました",
+      "seasonDeleted": "シーズンを削除しました",
+      "datesSaved": "日程を追加しました",
+      "datesDeleted": "日程を削除しました",
+      "failedToLoad": "シーズンの読み込みに失敗しました",
+      "failedToSave": "保存に失敗しました",
+      "failedToDelete": "削除に失敗しました"
     }
   },
   "profitLoss": {
@@ -6019,10 +6056,6 @@
       "nonEuropeanPassport": "その他のパスポート",
       "affectsEntranceFees": "一部の入場料に影響します",
       "pricePerPerson": "1名様あたりの料金",
-      "season": "シーズン",
-      "lowSeason": "ローシーズン",
-      "highSeason": "ハイシーズン",
-      "peakSeason": "ピークシーズン",
       "totalFor": "合計",
       "person": "名様",
       "people": "名様",
@@ -6055,7 +6088,8 @@
       "cairoGuide": "カイロガイド",
       "southGuide": "南部ガイド",
       "docAuthor": "作成者",
-      "docCreated": "作成日"
+      "docCreated": "作成日",
+      "seasonBadge": "{season} +{percent}%"
     },
     "views": {
       "grid": "グリッド",
@@ -6752,7 +6786,6 @@
     "generating": "生成中...",
     "generateRateSheet": "料金表を生成（1-10名）",
     "tourLeaderBadge": "+1 ツアーリーダー",
-    "season": "シーズン",
     "group": "グループ",
     "totalPax": "合計{total}名（支払いゲスト{paying}名 + ツアーリーダー1名）",
     "tlCost": "TL費用",
@@ -6847,7 +6880,10 @@
     "saveChanges": "変更を保存",
     "savingChanges": "保存中...",
     "resetChanges": "リセット",
-    "failedToSaveItinerary": "旅程の保存に失敗しました"
+    "failedToSaveItinerary": "旅程の保存に失敗しました",
+    "seasonPremium": "{season}割増 +{percent}%",
+    "seasonPremiumNote": "€{base}に対して€{amount}。通常日程であれば€{base_price}です。チップと入場料は対象外です。",
+    "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {
     "title": "予約管理",

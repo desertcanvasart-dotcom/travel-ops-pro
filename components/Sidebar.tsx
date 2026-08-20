@@ -57,6 +57,7 @@ import {
   Calculator,
   Sparkles,
   CalendarDays,
+  CalendarRange,
   Plug,
   Building2,
   ScrollText,
@@ -188,6 +189,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'hotelServices', href: '/rates/hotel-services', icon: ConciergeBell },
       { labelKey: 'tipping', href: '/rates/tipping', icon: DollarSign },
       { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
+      { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange },
     ]
   },
   {

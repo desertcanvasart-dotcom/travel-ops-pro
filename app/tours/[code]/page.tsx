@@ -78,7 +78,12 @@ interface PricingResult {
   template_name: string
   num_pax: number
   travel_date: string
-  season: string
+  season_uplift?: {
+    season_name: string
+    percent: number
+    amount: number
+    base: number
+  } | null
   is_eur_passport: boolean
   services: Array<{
     service_id: string
@@ -356,15 +361,6 @@ export default function TourDetailPage() {
     return type === 'private'
       ? { bg: 'bg-slate-50 border-slate-200', text: 'text-slate-700', icon: '🔒', label: 'Private' }
       : { bg: 'bg-sky-50 border-sky-200', text: 'text-sky-700', icon: '👥', label: 'Shared' }
-  }
-
-  const getSeasonBadge = (season: string) => {
-    const styles: Record<string, string> = {
-      low: 'bg-green-100 text-green-700',
-      high: 'bg-amber-100 text-amber-700',
-      peak: 'bg-red-100 text-red-700'
-    }
-    return styles[season] || 'bg-gray-100 text-gray-700'
   }
 
   const getCategoryIcon = (category: string) => {
@@ -770,9 +766,14 @@ export default function TourDetailPage() {
                 <div className="bg-[#647C47]/5 border border-[#647C47]/20 p-4 rounded-lg mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs text-gray-500">{t('detail.pricePerPerson')}</p>
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${getSeasonBadge(pricing.season)}`}>
-                      {t(`detail.${pricing.season}Season`)}
-                    </span>
+                    {pricing.season_uplift && pricing.season_uplift.percent > 0 && (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-[#647C47]/15 text-[#4a5c35]">
+                        {t('detail.seasonBadge', {
+                          season: pricing.season_uplift.season_name,
+                          percent: pricing.season_uplift.percent,
+                        })}
+                      </span>
+                    )}
                   </div>
                   <p className="text-3xl font-bold text-[#647C47]">
                     {formatWithConversion(pricing.price_per_person, 'EUR')}
