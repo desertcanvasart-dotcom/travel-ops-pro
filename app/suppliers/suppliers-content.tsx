@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { 
   Search, Plus, MoreHorizontal, Building2, Car, Compass, Ship, Ticket, Utensils, 
   ShoppingBag, MapPin, Users, Briefcase, X, Edit, Trash2, Eye, Loader2, AlertCircle,
@@ -224,6 +225,9 @@ export default function SuppliersContent() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
+  // Bulk selection — same kit as the rates pages. Above every early return.
+  const bulk = useBulkSelect()
+  const [bulkNotice, setBulkNotice] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -469,6 +473,17 @@ export default function SuppliersContent() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleBulkDelete = async () => {
+    const [ok, failed, reasons] = await bulkDeleteByIds([...bulk.selected], id => `/api/suppliers/${id}`)
+    bulk.clear()
+    // A partial result names its count AND the server's reason. "3 of 5
+    // deleted" with no why is a puzzle; "2 blocked: referenced by invoices"
+    // is an instruction.
+    if (failed === 0) setBulkNotice({ tone: 'ok', text: t('bulkDeleted', { count: ok }) })
+    else setBulkNotice({ tone: 'warn', text: t('bulkPartial', { ok, failed, reason: reasons.join(' · ') }) })
+    fetchSuppliers()
   }
 
   const handleDelete = async () => {
@@ -853,6 +868,14 @@ export default function SuppliersContent() {
           </div>
         ) : (
           <>
+            {bulkNotice && (
+              <div className={`mb-3 flex items-start justify-between gap-3 px-4 py-2.5 rounded-lg border text-sm ${bulkNotice.tone === 'ok' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+                <span>{bulkNotice.text}</span>
+                <button type="button" onClick={() => setBulkNotice(null)} className="text-xs opacity-70 hover:opacity-100">{t('dismiss')}</button>
+              </div>
+            )}
+            <BulkDeleteBar count={bulk.selected.size} label={t('bulkLabel')} onDelete={handleBulkDelete} onClear={bulk.clear} />
+
             {/* GRID VIEW */}
             {viewMode === 'grid' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -861,9 +884,10 @@ export default function SuppliersContent() {
                   const Icon = config.icon
                   const parentName = getParentName(supplier.parent_supplier_id)
                   return (
-                    <div key={supplier.id} className={`bg-white rounded-lg border ${config.borderColor} p-4 hover:shadow-md transition-all cursor-pointer group`} onClick={() => handleView(supplier)}>
+                    <div key={supplier.id} className={`bg-white rounded-lg border ${bulk.has(supplier.id) ? 'border-red-300 ring-1 ring-red-200' : config.borderColor} p-4 hover:shadow-md transition-all cursor-pointer group`} onClick={() => handleView(supplier)}>
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
+                          <input type="checkbox" aria-label="select supplier" checked={bulk.has(supplier.id)} onChange={() => bulk.toggle(supplier.id)} onClick={(e) => e.stopPropagation()} className="w-4 h-4 flex-shrink-0" />
                           <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center`}>
                             <Icon className="w-5 h-5" />
                           </div>
@@ -951,6 +975,7 @@ export default function SuppliersContent() {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-3 py-3 w-8"><input type="checkbox" aria-label="select all" checked={paginatedSuppliers.length > 0 && bulk.selected.size === paginatedSuppliers.length} onChange={() => bulk.toggleAll(paginatedSuppliers.map(s => s.id))} className="w-4 h-4" /></th>
                       <th className="text-left px-4 py-3"><button onClick={() => handleSort('name')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('name')} <SortIcon field="name" /></button></th>
                       <th className="text-left px-4 py-3"><button onClick={() => handleSort('type')} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">{t('type')} <SortIcon field="type" /></button></th>
                       <th className="text-left px-4 py-3"><span className="text-xs font-semibold text-gray-600">{t('parent')}</span></th>
@@ -966,7 +991,8 @@ export default function SuppliersContent() {
                       const Icon = config.icon
                       const parentName = getParentName(supplier.parent_supplier_id)
                       return (
-                        <tr key={supplier.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleView(supplier)}>
+                        <tr key={supplier.id} className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${bulk.has(supplier.id) ? 'bg-red-50/40' : ''}`} onClick={() => handleView(supplier)}>
+                          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label="select row" checked={bulk.has(supplier.id)} onChange={() => bulk.toggle(supplier.id)} className="w-4 h-4" /></td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
                               <div className={`w-8 h-8 rounded-lg ${config.color} flex items-center justify-center`}><Icon className="w-4 h-4" /></div>
@@ -1016,7 +1042,8 @@ export default function SuppliersContent() {
                   const Icon = config.icon
                   const parentName = getParentName(supplier.parent_supplier_id)
                   return (
-                    <div key={supplier.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 cursor-pointer group" onClick={() => handleView(supplier)}>
+                    <div key={supplier.id} className={`flex items-center gap-4 px-4 py-3 hover:bg-gray-50 cursor-pointer group ${bulk.has(supplier.id) ? 'bg-red-50/40' : ''}`} onClick={() => handleView(supplier)}>
+                      <input type="checkbox" aria-label="select supplier" checked={bulk.has(supplier.id)} onChange={() => bulk.toggle(supplier.id)} onClick={(e) => e.stopPropagation()} className="w-4 h-4 flex-shrink-0" />
                       <div className={`w-10 h-10 rounded-lg ${config.color} flex items-center justify-center flex-shrink-0`}><Icon className="w-5 h-5" /></div>
                       <div className="flex-1 min-w-0 grid grid-cols-5 gap-4">
                         <div>

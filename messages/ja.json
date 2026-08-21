@@ -2966,7 +2966,11 @@
       "supplierNameAmbiguous": "supplier_name「{name}」が{count}件のサプライヤーに一致します — supplier_idを明示的に指定してください: {candidates}",
       "supplierNameNoMatchForm": "supplier_name「{name}」に該当するサプライヤーが見つかりません。先にサプライヤーを作成するか、表記を修正するか、supplier_nameを空にしてサプライヤーなしで保存してください。",
       "supplierNameNoMatchBulk": "supplier_name「{name}」に該当するサプライヤーが見つかりません。先にサプライヤーを作成するか、表記を修正するか、supplier_nameを空欄にしてサプライヤーなしでインポートしてください。"
-    }
+    },
+    "bulkLabel": "サプライヤー",
+    "bulkDeleted": "{count}件のサプライヤーを削除しました",
+    "bulkPartial": "{ok}件を削除、{failed}件は削除できませんでした：{reason}",
+    "dismiss": "閉じる"
   },
   "copilot": {
     "concierge": {
@@ -7606,5 +7610,10 @@
     "colTarget": "対象",
     "empty": "まだ記録がありません。",
     "total": "{count}件"
+  },
+  "bulkDelete": {
+    "selected": "{count}件選択中",
+    "deleteSelected": "選択した項目を削除",
+    "clear": "クリア"
   }
 }

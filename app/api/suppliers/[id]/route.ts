@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { SUPPLIER_REFERENCE_CHECKS, describeBlockers } from '@/lib/suppliers/delete-guard'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -121,12 +122,29 @@ export async function DELETE(
       return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
     }
 
+    // Money and records must not lose their supplier. Refuse with the reason
+    // rather than letting the foreign key decide (a 500, or a quiet orphan).
+    const counts = await Promise.all(
+      SUPPLIER_REFERENCE_CHECKS.map(async ({ table, column, label }) => {
+        const { count } = await supabaseAdmin.from(table).select('*', { count: 'exact', head: true }).eq(column, id)
+        return { label, count: count ?? 0 }
+      })
+    )
+    const blocked = describeBlockers(counts)
+    if (blocked) {
+      return NextResponse.json({ error: blocked, blocked: true }, { status: 409 })
+    }
+
     const { error } = await supabaseAdmin
       .from('suppliers')
       .delete()
       .eq('id', id)
 
     if (error) {
+      // A reference this guard doesn't list. Still a 409 with a reason, not a 500.
+      if ((error as { code?: string }).code === '23503') {
+        return NextResponse.json({ error: 'Supplier is still referenced by other records — deactivate it instead', blocked: true }, { status: 409 })
+      }
       console.error('Error deleting supplier:', error)
       return NextResponse.json({ error: 'Failed to delete supplier' }, { status: 500 })
     }
