@@ -2084,7 +2084,7 @@
     "deleteConfirm": "Are you sure you want to delete {name}?",
     "showing": "Showing",
     "of": "of",
-    "perPage": "/ page",
+    "perPage": "per page",
     "select": "Select {field}",
     "name": "Name",
     "parent": "Parent",
@@ -2106,7 +2106,8 @@
     "bulkLabel": "suppliers",
     "bulkDeleted": "{count} suppliers deleted",
     "bulkPartial": "{ok} deleted, {failed} could not be deleted: {reason}",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "show": "Show"
   },
   "copilot": {
     "concierge": {

@@ -2948,7 +2948,7 @@
     "deleteConfirm": "{name}を削除してもよろしいですか？",
     "showing": "表示中",
     "of": "/",
-    "perPage": "/ ページ",
+    "perPage": "件/ページ",
     "select": "{field}を選択",
     "name": "名前",
     "parent": "親会社",
@@ -2970,7 +2970,8 @@
     "bulkLabel": "サプライヤー",
     "bulkDeleted": "{count}件のサプライヤーを削除しました",
     "bulkPartial": "{ok}件を削除、{failed}件は削除できませんでした：{reason}",
-    "dismiss": "閉じる"
+    "dismiss": "閉じる",
+    "show": "表示"
   },
   "copilot": {
     "concierge": {
