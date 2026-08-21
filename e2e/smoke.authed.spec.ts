@@ -130,14 +130,20 @@ test('system health: DB reachable, no RLS exposure', async ({ page }) => {
   // page.request shares the authed cookie session. This makes every E2E run
   // an automated RLS audit: any anon-visible row on a locked table fails CI.
   const res = await page.request.get('/api/health/system')
-  expect(res.status(), 'health endpoint should answer 200 when healthy').toBe(200)
   const health = await res.json()
+
+  // Assert the CONTENTS before the status code. Status-first turns every
+  // exposure into "Expected 200, Received 503", which says nothing about what
+  // leaked — and this is the failure someone will be reading at speed.
   expect(health.database.ok, 'database reachable via service role').toBe(true)
   expect(
     health.rls.exposed,
-    `tables exposed to the anonymous internet: ${JSON.stringify(health.rls.exposed)}`
+    `readable by the anonymous key: ${JSON.stringify(health.rls.exposed, null, 2)}`
   ).toEqual([])
+  // A probe that enumerated nothing must never read as healthy.
+  expect(health.rls.probed, 'probe enumerated the PostgREST surface').toBeGreaterThan(0)
   expect(health.overall).toBe('ok')
+  expect(res.status(), 'health endpoint should answer 200 when healthy').toBe(200)
 })
 
 test('dashboard loads its stat cards', async ({ page }) => {

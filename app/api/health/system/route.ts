@@ -1,110 +1,56 @@
 // ============================================
-// API: /api/health/system — DB reachability + automated RLS posture probe
+// API: /api/health/system — DB reachability + anon-exposure probe
 // ============================================
-// Automates the June 2026 RLS audit's manual method: for every table that
-// must be invisible to the anonymous internet, count rows AS ANON (real anon
-// key, no session). Any anon-visible row on a locked table = exposure = 503.
-// The goal is to catch an RLS regression in hours (next health check / E2E
-// run), not at the next hand-run audit.
+// Enumerates everything PostgREST publishes and counts rows AS ANON (real anon
+// key, no session) against each one. Any anon-visible row that has not been
+// declared open is an exposure and answers 503, so the E2E suite fails on it.
+//
+// Deny-by-default since 2026-08-21. The previous version probed a
+// hand-maintained list of 39 names; the audit that followed the `guides`
+// incident found 171 published resources and 47 serving rows to the anon key,
+// none of them on the list. A list cannot describe what nobody remembered to
+// add, so the probe now reads the surface from PostgREST itself and treats
+// undeclared readability as failure. See lib/rls/exposure.ts.
 //
 // AUTH: deliberately NOT middleware-allowlisted — the response describes
-// security posture, so it requires a logged-in operator session. The authed
-// E2E smoke suite hits it on every run.
+// security posture, so it requires a logged-in operator session.
 //
-// Notes on semantics:
-// - A table that is EMPTY passes trivially even if its RLS is missing; the
-//   probe flips red exactly when real rows become exposed. (Same limitation
-//   as the original audit — count probes can't distinguish locked from
-//   empty-and-open.)
-// - OPEN_BY_DESIGN lists rate/content tables that are currently anon-readable
-//   on purpose (pending the tightening follow-up). Reported as counts so the
-//   posture is visible; NOT a failure. When they get locked, move them into
-//   MUST_BE_LOCKED.
+// Note on semantics: a resource that is EMPTY passes trivially even if it is
+// wide open (a count probe cannot tell locked from empty), so those are
+// reported under `unprovable` rather than counted as safe. Grants are the real
+// defence — see 20260821_lock_public_schema.sql.
 // ============================================
 
 import { NextResponse } from 'next/server'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
+import { classifyExposure, resourcesFromOpenApi, OPEN_BY_DESIGN, type AnonProbe } from '@/lib/rls/exposure'
 
 export const dynamic = 'force-dynamic'
 
-// Tables the anonymous internet must never see rows from. Baseline verified
-// against live posture 2026-07-14 (all showed anon=0).
-const MUST_BE_LOCKED = [
-  'itineraries',
-  'itinerary_days',
-  'itinerary_services',
-  'itinerary_versions',
-  'clients',
-  'invoices',
-  'payments',
-  'bookings',
-  'booking_payments',
-  'expenses',
-  'commissions',
-  'suppliers',
-  'supplier_invoices',
-  'organizations',
-  'organization_members',
-  'user_profiles',
-  'tour_quotes',
-  'quote_versions',
-  'b2b_partners',
-  'communication_history',
-  'client_notes',
-  'client_followups',
-  'entrance_fees',
-  // Rate/content tables + the guides view — locked by the 20260714
-  // rate-table tightening migration (authenticated-only + view
-  // security_invoker). Previously listed as OPEN_BY_DESIGN.
-  'transportation_rates',
-  'accommodation_rates',
-  'guide_rates',
-  'meal_rates',
-  'nile_cruises',
-  'tour_templates',
-  'airport_staff_rates',
-  'hotel_staff_rates',
-  'tipping_rates',
-  'guides',
-  // Views, added 2026-08-21 after the probe caught `guides` alone: a view
-  // recreated without security_invoker runs as its definer and bypasses the
-  // source table's RLS. Only `guides` was on this list, so the identical
-  // exposure on airport_staff / itineraries_with_languages /
-  // tour_templates_with_languages / client_summary went unreported — the
-  // language views since February. See 20260821_view_security_invoker.sql.
-  'airport_staff',
-  'hotel_staff',
-  'itineraries_with_languages',
-  'quotes_with_languages',
-  'tour_templates_with_languages',
-  'client_summary',
-  // Audit trail of rate changes (full before/after records) — authenticated
-  // read-only per 20260226_rate_audit_trail.sql (applied 2026-07-14).
-  'rate_audit_log',
-]
+/** Probe fan-out. The surface is ~170 resources: sequentially that is minutes,
+ *  and unbounded parallelism just pressures PostgREST's pool. Measured against
+ *  the live project 2026-08-21 — 12 → 4.8s, 24 → 2.8s, 32 → 3.7s. 12 keeps the
+ *  endpoint well inside Playwright's 30s request timeout with room to spare. */
+const CONCURRENCY = 12
 
-// Tables that are anon-readable on purpose. Empty since the 20260714
-// tightening; keep the mechanism so a future deliberate exception is
-// declared here instead of weakening MUST_BE_LOCKED.
-const OPEN_BY_DESIGN: string[] = []
-
-async function anonCount(
-  // Loose generics on purpose: version-specific SupabaseClient generic
-  // parameters churn, and this helper only needs .from().select().
-  anon: SupabaseClient<any, any, any, any, any>,
-  table: string
-): Promise<{ table: string; count: number | null; error?: string }> {
-  // head+count on '*' — some tables (organization_members) have no `id` column.
-  const { count, error } = await anon.from(table).select('*', { count: 'exact', head: true })
-  if (error) return { table, count: null, error: error.message }
-  return { table, count: count ?? 0 }
+async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++
+        out[i] = await fn(items[i])
+      }
+    })
+  )
+  return out
 }
 
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const service = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-  // Plain anon client with NO session — deliberately simulates the anonymous
-  // internet, which is the whole point of the probe.
+  // Plain anon client with NO session — deliberately the anonymous internet.
   const anon = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
   // 1. Database reachability (service role) + latency
@@ -116,26 +62,43 @@ export async function GET() {
     ...(dbCheck.error ? { error: dbCheck.error.message } : {}),
   }
 
-  // 2. RLS posture: all probes in parallel
-  const [lockedResults, openResults] = await Promise.all([
-    Promise.all(MUST_BE_LOCKED.map((t) => anonCount(anon, t))),
-    Promise.all(OPEN_BY_DESIGN.map((t) => anonCount(anon, t))),
-  ])
+  // 2. The reachable surface, from PostgREST rather than from a list here.
+  let resources: string[] = []
+  let surfaceError: string | undefined
+  try {
+    const res = await fetch(`${url}/rest/v1/`, {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      },
+      cache: 'no-store',
+    })
+    resources = resourcesFromOpenApi(await res.json())
+  } catch (e) {
+    surfaceError = e instanceof Error ? e.message : String(e)
+  }
 
-  const exposed = lockedResults.filter((r) => (r.count ?? 0) > 0)
-  const probeErrors = lockedResults.filter((r) => r.error)
-  const openByDesign = Object.fromEntries(
-    openResults.map((r) => [r.table, r.error ? `error: ${r.error}` : r.count])
-  )
+  // 3. Count as anon against every resource.
+  const probes: AnonProbe[] = await mapWithLimit(resources, CONCURRENCY, async (resource) => {
+    const { count, error } = await anon.from(resource).select('*', { count: 'exact', head: true })
+    if (error) return { resource, count: null, error: error.message }
+    return { resource, count: count ?? 0 }
+  })
 
+  const report = classifyExposure(probes, OPEN_BY_DESIGN)
+
+  // An empty surface means the probe learned nothing — never report that as ok.
+  const surfaceOk = resources.length > 0
   const rls = {
-    ok: exposed.length === 0,
-    probedLocked: MUST_BE_LOCKED.length,
-    exposed: exposed.map((r) => ({ table: r.table, anonVisibleRows: r.count })),
-    // Errors mean "could not prove locked", not "exposed" — surfaced so an
-    // operator investigates, but they don't fail the check on their own.
-    probeErrors: probeErrors.map((r) => ({ table: r.table, error: r.error })),
-    openByDesign,
+    ok: report.ok && surfaceOk,
+    probed: report.probed,
+    exposed: report.exposed,
+    probeErrors: report.probeErrors,
+    openByDesign: report.openByDesign,
+    // Readable but empty — locked or not, a count probe cannot say.
+    unprovableCount: report.unprovable.length,
+    ...(surfaceError ? { surfaceError } : {}),
+    ...(surfaceOk ? {} : { surfaceError: surfaceError ?? 'PostgREST published no resources' }),
   }
 
   const overall = database.ok && rls.ok ? 'ok' : 'fail'
