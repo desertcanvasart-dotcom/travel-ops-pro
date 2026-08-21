@@ -43,6 +43,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     .select('token, created_at, expires_at, details_locked_at, view_count, last_viewed_at')
     .eq('booking_id', id)
     .eq('org_id', orgId)
+    .is('passenger_id', null)
     .is('revoked_at', null)
     .maybeSingle()
 
@@ -56,6 +57,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const { id } = await params
+
+    // A per-traveller (friends-mode) link is requested with ?passenger_id= or a
+    // JSON body { passenger_id }. Absent = the booking-level (family) link.
+    const body = await request.json().catch(() => ({} as Record<string, unknown>))
+    const passengerId =
+      request.nextUrl.searchParams.get('passenger_id') ||
+      (typeof body?.passenger_id === 'string' ? body.passenger_id : null)
 
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
@@ -72,16 +80,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
 
-    // One live link per booking. Re-sending returns the same URL rather than
+    if (passengerId) {
+      const { data: pax } = await supabaseAdmin
+        .from('booking_passengers')
+        .select('id')
+        .eq('id', passengerId)
+        .eq('booking_id', id)
+        .maybeSingle()
+      if (!pax) return NextResponse.json({ error: 'Traveller not found on this booking' }, { status: 404 })
+    }
+
+    // One live link per (booking, traveller). Re-sending returns the same URL rather than
     // minting infinite ones — the partial unique index enforces it, this is the
     // friendly path to the same answer.
-    const { data: existing } = await supabaseAdmin
+    const existingQuery = supabaseAdmin
       .from('booking_portal_links')
       .select('token, expires_at, details_locked_at')
       .eq('booking_id', id)
       .eq('org_id', orgId)
       .is('revoked_at', null)
-      .maybeSingle()
+    const { data: existing } = await (passengerId
+      ? existingQuery.eq('passenger_id', passengerId)
+      : existingQuery.is('passenger_id', null)
+    ).maybeSingle()
 
     if (existing) {
       await ensurePassengerRows(id, orgId, booking)
@@ -106,6 +127,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .insert({
         org_id: orgId,
         booking_id: id,
+        passenger_id: passengerId,
         token: generatePortalToken(),
         expires_at: expiresAt,
       })

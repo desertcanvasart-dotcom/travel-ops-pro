@@ -14,6 +14,7 @@ import {
   portalVerifyCookieName,
   portalVerifyCookieValue,
   verifyAnswerMatches,
+  verifyTravellerAnswer,
 } from '@/lib/booking-portal'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { data: link } = await supabase
       .from('booking_portal_links')
-      .select('id, booking_id, revoked_at, expires_at')
+      .select('id, booking_id, passenger_id, revoked_at, expires_at')
       .eq('token', token)
       .maybeSingle()
     if (!link || !portalLinkState(link).usable) return FAIL
@@ -55,18 +56,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .maybeSingle()
     if (!booking) return FAIL
 
-    const { data: lead } = await supabase
-      .from('booking_passengers')
-      .select('last_name, family_name_kanji, family_name_kana')
-      .eq('booking_id', booking.id)
-      .eq('is_lead_passenger', true)
-      .maybeSingle()
-
-    const ok = verifyAnswerMatches(answer, {
-      booking_code: booking.booking_code,
-      client_name: booking.client_name,
-      lead_names: lead ? [lead.last_name, lead.family_name_kanji, lead.family_name_kana] : [],
-    })
+    let ok = false
+    if (link.passenger_id) {
+      // Private per-traveller link: THAT traveller's family name + DOB, both.
+      const { data: pax } = await supabase
+        .from('booking_passengers')
+        .select('last_name, family_name_kanji, family_name_kana, date_of_birth')
+        .eq('id', link.passenger_id)
+        .eq('booking_id', booking.id)
+        .maybeSingle()
+      ok = !!pax && verifyTravellerAnswer(answer, body?.dob, {
+        names: [pax.last_name, pax.family_name_kanji, pax.family_name_kana],
+        date_of_birth: pax.date_of_birth,
+      })
+    } else {
+      // Booking-level link: booking number or the lead's family name, as before.
+      const { data: lead } = await supabase
+        .from('booking_passengers')
+        .select('last_name, family_name_kanji, family_name_kana')
+        .eq('booking_id', booking.id)
+        .eq('is_lead_passenger', true)
+        .maybeSingle()
+      ok = verifyAnswerMatches(answer, {
+        booking_code: booking.booking_code,
+        client_name: booking.client_name,
+        lead_names: lead ? [lead.last_name, lead.family_name_kanji, lead.family_name_kana] : [],
+      })
+    }
     if (!ok) return FAIL
 
     const res = NextResponse.json({ success: true })
