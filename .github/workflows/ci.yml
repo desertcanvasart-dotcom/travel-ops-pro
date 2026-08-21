@@ -1,7 +1,8 @@
 name: CI
 
 # Enforces the pricing harness (and the rest of the codebase) on every PR:
-# the test suite + a strict type-check must pass before merge.
+# the test suite, a strict type-check and a real production build must all
+# pass before merge.
 on:
   pull_request:
     branches: [main]
@@ -45,6 +46,41 @@ jobs:
         # with green CI while `tsc --noEmit` was broken on main — this closes
         # that class permanently.
         run: NODE_OPTIONS=--max-old-space-size=4096 npx tsc --noEmit
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      # `next build` is the only check that catches build-time-only failures:
+      # a client component calling useSearchParams() without a Suspense
+      # boundary type-checks and tests green, then fails prerender. That
+      # exact bug reached Railway and broke a deploy — this job moves the
+      # failure back to PR time.
+      #
+      # Placeholders, not secrets: the build evaluates module-scope Supabase
+      # clients (which throw on undefined env) but makes no network calls, so
+      # a fake URL/key is enough. Keeping real secrets out means this job also
+      # runs on fork PRs, where the E2E job has to skip.
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key
+      # Same memory headroom the type-check needs; the default heap OOMs.
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (next build)
+        run: npm run build
 
   e2e:
     name: E2E smoke (Playwright)
