@@ -7,6 +7,7 @@ import AccommodationSelector from './AccommodationSelector'
 import MealSelector from './MealSelector'
 import AdditionalServices from './AdditionalServices'
 import ActivityBuilder from './ActivityBuilder'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface DayPlannerProps {
   tour: Tour
@@ -26,6 +27,7 @@ export default function DayPlanner({
   onNext
 }: DayPlannerProps) {
   const t = useTranslations('tourBuilder.dayPlanner')
+  const confirmDialog = useConfirm()
   const [selectedDay, setSelectedDay] = useState(0)
 
   if (!tour.days || tour.days.length === 0) {
@@ -249,8 +251,8 @@ export default function DayPlanner({
       <div className="mt-6 flex gap-3">
         <button
           type="button"
-          onClick={() => {
-            if (confirm(t('copyToAllDaysConfirm'))) {
+          onClick={async () => {
+            if (await confirmDialog(t('copyToAllDaysConfirm'), { variant: 'warning' })) {
               tour.days?.forEach((_, index) => {
                 if (index !== selectedDay) {
                   onDayUpdate(index, {
@@ -267,8 +269,8 @@ export default function DayPlanner({
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (confirm(t('clearDayConfirm'))) {
+          onClick={async () => {
+            if (await confirmDialog(t('clearDayConfirm'))) {
               onDayUpdate(selectedDay, {
                 day_number: currentDay.day_number,
                 city: currentDay.city,

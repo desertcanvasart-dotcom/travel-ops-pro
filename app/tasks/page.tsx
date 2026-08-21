@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
 import Link from 'next/link'
 import { 
   Search,
@@ -132,6 +132,7 @@ const STATUS_ORDER = { todo: 0, in_progress: 1, done: 2 }
 export default function TasksPage() {
   const t = useTranslations('tasks')
   const dialog = useConfirmDialog()
+  const confirmDialog = useConfirm()
   const [tasks, setTasks] = useState<Task[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -392,7 +393,7 @@ export default function TasksPage() {
     const doneTasks = tasks.filter(t => t.status === 'done' && !t.archived)
     if (doneTasks.length === 0) return
     
-    if (!confirm(t('confirmBulkArchive', { count: doneTasks.length }))) return
+    if (!(await confirmDialog(t('confirmBulkArchive', { count: doneTasks.length }), { variant: 'warning' }))) return
 
     setArchiving('bulk')
     try {

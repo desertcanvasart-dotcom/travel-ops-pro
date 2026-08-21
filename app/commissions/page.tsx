@@ -35,7 +35,7 @@ import {
 import Link from 'next/link'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useTranslations } from 'next-intl'
-import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
 
 interface Commission {
   id: string
@@ -151,6 +151,7 @@ const initialFormData: FormData = {
 export default function CommissionsPage() {
   const t = useTranslations('commissions')
   const dialog = useConfirmDialog()
+  const confirmDialog = useConfirm()
   const [commissions, setCommissions] = useState<Commission[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -278,7 +279,7 @@ export default function CommissionsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('deleteConfirm'))) return
+    if (!(await confirmDialog(t('deleteConfirm')))) return
 
     try {
       const response = await fetch(`/api/commissions/${id}`, { method: 'DELETE' })

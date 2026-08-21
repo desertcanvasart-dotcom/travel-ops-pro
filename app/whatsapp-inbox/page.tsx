@@ -9,7 +9,7 @@ import {
   Trash2, UserPlus, Users, History, ArrowRight,
   Settings, Filter, UserCheck, UserX
 } from 'lucide-react'
-import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
 
 // Supported languages
 const QUICK_LANGUAGES = [
@@ -366,6 +366,7 @@ function AgentsManagementModal({
   onClose: () => void
   onRefresh: () => void
 }) {
+  const confirmDialog = useConfirm()
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentEmail, setNewAgentEmail] = useState('')
   const [isAdding, setIsAdding] = useState(false)
@@ -405,7 +406,7 @@ function AgentsManagementModal({
   }
 
   const deleteAgent = async (agentId: string) => {
-    if (!confirm('Are you sure you want to deactivate this agent?')) return
+    if (!(await confirmDialog('Are you sure you want to deactivate this agent?'))) return
     try {
       await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
       onRefresh()

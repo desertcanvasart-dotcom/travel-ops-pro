@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { FileText, Loader2, Plus, Eye, Trash2, X, Users, Clock, Send, CheckCircle2, XCircle } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface B2CQuote {
   id: string
@@ -28,6 +29,7 @@ const STATUS: Record<string, { bg: string; text: string; icon: any; label: strin
 }
 
 export default function B2CQuotesPage() {
+  const confirmDialog = useConfirm()
   const [quotes, setQuotes] = useState<B2CQuote[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
@@ -50,7 +52,7 @@ export default function B2CQuotesPage() {
   useEffect(() => { fetchQuotes() }, [statusFilter])
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this offer? This cannot be undone.')) return
+    if (!(await confirmDialog('Delete this offer? This cannot be undone.'))) return
     setDeleting(id)
     try {
       const res = await fetch(`/api/b2c/quotes/${id}`, { method: 'DELETE' })

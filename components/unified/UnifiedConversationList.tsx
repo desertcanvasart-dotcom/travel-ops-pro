@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { ChannelBadge, ChannelBadgeLight } from './ChannelBadge'
 import { UnifiedConversation, ConversationChannel, ConversationStatus } from '@/types/unified'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface UnifiedConversationListProps {
   onSelectConversation: (conversation: UnifiedConversation) => void
@@ -122,6 +123,7 @@ function AgentsManagementModal({
   onRefresh: () => void
   t: any
 }) {
+  const confirmDialog = useConfirm()
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentEmail, setNewAgentEmail] = useState('')
   const [isAdding, setIsAdding] = useState(false)
@@ -161,7 +163,7 @@ function AgentsManagementModal({
   }
 
   const deleteAgent = async (agentId: string) => {
-    if (!confirm(t('deactivateAgent'))) return
+    if (!(await confirmDialog(t('deactivateAgent')))) return
     try {
       await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
       onRefresh()

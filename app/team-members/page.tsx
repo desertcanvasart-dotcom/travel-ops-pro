@@ -16,6 +16,7 @@ import {
   XCircle,
   Users
 } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface Department {
   id: string
@@ -48,6 +49,7 @@ const ROLES = [
 
 export default function TeamMembersPage() {
   const t = useTranslations('teamMembers')
+  const confirmDialog = useConfirm()
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -146,7 +148,7 @@ export default function TeamMembersPage() {
   }
 
   const handleDelete = async (member: TeamMember) => {
-    if (!confirm(t('confirmDeactivate', { name: member.name }))) return
+    if (!(await confirmDialog(t('confirmDeactivate', { name: member.name })))) return
 
     try {
       const response = await fetch(`/api/team-members/${member.id}`, {

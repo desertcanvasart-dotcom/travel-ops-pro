@@ -23,6 +23,7 @@ import {
   X,
   RefreshCw
 } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface TeamMember {
   id: string
@@ -66,7 +67,8 @@ export default function UserManagementPage() {
   const router = useRouter()
   const { isAdmin, canManageTeam } = useRole()
   const { profile } = useAuth()
-  
+  const confirmDialog = useConfirm()
+
   const [activeTab, setActiveTab] = useState<'users' | 'invitations'>('users')
   const [members, setMembers] = useState<TeamMember[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
@@ -150,7 +152,7 @@ export default function UserManagementPage() {
   }
 
   const cancelInvitation = async (id: string) => {
-    if (!confirm('Cancel this invitation?')) return
+    if (!(await confirmDialog('Cancel this invitation?'))) return
 
     try {
       const response = await fetch(`/api/invitations?id=${id}`, {
@@ -221,7 +223,7 @@ export default function UserManagementPage() {
   }
 
   const deleteMember = async (memberId: string, memberName: string) => {
-    if (!confirm(`Are you sure you want to permanently delete "${memberName}"? This action cannot be undone.`)) return
+    if (!(await confirmDialog(`Are you sure you want to permanently delete "${memberName}"? This action cannot be undone.`))) return
 
     try {
       const response = await fetch(`/api/profiles/${memberId}`, {

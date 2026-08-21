@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 // ============================================
 // B2B QUOTES LIST PAGE
@@ -50,6 +51,7 @@ interface Quote {
 
 export default function QuotesListPage() {
   const t = useTranslations('b2bQuotes')
+  const confirmDialog = useConfirm()
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -73,7 +75,7 @@ export default function QuotesListPage() {
 
   const bulkDelete = async () => {
     const ids = [...selected]
-    if (ids.length === 0 || !confirm(`Delete ${ids.length} selected quote(s)? This cannot be undone.`)) return
+    if (ids.length === 0 || !(await confirmDialog(`Delete ${ids.length} selected quote(s)? This cannot be undone.`))) return
     setBulkBusy(true)
     try {
       const res = await fetch('/api/b2b/quotes/bulk-delete', {
@@ -136,7 +138,7 @@ export default function QuotesListPage() {
   }
 
   const handleDelete = async (id: string, quoteNumber: string) => {
-    if (!confirm(t('deleteConfirm', { quoteNumber }))) return
+    if (!(await confirmDialog(t('deleteConfirm', { quoteNumber })))) return
     
     setDeleting(id)
     try {

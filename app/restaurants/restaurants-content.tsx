@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
+import { useConfirm } from '@/components/ConfirmDialog'
 import { useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
 import {
@@ -168,6 +169,7 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
 // ============================================
 
 export default function RestaurantsContent() {
+  const confirmDialog = useConfirm()
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
@@ -398,7 +400,7 @@ export default function RestaurantsContent() {
 
   // Delete restaurant
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return
+    if (!(await confirmDialog(`Are you sure you want to delete "${name}"?`))) return
     
     try {
       const response = await fetch(`/api/resources/restaurants/${id}`, {

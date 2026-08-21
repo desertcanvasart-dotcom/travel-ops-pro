@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link2, Copy, Check, Eye, Trash2, Loader2 } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface PortalLink {
   url: string
@@ -23,6 +24,7 @@ interface PortalLink {
 }
 
 export default function PortalLinkCard({ bookingId }: { bookingId: string }) {
+  const confirmDialog = useConfirm()
   const [link, setLink] = useState<PortalLink | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -64,7 +66,7 @@ export default function PortalLinkCard({ bookingId }: { bookingId: string }) {
   async function revoke() {
     // Revoking is the one destructive action here: the traveller's link stops
     // working immediately, and a new one is a different URL.
-    if (!confirm('This link will stop working immediately. The traveller will need a new one.')) {
+    if (!(await confirmDialog('This link will stop working immediately. The traveller will need a new one.'))) {
       return
     }
     setBusy(true)

@@ -6,6 +6,7 @@ import {
   Users, Plus, Search, Edit, Trash2, X, Check, Building2,
   Mail, Phone, Globe, Percent, AlertCircle, CheckCircle2
 } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 // ============================================
 // B2B PARTNERS PAGE
@@ -48,6 +49,7 @@ const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'AUD', 'CAD', 'JPY']
 
 export default function B2BPartnersPage() {
   const t = useTranslations('b2bPartners')
+  const confirmDialog = useConfirm()
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -130,7 +132,7 @@ export default function B2BPartnersPage() {
   }
 
   const handleDelete = async (partner: B2BPartner) => {
-    if (!confirm(t('deleteConfirm', { companyName: partner.company_name }))) return
+    if (!(await confirmDialog(t('deleteConfirm', { companyName: partner.company_name })))) return
     try {
       const res = await fetch(`/api/b2b/partners/${partner.id}`, { method: 'DELETE' })
       const data = await res.json()
