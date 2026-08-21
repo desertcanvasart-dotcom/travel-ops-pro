@@ -46,7 +46,8 @@
     "endDate": "End Date",
     "backToList": "Back to List",
     "saved": "Saved",
-    "unknownError": "Unknown error"
+    "unknownError": "Unknown error",
+    "saving": "Saving…"
   },
   "contract": {
     "loadingContract": "Loading contract...",
