@@ -34,8 +34,18 @@ export type HoleKind =
  */
 export interface PricingHole {
   kind: HoleKind
-  /** Why this rate is unusable. */
-  reason: 'missing' | 'fuzzy'
+  /**
+   * Why this rate is unusable.
+   * - `missing`  — no row matched the lookup at all.
+   * - `fuzzy`    — a row matched, but not confidently enough to charge.
+   * - `unpriced` — a row EXISTS and its price is blank or zero. Distinct from
+   *   `missing` because the operator-facing fix is different: "add a rate" is
+   *   wrong advice when the row is already sitting on the rates screen. The
+   *   two €0 rows found on 2026-08-21 (HOTEL-PORTER-ALL, AIR-CAI-MEETGR-ARR)
+   *   were both reported as `missing`, telling the operator to add something
+   *   that was already there.
+   */
+  reason: 'missing' | 'fuzzy' | 'unpriced'
   dayNumber?: number
   city?: string
   attraction?: string
