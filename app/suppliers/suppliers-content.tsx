@@ -1085,11 +1085,15 @@ export default function SuppliersContent() {
                       <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40"><ChevronsRight className="w-4 h-4" /></button>
                     </div>
                   )}
-                  <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="h-8 w-24 px-2 text-sm border border-gray-200 rounded-lg outline-none bg-white">
-                    <option value={12}>12 {t('perPage')}</option>
-                    <option value={24}>24 {t('perPage')}</option>
-                    <option value={48}>48 {t('perPage')}</option>
-                  </select>
+                  <div className="flex items-center gap-2 whitespace-nowrap">
+                    <span className="text-sm text-gray-500">{t('show')}</span>
+                    <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="h-8 px-2 pr-7 text-sm border border-gray-200 rounded-lg outline-none bg-white">
+                      <option value={12}>12</option>
+                      <option value={24}>24</option>
+                      <option value={48}>48</option>
+                    </select>
+                    <span className="text-sm text-gray-500">{t('perPage')}</span>
+                  </div>
                 </div>
               </div>
             )}
