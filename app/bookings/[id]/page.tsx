@@ -61,8 +61,26 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [updating, setUpdating] = useState(false)
 
-  // Invoice linked to this booking's itinerary
-  const [linkedInvoice, setLinkedInvoice] = useState<{ id: string; invoice_number: string } | null>(null)
+  // Every invoice raised for this booking's trip, with the payments recorded
+  // against them. A trip normally has two — a deposit and a final — so showing
+  // only the first would hide half the money.
+  const [tripInvoices, setTripInvoices] = useState<any[]>([])
+  const linkedInvoice = tripInvoices[0] || null
+
+  // Payments live on the INVOICE (invoice_payments); booking_payments is a
+  // separate, older table that is empty in practice. The tab listed only the
+  // latter, so a paid invoice showed "no payments yet". Both are merged here.
+  const tripPayments = [
+    ...tripInvoices.flatMap((inv: any) =>
+      (inv.invoice_payments || []).map((p: any) => ({
+        ...p,
+        payment_type: p.payment_type || 'payment',
+        currency: p.currency || inv.currency,
+        invoice_number: inv.invoice_number,
+      }))
+    ),
+    ...((booking?.payments || []) as any[]),
+  ].sort((a, b) => String(b.payment_date || '').localeCompare(String(a.payment_date || '')))
 
   // Supplier modal state
   const [showSupplierModal, setShowSupplierModal] = useState(false)
@@ -88,18 +106,18 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       if (data.success) {
         setBooking(data.data)
 
-        // Fetch linked invoice if itinerary exists
+        // Fetch this trip's invoices, with their payments embedded.
+        // This read used to look for `invoiceData.invoices` — a key the API has
+        // never returned; it responds with a bare array. So no invoice was ever
+        // found, and the Payments tab said "Invoice Required" on bookings that
+        // had been invoiced and paid.
         if (data.data.itinerary_id) {
-          const invoiceRes = await fetch(`/api/invoices?itineraryId=${data.data.itinerary_id}`)
+          const invoiceRes = await fetch(`/api/invoices?itineraryId=${data.data.itinerary_id}&include=payments`)
           const invoiceData = await invoiceRes.json()
-          if (invoiceData.invoices && invoiceData.invoices.length > 0) {
-            setLinkedInvoice({
-              id: invoiceData.invoices[0].id,
-              invoice_number: invoiceData.invoices[0].invoice_number
-            })
-          } else {
-            setLinkedInvoice(null)
-          }
+          const list = Array.isArray(invoiceData) ? invoiceData : (invoiceData.data || invoiceData.invoices || [])
+          setTripInvoices(list)
+        } else {
+          setTripInvoices([])
         }
       }
     } catch (error) {
@@ -676,16 +694,32 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                 </div>
               ) : (
                 <>
+                  <div className="mb-6 space-y-2">
+                    {/* What has been billed and what is settled — an invoice
+                        marked paid without an itemised payment row still has to
+                        show as money received. */}
+                    {tripInvoices.map((inv: any) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-4 px-4 py-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Link href={`/invoices/${inv.id}`} className="text-sm font-medium text-[#647C47] hover:underline flex items-center gap-1">
+                            <FileText className="w-3.5 h-3.5" />
+                            {inv.invoice_number}
+                          </Link>
+                          <span className="text-xs text-gray-500 capitalize">{inv.invoice_type || 'standard'}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 capitalize">{inv.status}</span>
+                        </div>
+                        <div className="text-sm text-gray-700 whitespace-nowrap">
+                          {formatCurrency(Number(inv.amount_paid) || 0, inv.currency)}
+                          <span className="text-gray-400"> paid of </span>
+                          {formatCurrency(Number(inv.total_amount) || 0, inv.currency)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-3">
                       <h3 className="font-medium text-gray-900">Payment History</h3>
-                      <Link
-                        href={`/invoices/${linkedInvoice.id}`}
-                        className="text-sm text-[#647C47] hover:underline flex items-center gap-1"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        {linkedInvoice.invoice_number}
-                      </Link>
                     </div>
                     <Link
                       href={`/invoices/${linkedInvoice.id}#payments`}
@@ -696,7 +730,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                     </Link>
                   </div>
 
-                  {!booking.payments || booking.payments.length === 0 ? (
+                  {tripPayments.length === 0 ? (
                     <div className="text-center py-12">
                       <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                       <p className="text-gray-500">{t('messages.noPaymentsYet')}</p>
@@ -714,7 +748,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {booking.payments.map((payment) => (
+                    {tripPayments.map((payment: any) => (
                       <tr key={payment.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm text-gray-600">{formatDate(payment.payment_date)}</td>
                         <td className="px-4 py-3">
@@ -731,6 +765,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 font-mono">
                           {payment.transaction_reference || '-'}
+                          {payment.invoice_number && (
+                            <span className="ml-2 text-xs text-gray-400 font-sans">{payment.invoice_number}</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -739,7 +776,10 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                     <tr>
                       <td colSpan={3} className="px-4 py-3 text-right">Total Received:</td>
                       <td className="px-4 py-3 text-right text-green-600">
-                        {formatCurrency(booking.payment_summary?.total_paid || 0, booking.currency)}
+                        {formatCurrency(
+                          tripPayments.reduce((sum: number, p: any) => sum + (p.payment_type === 'refund' ? -Number(p.amount || 0) : Number(p.amount || 0)), 0),
+                          tripPayments[0]?.currency || booking.currency
+                        )}
                       </td>
                       <td></td>
                     </tr>
