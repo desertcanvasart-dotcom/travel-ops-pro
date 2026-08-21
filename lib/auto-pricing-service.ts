@@ -39,6 +39,7 @@ import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
 import type { PricingHole } from '@/lib/pricing-types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
+import { usableRate } from '@/lib/pricing/usable-rate'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1410,8 +1411,7 @@ export async function getAirportServiceRate(
       return null
     }
 
-    const rate = rates[0].rate_eur
-    return rate && rate > 0 ? rate : null
+    return usableRate(rates[0].rate_eur)
   } catch (err) {
     return null
   }
@@ -1439,8 +1439,7 @@ export async function getHotelServiceRate(
       return null
     }
 
-    const rate = rates[0].rate_eur
-    return rate && rate > 0 ? rate : null
+    return usableRate(rates[0].rate_eur)
   } catch (err) {
     return null
   }
@@ -1955,31 +1954,32 @@ export async function calculateDayBasedPricing(
   // EXACTLY (same filters incl. direction/category "both"/"all" fallbacks, same
   // first-matching-row-in-fetch-order semantics, same rate>0-else-null result).
   // The exported helpers remain for other callers.
+  // `rowExists` separates "nobody has entered this service" from "the row is
+  // there with a blank or zero price". Both block a definite price, but only
+  // the first is fixed by ADDING a rate — see PricingHole.reason.
   const resolveAirportServiceRate = (
     airportCode: string,
     direction: 'arrival' | 'departure'
-  ): number | null => {
+  ): { rate: number | null; rowExists: boolean } => {
     const row = airportStaffRows.find(
       (r: any) =>
         r.airport_code === airportCode &&
         (r.direction === direction || r.direction === 'both')
     )
-    if (!row) return null
-    const rate = row.rate_eur
-    return rate && rate > 0 ? rate : null
+    if (!row) return { rate: null, rowExists: false }
+    return { rate: usableRate(row.rate_eur), rowExists: true }
   }
   const resolveHotelServiceRate = (
     serviceType: 'checkin_assist' | 'porter' | 'full_service'
-  ): number | null => {
+  ): { rate: number | null; rowExists: boolean } => {
     const category = getTierCategory(tier)
     const row = hotelStaffRows.find(
       (r: any) =>
         r.service_type === serviceType &&
         (r.hotel_category === category || r.hotel_category === 'all')
     )
-    if (!row) return null
-    const rate = row.rate_eur
-    return rate && rate > 0 ? rate : null
+    if (!row) return { rate: null, rowExists: false }
+    return { rate: usableRate(row.rate_eur), rowExists: true }
   }
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
@@ -2095,7 +2095,8 @@ export async function calculateDayBasedPricing(
     // ----- AIRPORT SERVICES (fixed per service) -----
     if (day.services.airport_arrival) {
       const airportCode = getAirportCode(day.city)
-      const rate = resolveAirportServiceRate(airportCode, 'arrival')
+      const found = resolveAirportServiceRate(airportCode, 'arrival')
+      const rate = found.rate
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2114,18 +2115,21 @@ export async function calculateDayBasedPricing(
       } else {
         addHole({
           kind: 'airport_service',
-          reason: 'missing',
+          reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
           city: day.city,
           lookupAttempted: `airport_staff_rates ${airportCode}/arrival`,
-          message: `No airport service rate for ${airportCode} (arrival). Add it in Rates → Airport Services.`,
+          message: found.rowExists
+            ? `The airport service rate for ${airportCode} (arrival) has no price. Open it in Rates → Airport Services and set one.`
+            : `No airport service rate for ${airportCode} (arrival). Add it in Rates → Airport Services.`,
         })
       }
     }
 
     if (day.services.airport_departure) {
       const airportCode = getAirportCode(day.city)
-      const rate = resolveAirportServiceRate(airportCode, 'departure')
+      const found = resolveAirportServiceRate(airportCode, 'departure')
+      const rate = found.rate
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2144,18 +2148,21 @@ export async function calculateDayBasedPricing(
       } else {
         addHole({
           kind: 'airport_service',
-          reason: 'missing',
+          reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
           city: day.city,
           lookupAttempted: `airport_staff_rates ${airportCode}/departure`,
-          message: `No airport service rate for ${airportCode} (departure). Add it in Rates → Airport Services.`,
+          message: found.rowExists
+            ? `The airport service rate for ${airportCode} (departure) has no price. Open it in Rates → Airport Services and set one.`
+            : `No airport service rate for ${airportCode} (departure). Add it in Rates → Airport Services.`,
         })
       }
     }
 
     // ----- HOTEL SERVICES (fixed per service) -----
     if (day.services.hotel_checkin) {
-      const rate = resolveHotelServiceRate('checkin_assist')
+      const found = resolveHotelServiceRate('checkin_assist')
+      const rate = found.rate
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2174,17 +2181,20 @@ export async function calculateDayBasedPricing(
       } else {
         addHole({
           kind: 'hotel_service',
-          reason: 'missing',
+          reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
           city: day.city,
           lookupAttempted: `hotel_staff_rates checkin_assist tier=${tier}`,
-          message: `No hotel check-in service rate (${tier}). Add it in Rates → Hotel Services.`,
+          message: found.rowExists
+            ? `The hotel check-in service rate (${tier}) has no price. Open it in Rates → Hotel Services and set one.`
+            : `No hotel check-in service rate (${tier}). Add it in Rates → Hotel Services.`,
         })
       }
     }
 
     if (day.services.hotel_checkout) {
-      const rate = resolveHotelServiceRate('porter')
+      const found = resolveHotelServiceRate('porter')
+      const rate = found.rate
       if (rate != null) {
         fixedCosts += rate
         services.push({
@@ -2203,11 +2213,13 @@ export async function calculateDayBasedPricing(
       } else {
         addHole({
           kind: 'hotel_service',
-          reason: 'missing',
+          reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
           city: day.city,
           lookupAttempted: `hotel_staff_rates porter tier=${tier}`,
-          message: `No hotel check-out/porter service rate (${tier}). Add it in Rates → Hotel Services.`,
+          message: found.rowExists
+            ? `The hotel check-out/porter service rate (${tier}) has no price. Open it in Rates → Hotel Services and set one.`
+            : `No hotel check-out/porter service rate (${tier}). Add it in Rates → Hotel Services.`,
         })
       }
     }

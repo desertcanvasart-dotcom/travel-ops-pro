@@ -41,7 +41,8 @@ interface AirportStaffRate {
   airport_code: string
   service_type: string
   direction: 'arrival' | 'departure' | 'both'
-  rate_eur: number
+  /** null = not priced yet. Never 0 to mean unknown — see 20260821_staff_rates_unpriced.sql. */
+  rate_eur: number | null
   description: string | null
   notes: string | null
   is_active: boolean
@@ -212,7 +213,7 @@ export default function AirportServicesPage() {
     airport_code: 'CAI',
     service_type: 'meet_greet',
     direction: 'arrival' as 'arrival' | 'departure' | 'both',
-    rate_eur: 0,
+    rate_eur: '' as number | '',
     description: '',
     notes: '',
     supplier_id: '',
@@ -268,7 +269,7 @@ export default function AirportServicesPage() {
       airport_code: 'CAI',
       service_type: 'meet_greet',
       direction: 'arrival',
-      rate_eur: 0,
+      rate_eur: '' as number | '',
       description: '',
       notes: '',
       supplier_id: '',
@@ -284,7 +285,9 @@ export default function AirportServicesPage() {
       airport_code: rate.airport_code,
       service_type: rate.service_type,
       direction: rate.direction,
-      rate_eur: rate.rate_eur,
+      // An unpriced row must open with an empty box. Showing 0 invites the
+      // operator to save it back as 0, which is how these rows persist.
+      rate_eur: rate.rate_eur ?? '',
       description: rate.description || '',
       notes: rate.notes || '',
       supplier_id: rate.supplier_id || '',
@@ -303,7 +306,13 @@ export default function AirportServicesPage() {
       showToast('error', invalid)
       return
     }
-    const submitData = { ...formData, service_code: formData.service_code || generateCode() }
+    const submitData = {
+      ...formData,
+      service_code: formData.service_code || generateCode(),
+      // Empty means NOT PRICED. Sending 0 would store a rate that can never
+      // charge and reads as a price on screen — see 20260821_staff_rates_unpriced.sql.
+      rate_eur: formData.rate_eur === '' ? null : Number(formData.rate_eur),
+    }
 
     try {
       const url = editingRate ? `/api/rates/airport-services/${editingRate.id}` : '/api/rates/airport-services'
@@ -378,9 +387,15 @@ export default function AirportServicesPage() {
     active: rates.filter(r => r.is_active).length,
     airports: uniqueAirports,
     vipServices: rates.filter(r => r.service_type === 'vip_service').length,
-    avgRate: rates.length > 0 
-      ? Math.round(rates.reduce((sum, r) => sum + r.rate_eur, 0) / rates.length)
-      : 0
+    // Average across PRICED rows only. Summing unpriced rows and dividing by
+    // every row reports an average nobody charges — and after the rate_eur
+    // column became nullable, `sum + null` would quietly count them as 0.
+    avgRate: (() => {
+      const priced = rates.map(r => r.rate_eur).filter((v): v is number => v != null && v > 0)
+      return priced.length > 0
+        ? Math.round(priced.reduce((sum, v) => sum + v, 0) / priced.length)
+        : 0
+    })()
   }
 
   // Hooks run before any early return: this page shows a spinner while it loads,
@@ -559,7 +574,13 @@ export default function AirportServicesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      {formatRate(rate.rate_eur)}
+                      {rate.rate_eur == null || rate.rate_eur <= 0 ? (
+                        // Printing "€0" for a row the engine treats as unpriced
+                        // is how two rate rows sat inert for months.
+                        <span className="text-gray-400 font-normal italic">{tCommon('notPriced')}</span>
+                      ) : (
+                        formatRate(rate.rate_eur)
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate">
                       {rate.description || '-'}
@@ -693,7 +714,7 @@ export default function AirportServicesPage() {
                     name="rate_eur"
                     value={formData.rate_eur}
                     onChange={handleChange}
-                    min="0"
+                    min="0.01"
                     step="0.01"
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"

@@ -3839,6 +3839,7 @@
       "selectSupplier": "サプライヤーを選択（任意）",
       "activeRate": "有効（予約可能）",
       "avgRate": "平均料金",
+      "notPriced": "料金未設定",
       "cities": "都市",
       "basicInformation": "基本情報",
       "durationRates": "期間・料金",
