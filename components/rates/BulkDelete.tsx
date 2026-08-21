@@ -10,6 +10,8 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 export function useBulkSelect() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -49,10 +51,24 @@ export function BulkDeleteBar({
   onClear: () => void
 }) {
   const [busy, setBusy] = useState(false)
+  // The app's own dialog, not window.confirm: the native box renders as
+  // "autoura.net says" at the top of the browser chrome, in the browser's
+  // language, unstyled — every other destructive action in the app asks
+  // through ConfirmDialog, centred and translated. Hooks before the early
+  // return (Rules of Hooks — this exact mistake crashed 11 rates pages once).
+  const dialog = useConfirmDialog()
+  const t = useTranslations('confirmDialog')
   if (count === 0) return null
 
   const run = async () => {
-    if (!confirm(`Delete ${count} selected ${label}? This cannot be undone.`)) return
+    const confirmed = await dialog.confirm({
+      title: t('bulkDeleteTitle', { count }),
+      message: t('bulkDeleteMessage', { count, label }),
+      variant: 'danger',
+      confirmText: t('delete'),
+      cancelText: t('cancel'),
+    })
+    if (!confirmed) return
     setBusy(true)
     try {
       await onDelete()

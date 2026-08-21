@@ -6254,7 +6254,9 @@
     "confirmAction": "アクションを確認",
     "deleteTitle": "{itemName}を削除しますか？",
     "deleteMessage": "この{itemName}を削除してもよろしいですか？この操作は元に戻せません。",
-    "warningCannotUndo": "警告：この操作は元に戻せません。"
+    "warningCannotUndo": "警告：この操作は元に戻せません。",
+    "bulkDeleteTitle": "選択した{count}件を削除しますか？",
+    "bulkDeleteMessage": "選択した{count}件の{label}を削除します。この操作は元に戻せません。"
   },
   "clientLinkButton": {
     "linkToClient": "クライアントにリンク",
