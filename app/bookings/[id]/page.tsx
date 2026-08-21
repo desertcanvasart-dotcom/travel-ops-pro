@@ -47,6 +47,7 @@ import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import PassengerManifest from '@/components/PassengerManifest'
 import SendConfirmationButton from '@/components/SendConfirmationButton'
 import PortalCoordinator from '@/app/components/PortalCoordinator'
+import BookingChangeRequests from '@/app/components/BookingChangeRequests'
 import InsuranceCard from '@/app/components/InsuranceCard'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
@@ -415,6 +416,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         )}
       </div>
 
+      {/* Party-size requests from the portal, then the portal itself. */}
+      <BookingChangeRequests bookingId={resolvedParams.id} />
       {/* Portal: family (one link) or friends (a private link per traveller). */}
       <PortalCoordinator bookingId={resolvedParams.id} />
       <InsuranceCard bookingId={resolvedParams.id} />
