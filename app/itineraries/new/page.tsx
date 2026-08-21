@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Check, User, Plane, Users, FileText } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 
 export default function NewItineraryPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // Arriving from a client's page: the trip belongs to them, and saying so is
+  // what makes it appear in their booking history afterwards.
+  const clientId = searchParams.get('clientId')
   const t = useTranslations('itineraries')
   const tCommon = useTranslations('common')
   const { preferences, loading: prefsLoading } = usePreferences()
@@ -26,8 +30,34 @@ export default function NewItineraryPage() {
     num_children: 0,  // Ages 4-12: 50% discount
     num_infants: 0,   // Ages 0-3: FREE except flights
     currency: 'USD',
-    notes: ''
+    notes: '',
+    client_id: null as string | null,
   })
+
+  // Pre-fill from the client this booking is being made for, so their name and
+  // contact details are not retyped — and so the trip carries their id.
+  useEffect(() => {
+    if (!clientId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/clients/${clientId}`)
+        const json = await res.json()
+        const c = json?.data ?? json?.client ?? json
+        if (cancelled || !c?.id) return
+        setFormData(prev => ({
+          ...prev,
+          client_id: c.id,
+          client_name: prev.client_name || [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.name || '',
+          client_email: prev.client_email || c.email || '',
+          client_phone: prev.client_phone || c.phone || '',
+        }))
+      } catch {
+        // A client we cannot read just means an unprefilled form, not a blocked one.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [clientId])
 
   // Update currency from preferences once loaded
   useEffect(() => {

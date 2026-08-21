@@ -15,13 +15,51 @@ export async function GET(
   try {
     const { id } = await params
 
-    const { data, error } = await supabaseAdmin
+    // A trip belongs to a client by client_id — except that NO itinerary in this
+    // system has ever had one set. They carry the client's name and email as
+    // text, which is how the trip and the invoices for it were connected in
+    // practice. Matching on the email as well means the booking history shows
+    // the trips that exist, not the ones that were linked properly.
+    const { data: client } = await supabaseAdmin
+      .from('clients')
+      .select('email')
+      .eq('id', id)
+      .maybeSingle()
+
+    const email = (client as { email?: string } | null)?.email?.trim()
+
+    const COLUMNS = 'id, itinerary_code, trip_name, status, start_date, end_date, num_adults, num_children, total_cost, currency, created_at'
+    let query = supabaseAdmin
       .from('itineraries')
       // currency travels with total_cost: the amount is meaningless without it,
       // and this operator prices in yen.
-      .select('id, itinerary_code, trip_name, status, start_date, end_date, num_adults, num_children, total_cost, currency, created_at')
-      .eq('client_id', id)
+      .select(COLUMNS)
       .order('created_at', { ascending: false })
+
+    // Two queries rather than one .or() with the email interpolated into it:
+    // a filter string built from stored data is the injection shape this
+    // codebase already had to fix once (sanitizeSearchTerm, PR #14 era).
+    const [byId, byEmail] = await Promise.all([
+      query.eq('client_id', id),
+      email
+        ? supabaseAdmin.from('itineraries').select(COLUMNS).ilike('client_email', email)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    const error = byId.error || byEmail.error
+    const seen = new Set<string>()
+    const data = [...(byId.data || []), ...(byEmail.data || [])]
+      .filter(row => {
+        const key = (row as { id: string }).id
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .sort((a, b) =>
+        String((b as { created_at?: string }).created_at ?? '').localeCompare(
+          String((a as { created_at?: string }).created_at ?? '')
+        )
+      )
 
     if (error) {
       console.error('Error fetching client itineraries:', error)
