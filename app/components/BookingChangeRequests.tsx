@@ -34,8 +34,14 @@ export default function BookingChangeRequests({ bookingId }: { bookingId: string
         body: JSON.stringify({ action }),
       })
       const data = await res.json().catch(() => ({}))
-      if (res.ok && action === 'approve' && data.repriceNeeded) {
-        setNotice(`Added ${data.added}. Booked count is now ${data.newBookedCount} — re-price this booking.`)
+      if (res.ok && action === 'approve') {
+        const rp = data.reprice
+        if (rp && rp.method === 'per_person') {
+          const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+          setNotice(`Added ${data.added}. Total re-priced ${fmt(rp.oldTotal)} → ${fmt(rp.newTotal)} (+${fmt(rp.delta)}, at ${fmt(rp.perPerson)}/person). Adjust in pricing if the group shares fixed costs.`)
+        } else {
+          setNotice(`Added ${data.added}. Booked count is now ${data.newBookedCount} — set the price for this booking (no per-person base to extend).`)
+        }
       }
       await load()
     } finally { setBusy(null) }

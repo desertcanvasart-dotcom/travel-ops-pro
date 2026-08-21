@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
+import { computeAddTravellerReprice } from '@/lib/reprice-add-traveller'
 
 export const dynamic = 'force-dynamic'
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -50,16 +51,37 @@ export async function POST(
   // Approve: bump the booked count and seed the new (blank) passenger rows.
   const { data: booking } = await admin
     .from('bookings')
-    .select('id, num_adults, num_children')
+    .select('id, num_adults, num_children, total_cost, balance_due, deposit_percent')
     .eq('id', id)
     .eq('org_id', orgId)
     .maybeSingle()
   if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
 
+  const oldPax = (booking.num_adults ?? 0) + (booking.num_children ?? 0)
   const newAdults = (booking.num_adults ?? 0) + req.requested_count
+
+  // Auto-reprice: extend the per-person rate the customer already agreed to.
+  const reprice = computeAddTravellerReprice({
+    oldTotal: booking.total_cost,
+    oldPax,
+    addedPax: req.requested_count,
+    depositPercent: booking.deposit_percent,
+    oldBalanceDue: booking.balance_due,
+  })
+
+  const bookingUpdate: Record<string, unknown> = {
+    num_adults: newAdults,
+    updated_at: new Date().toISOString(),
+  }
+  if (reprice.method === 'per_person') {
+    bookingUpdate.total_cost = reprice.newTotal
+    bookingUpdate.deposit_amount = reprice.newDepositAmount
+    bookingUpdate.balance_due = reprice.newBalanceDue
+  }
+
   const { error: bumpErr } = await admin
     .from('bookings')
-    .update({ num_adults: newAdults, updated_at: new Date().toISOString() })
+    .update(bookingUpdate)
     .eq('id', id)
   if (bumpErr) return NextResponse.json({ error: clientMessage(bumpErr, 'Could not update booking') }, { status: 500 })
 
@@ -77,7 +99,9 @@ export async function POST(
     status: 'approved',
     added: req.requested_count,
     newBookedCount: newAdults + (booking.num_children ?? 0),
-    // The count changed; the stored total has not. Operator re-prices next.
-    repriceNeeded: true,
+    reprice,
+    // Auto-repriced when a per-person base existed; otherwise the operator
+    // sets the price (no base to extend from).
+    repriceNeeded: reprice.method !== 'per_person',
   })
 }
