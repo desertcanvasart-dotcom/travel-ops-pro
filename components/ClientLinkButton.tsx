@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface Client {
   id: string
@@ -46,6 +47,7 @@ export default function ClientLinkButton({
   className = ''
 }: ClientLinkButtonProps) {
   const t = useTranslations('clientLinkButton')
+  const confirmDialog = useConfirm()
   const [linkedClient, setLinkedClient] = useState<Client | null>(null)
   const [linkId, setLinkId] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -134,7 +136,7 @@ export default function ClientLinkButton({
   }
 
   const handleUnlink = async () => {
-    if (!confirm(t('removeLinkConfirm'))) return
+    if (!(await confirmDialog(t('removeLinkConfirm')))) return
 
     setLinking(true)
     try {

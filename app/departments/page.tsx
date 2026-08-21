@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Building2, Loader2, Check, Plus, Trash2 } from 'lucide-react'
 import { SERVICE_TYPE_ROUTING } from '@/lib/departments'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface Department {
   id: string
@@ -26,6 +27,7 @@ const KNOWN_TYPES = Object.keys(SERVICE_TYPE_ROUTING)
 
 export default function DepartmentsPage() {
   const t = useTranslations('departments')
+  const confirmDialog = useConfirm()
   const [departments, setDepartments] = useState<Department[]>([])
   const [members, setMembers] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -93,7 +95,7 @@ export default function DepartmentsPage() {
   }
 
   const remove = async (dept: Department) => {
-    if (!confirm(t('deleteConfirm', { name: dept.name }))) return
+    if (!(await confirmDialog(t('deleteConfirm', { name: dept.name })))) return
     setError(null)
     try {
       const res = await fetch(`/api/departments/${dept.id}`, { method: 'DELETE' })

@@ -39,6 +39,28 @@ interface ConfirmDialogContextType {
 
 const ConfirmDialogContext = createContext<ConfirmDialogContextType | null>(null)
 
+// ============================================
+// Drop-in async replacement for window.confirm
+// ============================================
+// window.confirm renders the browser's own "<host> says" box — unstyled, at
+// the top of the chrome, in the browser's language. This has the SAME call
+// shape — confirmDialog(message) -> Promise<boolean> — so a native call
+// becomes the app's centred dialog by only gaining `await`. Danger variant by
+// default (nearly every confirm here guards a delete); pass an override for
+// non-destructive prompts.
+export function useConfirm() {
+  const ctx = useContext(ConfirmDialogContext)
+  if (!ctx) {
+    throw new Error('useConfirm must be used within ConfirmDialogProvider')
+  }
+  const { confirm } = ctx
+  return useCallback(
+    (message: string, options?: Partial<Omit<DialogOptions, 'message'>>): Promise<boolean> =>
+      confirm({ message, variant: 'danger', ...options }),
+    [confirm]
+  )
+}
+
 export function useConfirmDialog() {
   const context = useContext(ConfirmDialogContext)
   if (!context) {

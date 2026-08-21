@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
+import { useConfirm } from '@/components/ConfirmDialog'
 import {
   Bell,
   Check,
@@ -35,6 +36,7 @@ interface Notification {
 
 export default function NotificationsPage() {
   const t = useTranslations('notifications')
+  const confirmDialog = useConfirm()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
@@ -98,7 +100,7 @@ export default function NotificationsPage() {
   }
 
   const deleteNotification = async (id: string) => {
-    if (!confirm(t('deleteConfirm'))) return
+    if (!(await confirmDialog(t('deleteConfirm')))) return
 
     try {
       const response = await fetch(`/api/notifications/${id}`, {

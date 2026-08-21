@@ -31,7 +31,7 @@ import {
 import { generateInvoicePDF, downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { fetchCompanyInfo } from '@/lib/company-info-client'
 import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
-import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface Invoice {
@@ -144,6 +144,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const t = useTranslations('invoices.detail')
   const tCommon = useTranslations('common')
   const dialog = useConfirmDialog()
+  const confirmDialog = useConfirm()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [linkedInvoice, setLinkedInvoice] = useState<Invoice | null>(null)
   const [childInvoice, setChildInvoice] = useState<Invoice | null>(null)
@@ -365,7 +366,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const handleDeletePayment = async (paymentId: string) => {
-    if (!confirm(t('confirmDeletePayment'))) return
+    if (!(await confirmDialog(t('confirmDeletePayment')))) return
 
     try {
       const response = await fetch(`/api/invoices/${resolvedParams.id}/payments/${paymentId}`, {
@@ -383,7 +384,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const handleCreateFinalInvoice = async () => {
     if (!invoice) return
 
-    if (!confirm(t('confirmCreateFinalInvoice'))) return
+    if (!(await confirmDialog(t('confirmCreateFinalInvoice')))) return
 
     setCreatingFinalInvoice(true)
     try {

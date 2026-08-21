@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { useConfirm } from '@/components/ConfirmDialog'
 import {
   ArrowLeft,
   FileText,
@@ -57,6 +58,7 @@ interface MatchedExpense {
 export default function SupplierInvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const confirmDialog = useConfirm()
   const { user } = useAuth()
   const [invoice, setInvoice] = useState<Record<string, unknown> | null>(null)
   const [matchedExpenses, setMatchedExpenses] = useState<MatchedExpense[]>([])
@@ -139,7 +141,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
   }
 
   const handleDelete = async () => {
-    if (!confirm('Delete this supplier invoice?')) return
+    if (!(await confirmDialog('Delete this supplier invoice?'))) return
     await fetch(`/api/supplier-invoices/${id}`, { method: 'DELETE' })
     router.push('/supplier-invoices')
   }

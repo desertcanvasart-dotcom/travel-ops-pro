@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { History, Loader2, RotateCcw, GitCompare, Check } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface Revision {
   id: string
@@ -26,6 +27,7 @@ const fmt = (v: any) => {
 }
 
 export default function QuoteRevisions({ quoteId, basePath = '/api/b2b/quotes' }: { quoteId: string; basePath?: string }) {
+  const confirmDialog = useConfirm()
   const [revisions, setRevisions] = useState<Revision[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<number | null>(null)
@@ -67,7 +69,7 @@ export default function QuoteRevisions({ quoteId, basePath = '/api/b2b/quotes' }
   }
 
   const revert = async (v: number) => {
-    if (!confirm(`Revert this quote to version ${v}? The current state is saved as a new revision first.`)) return
+    if (!(await confirmDialog(`Revert this quote to version ${v}? The current state is saved as a new revision first.`))) return
     setBusy(v)
     setError(null)
     try {

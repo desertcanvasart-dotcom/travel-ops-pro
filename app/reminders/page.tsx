@@ -21,7 +21,7 @@ import {
   ChevronLeft,
   Filter
 } from 'lucide-react'
-import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface PendingReminder {
   invoice_id: string
@@ -87,6 +87,7 @@ const REMINDER_TYPE_LABELS: Record<string, { label: string; color: string }> = {
 
 export default function PaymentRemindersPage() {
   const dialog = useConfirmDialog()
+  const confirmDialog = useConfirm()
   const [pendingReminders, setPendingReminders] = useState<PendingReminder[]>([])
   const [reminderHistory, setReminderHistory] = useState<ReminderHistoryItem[]>([])
   const [historyStats, setHistoryStats] = useState<HistoryStats>({ total: 0, sent: 0, failed: 0 })
@@ -237,7 +238,7 @@ export default function PaymentRemindersPage() {
 
   const handleSendAll = async () => {
     const activeReminders = pendingReminders.filter(r => !r.reminder_paused)
-    if (!confirm(`Are you sure you want to send reminders to all ${activeReminders.length} active invoices?`)) {
+    if (!(await confirmDialog(`Are you sure you want to send reminders to all ${activeReminders.length} active invoices?`, { variant: 'warning' }))) {
       return
     }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useConfirm } from '@/components/ConfirmDialog'
 import {
   Calendar,
   Plus,
@@ -75,6 +76,7 @@ const STATUS_CONFIG = {
 // ============================================
 
 export default function DeparturesPage() {
+  const confirmDialog = useConfirm()
   const [loading, setLoading] = useState(true)
   const [departures, setDepartures] = useState<TourDeparture[]>([])
   const [templates, setTemplates] = useState<TourTemplate[]>([])
@@ -236,7 +238,7 @@ export default function DeparturesPage() {
   // ============================================
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this departure?')) return
+    if (!(await confirmDialog('Are you sure you want to delete this departure?'))) return
 
     setDeletingId(id)
     try {

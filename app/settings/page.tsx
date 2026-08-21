@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { createClient } from '@/app/supabase'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
+import { useConfirm } from '@/components/ConfirmDialog'
 import {
   User,
   Mail,
@@ -116,6 +117,7 @@ function SettingsContent() {
   const tabParam = searchParams.get('tab')
   const { user } = useAuth()
   const t = useTranslations('settings')
+  const confirmDialog = useConfirm()
 
   const [activeTab, setActiveTab] = useState(tabParam || 'profile')
   const [loading, setLoading] = useState(true)
@@ -279,7 +281,7 @@ function SettingsContent() {
   }
 
   const disconnectAccounting = async (provider: 'xero' | 'quickbooks') => {
-    if (!user || !confirm(`Disconnect ${provider === 'xero' ? 'Xero' : 'QuickBooks'}?`)) return
+    if (!user || !(await confirmDialog(`Disconnect ${provider === 'xero' ? 'Xero' : 'QuickBooks'}?`))) return
     try {
       await fetch('/api/auth/accounting/disconnect', {
         method: 'POST',
@@ -505,7 +507,7 @@ function SettingsContent() {
       return
     }
 
-    if (!confirm('Are you sure you want to disconnect your Gmail account?')) {
+    if (!(await confirmDialog('Are you sure you want to disconnect your Gmail account?'))) {
       return
     }
 

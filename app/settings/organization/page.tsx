@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { Building2, Users, Mail, Loader2, Save, Trash2, Send, XCircle, CheckCircle, ShieldCheck } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface OrgInfo {
   id: string
@@ -41,6 +42,7 @@ type InviteRole = typeof ROLES[number]
 
 export default function OrganizationSettingsPage() {
   const { user } = useAuth()
+  const confirmDialog = useConfirm()
 
   const [org, setOrg] = useState<OrgInfo | null>(null)
   const [members, setMembers] = useState<OrgMember[]>([])
@@ -147,7 +149,7 @@ export default function OrganizationSettingsPage() {
   }
 
   async function cancelInvite(id: string) {
-    if (!confirm('Cancel this invitation?')) return
+    if (!(await confirmDialog('Cancel this invitation?'))) return
     try {
       const res = await fetch(`/api/invitations?id=${id}`, { method: 'DELETE' })
       const json = await res.json()
@@ -162,7 +164,7 @@ export default function OrganizationSettingsPage() {
   async function removeMember(userId: string) {
     const target = members.find(m => m.user_id === userId)
     const label = target?.user?.full_name || target?.user?.email || 'this member'
-    if (!confirm(`Remove ${label} from the organization?`)) return
+    if (!(await confirmDialog(`Remove ${label} from the organization?`))) return
     try {
       const res = await fetch(`/api/organization/members?user_id=${encodeURIComponent(userId)}`, {
         method: 'DELETE',
