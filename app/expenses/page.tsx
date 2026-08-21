@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
 import { useTranslations } from 'next-intl'
 import {
   Search,
@@ -363,7 +364,7 @@ export default function ExpensesPage() {
   }
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }  // eslint-disable-line -- kept for the form's option labels
     return symbols[currency] || currency
   }
 
@@ -393,14 +394,23 @@ export default function ExpensesPage() {
   )
 
   // Stats
-  const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0)
-  const pendingExpenses = expenses.filter(e => e.status === 'pending').reduce((sum, exp) => sum + Number(exp.amount), 0)
-  const approvedExpenses = expenses.filter(e => e.status === 'approved').reduce((sum, exp) => sum + Number(exp.amount), 0)
-  const paidExpenses = expenses.filter(e => e.status === 'paid').reduce((sum, exp) => sum + Number(exp.amount), 0)
+  // An expense carries its own currency — a Cairo taxi in EGP and a hotel
+  // deposit in EUR are not one number — so the tiles keep them apart.
+  const totalsByCurrency = sumByCurrency(expenses, e => e.amount, e => e.currency)
+  const pendingByCurrency = sumByCurrency(expenses.filter(e => e.status === 'pending'), e => e.amount, e => e.currency)
+  const approvedByCurrency = sumByCurrency(expenses.filter(e => e.status === 'approved'), e => e.amount, e => e.currency)
+  const paidByCurrency = sumByCurrency(expenses.filter(e => e.status === 'paid'), e => e.amount, e => e.currency)
+
+  // The charts show proportions, which need ONE denominator. They work in the
+  // currency most of this list is in, and say so above the bars.
+  const chartCurrency =
+    Object.entries(totalsByCurrency).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] || 'EUR'
+  const chartExpenses = expenses.filter(e => (e.currency || 'EUR').toUpperCase() === chartCurrency)
+  const totalExpenses = chartExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0)
 
   // Category breakdown for chart
   const categoryBreakdown = CATEGORIES.map(cat => {
-    const total = expenses
+    const total = chartExpenses
       .filter(e => e.category === cat.value)
       .reduce((sum, e) => sum + Number(e.amount), 0)
     return { ...cat, total }
@@ -489,7 +499,7 @@ export default function ExpensesPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('totalExpenses')}</p>
-          <p className="text-2xl font-semibold text-gray-900">€{totalExpenses.toLocaleString()}</p>
+          <p className="text-2xl font-semibold text-gray-900">{formatTotals(totalsByCurrency, { defaultCurrency: chartCurrency })}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -497,7 +507,7 @@ export default function ExpensesPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('pending')}</p>
-          <p className="text-2xl font-semibold text-yellow-600">€{pendingExpenses.toLocaleString()}</p>
+          <p className="text-2xl font-semibold text-yellow-600">{formatTotals(pendingByCurrency, { defaultCurrency: chartCurrency })}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -505,7 +515,7 @@ export default function ExpensesPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('approved')}</p>
-          <p className="text-2xl font-semibold text-blue-600">€{approvedExpenses.toLocaleString()}</p>
+          <p className="text-2xl font-semibold text-blue-600">{formatTotals(approvedByCurrency, { defaultCurrency: chartCurrency })}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -513,7 +523,7 @@ export default function ExpensesPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
           </div>
           <p className="text-xs text-gray-500 mb-1">{t('paid')}</p>
-          <p className="text-2xl font-semibold text-green-600">€{paidExpenses.toLocaleString()}</p>
+          <p className="text-2xl font-semibold text-green-600">{formatTotals(paidByCurrency, { defaultCurrency: chartCurrency })}</p>
         </div>
       </div>
 
@@ -667,7 +677,7 @@ export default function ExpensesPage() {
                         <span>{cat.icon}</span>
                         <span className="text-gray-700">{cat.label}</span>
                       </div>
-                      <span className="font-medium text-gray-900">€{cat.total.toLocaleString()}</span>
+                      <span className="font-medium text-gray-900">{formatMoney(cat.total, chartCurrency)}</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div 
@@ -686,10 +696,10 @@ export default function ExpensesPage() {
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Expenses by Status</h3>
             <div className="space-y-4">
               {Object.entries(STATUS_CONFIG).map(([key, config]) => {
-                const amount = expenses
+                const amount = chartExpenses
                   .filter(e => e.status === key)
                   .reduce((sum, e) => sum + Number(e.amount), 0)
-                const count = expenses.filter(e => e.status === key).length
+                const count = chartExpenses.filter(e => e.status === key).length
                 const percentage = totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0
                 
                 return (
@@ -701,7 +711,7 @@ export default function ExpensesPage() {
                         </span>
                         <span className="text-gray-500">{count} items</span>
                       </div>
-                      <span className="font-medium text-gray-900">€{amount.toLocaleString()}</span>
+                      <span className="font-medium text-gray-900">{formatMoney(amount, chartCurrency)}</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div 

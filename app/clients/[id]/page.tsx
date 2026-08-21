@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { formatMoney } from '@/lib/currency-totals'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import ClientTimeline from '@/components/ClientTimeline'
@@ -701,7 +702,7 @@ export default function ClientProfilePage() {
                       </div>
                       <div className="text-right">
                         <div className="text-xl font-bold text-green-600">
-                          €{booking.total_cost?.toLocaleString()}
+                          {formatMoney(Number(booking.total_cost) || 0, booking.currency || 'EUR')}
                         </div>
                         <Link
                           href={`/view-itinerary/${booking.id}`}

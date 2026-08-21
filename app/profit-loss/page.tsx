@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { formatMoney, formatTotals } from '@/lib/currency-totals'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -61,6 +62,11 @@ interface TripPnL {
 
 interface Summary {
   total_trips: number
+  /** Set only when every trip shares one currency; null when they do not. */
+  currency?: string | null
+  mixed_currency?: boolean
+  /** The real per-currency breakdown, which the flat totals below cannot be. */
+  by_currency?: Record<string, Record<string, number>>
   total_revenue: number
   total_expenses: number
   total_profit: number
@@ -198,6 +204,35 @@ export default function ProfitLossPage() {
     currentPage * ITEMS_PER_PAGE
   )
 
+  /**
+   * A summary figure in the currency it is actually in.
+   *
+   * The API already does the hard part: `currency` is set only when every trip
+   * shares one, and `by_currency` holds the real breakdown otherwise. Its own
+   * comment says the flat totals are authoritative ONLY when mixed_currency is
+   * false — so on a mixed page this renders "¥879,917 + €1,200" from the
+   * breakdown instead of a merged number the page had no right to print.
+   */
+  /**
+   * A margin across two currencies is not a smaller or larger margin — it is
+   * not a margin at all: the ratio's numerator and denominator are different
+   * money. Per-trip margins in the table below stay meaningful, because each
+   * trip has one currency.
+   */
+  const summaryPercent = (value: number) =>
+    summary?.mixed_currency ? '—' : `${value.toFixed(1)}%`
+
+  const summaryMoney = (field: string, flat: number) => {
+    if (!summary) return ''
+    if (summary.mixed_currency && summary.by_currency) {
+      const totals = Object.fromEntries(
+        Object.entries(summary.by_currency).map(([code, bucket]: [string, any]) => [code, Number(bucket?.[field]) || 0])
+      )
+      return formatTotals(totals)
+    }
+    return formatMoney(flat, summary.currency || 'EUR')
+  }
+
   const getCurrencySymbol = (currency: string) => {
     const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
     return symbols[currency] || currency
@@ -298,14 +333,14 @@ export default function ProfitLossPage() {
                 title: 'Profit & Loss Report',
                 summary: summary ? [
                   { label: 'Total Trips', value: String(summary.total_trips) },
-                  { label: 'Total Revenue', value: `€${summary.total_revenue.toLocaleString()}` },
-                  { label: 'Total Expenses', value: `€${summary.total_expenses.toLocaleString()}` },
-                  { label: 'Gross Profit', value: `€${summary.total_profit.toLocaleString()}` },
-                  { label: 'Agent Commission', value: `€${Math.round(summary.total_agent_commissions).toLocaleString()}` },
-                  { label: 'Net Profit', value: `€${Math.round(summary.total_net_profit).toLocaleString()}` },
-                  { label: 'Avg Net Margin', value: `${summary.average_net_margin.toFixed(1)}%` },
-                  { label: 'Realized Profit', value: `€${Math.round(summary.total_realized_profit).toLocaleString()}` },
-                  { label: 'Avg Margin', value: `${summary.average_margin.toFixed(1)}%` },
+                  { label: 'Total Revenue', value: summaryMoney('revenue', summary.total_revenue) },
+                  { label: 'Total Expenses', value: summaryMoney('total_expenses', summary.total_expenses) },
+                  { label: 'Gross Profit', value: summaryMoney('profit', summary.total_profit) },
+                  { label: 'Agent Commission', value: summaryMoney('agent_commissions', summary.total_agent_commissions) },
+                  { label: 'Net Profit', value: summaryMoney('net_profit', summary.total_net_profit) },
+                  { label: 'Avg Net Margin', value: summaryPercent(summary.average_net_margin) },
+                  { label: 'Realized Profit', value: summaryMoney('realized_profit', summary.total_realized_profit) },
+                  { label: 'Avg Margin', value: summaryPercent(summary.average_margin) },
                 ] : [],
                 data: filteredData as unknown as Record<string, unknown>[],
                 columns: cols,
@@ -339,7 +374,7 @@ export default function ProfitLossPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.totalRevenue')}</p>
-            <p className="text-lg font-semibold text-blue-600 truncate" title={`€${summary.total_revenue.toLocaleString()}`}>€{summary.total_revenue.toLocaleString()}</p>
+            <p className="text-lg font-semibold text-blue-600 truncate" title={summaryMoney('revenue', summary.total_revenue)}>{summaryMoney('revenue', summary.total_revenue)}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
@@ -348,7 +383,7 @@ export default function ProfitLossPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.totalExpenses')}</p>
-            <p className="text-lg font-semibold text-red-600 truncate" title={`€${summary.total_expenses.toLocaleString()}`}>€{summary.total_expenses.toLocaleString()}</p>
+            <p className="text-lg font-semibold text-red-600 truncate" title={summaryMoney('total_expenses', summary.total_expenses)}>{summaryMoney('total_expenses', summary.total_expenses)}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
@@ -357,12 +392,12 @@ export default function ProfitLossPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.grossProfit')}</p>
-            <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_profit)}`} title={`€${summary.total_profit.toLocaleString()}`}>
-              €{summary.total_profit.toLocaleString()}
+            <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_profit)}`} title={summaryMoney('profit', summary.total_profit)}>
+              {summaryMoney('profit', summary.total_profit)}
             </p>
             {summary.total_agent_commissions > 0 && (
               <p className="text-[11px] text-gray-500 mt-0.5">
-                before €{Math.round(summary.total_agent_commissions).toLocaleString()} agent commission
+                before {summaryMoney('agent_commissions', summary.total_agent_commissions)} agent commission
               </p>
             )}
           </div>
@@ -376,10 +411,10 @@ export default function ProfitLossPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Net of commission</p>
-            <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_net_profit)}`} title={`€${summary.total_net_profit.toLocaleString()}`}>
-              €{Math.round(summary.total_net_profit).toLocaleString()}
+            <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_net_profit)}`} title={summaryMoney('net_profit', summary.total_net_profit)}>
+              {summaryMoney('net_profit', summary.total_net_profit)}
             </p>
-            <p className="text-[11px] text-gray-500 mt-0.5">{summary.average_net_margin.toFixed(1)}% margin</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{summaryPercent(summary.average_net_margin)} margin</p>
           </div>
 
           {/* Realized — cash that actually moved. Deliberately separate from the
@@ -393,10 +428,10 @@ export default function ProfitLossPage() {
               Realized
             </p>
             <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_realized_profit)}`}>
-              €{Math.round(summary.total_realized_profit).toLocaleString()}
+              {summaryMoney('realized_profit', summary.total_realized_profit)}
             </p>
             <p className="text-[11px] text-gray-500 mt-0.5">
-              €{Math.round(summary.total_realized_revenue).toLocaleString()} in · €{Math.round(summary.total_realized_cost).toLocaleString()} out
+              {summaryMoney('realized_revenue', summary.total_realized_revenue)} in · {summaryMoney('realized_cost', summary.total_realized_cost)} out
             </p>
           </div>
 
@@ -406,7 +441,7 @@ export default function ProfitLossPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.avgMargin')}</p>
-            <p className="text-xl font-semibold text-purple-600 truncate">{summary.average_margin.toFixed(1)}%</p>
+            <p className="text-xl font-semibold text-purple-600 truncate">{summaryPercent(summary.average_margin)}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">

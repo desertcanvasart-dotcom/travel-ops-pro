@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
 import {
   Search,
   Plus,
@@ -551,12 +552,26 @@ export default function InvoicesContent() {
 
   // Stats
   const totalInvoices = invoices.length
-  const totalRevenue = invoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0)
-  const totalPaid = invoices.reduce((sum, inv) => sum + Number(inv.amount_paid), 0)
-  const totalOutstanding = invoices.reduce((sum, inv) => sum + Number(inv.balance_due), 0)
-  const overdueAmount = processedInvoices
-    .filter(inv => inv.status === 'overdue')
-    .reduce((sum, inv) => sum + Number(inv.balance_due), 0)
+  // Summed PER CURRENCY. A yen invoice and a euro invoice do not add up to a
+  // number that is true in either, and this operator bills in yen while the
+  // rate tables are in euro — so the tiles have to say which is which.
+  const totalRevenue = sumByCurrency(invoices, inv => inv.total_amount, inv => inv.currency)
+  const totalPaid = sumByCurrency(invoices, inv => inv.amount_paid, inv => inv.currency)
+  const totalOutstanding = sumByCurrency(invoices, inv => inv.balance_due, inv => inv.currency)
+  // A tile that sums to zero still has to pick a symbol. Use the currency this
+  // operator actually bills in — the invoices on screen — before falling back
+  // to their preference, so an empty "Outstanding" does not read as euro on a
+  // page of yen.
+  const listCurrency =
+    Object.entries(totalRevenue).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0]
+    || preferences?.default_currency
+    || 'EUR'
+
+  const overdueAmount = sumByCurrency(
+    processedInvoices.filter(inv => inv.status === 'overdue'),
+    inv => inv.balance_due,
+    inv => inv.currency
+  )
   const depositCount = invoices.filter(inv => inv.invoice_type === 'deposit').length
   const finalCount = invoices.filter(inv => inv.invoice_type === 'final').length
 
@@ -666,28 +681,28 @@ export default function InvoicesContent() {
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
             <span className="text-xs text-gray-500 font-medium">{t('billed')}</span>
           </div>
-          <p className="text-2xl font-bold text-gray-900 mt-2">€{totalRevenue.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-2">{formatTotals(totalRevenue, { defaultCurrency: listCurrency })}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
             <span className="text-xs text-gray-500 font-medium">{t('paid')}</span>
           </div>
-          <p className="text-2xl font-bold text-green-600 mt-2">€{totalPaid.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-green-600 mt-2">{formatTotals(totalPaid, { defaultCurrency: listCurrency })}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
             <span className="text-xs text-gray-500 font-medium">{t('outstanding')}</span>
           </div>
-          <p className="text-2xl font-bold text-orange-600 mt-2">€{totalOutstanding.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-orange-600 mt-2">{formatTotals(totalOutstanding, { defaultCurrency: listCurrency })}</p>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-red-500"></div>
             <span className="text-xs text-gray-500 font-medium">{t('overdue')}</span>
           </div>
-          <p className="text-2xl font-bold text-red-600 mt-2">€{overdueAmount.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-red-600 mt-2">{formatTotals(overdueAmount, { defaultCurrency: listCurrency })}</p>
         </div>
       </div>
 
@@ -795,12 +810,12 @@ export default function InvoicesContent() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       <span className="text-sm font-medium text-gray-900">
-                        €{Number(invoice.total_amount).toLocaleString()}
+                        {formatMoney(Number(invoice.total_amount), invoice.currency)}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-right">
                       <span className={`text-sm font-medium ${Number(invoice.balance_due) > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                        €{Number(invoice.balance_due).toLocaleString()}
+                        {formatMoney(Number(invoice.balance_due), invoice.currency)}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-center">
@@ -971,7 +986,7 @@ export default function InvoicesContent() {
                     <option value="">No Itinerary</option>
                     {itineraries.map(it => (
                       <option key={it.id} value={it.id}>
-                        {it.itinerary_code} - {it.client_name} (€{it.total_cost})
+                        {it.itinerary_code} - {it.client_name} ({formatMoney(Number(it.total_cost), (it as any).currency || preferences?.default_currency || 'EUR')})
                       </option>
                     ))}
                   </select>

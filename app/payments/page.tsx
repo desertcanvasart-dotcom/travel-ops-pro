@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { addToTotals, emptyTotals, formatMoney, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
 import {
   DollarSign,
   TrendingUp,
@@ -36,10 +37,12 @@ interface UnifiedPayment {
 }
 
 interface PaymentStats {
-  totalReceived: number
-  pendingPayments: number
-  overduePayments: number
-  thisMonthRevenue: number
+  // Kept per currency: this operator collects in yen while the rate tables are
+  // in euro, and one merged number would be true in neither.
+  totalReceived: CurrencyTotals
+  pendingPayments: CurrencyTotals
+  overduePayments: CurrencyTotals
+  thisMonthRevenue: CurrencyTotals
 }
 
 export default function PaymentsPage() {
@@ -48,10 +51,10 @@ export default function PaymentsPage() {
   const [filteredPayments, setFilteredPayments] = useState<UnifiedPayment[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<PaymentStats>({
-    totalReceived: 0,
-    pendingPayments: 0,
-    overduePayments: 0,
-    thisMonthRevenue: 0
+    totalReceived: emptyTotals(),
+    pendingPayments: emptyTotals(),
+    overduePayments: emptyTotals(),
+    thisMonthRevenue: emptyTotals()
   })
 
   const [methodFilter, setMethodFilter] = useState('all')
@@ -80,9 +83,9 @@ export default function PaymentsPage() {
       ])
 
       const allPayments: UnifiedPayment[] = []
-      let totalReceived = 0
-      let pendingPayments = 0
-      let overduePayments = 0
+      const totalReceived = emptyTotals()
+      const pendingPayments = emptyTotals()
+      const overduePayments = emptyTotals()
 
       // Process itinerary payments
       {
@@ -102,7 +105,7 @@ export default function PaymentsPage() {
             notes: p.notes,
             created_at: p.created_at
           })
-          totalReceived += Number(p.amount) || 0
+          addToTotals(totalReceived, p.amount, p.currency || 'EUR')
         })
       }
 
@@ -113,13 +116,13 @@ export default function PaymentsPage() {
         for (const invoice of invoices) {
           // Track pending and overdue from invoices
           if (['sent', 'partial', 'viewed'].includes(invoice.status)) {
-            pendingPayments += Number(invoice.balance_due) || 0
+            addToTotals(pendingPayments, invoice.balance_due, invoice.currency)
           }
 
           if (invoice.status !== 'paid' && invoice.status !== 'cancelled' && invoice.due_date) {
             const dueDate = new Date(invoice.due_date)
             if (dueDate < now && Number(invoice.balance_due) > 0) {
-              overduePayments += Number(invoice.balance_due) || 0
+              addToTotals(overduePayments, invoice.balance_due, invoice.currency)
             }
           }
 
@@ -143,7 +146,7 @@ export default function PaymentsPage() {
                 notes: p.notes,
                 created_at: p.created_at
               })
-              totalReceived += Number(p.amount) || 0
+              addToTotals(totalReceived, p.amount, p.currency || invoice.currency)
             })
           }
         }
@@ -161,9 +164,12 @@ export default function PaymentsPage() {
       startOfMonth.setDate(1)
       startOfMonth.setHours(0, 0, 0, 0)
 
-      const thisMonthRevenue = allPayments
-        .filter(p => p.payment_date && new Date(p.payment_date) >= startOfMonth)
-        .reduce((sum, p) => sum + p.amount, 0)
+      const thisMonthRevenue = emptyTotals()
+      for (const p of allPayments) {
+        if (p.payment_date && new Date(p.payment_date) >= startOfMonth) {
+          addToTotals(thisMonthRevenue, p.amount, p.currency)
+        }
+      }
 
       setPayments(allPayments)
       setStats({
@@ -218,10 +224,12 @@ export default function PaymentsPage() {
     return key ? t(key) : method
   }
 
-  const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
-    return symbols[currency] || currency
-  }
+  // The currency this screen is mostly in — what a zero tile should be
+  // denominated in, rather than defaulting to euro on a page of yen.
+  const listCurrency =
+    Object.entries(stats.totalReceived).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0]
+    || Object.entries(stats.pendingPayments).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0]
+    || 'EUR'
 
   const getSourceLink = (payment: UnifiedPayment) => {
     if (payment.source === 'invoice') {
@@ -323,7 +331,7 @@ export default function PaymentsPage() {
           </div>
           <h3 className="text-xs text-gray-600 font-medium">{t('totalReceived')}</h3>
           <p className="text-2xl font-bold text-gray-900 mt-1">
-            €{stats.totalReceived.toLocaleString()}
+            {formatTotals(stats.totalReceived, { defaultCurrency: listCurrency })}
           </p>
           <p className="text-xs text-gray-500 mt-1">{t('allTimePayments')}</p>
         </div>
@@ -335,7 +343,7 @@ export default function PaymentsPage() {
           </div>
           <h3 className="text-xs text-gray-600 font-medium">{t('pendingPayments')}</h3>
           <p className="text-2xl font-bold text-gray-900 mt-1">
-            €{stats.pendingPayments.toLocaleString()}
+            {formatTotals(stats.pendingPayments, { defaultCurrency: listCurrency })}
           </p>
           <p className="text-xs text-gray-500 mt-1">{t('outstandingBalance')}</p>
         </div>
@@ -347,7 +355,7 @@ export default function PaymentsPage() {
           </div>
           <h3 className="text-xs text-gray-600 font-medium">{t('overdue')}</h3>
           <p className="text-2xl font-bold text-red-600 mt-1">
-            €{stats.overduePayments.toLocaleString()}
+            {formatTotals(stats.overduePayments, { defaultCurrency: listCurrency })}
           </p>
           <p className="text-xs text-gray-500 mt-1">{t('pastDueDate')}</p>
         </div>
@@ -359,7 +367,7 @@ export default function PaymentsPage() {
           </div>
           <h3 className="text-xs text-gray-600 font-medium">{t('thisMonth')}</h3>
           <p className="text-2xl font-bold text-gray-900 mt-1">
-            €{stats.thisMonthRevenue.toLocaleString()}
+            {formatTotals(stats.thisMonthRevenue, { defaultCurrency: listCurrency })}
           </p>
           <p className="text-xs text-gray-500 mt-1">{t('revenueThisMonth')}</p>
         </div>
@@ -461,7 +469,7 @@ export default function PaymentsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <span className="text-sm font-bold text-green-600">
-                      {getCurrencySymbol(payment.currency)}{payment.amount.toLocaleString()}
+                      {formatMoney(payment.amount, payment.currency)}
                     </span>
                   </td>
                   <td className="px-4 py-3">

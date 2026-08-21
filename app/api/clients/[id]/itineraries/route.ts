@@ -17,7 +17,9 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
       .from('itineraries')
-      .select('id, itinerary_code, trip_name, status, start_date, end_date, num_adults, num_children, total_cost, created_at')
+      // currency travels with total_cost: the amount is meaningless without it,
+      // and this operator prices in yen.
+      .select('id, itinerary_code, trip_name, status, start_date, end_date, num_adults, num_children, total_cost, currency, created_at')
       .eq('client_id', id)
       .order('created_at', { ascending: false })
 
