@@ -502,7 +502,7 @@ export default function ClientProfilePage() {
                 <h3 className="text-base font-semibold mb-3">{t('quickActions')}</h3>
                 <div className="space-y-2">
                 <Link
-               href={`/whatsapp-parser?clientId=${clientId}`}
+               href={`/itineraries/new?clientId=${clientId}`}
                className="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-sm rounded-lg hover:bg-blue-100"
                  >
                 <Plus className="w-4 h-4" />
@@ -668,7 +668,7 @@ export default function ClientProfilePage() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">{t('bookingHistory')}</h2>
               <Link
-               href={`/whatsapp-parser?clientId=${clientId}`}
+               href={`/itineraries/new?clientId=${clientId}`}
                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                >
               <Plus className="w-4 h-4" />
@@ -681,7 +681,7 @@ export default function ClientProfilePage() {
                 <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-sm text-gray-600 mb-3">{t('noBookings')}</p>
                 <Link
-                href={`/whatsapp-parser?clientId=${clientId}`}
+                href={`/itineraries/new?clientId=${clientId}`}
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                  >
                 <Plus className="w-4 h-4" />
