@@ -1359,6 +1359,82 @@ npm install
 
 ## 19. Changelog
 
+### 2026-08-22 — Security hardening, rates/supplier fixes, and the multi-traveller portal
+
+20 PRs (#116–#135), all merged to `main` and deployed to production (autoura.net via
+Railway), each verified live against production on throwaway data.
+
+**CI**
+- ✅ `next build` now runs on every PR (#116). Tests + `tsc` were green while a
+  production-only failure (a client `useSearchParams()` without Suspense) broke a
+  deploy; the build step catches that class at PR time. NOTE: `next build` does NOT
+  type-check here (`next.config.ts` has `ignoreBuildErrors: true`), so the separate
+  `tsc --noEmit` job is load-bearing — keep both.
+
+**Security (the audit `next build` flushed out)**
+- ✅ Views were bypassing RLS — `guides`/`airport_staff`/`itineraries_with_languages`/
+  `tour_templates_with_languages`/`client_summary` were anon-readable (#117). Cause:
+  `CREATE OR REPLACE VIEW` drops `security_invoker`. Guard test replays the migration
+  timeline; any view left at definer rights fails CI.
+- ✅ Full-surface lockdown (#118): of 171 PostgREST resources, 47 served real rows to
+  the anon key (whatsapp_messages, contacts, cost structure, content library…).
+  Schema-wide `REVOKE … FROM anon` + RLS + `security_invoker` + `ALTER DEFAULT
+  PRIVILEGES` so new tables are born locked. `/api/health/system` rewritten
+  deny-by-default (enumerates the surface, fails on any anon-visible row).
+- ✅ Repointed 3 dead assignment FKs to `suppliers` and retired the `_deprecated_*`
+  rosters (#119) — guide/airport/hotel-assistant assignment had been impossible.
+- ✅ Service-role client fails loudly instead of silently degrading to the anon key
+  (#120); OAuth `state` refuses an empty signing key (#121).
+
+**Rates & suppliers**
+- ✅ "Not priced" vs "no rate" (#122): staff `rate_eur` nullable; forms no longer save
+  €0. ✅ Editing a supplier-less rate 500'd — PUT passed `supplier_id: ''` to a uuid
+  column (#123). ✅ `updated_at` now actually updates via a trigger on every table with
+  the column (#124). ✅ Hotel assistance now prices from the full-service row — it had
+  NEVER priced (#125). ✅ Supplier bulk delete with a reference guard (#127). ✅
+  Creating a supplier 500'd — the multi-type CHECK's own `types` column was stripped by
+  the field whitelist (#128). ✅ Pagination "page" label no longer clipped (#129).
+
+**UX**
+- ✅ Every `window.confirm` (32 across 24 files) replaced with the app's centred dialog
+  (#126 rates, #130 the rest) via a `useConfirm()` adapter.
+
+**Multi-traveller portal (the feature)** — friends each fill their own passport/medical
+data privately; families keep the one-link flow. All prod-verified.
+- ✅ Phase 1 (#131): per-traveller private links, gated on each person's name + DOB,
+  read/write scoped to their own row. `booking_portal_links.passenger_id`, booking
+  `portal_mode`.
+- ✅ Phase 2 (#132): operator coordinator on the booking page — roster, send/resend/
+  copy/revoke, "N of M submitted". `booking_portal_links.last_sent_at`.
+- ✅ Phase 3 (#133): re-price guard — adding beyond booked count is an operator-approved
+  change request, never silent. `booking_change_requests`.
+- ✅ Lead coordinator inside the portal (#134): the lead runs the party from their own
+  link; gated to the lead's link on a friends booking; sees no passport/medical.
+  Shared `lib/portal-links.ts` so operator + lead surfaces can't drift.
+- ✅ Auto-reprice on approve (#135): extends the customer's AGREED per-person rate
+  (`newTotal = oldTotal/oldPax × newPax`), preserves payments, falls back to manual when
+  there's no priced base. Deliberately NOT an engine re-run — the booking total is a
+  negotiated quote price and passport type isn't stored on bookings.
+
+**Migrations applied to production this session** (all verified live): view
+`security_invoker`; schema-wide anon lockdown; deprecated-roster retirement + FK
+repoint; staff-rate nullability; `updated_at` triggers (schema-wide); portal
+`passenger_id` + `bookings.portal_mode`; portal `last_sent_at`; `booking_change_requests`.
+
+**⚠️ Operational lesson — Railway can serve a STALE build behind a fresh SHA.** After
+merging #132, `/api/version` reported the new SHA and `railway deployment list` showed it
+SUCCESS+active, but the container ran the PREVIOUS commit's compiled app (reused
+`next build` cache layer). Green CI + a matching `/api/version` SHA is NOT proof the
+running code matches. To confirm: PUT a field only the new code writes and read it back;
+if it doesn't persist, the deploy is stale. Fix: `railway up -c` from clean `main` forces
+a fresh CLI-upload build (its deploy shows commitHash `(cli-upload)`, not the git SHA);
+an empty retrigger commit does NOT rebuild (zero-diff).
+
+**Tooling note:** migrations with procedural logic (DO blocks, triggers, schema walks)
+are now executed in PGlite (Postgres-in-WASM) before hand-off, since there is no local
+Postgres on the build machine.
+
+
 ### Version 1.0.0 (November 12, 2025)
 
 **Initial Release**
@@ -1437,7 +1513,7 @@ npm install
 **Primary Developer:** Islam Mohamed  
 **Project Started:** October 2025  
 **Version:** 1.0.0  
-**Last Updated:** November 12, 2025
+**Last Updated:** August 22, 2026
 
 ---
 
