@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import {
@@ -757,6 +758,14 @@ export default function CruisesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // The browser knows which field is missing; it is only bad at saying so
+    // inside a scrolling modal, where its own bubble can land off-screen and
+    // the save button just appears dead. See lib/form-guard.ts.
+    const invalid = firstInvalidMessage(e.currentTarget)
+    if (invalid) {
+      showToast('error', invalid)
+      return
+    }
     
     // Use low season rates as the "default" legacy rates for backward compatibility
     const submitData = {
@@ -1136,7 +1145,7 @@ export default function CruisesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-6">
+            <form noValidate onSubmit={handleSubmit} className="p-4 space-y-6">
               {/* Section 1: Supplier Selection */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.supplier')}</label>

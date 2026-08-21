@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -653,6 +654,14 @@ export default function HotelsContent() {
   // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // The browser knows which field is missing; it is only bad at saying so
+    // inside a scrolling modal, where its own bubble can land off-screen and
+    // the save button just appears dead. See lib/form-guard.ts.
+    const invalid = firstInvalidMessage(e.currentTarget)
+    if (invalid) {
+      showToast('error', invalid)
+      return
+    }
     
     // Generate service code if empty
     const dataToSubmit = {
@@ -1296,7 +1305,7 @@ export default function HotelsContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4">
+            <form noValidate onSubmit={handleSubmit} className="p-4">
               {/* SECTION 1: Hotel Information */}
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">

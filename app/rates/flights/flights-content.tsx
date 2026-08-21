@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -351,6 +352,14 @@ export default function FlightsContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // The browser knows which field is missing; it is only bad at saying so
+    // inside a scrolling modal, where its own bubble can land off-screen and
+    // the save button just appears dead. See lib/form-guard.ts.
+    const invalid = firstInvalidMessage(e.currentTarget)
+    if (invalid) {
+      setError(invalid)
+      return
+    }
     setSaving(true)
     setError(null)
 
@@ -895,7 +904,7 @@ export default function FlightsContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form noValidate onSubmit={handleSubmit} className="p-6 space-y-6">
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
                   {error}

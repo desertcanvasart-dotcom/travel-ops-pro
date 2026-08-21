@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -348,6 +349,15 @@ export default function MealRatesContent() {
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
     e?.preventDefault()
     if (saving) return  // Prevent double-submit
+
+    // This handler can also be called from a button click, so the form is only
+    // checked when there is one. See lib/form-guard.ts for why the browser's
+    // own message is not enough inside a modal.
+    const invalid = firstInvalidMessage(e?.currentTarget)
+    if (invalid) {
+      setError(invalid)
+      return
+    }
 
     setSaving(true)
     try {
@@ -1070,7 +1080,7 @@ export default function MealRatesContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+            <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
               {/* Basic Info */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">

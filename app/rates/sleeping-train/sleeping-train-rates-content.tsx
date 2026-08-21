@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { firstInvalidMessage } from '@/lib/form-guard'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
@@ -243,6 +244,14 @@ export default function SleepingTrainRatesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // The browser knows which field is missing; it is only bad at saying so
+    // inside a scrolling modal, where its own bubble can land off-screen and
+    // the save button just appears dead. See lib/form-guard.ts.
+    const invalid = firstInvalidMessage(e.currentTarget)
+    if (invalid) {
+      showNotification('error', 'Error', invalid)
+      return
+    }
 
     try {
       const url = editingRate
@@ -912,7 +921,7 @@ export default function SleepingTrainRatesContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+            <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
               <SupplierPicker
                 value={formData.supplier_id}
                 onChange={(supplier_id: string) => setFormData(prev => ({ ...prev, supplier_id }))}
