@@ -69,3 +69,47 @@ describe('average rate display', () => {
     expect(avg([{ rate_eur: null }, { rate_eur: 0 }])).toBe(0)
   })
 })
+
+describe('full-service fallback for hotel assistance', () => {
+  // The rate table holds one full-service row per category; the day loop
+  // asks for checkin_assist / porter. Nothing bridged them until 2026-08-21,
+  // so hotel assistance had never priced on any trip. Mirrors the in-memory
+  // resolver in lib/auto-pricing-service.ts.
+  type Row = { service_type: string; hotel_category: string; rate_eur: number | null }
+  const resolve = (rows: Row[], serviceType: string, category = 'standard') => {
+    const matches = (t: string) =>
+      rows.find((r) => r.service_type === t && (r.hotel_category === category || r.hotel_category === 'all'))
+    const dedicated = matches(serviceType)
+    if (dedicated) return { rate: usableRate(dedicated.rate_eur), via: 'dedicated' }
+    if (serviceType !== 'full_service') {
+      const full = matches('full_service')
+      if (full) return { rate: usableRate(full.rate_eur), via: 'full_service' }
+    }
+    return { rate: null, via: 'dedicated' }
+  }
+  const ONLY_FULL: Row[] = [{ service_type: 'full_service', hotel_category: 'all', rate_eur: 20 }]
+
+  it("prices check-in from the full-service row when there's no dedicated one — the operator's model", () => {
+    expect(resolve(ONLY_FULL, 'checkin_assist')).toEqual({ rate: 20, via: 'full_service' })
+  })
+
+  it('prices check-out / porter the same way', () => {
+    expect(resolve(ONLY_FULL, 'porter')).toEqual({ rate: 20, via: 'full_service' })
+  })
+
+  it('prefers a dedicated row when one exists', () => {
+    const rows = [...ONLY_FULL, { service_type: 'porter', hotel_category: 'all', rate_eur: 5 }]
+    expect(resolve(rows, 'porter')).toEqual({ rate: 5, via: 'dedicated' })
+    expect(resolve(rows, 'checkin_assist')).toEqual({ rate: 20, via: 'full_service' })
+  })
+
+  it('honours the category on the fallback too', () => {
+    const rows: Row[] = [{ service_type: 'full_service', hotel_category: 'luxury', rate_eur: 30 }]
+    expect(resolve(rows, 'porter', 'standard').rate).toBeNull()
+    expect(resolve(rows, 'porter', 'luxury').rate).toBe(30)
+  })
+
+  it('does not loop when asked for full_service directly', () => {
+    expect(resolve([], 'full_service')).toEqual({ rate: null, via: 'dedicated' })
+  })
+})
