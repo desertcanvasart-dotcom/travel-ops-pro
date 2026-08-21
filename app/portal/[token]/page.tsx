@@ -39,6 +39,7 @@ import { formatMoney } from '@/lib/currency-totals'
 import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
 import ChangeRequestForm from './ChangeRequestForm'
+import LeadCoordinator from './LeadCoordinator'
 import { customerFacingOrgName } from '@/lib/org-name'
 
 export const dynamic = 'force-dynamic'
@@ -83,6 +84,7 @@ async function resolve(token: string): Promise<{
   insuranceBands: PremiumBand[]
   tripDays: number | null
   scopedPassengerId: string | null
+  isLeadCoordinator: boolean
 } | null> {
   if (!isValidPortalToken(token)) return null
   const supabase = admin()
@@ -98,7 +100,7 @@ async function resolve(token: string): Promise<{
   const { data: booking } = await supabase
     .from('bookings')
     .select(
-      'id, booking_code, trip_name, start_date, end_date, num_adults, num_children, currency, total_cost, balance_due, deposit_amount, deposit_paid, payment_deadline, balance_due_date, itinerary_id'
+      'id, booking_code, trip_name, start_date, end_date, num_adults, num_children, currency, total_cost, balance_due, deposit_amount, deposit_paid, payment_deadline, balance_due_date, itinerary_id, portal_mode'
     )
     .eq('id', link!.booking_id)
     .maybeSingle()
@@ -258,10 +260,16 @@ async function resolve(token: string): Promise<{
     .eq('id', link!.id)
     .then(undefined, () => {})
 
+  const isLeadCoordinator =
+    Boolean(scopedPassengerId) &&
+    (booking as { portal_mode?: string }).portal_mode === 'friends' &&
+    Boolean((passengers ?? [])[0]?.is_lead_passenger)
+
   return {
     insuranceBands,
     tripDays: tripDays(booking.start_date, booking.end_date),
     scopedPassengerId,
+    isLeadCoordinator,
     booking: toPortalBooking({
       booking,
       passengers: passengers ?? [],
@@ -306,7 +314,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const resolved = await resolve(token)
   if (!resolved) notFound()
 
-  const { booking, operator, insuranceBands, tripDays: days, scopedPassengerId } = resolved
+  const { booking, operator, insuranceBands, tripDays: days, scopedPassengerId, isLeadCoordinator } = resolved
 
   // CONFIRMATION GATE: the link alone shows nothing. One fact the traveller
   // knows (booking number or the lead family name) sets the cookie; until
@@ -408,6 +416,9 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
         </p>
       </section>
       )}
+
+      {/* Lead coordinator (friends mode): manage the party's links + status. */}
+      {isLeadCoordinator && <LeadCoordinator token={token} />}
 
       {/* ---------------- the form ---------------- */}
       <section>

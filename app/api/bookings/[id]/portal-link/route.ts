@@ -16,7 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { generatePortalToken } from '@/lib/booking-portal'
-import { sendEmailInternal } from '@/lib/email-send'
+import { mintOrReusePassengerLink, markSentAndDeliver, expiryFromStartDate } from '@/lib/portal-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,52 +25,11 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-/** A link outlives the trip by a month, then stops answering. It carries
- *  passport details; it has no reason to work forever. */
-const DAYS_AFTER_DEPARTURE = 30
-
 function portalUrl(request: NextRequest, token: string): string {
   const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
   return `${origin.replace(/\/$/, '')}/portal/${token}`
 }
 
-
-/** Stamp a link as sent and best-effort email it to the traveller. Never fails
- *  the request on a delivery error — the operator can always copy the URL. */
-async function markSentAndDeliver(
-  token: string,
-  passengerId: string,
-  orgId: string,
-  url: string
-): Promise<{ sent: boolean }> {
-  await supabaseAdmin
-    .from('booking_portal_links')
-    .update({ last_sent_at: new Date().toISOString() })
-    .eq('token', token)
-    .eq('org_id', orgId)
-
-  const { data: pax } = await supabaseAdmin
-    .from('booking_passengers')
-    .select('email, first_name')
-    .eq('id', passengerId)
-    .maybeSingle()
-
-  if (!pax?.email) return { sent: false }
-  try {
-    await sendEmailInternal({
-      to: pax.email,
-      subject: 'ご旅行の参加者情報のご登録のお願い',
-      html: `<p>${pax.first_name ? pax.first_name + ' 様' : 'お客様'}</p>`
-        + `<p>ご旅行の参加者情報をご登録ください。下記のリンクからお進みいただけます。</p>`
-        + `<p><a href="${url}">${url}</a></p>`
-        + `<p>ご本人確認のため、姓と生年月日の入力をお願いいたします。</p>`,
-    })
-    return { sent: true }
-  } catch (e) {
-    console.error('Portal link email failed (link still valid):', e)
-    return { sent: false }
-  }
-}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const orgId = await getCurrentOrgId()
@@ -147,7 +106,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       await ensurePassengerRows(id, orgId, booking)
       const url = portalUrl(request, existing.token)
       const delivery = passengerId && body?.send
-        ? await markSentAndDeliver(existing.token, passengerId, orgId, url)
+        ? await markSentAndDeliver(supabaseAdmin, { token: existing.token, passengerId, orgId, url })
         : null
       return NextResponse.json({
         link: { ...existing, url },
@@ -159,12 +118,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Computed here rather than pulled from lib/payment-schedule: that module
     // is a payment concern and this is the only date arithmetic the portal
     // does. UTC, so the expiry does not move across a DST boundary.
-    const expiresAt = booking.start_date
-      ? new Date(
-          Date.parse(`${booking.start_date.slice(0, 10)}T23:59:59Z`) +
-            DAYS_AFTER_DEPARTURE * 86_400_000
-        ).toISOString()
-      : null
+    const expiresAt = expiryFromStartDate(booking.start_date)
 
     const { data: link, error } = await supabaseAdmin
       .from('booking_portal_links')
@@ -188,7 +142,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const seeded = await ensurePassengerRows(id, orgId, booking)
     const url = portalUrl(request, link.token)
     const delivery = passengerId && body?.send
-      ? await markSentAndDeliver(link.token, passengerId, orgId, url)
+      ? await markSentAndDeliver(supabaseAdmin, { token: link.token, passengerId, orgId, url })
       : null
 
     return NextResponse.json(
