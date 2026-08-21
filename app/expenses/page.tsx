@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { SUPPLIER_TYPES as CANONICAL_SUPPLIER_TYPES } from '@/lib/supplier-types'
 import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
 import { useTranslations } from 'next-intl'
 import {
@@ -119,18 +120,13 @@ const CATEGORIES = [
   { value: 'other', label: 'Other', icon: '📦' }
 ]
 
+// Every supplier the operator can buy from, from the one canonical list, plus
+// the one payee that is not a supplier: an authority whose fee is still an
+// expense (visas, permits, the antiquities ticket office).
 const SUPPLIER_TYPES = [
-  { value: 'guide', label: 'Tour Guide' },
-  { value: 'driver', label: 'Driver' },
-  { value: 'hotel', label: 'Hotel' },
-  { value: 'restaurant', label: 'Restaurant' },
-  { value: 'transport', label: 'Transport' },
-  { value: 'local_operator', label: 'Local Operator' },
-  { value: 'airport_assistant', label: 'Airport Assistant' },
-  { value: 'hotel_assistant', label: 'Hotel Assistant' },
-  { value: 'ground_handler', label: 'Ground Handler' },
+  ...CANONICAL_SUPPLIER_TYPES.filter(t => t.value !== 'other'),
   { value: 'government', label: 'Government/Authority' },
-  { value: 'other', label: 'Other' }
+  { value: 'other', label: 'Other' },
 ]
 
 const PAYMENT_METHODS = [

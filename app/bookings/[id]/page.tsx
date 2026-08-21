@@ -41,6 +41,8 @@ import {
   SupplierConfirmationStatus
 } from '@/types/bookings'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
+import { SUPPLIER_TYPE_GROUPS, supplierTypeLabel } from '@/lib/supplier-types'
+import SupplierPicker from '@/components/rates/SupplierPicker'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import PassengerManifest from '@/components/PassengerManifest'
 import SendConfirmationButton from '@/components/SendConfirmationButton'
@@ -52,6 +54,7 @@ type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const t = useTranslations('bookings')
+  const tCommon = useTranslations('common')
 
   const [booking, setBooking] = useState<BookingWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,6 +69,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const [syncing, setSyncing] = useState(false)
   const [supplierForm, setSupplierForm] = useState({
     supplier_type: 'hotel',
+    supplier_id: '',
     supplier_name: '',
     service_description: '',
     service_date: '',
@@ -176,6 +180,40 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // The Notes tab rendered both fields as text with nothing to edit them —
+  // the columns and the PUT endpoint have always been there.
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notesDraft, setNotesDraft] = useState({ special_requests: '', operational_notes: '' })
+  const [savingNotes, setSavingNotes] = useState(false)
+
+  const startEditingNotes = () => {
+    setNotesDraft({
+      special_requests: booking?.special_requests || '',
+      operational_notes: booking?.operational_notes || '',
+    })
+    setEditingNotes(true)
+  }
+
+  const saveNotes = async () => {
+    setSavingNotes(true)
+    try {
+      const response = await fetch(`/api/bookings/${resolvedParams.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          special_requests: notesDraft.special_requests.trim() || null,
+          operational_notes: notesDraft.operational_notes.trim() || null,
+        }),
+      })
+      if (response.ok) {
+        setEditingNotes(false)
+        fetchBooking()
+      }
+    } finally {
+      setSavingNotes(false)
+    }
+  }
+
   const addSupplier = async () => {
     if (!supplierForm.supplier_name) return
 
@@ -186,6 +224,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplier_type: supplierForm.supplier_type,
+          supplier_id: supplierForm.supplier_id || null,
           supplier_name: supplierForm.supplier_name,
           service_description: supplierForm.service_description || null,
           service_date: supplierForm.service_date || null,
@@ -197,6 +236,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         setShowSupplierModal(false)
         setSupplierForm({
           supplier_type: 'hotel',
+          supplier_id: '',
           supplier_name: '',
           service_description: '',
           service_date: '',
@@ -574,7 +614,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               {getSupplierIcon(supplier.supplier_type)}
-                              <span className="capitalize text-sm">{supplier.supplier_type}</span>
+                              <span className="text-sm">{supplierTypeLabel(supplier.supplier_type)}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3 font-medium text-gray-900">{supplier.supplier_name}</td>
@@ -718,21 +758,70 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
 
           {activeTab === 'notes' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="lg:col-span-2 flex justify-end">
+                {editingNotes ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingNotes(false)}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
+                    >
+                      {tCommon('cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveNotes}
+                      disabled={savingNotes}
+                      className="px-4 py-1.5 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] disabled:opacity-50"
+                    >
+                      {savingNotes ? tCommon('saving') : tCommon('save')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startEditingNotes}
+                    className="px-4 py-1.5 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#e8ede3]"
+                  >
+                    {tCommon('edit')}
+                  </button>
+                )}
+              </div>
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">{t('fields.specialRequests')}</h3>
-                <div className="bg-gray-50 rounded-lg p-4 min-h-32">
-                  <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                    {booking.special_requests || 'No special requests recorded.'}
-                  </p>
-                </div>
+                {editingNotes ? (
+                  <textarea
+                    value={notesDraft.special_requests}
+                    onChange={(e) => setNotesDraft(prev => ({ ...prev, special_requests: e.target.value }))}
+                    rows={6}
+                    className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    placeholder="What the client has asked for — dietary needs, room preferences, anything the trip must respect."
+                  />
+                ) : (
+                  <div className="bg-gray-50 rounded-lg p-4 min-h-32">
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                      {booking.special_requests || 'No special requests recorded.'}
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">{t('fields.operationalNotes')}</h3>
-                <div className="bg-gray-50 rounded-lg p-4 min-h-32">
-                  <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                    {booking.operational_notes || 'No operational notes.'}
-                  </p>
-                </div>
+                {editingNotes ? (
+                  <textarea
+                    value={notesDraft.operational_notes}
+                    onChange={(e) => setNotesDraft(prev => ({ ...prev, operational_notes: e.target.value }))}
+                    rows={6}
+                    className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                    placeholder="For the team running the trip — pickup quirks, who to call, what went wrong last time."
+                  />
+                ) : (
+                  <div className="bg-gray-50 rounded-lg p-4 min-h-32">
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                      {booking.operational_notes || 'No operational notes.'}
+                    </p>
+                  </div>
+                )}
               </div>
               {booking.emergency_contact && (
                 <div className="lg:col-span-2">
@@ -772,23 +861,37 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                   title={t('fields.supplierType')}
                   className="w-full border rounded-lg px-3 py-2"
                 >
-                  <option value="hotel">Hotel</option>
-                  <option value="guide">Guide</option>
-                  <option value="transport">Transport</option>
-                  <option value="restaurant">Restaurant</option>
-                  <option value="activity">Activity</option>
-                  <option value="entrance">Entrance/Ticket</option>
-                  <option value="cruise">Cruise</option>
-                  <option value="flight">Flight</option>
-                  <option value="other">Other</option>
+                  {SUPPLIER_TYPE_GROUPS.map(({ group, options }) => (
+                    <optgroup key={group} label={group}>
+                      {options.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
+              {/* Choosing from the roster records WHICH supplier, not just a
+                  name typed twice — booking_supplier_status has carried a
+                  supplier_id all along and this modal never set it. The name
+                  stays editable for a one-off nobody has on file yet. */}
+              <SupplierPicker
+                value={supplierForm.supplier_id}
+                onChange={(supplier_id, supplier) => setSupplierForm(prev => ({
+                  ...prev,
+                  supplier_id,
+                  supplier_name: supplier?.name || prev.supplier_name,
+                }))}
+                preferredType={supplierForm.supplier_type}
+                preferredLabel={supplierTypeLabel(supplierForm.supplier_type)}
+                label={t('fields.supplierName')}
+              />
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.supplierName')} *</label>
                 <input
                   type="text"
                   value={supplierForm.supplier_name}
-                  onChange={(e) => setSupplierForm({ ...supplierForm, supplier_name: e.target.value })}
+                  onChange={(e) => setSupplierForm({ ...supplierForm, supplier_name: e.target.value, supplier_id: '' })}
                   placeholder="e.g., Marriott Mena House"
                   className="w-full border rounded-lg px-3 py-2"
                 />

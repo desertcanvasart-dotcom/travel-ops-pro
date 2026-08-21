@@ -46,7 +46,8 @@
     "endDate": "終了日",
     "backToList": "一覧に戻る",
     "saved": "保存しました",
-    "unknownError": "不明なエラー"
+    "unknownError": "不明なエラー",
+    "saving": "保存中…"
   },
   "contract": {
     "loadingContract": "契約書を読み込み中...",
