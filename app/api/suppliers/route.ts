@@ -1,34 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { buildSupplierInsert } from '@/lib/suppliers/create-payload'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-// All valid supplier fields (including hierarchical fields)
-const VALID_FIELDS = [
-  'name', 'type', 'contact_name', 'contact_email', 'contact_phone',
-  'phone2', 'whatsapp', 'website', 'address', 'city', 'country',
-  'default_commission_rate', 'commission_type', 'payment_terms',
-  'bank_details', 'status', 'notes',
-  // Type-specific fields
-  'languages', 'vehicle_types', 'star_rating', 'property_type',
-  'cuisine_types', 'routes', 'ship_name', 'cabin_count', 'capacity',
-  // Hierarchical fields (company -> property relationship)
-  'is_property', 'parent_supplier_id'
-]
-
-// Filter object to only include valid fields
-function filterValidFields(obj: Record<string, any>): Record<string, any> {
-  const filtered: Record<string, any> = {}
-  for (const key of VALID_FIELDS) {
-    if (obj[key] !== undefined) {
-      filtered[key] = obj[key]
-    }
-  }
-  return filtered
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -89,38 +66,30 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // `types` is the set, `type` the primary. A caller may send either; the
-    // column CHECK requires the primary to be one of the set.
-    if (Array.isArray(body.types) && body.types.length > 0) {
-      body.type = body.type && body.types.includes(body.type) ? body.type : body.types[0]
-    } else if (body.type) {
-      body.types = [body.type]
-    }
-
-    if (!body.name || !body.type) {
-      return NextResponse.json(
-        { error: 'Name and type are required' },
-        { status: 400 }
-      )
-    }
-
-    // Filter to only valid fields and set defaults
-    const newSupplier = {
-      ...filterValidFields(body),
-      country: body.country || 'Egypt',
-      status: body.status || 'active',
-      is_property: body.is_property || false,
-      parent_supplier_id: body.parent_supplier_id || null
+    const built = buildSupplierInsert(body)
+    if (!built.ok) {
+      return NextResponse.json({ error: built.error }, { status: 400 })
     }
 
     const { data, error } = await supabaseAdmin
       .from('suppliers')
-      .insert([newSupplier])
+      .insert([built.row])
       .select()
       .single()
 
     if (error) {
       console.error('Error creating supplier:', error)
+      // A constraint violation is a bad request, not a server fault — and the
+      // blank "Failed to create supplier" is what hid this bug for a day.
+      if (error.code === '23514') {
+        return NextResponse.json(
+          { error: 'Supplier type must be one of its roles. Pick at least one role.' },
+          { status: 400 }
+        )
+      }
+      if (error.code === '23505') {
+        return NextResponse.json({ error: 'A supplier with these details already exists.' }, { status: 409 })
+      }
       return NextResponse.json({ error: 'Failed to create supplier' }, { status: 500 })
     }
 
