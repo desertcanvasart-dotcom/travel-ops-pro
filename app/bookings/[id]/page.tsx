@@ -46,7 +46,7 @@ import SupplierPicker from '@/components/rates/SupplierPicker'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import PassengerManifest from '@/components/PassengerManifest'
 import SendConfirmationButton from '@/components/SendConfirmationButton'
-import PortalLinkCard from '@/app/components/PortalLinkCard'
+import PortalCoordinator from '@/app/components/PortalCoordinator'
 import InsuranceCard from '@/app/components/InsuranceCard'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
@@ -415,8 +415,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         )}
       </div>
 
-      {/* The traveller's own link — mint, copy, revoke. */}
-      <PortalLinkCard bookingId={resolvedParams.id} />
+      {/* Portal: family (one link) or friends (a private link per traveller). */}
+      <PortalCoordinator bookingId={resolvedParams.id} />
       <InsuranceCard bookingId={resolvedParams.id} />
 
       {/* Tabs */}

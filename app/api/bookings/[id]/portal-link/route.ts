@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { generatePortalToken } from '@/lib/booking-portal'
+import { sendEmailInternal } from '@/lib/email-send'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,44 @@ const DAYS_AFTER_DEPARTURE = 30
 function portalUrl(request: NextRequest, token: string): string {
   const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
   return `${origin.replace(/\/$/, '')}/portal/${token}`
+}
+
+
+/** Stamp a link as sent and best-effort email it to the traveller. Never fails
+ *  the request on a delivery error — the operator can always copy the URL. */
+async function markSentAndDeliver(
+  token: string,
+  passengerId: string,
+  orgId: string,
+  url: string
+): Promise<{ sent: boolean }> {
+  await supabaseAdmin
+    .from('booking_portal_links')
+    .update({ last_sent_at: new Date().toISOString() })
+    .eq('token', token)
+    .eq('org_id', orgId)
+
+  const { data: pax } = await supabaseAdmin
+    .from('booking_passengers')
+    .select('email, first_name')
+    .eq('id', passengerId)
+    .maybeSingle()
+
+  if (!pax?.email) return { sent: false }
+  try {
+    await sendEmailInternal({
+      to: pax.email,
+      subject: 'ご旅行の参加者情報のご登録のお願い',
+      html: `<p>${pax.first_name ? pax.first_name + ' 様' : 'お客様'}</p>`
+        + `<p>ご旅行の参加者情報をご登録ください。下記のリンクからお進みいただけます。</p>`
+        + `<p><a href="${url}">${url}</a></p>`
+        + `<p>ご本人確認のため、姓と生年月日の入力をお願いいたします。</p>`,
+    })
+    return { sent: true }
+  } catch (e) {
+    console.error('Portal link email failed (link still valid):', e)
+    return { sent: false }
+  }
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -106,9 +145,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (existing) {
       await ensurePassengerRows(id, orgId, booking)
+      const url = portalUrl(request, existing.token)
+      const delivery = passengerId && body?.send
+        ? await markSentAndDeliver(existing.token, passengerId, orgId, url)
+        : null
       return NextResponse.json({
-        link: { ...existing, url: portalUrl(request, existing.token) },
+        link: { ...existing, url },
         created: false,
+        ...(delivery ? { emailed: delivery.sent } : {}),
       })
     }
 
@@ -142,12 +186,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const seeded = await ensurePassengerRows(id, orgId, booking)
+    const url = portalUrl(request, link.token)
+    const delivery = passengerId && body?.send
+      ? await markSentAndDeliver(link.token, passengerId, orgId, url)
+      : null
 
     return NextResponse.json(
       {
-        link: { ...link, url: portalUrl(request, link.token) },
+        link: { ...link, url },
         created: true,
         travellers_seeded: seeded,
+        ...(delivery ? { emailed: delivery.sent } : {}),
       },
       { status: 201 }
     )
@@ -162,14 +211,18 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!orgId) return noOrgResponse()
   const { id } = await params
 
-  // Revoked rather than deleted: the row is the record of what was shared and
-  // when. The token simply stops resolving.
-  const { error } = await supabaseAdmin
+  // ?passenger_id= revokes ONE traveller's private link; absent revokes the
+  // booking-level (family) link only. Revoked rather than deleted: the row is
+  // the record of what was shared and when; the token simply stops resolving.
+  const passengerId = request.nextUrl.searchParams.get('passenger_id')
+  let query = supabaseAdmin
     .from('booking_portal_links')
     .update({ revoked_at: new Date().toISOString() })
     .eq('booking_id', id)
     .eq('org_id', orgId)
     .is('revoked_at', null)
+  query = passengerId ? query.eq('passenger_id', passengerId) : query.is('passenger_id', null)
+  const { error } = await query
 
   if (error) {
     return NextResponse.json({ error: clientMessage(error, 'Failed to revoke') }, { status: 500 })
