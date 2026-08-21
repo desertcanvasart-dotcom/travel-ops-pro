@@ -81,13 +81,14 @@ async function resolve(token: string): Promise<{
   operator: Operator
   insuranceBands: PremiumBand[]
   tripDays: number | null
+  scopedPassengerId: string | null
 } | null> {
   if (!isValidPortalToken(token)) return null
   const supabase = admin()
 
   const { data: link } = await supabase
     .from('booking_portal_links')
-    .select('id, org_id, booking_id, revoked_at, expires_at, details_locked_at, view_count')
+    .select('id, org_id, booking_id, passenger_id, revoked_at, expires_at, details_locked_at, view_count')
     .eq('token', token)
     .maybeSingle()
 
@@ -103,10 +104,16 @@ async function resolve(token: string): Promise<{
 
   if (!booking) return null
 
-  const { data: passengers } = await supabase
+  // A private per-traveller link resolves ONLY its own passenger — the other
+  // travellers' passport data never crosses the boundary. A booking-level link
+  // (family) loads everyone, as before.
+  const scopedPassengerId = (link!.passenger_id as string | null) ?? null
+  let passengerQuery = supabase
     .from('booking_passengers')
     .select('*')
     .eq('booking_id', booking.id)
+  if (scopedPassengerId) passengerQuery = passengerQuery.eq('id', scopedPassengerId)
+  const { data: passengers } = await passengerQuery
     .order('is_lead_passenger', { ascending: false })
     .order('created_at', { ascending: true })
 
@@ -253,6 +260,7 @@ async function resolve(token: string): Promise<{
   return {
     insuranceBands,
     tripDays: tripDays(booking.start_date, booking.end_date),
+    scopedPassengerId,
     booking: toPortalBooking({
       booking,
       passengers: passengers ?? [],
@@ -297,7 +305,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const resolved = await resolve(token)
   if (!resolved) notFound()
 
-  const { booking, operator, insuranceBands, tripDays: days } = resolved
+  const { booking, operator, insuranceBands, tripDays: days, scopedPassengerId } = resolved
 
   // CONFIRMATION GATE: the link alone shows nothing. One fact the traveller
   // knows (booking number or the lead family name) sets the cookie; until
@@ -316,7 +324,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           <p className="sub">お客様の情報を守るため、ご予約の確認をお願いいたします。</p>
         </header>
         <section className="gate">
-          <VerifyGate token={token} />
+          <VerifyGate token={token} requireDob={Boolean(scopedPassengerId)} />
         </section>
       </main>
     )
@@ -344,6 +352,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
       </header>
 
       {/* ---------------- money ---------------- */}
+      {!scopedPassengerId && (
       <section>
         <h2>お支払いについて</h2>
         <div className="money">
@@ -397,6 +406,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           お振込みの反映には数日かかる場合がございます。ご入金後に表示が変わらない場合も、行き違いですのでご安心ください。
         </p>
       </section>
+      )}
 
       {/* ---------------- the form ---------------- */}
       <section>

@@ -67,12 +67,17 @@ export async function PATCH(
 
   const { data: link } = await supabase
     .from('booking_portal_links')
-    .select('id, booking_id, org_id, revoked_at, expires_at, details_locked_at')
+    .select('id, booking_id, org_id, passenger_id, revoked_at, expires_at, details_locked_at')
     .eq('token', token)
     .maybeSingle()
 
   const state = portalLinkState(link)
   if (!state.usable) return notFound()
+
+  // A private per-traveller link may write ONLY its own passenger. This is what
+  // stops one friend's token touching another's manifest — indistinguishable
+  // from a missing row so the URL space stays unprobeable.
+  if (link!.passenger_id && id !== link!.passenger_id) return notFound()
 
   if (link!.details_locked_at) {
     return NextResponse.json(

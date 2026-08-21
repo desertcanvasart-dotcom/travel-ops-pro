@@ -6,21 +6,22 @@
 
 import { useState } from 'react'
 
-export default function VerifyGate({ token }: { token: string }) {
+export default function VerifyGate({ token, requireDob = false }: { token: string; requireDob?: boolean }) {
   const [answer, setAnswer] = useState('')
+  const [dob, setDob] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!answer.trim() || busy) return
+    if (!answer.trim() || busy || (requireDob && !dob)) return
     setBusy(true)
     setError(null)
     try {
       const res = await fetch(`/api/portal/${token}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answer }),
+        body: JSON.stringify(requireDob ? { answer, dob } : { answer }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok && data.success) {
@@ -37,15 +38,27 @@ export default function VerifyGate({ token }: { token: string }) {
 
   return (
     <form className="gateform" onSubmit={submit}>
-      <label htmlFor="gate-answer">予約番号 または 代表者の姓</label>
+      <label htmlFor="gate-answer">{requireDob ? 'ご本人の姓' : '予約番号 または 代表者の姓'}</label>
       <input
         id="gate-answer"
         value={answer}
         onChange={e => setAnswer(e.target.value)}
-        placeholder="例：BKG-2026-0001 ／ 山田"
+        placeholder={requireDob ? '例：山田' : '例：BKG-2026-0001 ／ 山田'}
         autoComplete="off"
         autoFocus
       />
+      {requireDob && (
+        <>
+          <label htmlFor="gate-dob">生年月日</label>
+          <input
+            id="gate-dob"
+            type="date"
+            value={dob}
+            onChange={e => setDob(e.target.value)}
+            autoComplete="off"
+          />
+        </>
+      )}
       {error && <p className="gateerr">{error}</p>}
       <button type="submit" disabled={busy || !answer.trim()}>
         {busy ? '確認中…' : '確認する'}

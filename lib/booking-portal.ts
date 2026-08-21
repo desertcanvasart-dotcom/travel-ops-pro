@@ -452,6 +452,48 @@ export function normalizeVerifyAnswer(value: unknown): string {
 /** Does the visitor's answer match a fact of this booking? Candidates are the
  *  booking number, the client name (full and family-name token), and the lead
  *  traveller's family name in all three scripts. */
+/** Normalize a date answer to YYYY-MM-DD, or '' if it isn't a usable date.
+ *  Accepts what a date input sends (YYYY-MM-DD) and common typed forms. */
+export function normalizeDob(value: unknown): string {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  // ISO date or datetime — take the date part.
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+  // YYYY/MM/DD or YYYY.MM.DD
+  const sep = raw.normalize('NFKC').match(/^(\d{4})[/.](\d{1,2})[/.](\d{1,2})$/)
+  if (sep) return `${sep[1]}-${sep[2].padStart(2, '0')}-${sep[3].padStart(2, '0')}`
+  return ''
+}
+
+/** The per-traveller gate: a friends-mode link unlocks ONE person's passport,
+ *  so it demands that person's family name AND date of birth — both, not
+ *  "any two facts". A forwarded link is useless without knowing the DOB. */
+export function verifyTravellerAnswer(
+  nameAnswer: unknown,
+  dobAnswer: unknown,
+  traveller: {
+    names?: Array<string | null | undefined>
+    date_of_birth?: string | null
+  }
+): boolean {
+  const givenName = normalizeVerifyAnswer(nameAnswer)
+  if (givenName.length < 2) return false
+
+  const nameOk = (traveller.names ?? []).some(n => {
+    const c = normalizeVerifyAnswer(n)
+    return c.length >= 2 && c === givenName
+  })
+  if (!nameOk) return false
+
+  const givenDob = normalizeDob(dobAnswer)
+  const realDob = normalizeDob(traveller.date_of_birth)
+  // No DOB on file means the gate cannot be satisfied — fail closed rather than
+  // letting a name alone through on a private link.
+  if (!givenDob || !realDob) return false
+  return givenDob === realDob
+}
+
 export function verifyAnswerMatches(
   answer: unknown,
   facts: {
