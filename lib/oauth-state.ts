@@ -11,12 +11,41 @@ import crypto from 'crypto'
  *
  * Secret falls back to the service-role key (server-only, high entropy) when a
  * dedicated OAUTH_STATE_SECRET isn't configured.
+ *
+ * It does NOT fall back to the empty string, which is what it used to do. An
+ * empty HMAC key is a key anyone can guess: the signature becomes computable
+ * by the attacker, `verifyState` accepts a forged payload, and the module
+ * silently stops providing the single protection it exists for. A
+ * misconfigured deployment must refuse to sign, not sign forgeably.
+ *
+ * Resolved lazily, not at module scope: these functions are imported by route
+ * modules that `next build` evaluates during prerender, where the variables
+ * are absent by design.
  */
-const STATE_SECRET =
-  process.env.OAUTH_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+let cachedSecret: string | null = null
+
+function stateSecret(): string {
+  if (cachedSecret) return cachedSecret
+
+  const secret = process.env.OAUTH_STATE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  if (!secret) {
+    throw new Error(
+      'OAuth state cannot be signed: set OAUTH_STATE_SECRET (or SUPABASE_SERVICE_ROLE_KEY). ' +
+        'Refusing to sign with an empty key — that would let anyone forge the user id in `state`.'
+    )
+  }
+
+  cachedSecret = secret
+  return cachedSecret
+}
+
+/** Test seam: forget the memoised secret so a changed env is picked up. */
+export function resetStateSecretForTests(): void {
+  cachedSecret = null
+}
 
 function sign(payload: string): string {
-  return crypto.createHmac('sha256', STATE_SECRET).update(payload).digest('base64url')
+  return crypto.createHmac('sha256', stateSecret()).update(payload).digest('base64url')
 }
 
 /** Returns `${payload}.${signature}` for use as an OAuth `state` parameter. */
@@ -34,7 +63,16 @@ export function verifyState(state: string | null | undefined): string | null {
   if (idx <= 0) return null
   const payload = state.slice(0, idx)
   const sig = state.slice(idx + 1)
-  const expected = sign(payload)
+
+  // A missing secret means nothing legitimate was ever signed, so every state
+  // is unverifiable. Reject rather than throw: the callback should read as
+  // "invalid state", not crash with a stack trace containing config details.
+  let expected: string
+  try {
+    expected = sign(payload)
+  } catch {
+    return null
+  }
   if (sig.length !== expected.length) return null
   try {
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null
