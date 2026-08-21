@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { formatMoney } from '@/lib/currency-totals'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -1356,7 +1357,7 @@ export default function ViewItineraryPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">{t('totalCost')}</p>
-              <p className="text-xl font-bold text-gray-900">{itinerary.currency} {effectiveTotalCost.toFixed(2)}</p>
+              <p className="text-xl font-bold text-gray-900">{formatMoney(effectiveTotalCost, itinerary.currency)}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
                   {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
@@ -1780,7 +1781,7 @@ export default function ViewItineraryPage() {
                                 </div>
                               ) : (
                                 <button onClick={() => handleStartEditCost(service)} disabled={costMode !== 'manual'} className={`text-sm font-semibold ${costMode === 'manual' ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' : 'text-gray-900 cursor-default'}`} title={costMode === 'manual' ? t('clickToEdit') : t('switchToManualMode')}>
-                                  {itinerary.currency} {service.total_cost.toFixed(2)}
+                                  {formatMoney(Number(service.total_cost) || 0, itinerary.currency)}
                                 </button>
                               )}
                             </div>
