@@ -1427,19 +1427,23 @@ export async function getHotelServiceRate(
   try {
     const category = getTierCategory(tier)
 
-    const { data: rates } = await supabaseAdmin
-      .from('hotel_staff_rates')
-      .select('rate_eur')
-      .eq('is_active', true)
-      .eq('service_type', serviceType)
-      .or(`hotel_category.eq.${category},hotel_category.eq.all`)
-      .limit(1)
-
-    if (!rates || rates.length === 0) {
-      return null
+    const lookup = async (type: string) => {
+      const { data } = await supabaseAdmin
+        .from('hotel_staff_rates')
+        .select('rate_eur')
+        .eq('is_active', true)
+        .eq('service_type', type)
+        .or(`hotel_category.eq.${category},hotel_category.eq.all`)
+        .limit(1)
+      return data && data.length > 0 ? usableRate(data[0].rate_eur) : null
     }
 
-    return usableRate(rates[0].rate_eur)
+    const dedicated = await lookup(serviceType)
+    if (dedicated != null) return dedicated
+    // No dedicated row: a full-service assistant covers the event. See the
+    // in-memory resolver in calculateAutoPricing for why.
+    if (serviceType !== 'full_service') return lookup('full_service')
+    return null
   } catch (err) {
     return null
   }
@@ -1969,17 +1973,31 @@ export async function calculateDayBasedPricing(
     if (!row) return { rate: null, rowExists: false }
     return { rate: usableRate(row.rate_eur), rowExists: true }
   }
+  // Hotel assistance is modelled in the rate table as ONE full-service row
+  // per category (an assistant who handles both ends of the stay), but the
+  // day loop asks for the per-event types — checkin_assist on the first
+  // night, porter on the last. Until 2026-08-21 nothing bridged the two, so
+  // hotel assistance never priced: every check-in/out day was a hole, and the
+  // full-service rows were never read. A full-service row now covers either
+  // event when no dedicated row exists. Charged per event, matching how the
+  // dedicated rows were always charged.
   const resolveHotelServiceRate = (
     serviceType: 'checkin_assist' | 'porter' | 'full_service'
-  ): { rate: number | null; rowExists: boolean } => {
+  ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'full_service' } => {
     const category = getTierCategory(tier)
-    const row = hotelStaffRows.find(
-      (r: any) =>
-        r.service_type === serviceType &&
-        (r.hotel_category === category || r.hotel_category === 'all')
-    )
-    if (!row) return { rate: null, rowExists: false }
-    return { rate: usableRate(row.rate_eur), rowExists: true }
+    const matches = (type: string) =>
+      hotelStaffRows.find(
+        (r: any) =>
+          r.service_type === type &&
+          (r.hotel_category === category || r.hotel_category === 'all')
+      )
+    const dedicated = matches(serviceType)
+    if (dedicated) return { rate: usableRate(dedicated.rate_eur), rowExists: true, via: 'dedicated' }
+    if (serviceType !== 'full_service') {
+      const full = matches('full_service')
+      if (full) return { rate: usableRate(full.rate_eur), rowExists: true, via: 'full_service' }
+    }
+    return { rate: null, rowExists: false, via: 'dedicated' }
   }
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
@@ -2169,7 +2187,7 @@ export async function calculateDayBasedPricing(
           id: `day${day.day}-hotel-checkin`,
           dayNumber: day.day,
           serviceType: 'hotel_service',
-          serviceName: 'Hotel Check-in Assistance',
+          serviceName: found.via === 'full_service' ? 'Hotel Assistance — check-in (full service)' : 'Hotel Check-in Assistance',
           quantity: 1,
           quantityMode: 'fixed',
           unitCost: rate,
@@ -2201,7 +2219,7 @@ export async function calculateDayBasedPricing(
           id: `day${day.day}-hotel-checkout`,
           dayNumber: day.day,
           serviceType: 'hotel_service',
-          serviceName: 'Hotel Check-out & Porter',
+          serviceName: found.via === 'full_service' ? 'Hotel Assistance — check-out (full service)' : 'Hotel Check-out & Porter',
           quantity: 1,
           quantityMode: 'fixed',
           unitCost: rate,
