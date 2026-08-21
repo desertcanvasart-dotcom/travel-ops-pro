@@ -66,6 +66,18 @@ const MUST_BE_LOCKED = [
   'hotel_staff_rates',
   'tipping_rates',
   'guides',
+  // Views, added 2026-08-21 after the probe caught `guides` alone: a view
+  // recreated without security_invoker runs as its definer and bypasses the
+  // source table's RLS. Only `guides` was on this list, so the identical
+  // exposure on airport_staff / itineraries_with_languages /
+  // tour_templates_with_languages / client_summary went unreported — the
+  // language views since February. See 20260821_view_security_invoker.sql.
+  'airport_staff',
+  'hotel_staff',
+  'itineraries_with_languages',
+  'quotes_with_languages',
+  'tour_templates_with_languages',
+  'client_summary',
   // Audit trail of rate changes (full before/after records) — authenticated
   // read-only per 20260226_rate_audit_trail.sql (applied 2026-07-14).
   'rate_audit_log',
