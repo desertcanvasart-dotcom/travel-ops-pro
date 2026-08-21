@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { sanitizeRateUpdate } from '@/lib/rates/update-payload'
 
 export async function PUT(
   request: NextRequest,
@@ -12,9 +13,19 @@ export async function PUT(
     const supabase = createServerClient()
     const body = await request.json()
 
+    // The form posts its whole state; '' on a uuid column is a 500, and the
+    // client must not rewrite id/created_at. See lib/rates/update-payload.ts.
+    const clean = sanitizeRateUpdate(body)
+    if (!clean.ok) {
+      return NextResponse.json(
+        { success: false, error: clean.error, violations: clean.violations },
+        { status: clean.status }
+      )
+    }
+
     const { data, error } = await supabase
       .from('tipping_rates')
-      .update(body)
+      .update(clean.payload)
       .eq('id', id)
       .select()
       .single()

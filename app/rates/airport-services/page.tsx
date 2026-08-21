@@ -249,7 +249,9 @@ export default function AirportServicesPage() {
     const { name, value, type } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : value
+      // A cleared number box is '' (not priced), never 0 — zero is the
+      // value that made two rate rows inert. See usableRate().
+      [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
     }))
   }
 
