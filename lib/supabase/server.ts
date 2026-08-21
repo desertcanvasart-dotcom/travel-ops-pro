@@ -1,8 +1,6 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+// Server-side Supabase client. Delegates to the shared service-role factory,
+// which throws on a missing key instead of silently degrading to the anon key
+// — see lib/supabase/service-client.ts for why that mattered.
+import { createServiceClient } from './service-client'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const createClient = () => {
-  return createSupabaseClient(supabaseUrl, supabaseServiceKey)
-}
+export const createClient = () => createServiceClient()

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
-import { createClient } from '@supabase/supabase-js'
+import { createServiceClient } from '@/lib/supabase/service-client'
 
 type BookingStatus = 'confirmed' | 'cancelled' | 'pending_payment' | 'paid' | 'completed'
 
@@ -92,10 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create server-side Supabase client
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    const supabase = createServiceClient()
 
     // Get itinerary
     const { data: itinerary, error: dbError } = await supabase
