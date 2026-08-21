@@ -33,6 +33,16 @@ const CSS = `
 .portal .gateform input{padding:12px;border:1px solid var(--line);border-radius:8px;font-size:16px;background:var(--card);color:inherit}
 .portal .gateform button{padding:12px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
 .portal .gateform button:disabled{opacity:.5;cursor:default}
+.portal .changereq{margin-top:20px;padding-top:16px;border-top:1px dashed var(--line)}
+.portal .crtoggle{background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
+.portal .crform{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.portal .crform label{font-size:13px;color:var(--soft)}
+.portal .crlead{font-size:13px;color:var(--soft);margin:0 0 4px}
+.portal .crform input,.portal .crform textarea{padding:10px;border:1px solid var(--line);border-radius:8px;font-size:16px;background:var(--card);color:inherit}
+.portal .crform button{padding:11px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.portal .crform button:disabled{opacity:.5}
+.portal .crdone{font-size:14px;color:var(--brand);font-weight:600;margin:0}
+.portal .gateform button:disabled{opacity:.5;cursor:default}
 .portal .gateerr{font-size:13px;color:#c0392b;margin:0}
 .portal .op{font-size:12px;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
 .portal .optag{font-size:11px;color:var(--soft);margin:-4px 0 8px}

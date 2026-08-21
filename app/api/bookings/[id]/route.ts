@@ -119,7 +119,8 @@ export async function PUT(
       'special_requests',
       'operational_notes',
       'cancelled_at',
-      'cancellation_reason'
+      'cancellation_reason',
+      'portal_mode'
     ]
 
     // Filter body to only allowed fields

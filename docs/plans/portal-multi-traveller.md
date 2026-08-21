@@ -1,6 +1,6 @@
 # Plan — Multi-traveller data collection in the customer portal
 
-**Status:** design agreed, not yet built.
+**Status:** Phase 1 built, merged (PR #131), applied and prod-verified 2026-08-21. Phases 2–4 pending.
 **Decision owner:** operator (Islam).
 **Author:** drafted 2026-08-21.
 

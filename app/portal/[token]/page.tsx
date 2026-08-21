@@ -38,6 +38,7 @@ import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
 import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
+import ChangeRequestForm from './ChangeRequestForm'
 import { customerFacingOrgName } from '@/lib/org-name'
 
 export const dynamic = 'force-dynamic'
@@ -437,6 +438,10 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
             tripDays={days}
           />
         ))}
+
+        {/* Family link only: the lead may request adding travellers. A private
+            per-traveller link is one person's and shows no such control. */}
+        {!scopedPassengerId && !booking.detailsLocked && <ChangeRequestForm token={token} />}
       </section>
 
       {/* ---------------- documents ---------------- */}
