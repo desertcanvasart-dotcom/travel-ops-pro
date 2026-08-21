@@ -2102,7 +2102,11 @@
       "supplierNameAmbiguous": "supplier_name \"{name}\" matches {count} suppliers — set supplier_id explicitly: {candidates}",
       "supplierNameNoMatchForm": "supplier_name \"{name}\" has no canonical supplier. Create the supplier first, fix the spelling, or omit supplier_name to save without a supplier.",
       "supplierNameNoMatchBulk": "supplier_name \"{name}\" has no canonical supplier. Create the supplier first, fix the spelling, or clear supplier_name to import without a supplier."
-    }
+    },
+    "bulkLabel": "suppliers",
+    "bulkDeleted": "{count} suppliers deleted",
+    "bulkPartial": "{ok} deleted, {failed} could not be deleted: {reason}",
+    "dismiss": "Dismiss"
   },
   "copilot": {
     "concierge": {
@@ -7020,5 +7024,10 @@
     "colTarget": "Target",
     "empty": "No activity recorded yet.",
     "total": "{count} entries"
+  },
+  "bulkDelete": {
+    "selected": "{count} selected",
+    "deleteSelected": "Delete selected",
+    "clear": "Clear"
   }
 }
