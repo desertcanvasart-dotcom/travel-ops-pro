@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 
 import { useState, useEffect, useRef } from 'react'
+import { formatMoney, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
@@ -27,6 +28,10 @@ interface ClientSummary {
   lead_source?: string
   total_bookings_count: number
   total_revenue_generated: number
+  /** Billed per currency — the truth behind the scalar above. */
+  revenue_by_currency?: Record<string, number> | null
+  /** Which currency the scalar figures are denominated in. */
+  revenue_currency?: string | null
   last_contacted_at?: string
   created_at: string
   pending_followups: number
@@ -82,7 +87,7 @@ export default function ClientsPage() {
     active: 0,
     vip: 0,
     newThisMonth: 0,
-    totalRevenue: 0
+    totalRevenue: {} as CurrencyTotals
   })
 
   const supabase = createClient()
@@ -266,7 +271,7 @@ export default function ClientsPage() {
     try {
       const { data: allClients } = await supabase
         .from('clients')
-        .select('status, vip_status, total_revenue_generated, created_at')
+        .select('status, vip_status, total_revenue_generated, revenue_currency, revenue_by_currency, created_at')
 
       if (allClients) {
         const now = new Date()
@@ -277,7 +282,17 @@ export default function ClientsPage() {
           active: allClients.filter(c => c.status === 'active').length,
           vip: allClients.filter(c => c.vip_status).length,
           newThisMonth: allClients.filter(c => new Date(c.created_at) >= firstDayOfMonth).length,
-          totalRevenue: allClients.reduce((sum, c) => sum + (c.total_revenue_generated || 0), 0)
+          // Per currency: a yen client and a euro client have not generated one
+          // combined number, and this book is billed in both.
+          totalRevenue: allClients.reduce((acc: CurrencyTotals, c: any) => {
+            const byCurrency = (c.revenue_by_currency && typeof c.revenue_by_currency === 'object')
+              ? c.revenue_by_currency
+              : (c.total_revenue_generated ? { [c.revenue_currency || 'EUR']: c.total_revenue_generated } : {})
+            for (const [code, amount] of Object.entries(byCurrency)) {
+              acc[code] = (acc[code] || 0) + (Number(amount) || 0)
+            }
+            return acc
+          }, {} as CurrencyTotals)
         })
       }
     } catch (error) {
@@ -500,7 +515,7 @@ export default function ClientsPage() {
             </div>
             <p className="text-xs text-gray-600">{t('statsTotalRevenue')}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">
-              €{stats.totalRevenue.toLocaleString()}
+              {formatTotals(stats.totalRevenue)}
             </p>
           </div>
         </div>
@@ -800,7 +815,7 @@ export default function ClientsPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">
                           <div className="font-semibold text-green-600">
-                            €{client.total_revenue_generated.toLocaleString()}
+                            {formatMoney(client.total_revenue_generated || 0, client.revenue_currency || 'EUR')}
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">

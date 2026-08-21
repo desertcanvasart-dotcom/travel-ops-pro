@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { formatMoney } from '@/lib/currency-totals'
+import { formatMoney, formatTotals } from '@/lib/currency-totals'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import ClientTimeline from '@/components/ClientTimeline'
@@ -33,6 +33,10 @@ interface Client {
   status: string
   total_bookings_count: number
   total_revenue_generated: number
+  /** Billed per currency — the truth behind the scalar above. */
+  revenue_by_currency?: Record<string, number> | null
+  /** Which currency the scalar figures are denominated in. */
+  revenue_currency?: string | null
   average_booking_value: number
   created_at: string
   last_contacted_at?: string
@@ -361,13 +365,15 @@ export default function ClientProfilePage() {
               </div>
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 text-center">
                 <div className="text-xl font-bold text-green-600">
-                  €{client.total_revenue_generated.toLocaleString()}
+                  {client.revenue_by_currency && Object.keys(client.revenue_by_currency).length > 0
+                    ? formatTotals(client.revenue_by_currency)
+                    : formatMoney(client.total_revenue_generated || 0, client.revenue_currency || 'EUR')}
                 </div>
                 <div className="text-xs text-gray-600 mt-0.5">{t('statsRevenue')}</div>
               </div>
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 text-center">
                 <div className="text-xl font-bold text-purple-600">
-                  €{client.average_booking_value.toLocaleString()}
+                  {formatMoney(client.average_booking_value || 0, client.revenue_currency || 'EUR')}
                 </div>
                 <div className="text-xs text-gray-600 mt-0.5">{t('statsAvgValue')}</div>
               </div>
