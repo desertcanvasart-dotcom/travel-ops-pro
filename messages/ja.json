@@ -6366,7 +6366,8 @@
     "note": "注意:",
     "noteText": "チップと飲料水は通常、利益なしのパススルーコストです。交通、ガイド、入場料には標準の{marginPercent}%マークアップが適用されます。",
     "extraExpenses": "追加経費",
-    "extraExpensesNote": "追加経費はマージンを減少させる運営費です"
+    "extraExpensesNote": "追加経費はマージンを減少させる運営費です",
+    "fromTripTotals": "サービス単価が未入力のため、旅程の合計金額から算出"
   },
   "resourceAssignment": {
     "loadingResources": "リソースを読み込み中...",

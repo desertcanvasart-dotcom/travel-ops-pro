@@ -47,6 +47,8 @@ interface Itinerary {
   num_infants: number    // Ages 0-3: FREE except flights
   currency: string
   total_cost: number
+  /** What the trip costs us, when the pricing engine has stored it. */
+  supplier_cost?: number | null
   status: string
   notes: string
   assigned_guide_id: string
@@ -1437,6 +1439,7 @@ export default function ViewItineraryPage() {
         {days.length > 0 && <ItineraryPL
           itineraryId={itinerary.id}
           totalCost={effectiveTotalCost}
+          supplierCost={itinerary.supplier_cost}
           currency={itinerary.currency}
           marginPercent={25}
           days={days}
