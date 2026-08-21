@@ -4829,7 +4829,9 @@
     "confirmAction": "Confirm Action",
     "deleteTitle": "Delete {itemName}?",
     "deleteMessage": "Are you sure you want to delete this {itemName}? This action cannot be undone.",
-    "warningCannotUndo": "Warning: This action cannot be undone."
+    "warningCannotUndo": "Warning: This action cannot be undone.",
+    "bulkDeleteTitle": "Delete {count} selected?",
+    "bulkDeleteMessage": "Delete {count} selected {label}? This cannot be undone."
   },
   "clientLinkButton": {
     "linkToClient": "Link to Client",

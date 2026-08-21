@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { CalendarRange, Plus, Trash2, X, Check, Loader2, Info, ChevronLeft, CalendarPlus, Pencil } from 'lucide-react'
 import { SEASON_COLOURS } from '@/lib/pricing/season-admin'
 
@@ -40,6 +41,8 @@ const formatPercent = (value: number) => String(Number(value))
 
 export default function PricingSeasonsPage() {
   const t = useTranslations('rates.seasons')
+  const tDialog = useTranslations('confirmDialog')
+  const dialog = useConfirmDialog()
   const tCommon = useTranslations('rates.common')
 
   const [seasons, setSeasons] = useState<Season[]>([])
@@ -155,7 +158,7 @@ export default function PricingSeasonsPage() {
   }
 
   const handleDeleteSeason = async (season: Season) => {
-    if (!confirm(t('deleteSeasonConfirm', { name: season.name }))) return
+    if (!(await dialog.confirm({ message: t('deleteSeasonConfirm', { name: season.name }), variant: 'danger', confirmText: tDialog('delete'), cancelText: tDialog('cancel') }))) return
     try {
       const res = await fetch(`/api/pricing/seasons/${season.id}`, { method: 'DELETE' })
       const data = await res.json()
@@ -201,7 +204,7 @@ export default function PricingSeasonsPage() {
   }
 
   const handleDeleteDates = async (window: SeasonWindow) => {
-    if (!confirm(t('deleteDatesConfirm'))) return
+    if (!(await dialog.confirm({ message: t('deleteDatesConfirm'), variant: 'danger', confirmText: tDialog('delete'), cancelText: tDialog('cancel') }))) return
     try {
       const res = await fetch(`/api/pricing/season-dates/${window.id}`, { method: 'DELETE' })
       const data = await res.json()
