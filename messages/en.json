@@ -4941,7 +4941,8 @@
     "note": "Note:",
     "noteText": "Tips and water are typically pass-through costs with no margin. Transportation, guides, and entrances carry the standard {marginPercent}% markup.",
     "extraExpenses": "Extra Expenses",
-    "extraExpensesNote": "Extra expenses are operational costs that reduce margin"
+    "extraExpensesNote": "Extra expenses are operational costs that reduce margin",
+    "fromTripTotals": "From the trip's own total — no priced services yet"
   },
   "resourceAssignment": {
     "loadingResources": "Loading resources...",

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { getFallbackRates, convertCurrency } from '@/lib/currency-service'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface Service {
   id: string
@@ -34,7 +35,10 @@ interface ExtraExpense {
 
 interface ItineraryPLProps {
   itineraryId: string
+  /** The trip's own client price — what the itinerary row says it sells for. */
   totalCost: number
+  /** The trip's own supplier cost, when the pricing engine has stored one. */
+  supplierCost?: number | null
   currency: string
   marginPercent?: number
   days: DayWithServices[]
@@ -66,6 +70,7 @@ const SERVICE_ICONS: Record<string, string> = {
 export default function ItineraryPL({
   itineraryId,
   totalCost,
+  supplierCost,
   currency,
   marginPercent = 25,
   days,
@@ -83,7 +88,10 @@ export default function ItineraryPL({
 
   useEffect(() => {
     calculatePL()
-  }, [days, extraExpenses])
+  }, [days, extraExpenses, totalCost, supplierCost])
+
+  // True when the numbers came from the trip rather than from priced services.
+  const [fromTripTotals, setFromTripTotals] = useState(false)
 
   const calculatePL = () => {
     const byType: Record<string, PLBreakdown> = {}
@@ -116,6 +124,20 @@ export default function ItineraryPL({
         byType[service.service_type].count += 1
       })
     })
+
+    // A trip whose services carry no prices is the normal case here — services
+    // are priced through the grid and the engine, and itinerary_services is
+    // empty for every trip in this system. The panel used to report ¥0 / ¥0 /
+    // 0% for those, ignoring the totalCost it was handed. Fall back to what the
+    // trip itself says: its client price, and its supplier cost when the engine
+    // has stored one, or the price less the standard margin when it has not.
+    const hasPricedServices = totalSupplierCost > 0 || totalClientPrice > 0
+    if (!hasPricedServices && Number(totalCost) > 0) {
+      totalClientPrice = Number(totalCost)
+      totalSupplierCost = Number(supplierCost) > 0
+        ? Number(supplierCost)
+        : Number(totalCost) / (1 + marginPercent / 100)
+    }
 
     // Add extra expenses (operational costs that reduce margin)
     if (extraExpenses.length > 0) {
@@ -170,6 +192,7 @@ export default function ItineraryPL({
       ? (totalMargin / totalSupplierCost) * 100 
       : 0
 
+    setFromTripTotals(!hasPricedServices && Number(totalCost) > 0)
     setBreakdown(sortedBreakdown)
     setTotals({
       supplierCost: totalSupplierCost,
@@ -179,13 +202,9 @@ export default function ItineraryPL({
     })
   }
 
-  const getCurrencySymbol = (curr: string) => {
-    return { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }[curr] || curr
-  }
-
-  const formatCurrency = (amount: number) => {
-    return `${getCurrencySymbol(currency)}${amount.toFixed(2)}`
-  }
+  // One formatter for money everywhere, so ¥1,099,897 does not render with the
+  // two decimal places the yen does not have.
+  const formatCurrency = (amount: number) => formatMoney(amount, currency)
 
   const getMarginColor = (percent: number) => {
     if (percent >= 25) return 'text-green-600'
@@ -214,7 +233,9 @@ export default function ItineraryPL({
           </div>
           <div className="text-left">
             <h3 className="text-sm font-semibold text-gray-900">{t('profitAndLoss')}</h3>
-            <p className="text-xs text-gray-500">{t('costBreakdownAndMargins')}</p>
+            <p className="text-xs text-gray-500">
+              {fromTripTotals ? t('fromTripTotals') : t('costBreakdownAndMargins')}
+            </p>
           </div>
         </div>
 
