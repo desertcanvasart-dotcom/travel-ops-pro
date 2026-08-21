@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -345,6 +346,14 @@ export default function ActivityRatesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // The browser knows which field is missing; it is only bad at saying so
+    // inside a scrolling modal, where its own bubble can land off-screen and
+    // the save button just appears dead. See lib/form-guard.ts.
+    const invalid = firstInvalidMessage(e.currentTarget)
+    if (invalid) {
+      showNotification('error', 'Error', invalid)
+      return
+    }
 
     try {
       const url = editingRate
@@ -1049,7 +1058,7 @@ export default function ActivityRatesContent() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+            <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
               {/* Basic Info */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">

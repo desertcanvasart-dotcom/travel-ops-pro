@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { firstInvalidMessage } from '@/lib/form-guard'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -294,6 +295,14 @@ export default function AirportServicesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // The browser knows which field is missing; it is only bad at saying so
+    // inside a scrolling modal, where its own bubble can land off-screen and
+    // the save button just appears dead. See lib/form-guard.ts.
+    const invalid = firstInvalidMessage(e.currentTarget)
+    if (invalid) {
+      showToast('error', invalid)
+      return
+    }
     const submitData = { ...formData, service_code: formData.service_code || generateCode() }
 
     try {
@@ -625,7 +634,7 @@ export default function AirportServicesPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <form noValidate onSubmit={handleSubmit} className="p-4 space-y-4">
               <SupplierPicker
                 value={formData.supplier_id}
                 onChange={(supplier_id) => setFormData(prev => ({ ...prev, supplier_id }))}
