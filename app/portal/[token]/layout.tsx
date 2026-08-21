@@ -42,6 +42,26 @@ const CSS = `
 .portal .crform button{padding:11px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer}
 .portal .crform button:disabled{opacity:.5}
 .portal .crdone{font-size:14px;color:var(--brand);font-weight:600;margin:0}
+.portal .leadcoord{margin:20px 0;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.portal .lchd{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.portal .lchd h2{margin:0;font-size:17px}
+.portal .lccount{font-size:13px;color:var(--soft);font-weight:600;white-space:nowrap}
+.portal .lclead{font-size:12px;color:var(--soft);margin:8px 0 14px;line-height:1.6}
+.portal .lclist{display:flex;flex-direction:column;gap:12px}
+.portal .lcrow{border:1px solid var(--line);border-radius:10px;padding:12px}
+.portal .lctop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.portal .lcname{font-size:15px;font-weight:600}
+.portal .lctag{font-style:normal;font-size:11px;background:var(--brand);color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px}
+.portal .lcstatus{font-size:12px;color:var(--soft);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.portal .lcstatus.ok{color:#2e7d32;border-color:#a5d6a7;background:#f1f8f2}
+.portal .lcfields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.portal .lcfield{display:flex;flex-direction:column;gap:3px}
+.portal .lcfield span{font-size:12px;color:var(--soft)}
+.portal .lcfield input{padding:9px;border:1px solid var(--line);border-radius:8px;font-size:15px;background:var(--bg,#fff);color:inherit}
+.portal .lcactions{display:flex;flex-wrap:wrap;gap:8px}
+.portal .lcactions button{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--brand);font-size:13px;font-weight:600;cursor:pointer}
+.portal .lcactions button:disabled{opacity:.5}
+.portal .lcactions .lcdanger{color:#c62828;border-color:#ef9a9a}
 .portal .gateform button:disabled{opacity:.5;cursor:default}
 .portal .gateerr{font-size:13px;color:#c0392b;margin:0}
 .portal .op{font-size:12px;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
