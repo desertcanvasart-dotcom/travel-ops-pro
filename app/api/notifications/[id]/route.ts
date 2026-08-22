@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentUserId } from '@/lib/auth/current-org'
-import { linkedTeamMemberIds, notificationScopeFilter } from '@/lib/notifications-scope'
+import { ownNotificationIds } from '@/lib/notifications-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,11 +9,13 @@ const supabase = createClient(
 )
 
 // Only the addressee may read-mark or delete a notification; anyone else's
-// id simply does not match and comes back 404.
-async function ownScope(): Promise<string | null> {
+// id simply does not match and comes back 404. The ownership check is a
+// SELECT, the mutation is by id — see ownNotificationIds for why.
+async function owned(id: string): Promise<'unauthenticated' | 'not-found' | 'ok'> {
   const userId = await getCurrentUserId()
-  if (!userId) return null
-  return notificationScopeFilter(userId, await linkedTeamMemberIds(supabase, userId))
+  if (!userId) return 'unauthenticated'
+  const ids = await ownNotificationIds(supabase, userId, { id })
+  return ids.length ? 'ok' : 'not-found'
 }
 
 // PUT - Mark notification as read
@@ -22,9 +24,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const scope = await ownScope()
-    if (!scope) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     const { id } = await params
+    const own = await owned(id)
+    if (own === 'unauthenticated') return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
+    if (own === 'not-found') return NextResponse.json({ success: false, error: 'Notification not found' }, { status: 404 })
     const body = await request.json()
     const { is_read = true } = body
 
@@ -32,7 +35,6 @@ export async function PUT(
       .from('notifications')
       .update({ is_read, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .or(scope)
       .select()
       .maybeSingle()
 
@@ -55,15 +57,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const scope = await ownScope()
-    if (!scope) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     const { id } = await params
+    const own = await owned(id)
+    if (own === 'unauthenticated') return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
+    if (own === 'not-found') return NextResponse.json({ success: false, error: 'Notification not found' }, { status: 404 })
 
     const { data, error } = await supabase
       .from('notifications')
       .delete()
       .eq('id', id)
-      .or(scope)
       .select('id')
 
     if (error) throw error
