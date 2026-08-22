@@ -1521,7 +1521,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
-                  {t('lowSeasonRates')}
+                  {t('lowSeasonRates', { currency: rateCurrency })}
                 </h3>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   {/* Date Range */}
@@ -1580,7 +1580,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">5</span>
-                  {t('highSeasonRates')}
+                  {t('highSeasonRates', { currency: rateCurrency })}
                 </h3>
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                   {/* Date Range */}
@@ -1639,7 +1639,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold">6</span>
-                  {t('peakSeasonRates')}
+                  {t('peakSeasonRates', { currency: rateCurrency })}
                 </h3>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   {/* Date Ranges - Primary and Secondary */}

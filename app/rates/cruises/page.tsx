@@ -1304,7 +1304,7 @@ export default function CruisesPage() {
 
               {/* Section 6: Low Season Rates */}
               <SeasonalRateSection
-                title={t('form.lowSeasonRates')}
+                title={t('form.lowSeasonRates', { currency: rateCurrency })}
                 seasonNumber={3}
                 startDate={formData.low_season_start}
                 endDate={formData.low_season_end}
@@ -1328,7 +1328,7 @@ export default function CruisesPage() {
 
               {/* Section 7: High Season Rates */}
               <SeasonalRateSection
-                title={t('form.highSeasonRates')}
+                title={t('form.highSeasonRates', { currency: rateCurrency })}
                 seasonNumber={4}
                 startDate={formData.high_season_start}
                 endDate={formData.high_season_end}
@@ -1352,7 +1352,7 @@ export default function CruisesPage() {
 
               {/* Section 8: Peak Season Rates */}
               <SeasonalRateSection
-                title={t('form.peakSeasonRates')}
+                title={t('form.peakSeasonRates', { currency: rateCurrency })}
                 seasonNumber={5}
                 startDate={formData.peak_season_1_start}
                 endDate={formData.peak_season_1_end}
