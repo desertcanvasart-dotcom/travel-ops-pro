@@ -1421,7 +1421,10 @@ Five PRs (#157–#161), merged, deployed, proven on production. Four migrations 
   (dev/CI never run jobs against the shared DB). The registry in `scheduler.ts` is the
   single source of truth; `railway.toml` keeps a pointer. **This makes the two nightly
   jobs run for the first time** — `data-invariants` e-mails `BUSINESS_EMAIL` when it finds
-  problems. Self-run proof: see the note at the end of this entry.
+  problems. **Self-run proof:** the container logged `[cron] in-process scheduler armed`
+  at 23:00:42 UTC; at 23:15:01 it claimed slot 23:15:00 in `cron_locks` and the digest
+  watermark advanced — nobody triggered it. Before #161 the watermark had sat still
+  across the 23:00 slot.
 
 **Lessons**
 - A "notify X" feature is only as real as its address. Anything keyed to the legacy
