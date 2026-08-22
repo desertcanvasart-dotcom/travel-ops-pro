@@ -1361,7 +1361,7 @@ npm install
 
 ### 2026-08-23 (session 5) — Margin as a company fact; the notification system was hollow; rate-change alerts; the crons never ran
 
-Five PRs (#157–#161), merged, deployed, proven on production. Four migrations applied
+Six PRs (#157–#161, #163), merged, deployed, proven on production; handover #162. Four migrations applied
 (`20260823_org_default_margin`, `20260823_notifications_by_user`,
 `20260823_rate_change_digest`, `20260823_cron_locks`).
 
@@ -1438,11 +1438,27 @@ Five PRs (#157–#161), merged, deployed, proven on production. Four migrations 
 - `timeout` does not exist on macOS (the grep silently never ran); `railway logs` streams
   and never returns — use the DB, not the logs, as the proof.
 
-**Still in the operator's court**
-- Set the real company margin and the rate-change alert level on Company Profile.
-- Team → change the owner's roster e-mail to the login e-mail so task/trip assignments
-  reach the owner's bell.
-- Decide whether the two nightly jobs should stay on (one registry line each to drop).
+**Settings decided and applied the same day (operator's decisions, applied by the agent
+through the service key against the same columns the Company Profile / Team forms write)**
+- **Company margin = 30** (`organizations.default_margin_percent`). The three other
+  members' personal margins (two admins, one agent — each an explicit 25) were
+  **cleared** so they inherit the company's 30; the owner keeps their own 30. This
+  exposed #163: the user-preferences GET folded the company margin in only for users
+  with *no* preferences row, so a cleared row came back `null`, Settings showed 25 and a
+  save would have re-pinned 25 — fixed and prod-proven (cleared user under a 33 org →
+  GET returns 33).
+- **Rate-change alerts = in-app + e-mail** (`organizations.rate_change_alerts =
+  'in_app_email'`). E-mails go to the managers' profile addresses (owner +
+  two admins), minus whoever made the change; the in-app notice stands even if a mail
+  bounces.
+- **Owner's roster row linked to the login**: `team_members` "Islam Mohamed" re-pointed
+  from info@travel2egypt.org to travel2egypt69@gmail.com and `user_id` set to the org
+  owner, so task/trip assignments reach the owner's bell. 4 of 7 roster rows are now
+  linked; Manal, Hind Galal and Sayed Adly have no login to link to. Note: the Team
+  page's edit form changes the e-mail only and never sets `user_id` — a future e-mail
+  change from the UI needs the link made separately.
+- **Both nightly jobs stay on** (`process-agent-memory` 02:00 UTC, `data-invariants`
+  03:15 UTC); their first real runs are the night of 2026-08-23.
 
 ### 2026-08-22 (session 4) — No euro assumption left anywhere
 
