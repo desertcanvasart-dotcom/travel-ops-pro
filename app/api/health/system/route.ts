@@ -19,11 +19,18 @@
 // wide open (a count probe cannot tell locked from empty), so those are
 // reported under `unprovable` rather than counted as safe. Grants are the real
 // defence — see 20260821_lock_public_schema.sql.
+//
+// A read that Postgres REFUSES (SQLSTATE 42501) is the goal state and is
+// reported under `denied`. Only a failure for some other reason — bad key,
+// missing table, 5xx — lands in `probeErrors`, so that list means "could not
+// prove" and nothing else. (Until 2026-08-22 the probe went through
+// supabase-js' head-count path, which drops the error code and message, and
+// every one of the 168 clean denials was listed as an error with text "".)
 // ============================================
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { classifyExposure, resourcesFromOpenApi, OPEN_BY_DESIGN, type AnonProbe } from '@/lib/rls/exposure'
+import { classifyExposure, probeAsAnon, resourcesFromOpenApi, OPEN_BY_DESIGN } from '@/lib/rls/exposure'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,8 +57,8 @@ async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Pr
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const service = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-  // Plain anon client with NO session — deliberately the anonymous internet.
-  const anon = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  // The plain anon key with NO session — deliberately the anonymous internet.
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
   // 1. Database reachability (service role) + latency
   const t0 = Date.now()
@@ -78,12 +85,10 @@ export async function GET() {
     surfaceError = e instanceof Error ? e.message : String(e)
   }
 
-  // 3. Count as anon against every resource.
-  const probes: AnonProbe[] = await mapWithLimit(resources, CONCURRENCY, async (resource) => {
-    const { count, error } = await anon.from(resource).select('*', { count: 'exact', head: true })
-    if (error) return { resource, count: null, error: error.message }
-    return { resource, count: count ?? 0 }
-  })
+  // 3. Count as anon against every resource — raw HTTP so the SQLSTATE survives.
+  const probes = await mapWithLimit(resources, CONCURRENCY, (resource) =>
+    probeAsAnon(url, anonKey, resource)
+  )
 
   const report = classifyExposure(probes, OPEN_BY_DESIGN)
 
@@ -93,6 +98,9 @@ export async function GET() {
     ok: report.ok && surfaceOk,
     probed: report.probed,
     exposed: report.exposed,
+    // Refused by Postgres — the desired answer for every locked resource.
+    deniedCount: report.denied.length,
+    // Could not prove either way. Read this list; it should be empty.
     probeErrors: report.probeErrors,
     openByDesign: report.openByDesign,
     // Readable but empty — locked or not, a count probe cannot say.

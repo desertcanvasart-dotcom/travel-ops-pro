@@ -142,6 +142,16 @@ test('system health: DB reachable, no RLS exposure', async ({ page }) => {
   ).toEqual([])
   // A probe that enumerated nothing must never read as healthy.
   expect(health.rls.probed, 'probe enumerated the PostgREST surface').toBeGreaterThan(0)
+  // "Could not prove locked" is not "locked". Since 2026-08-22 a refused read
+  // (42501) is reported under deniedCount, so anything left here is a real
+  // failure — a bad key, a vanished table, a 5xx — and names the table.
+  expect(
+    health.rls.probeErrors,
+    `probe could not prove these locked: ${JSON.stringify(health.rls.probeErrors, null, 2)}`
+  ).toEqual([])
+  // With the grants revoked, at least one resource must have been refused
+  // outright — zero denials means the lockdown regressed, however empty the tables.
+  expect(health.rls.deniedCount, 'anon key refused by Postgres somewhere').toBeGreaterThan(0)
   expect(health.overall).toBe('ok')
   expect(res.status(), 'health endpoint should answer 200 when healthy').toBe(200)
 })
