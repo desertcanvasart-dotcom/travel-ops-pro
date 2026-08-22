@@ -1359,6 +1359,91 @@ npm install
 
 ## 19. Changelog
 
+### 2026-08-23 (session 5) — Margin as a company fact; the notification system was hollow; rate-change alerts; the crons never ran
+
+Five PRs (#157–#161), merged, deployed, proven on production. Four migrations applied
+(`20260823_org_default_margin`, `20260823_notifications_by_user`,
+`20260823_rate_change_digest`, `20260823_cron_locks`).
+
+- ✅ **Margin is an org default, like the currencies** (#157). It was a per-user
+  preference with a hard-coded 25 behind it, so two offices could quote the same trip at
+  different margins and a new colleague quoted at a constant in a file. Now
+  `organizations.default_margin_percent` (NULL = not configured, CHECK 0–100, backfilled
+  by member vote, ties to the owner) sits under every user: resolution is **request →
+  user preference → org default → 25**, everywhere — B2B calculate-price and
+  quote-from-itinerary (partner override still on top), B2C quotes, template auto-price,
+  pricing-grid save, the user-preferences API (whose PUT had turned a real 0 into 25)
+  and AI generation. One resolver, `lib/org-default-margin.ts`. Company Profile gains
+  *Default margin (%)* (EN/JA). The backfill exposed the drift it exists to catch: A.T.S
+  owner = 30, the two admins and the agent = 25, so the org default became 25 by
+  majority — **the operator should set the real company margin on Company Profile.**
+- ✅ **"When a rate changes, owners & managers get a notification."** Investigating it
+  found the in-app notification system had **never delivered a row in production**
+  (`notifications` = 0 rows, ever): rows were addressed to `team_members` — the old
+  WhatsApp-inbox roster (7 rows, 1 active, 1 linked to a login) that nothing creates for
+  a colleague; the bell and `/notifications` listed *every* row to *every* viewer; and
+  `notifyOrgManagers` filtered `team_members` by an `org_id` column that table never had
+  (query errored, error swallowed — the portal change-request alert from #133 never
+  fired).
+  - #158 + #159: `notifications.user_id` (→ auth.users) is the address; roster entries
+    linked to logins by e-mail (3 of A.T.S's 7 now linked — the owner's roster row uses
+    info@travel2egypt.org, not the login e-mail; change it in Team to link); legacy rows
+    follow their link; CHECK that a row has an address. GET / mark-read / delete /
+    mark-all-read scoped to the signed-in user (`lib/notifications-scope.ts`); foreign
+    rows → 404. `notifyOrgManagers` reads `organization_members` (owner/admin/manager),
+    excludes the actor. **Gotcha fixed in #159:** PostgREST rejected the `or=(user_id…)`
+    scope on PATCH/DELETE (42703) while accepting it on GET — mutations now target ids
+    resolved by a scoped SELECT. Prod-proven 6/6.
+  - #160: **rate-change digest** — `/api/cron/rate-change-digest` reads the
+    trigger-written `rate_audit_log` since its watermark (`cron_watermarks`), groups by
+    **editor × table**, and tells each org's owners/admins/managers **once per group**;
+    the editor is not told about their own change; a 79-row import is one notice
+    (「料金変更: 入場料 79件 — Rate change: 79 entrance fees」 + first three changes + link
+    to the rates page). Reads the audit log, so imports and SQL-editor edits count too.
+    Company Profile → *Rate-change alerts*: in the app / + e-mail / off
+    (`organizations.rate_change_alerts`). **Attribution:** `changed_by` was NULL on all
+    597 audit rows (service-role writes). `lib/supabase-actor.ts` sends the
+    middleware-verified user as an `x-tops-actor` header; PostgREST exposes request
+    headers to SQL and `fn_rate_audit_actor()` reads it when `auth.uid()` is NULL (garbage
+    → NULL, never an aborted write; a real `auth.uid()` wins). 22 rate routes +
+    `lib/supabase-server` use it. Prod-proven 8/8: create/update/delete via the API → all
+    three audit rows name the editor; one digest run → each A.T.S manager got exactly one
+    notice, editor none, no e-mail, watermark advanced.
+- ✅ **The scheduled jobs never ran** (#161). Railway's only cron key is
+  `deploy.cronSchedule`, which runs a *service's start command* on a schedule (a separate
+  cron service); it does not read `[[cron]]` tables, and the project has one service. So
+  the nightly `process-agent-memory` (02:00) and `data-invariants` (03:15) entries in
+  `railway.toml` had **never fired** — proven: the digest watermark did not move across
+  the 23:00 UTC slot. `instrumentation.ts` now arms an in-process scheduler
+  (`lib/cron/scheduler.ts`: minute tick, 5-field cron matcher, a `cron_locks` claim per
+  job × slot so two containers never double-run, handlers invoked in-process with the
+  `CRON_SECRET` bearer). Guard: only with `RAILWAY_SERVICE_NAME` or `CRON_IN_PROCESS=true`
+  (dev/CI never run jobs against the shared DB). The registry in `scheduler.ts` is the
+  single source of truth; `railway.toml` keeps a pointer. **This makes the two nightly
+  jobs run for the first time** — `data-invariants` e-mails `BUSINESS_EMAIL` when it finds
+  problems. **Self-run proof:** the container logged `[cron] in-process scheduler armed`
+  at 23:00:42 UTC; at 23:15:01 it claimed slot 23:15:00 in `cron_locks` and the digest
+  watermark advanced — nobody triggered it. Before #161 the watermark had sat still
+  across the 23:00 slot.
+
+**Lessons**
+- A "notify X" feature is only as real as its address. Anything keyed to the legacy
+  `team_members` roster reaches nobody; address logins (`user_id`) and take recipients
+  from `organization_members`.
+- Never put `.or()` on a PostgREST mutation; resolve ids with a SELECT and mutate by id.
+  Batch inserts need identical keys per row (PGRST102).
+- Never trust a config file for scheduling. Prove a schedule by watching a DB row
+  (`cron_locks`, `cron_watermarks`) advance **without** a manual trigger. New scheduled
+  jobs go in `CRON_JOBS`, not in `railway.toml`.
+- `timeout` does not exist on macOS (the grep silently never ran); `railway logs` streams
+  and never returns — use the DB, not the logs, as the proof.
+
+**Still in the operator's court**
+- Set the real company margin and the rate-change alert level on Company Profile.
+- Team → change the owner's roster e-mail to the login e-mail so task/trip assignments
+  reach the owner's bell.
+- Decide whether the two nightly jobs should stay on (one registry line each to drop).
+
 ### 2026-08-22 (session 4) — No euro assumption left anywhere
 
 Two PRs (#152, #153), merged, deployed, proven on production. No migration.
@@ -1706,7 +1791,7 @@ Postgres on the build machine.
 **Primary Developer:** Islam Mohamed  
 **Project Started:** October 2025  
 **Version:** 1.0.0  
-**Last Updated:** August 22, 2026 (session 4)
+**Last Updated:** August 23, 2026 (session 5)
 
 ---
 
