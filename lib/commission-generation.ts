@@ -37,6 +37,15 @@
 // Commissions). Until 2026-08-22 every commission was computed off the
 // supplier's cost regardless of direction, so a "we pay" supplier would have
 // been owed a percentage of their own invoice.
+//
+// SOLD BY
+//
+// The guide who sells a third party's optional tour is not that service's
+// supplier. `itinerary_services.sold_by_supplier_id` names the seller; when it
+// is set, the service yields a SECOND commission — payable to the seller, at
+// the seller's rate, on the same profit — alongside whatever the provider is
+// owed or owes. A seller is always "we pay": a seller whose direction is set to
+// "we receive" is skipped with a reason rather than silently paid or ignored.
 
 import { SERVICE_TYPE_ROUTING } from './departments'
 
@@ -112,6 +121,9 @@ export interface CommissionSourceService {
   commission_rate?: number | string | null
   commission_status?: string | null
   supplier?: CommissionSupplier | null
+  /** Who SOLD the service (a guide), distinct from who provides it. */
+  sold_by_supplier_id?: string | null
+  seller?: CommissionSupplier | null
 }
 
 export interface CommissionContext {
@@ -156,6 +168,9 @@ export type SkipReason =
   | 'no_base_amount'
   | 'no_client_price'
   | 'no_profit'
+  | 'seller_no_rate'
+  | 'seller_not_payable'
+  | 'seller_no_profit'
 
 export interface SkippedService {
   service_id: string
@@ -185,6 +200,12 @@ const SKIP_DETAIL: Record<SkipReason, string> = {
     'This supplier is paid a share of OUR PROFIT, and the service has no client price, so there is no profit to share. Price the service to the client, or change the supplier\'s commission direction under Rates › Commissions.',
   no_profit:
     'This supplier is paid a share of OUR PROFIT, and this service made none (client price is not above the supplier cost). No commission is paid on a loss.',
+  seller_no_rate:
+    'The service names who sold it, but that seller has no commission rate. Set one under Rates › Commissions ("We pay").',
+  seller_not_payable:
+    'The service names who sold it, but that seller\'s commission is set to "We receive". A seller is paid a share of our profit — change the direction to "We pay" under Rates › Commissions.',
+  seller_no_profit:
+    'The service names who sold it, but there is no profit to share (no client price, or client price not above the supplier cost). No seller commission is paid on a loss.',
 }
 
 /** The direction a supplier's commission runs in. Anything but 'payable' is
@@ -234,6 +255,48 @@ export function buildCommissions(
       continue
     }
 
+    const serviceType = (s.service_type || '').trim().toLowerCase()
+    const costAmount = toNumber(s.total_cost)
+    const clientPrice = toNumber(s.client_price)
+    // Profit on the service: what the "we pay" commissions are a share of.
+    // Only meaningful when both sides are priced.
+    const profit =
+      costAmount > 0 && clientPrice > 0 ? Math.round((clientPrice - costAmount) * 100) / 100 : null
+
+    // ---- The seller's commission (sold by), independent of the provider's ----
+    if (s.sold_by_supplier_id && s.seller) {
+      const sellerRate = toNumber(s.seller.default_commission_rate)
+      if (sellerRate <= 0) skip(s, 'seller_no_rate')
+      else if (commissionDirection(s.seller) !== 'payable') skip(s, 'seller_not_payable')
+      else if (profit === null || profit <= 0) skip(s, 'seller_no_profit')
+      else {
+        pairs.push({
+          serviceId: s.id,
+          commission: {
+            org_id: ctx.orgId,
+            itinerary_id: ctx.itineraryId,
+            supplier_id: s.sold_by_supplier_id,
+            client_id: ctx.clientId || null,
+            commission_type: 'payable',
+            // A sale credit, not the service's own category: the guide who
+            // sold the optional tour is what this row is about.
+            category: 'optional_tour',
+            source_name: s.seller.name || null,
+            description: `${s.service_name || s.service_type || 'Service'} — sold by ${s.seller.name || 'seller'} - ${ctx.itineraryCode}`,
+            base_amount: profit,
+            cost_amount: costAmount,
+            commission_rate: sellerRate,
+            commission_amount: Math.round(profit * sellerRate) / 100,
+            currency,
+            status: 'pending',
+            transaction_date: transactionDate,
+            notes: `Auto-generated from itinerary ${ctx.itineraryCode} — sold by ${s.seller.name || 'seller'}: ${sellerRate}% of profit (client price − supplier cost ${costAmount})`,
+          },
+        })
+      }
+    }
+
+    // ---- The provider's commission ----
     if (!s.supplier || !s.supplier_id) {
       skip(s, 'no_supplier')
       continue
@@ -255,7 +318,6 @@ export function buildCommissions(
     // is skipped, not priced off the marked-up figure. Falling back would
     // reintroduce the exact error this line exists to prevent, on precisely the
     // rows where nobody would notice.
-    const costAmount = toNumber(s.total_cost)
     if (costAmount <= 0) {
       skip(s, 'no_base_amount')
       continue
@@ -269,20 +331,16 @@ export function buildCommissions(
     // on a loss.
     let baseAmount = costAmount
     if (direction === 'payable') {
-      const clientPrice = toNumber(s.client_price)
       if (clientPrice <= 0) {
         skip(s, 'no_client_price')
         continue
       }
-      const profit = Math.round((clientPrice - costAmount) * 100) / 100
-      if (profit <= 0) {
+      if (profit === null || profit <= 0) {
         skip(s, 'no_profit')
         continue
       }
       baseAmount = profit
     }
-
-    const serviceType = (s.service_type || '').trim().toLowerCase()
 
     pairs.push({
       serviceId: s.id,

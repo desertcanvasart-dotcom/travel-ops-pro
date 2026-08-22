@@ -44,6 +44,7 @@ export async function PUT(
       notes: body.notes,
       supplier_id: body.supplier_id,
       supplier_name: body.supplier_name,
+      sold_by_supplier_id: body.sold_by_supplier_id,
       commission_rate: body.commission_rate,
       commission_amount: body.commission_amount,
       commission_status: body.commission_status,

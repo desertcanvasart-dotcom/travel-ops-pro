@@ -1649,7 +1649,10 @@
       "programmeNone": "未設定",
       "programmeLengthMismatch": "プログラムは{programmeDays}日間ですが、この旅行は{tripDays}日間です。日程表が販売内容と一致しません。",
       "programmePreview": "日程表をプレビュー",
-      "programmeUnlinkedNote": "プログラムが未設定の場合、お客様ページには通常の日程リストが表示されます。"
+      "programmeUnlinkedNote": "プログラムが未設定の場合、お客様ページには通常の日程リストが表示されます。",
+      "soldBy": "販売者",
+      "soldByNone": "ガイドによる販売なし",
+      "soldByHint": "このサービスをお客様に販売したガイドには、当社利益に対する「支払」コミッションが発生します（レート › コミッション）。"
     },
     "delete": "削除",
     "clickToConfirm": "確認のためもう一度クリック",
@@ -5520,7 +5523,7 @@
       "backToHub": "レート一覧",
       "loading": "コミッションを読み込み中...",
       "explainTitle": "2つの方向",
-      "explainPay": "支払：当社の利益の一部をサプライヤーへ支払う（例：オプショナルツアーを販売したガイド）。",
+      "explainPay": "支払：当社の利益の一部をサプライヤーへ支払う（例：オプショナルツアーを販売したガイド）。ツアーの提供者が別の場合は、日程エディターでそのサービスの「販売者」にガイドを指定してください。",
       "explainReceive": "受取：サプライヤーの売上の一部を当社が受け取る（例：お客様が訪問するショップ）。",
       "searchPlaceholder": "サプライヤーを検索...",
       "allDirections": "すべての方向",
