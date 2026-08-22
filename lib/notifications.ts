@@ -30,7 +30,10 @@ export type NotificationType =
   | 'whatsapp_new_message'
 
 export interface CreateNotificationInput {
-  team_member_id: string
+  /** The login to notify — the normal address. */
+  user_id?: string | null
+  /** Legacy roster address; still honoured. One of the two is required. */
+  team_member_id?: string | null
   type: NotificationType | string
   title: string
   message: string
@@ -59,7 +62,8 @@ export async function createNotification(
   input: CreateNotificationInput
 ): Promise<CreateNotificationResult> {
   const {
-    team_member_id,
+    user_id = null,
+    team_member_id = null,
     type,
     title,
     message,
@@ -69,13 +73,14 @@ export async function createNotification(
     send_email = true,
   } = input
 
-  if (!team_member_id) {
-    return { success: false, emailed: false, error: 'team_member_id is required' }
+  if (!user_id && !team_member_id) {
+    return { success: false, emailed: false, error: 'user_id or team_member_id is required' }
   }
 
   const { data: notification, error } = await supabaseAdmin
     .from('notifications')
     .insert({
+      user_id,
       team_member_id,
       type,
       title,
@@ -94,7 +99,16 @@ export async function createNotification(
     return { success: false, emailed: false, error: error?.message || 'Insert failed' }
   }
 
-  const recipient = (notification as { team_member?: { name?: string; email?: string } }).team_member
+  let recipient: { name?: string | null; email?: string | null } | undefined =
+    (notification as { team_member?: { name?: string; email?: string } }).team_member ?? undefined
+  if (send_email && !recipient?.email && user_id) {
+    const { data: profile } = await supabaseAdmin
+      .from('user_profiles')
+      .select('email, full_name')
+      .eq('id', user_id)
+      .maybeSingle()
+    if (profile?.email) recipient = { email: profile.email, name: profile.full_name }
+  }
   if (!send_email || !recipient?.email) {
     return { success: true, notification, emailed: false }
   }
