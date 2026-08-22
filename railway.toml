@@ -1,34 +1,17 @@
-# Railway configuration — adds the agent-memory feedback-loop cron job.
+# Railway configuration.
 #
-# Build & deploy are intentionally OMITTED so your existing Railway (dashboard)
-# settings keep applying unchanged — this file only adds the scheduled job.
-# If your deploy is fully dashboard-managed and you'd rather not introduce a
-# railway.toml, add the same cron via Railway → service → Settings → Cron and
-# delete this file.
+# Build & deploy are intentionally OMITTED so the existing Railway (dashboard)
+# settings keep applying unchanged.
 #
-# Uses the service's existing NEXT_PUBLIC_APP_URL (full https URL of the app)
-# and CRON_SECRET. The endpoint is a GET that checks
-# `Authorization: Bearer $CRON_SECRET` — note the route only ENFORCES that
-# header when CRON_SECRET is set; if it's unset the endpoint is unauthenticated.
-
-[[cron]]
-schedule = "0 2 * * *"   # nightly at 02:00 UTC
-command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/process-agent-memory\" -H \"Authorization: Bearer $CRON_SECRET\""
-
-# Nightly data-integrity sweep (see app/api/cron/data-invariants/route.ts):
-# 12 invariant checks over itineraries/invoices/rates; violations alert
-# BUSINESS_EMAIL. Curl's -f makes a non-2xx exit non-zero for Railway's cron
-# logs, but note the endpoint intentionally returns 200 with ok:false for
-# DATA violations (email is the alert channel) — -f only catches infra
-# failures (500s / unreachable).
-[[cron]]
-schedule = "15 3 * * *"  # nightly at 03:15 UTC
-command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/data-invariants\" -H \"Authorization: Bearer $CRON_SECRET\""
-
-# Rate-change digest (see app/api/cron/rate-change-digest/route.ts): tells
-# owners/admins/managers what changed in the rate tables since the last run,
-# one notification per editor × table. Reads the trigger-written audit log,
-# so imports and SQL-editor edits are covered too.
-[[cron]]
-schedule = "*/15 * * * *"
-command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/rate-change-digest\" -H \"Authorization: Bearer $CRON_SECRET\""
+# Scheduled jobs are NOT configured here. Railway's only cron key is
+# `deploy.cronSchedule`, which runs a service's START COMMAND on a schedule —
+# i.e. a separate cron service — and it does not read `[[cron]]` tables (the
+# ones that used to live in this file never fired). The jobs run in-process
+# instead: see instrumentation.ts → lib/cron/scheduler.ts, which ticks every
+# minute inside the web container and claims each slot in cron_locks. The
+# registry there is the single source of truth for schedules:
+#   rate-change-digest   */15 * * * *
+#   process-agent-memory 0 2 * * *     (02:00 UTC)
+#   data-invariants      15 3 * * *    (03:15 UTC)
+# Needs CRON_SECRET (bearer the routes check) and RAILWAY_SERVICE_NAME (set by
+# Railway) or CRON_IN_PROCESS=true; CRON_IN_PROCESS=false disarms.
