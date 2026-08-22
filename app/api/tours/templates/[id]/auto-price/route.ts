@@ -17,6 +17,8 @@ import {
   ServiceTier 
 } from '@/lib/auto-pricing-service'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { createServerClient } from '@/lib/supabase-server'
 
 export async function POST(
   request: NextRequest,
@@ -34,13 +36,14 @@ export async function POST(
       is_eur_passport = true,
       language = 'English',
       travel_date,
-      margin_percent = 25,
+      margin_percent: requestedMargin = null,  // resolved below: request → org default → 25
       meal_plan = 'lunch_only',
       include_accommodation = false,
       // Multi-tier mode
       all_tiers = false,
       tiers = ['budget', 'standard', 'deluxe', 'luxury']
     } = body
+    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(createServerClient(), await getCurrentOrgId()) })
 
     // Validate tier
     const validTiers: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']

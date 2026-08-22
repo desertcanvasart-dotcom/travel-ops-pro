@@ -237,7 +237,7 @@ function SettingsContent() {
           id: data.id,
           user_id: data.user_id,
           default_tier: data.default_tier || 'standard',
-          default_margin_percent: data.default_margin_percent || 25,
+          default_margin_percent: data.default_margin_percent ?? 25,
           default_currency: data.default_currency || 'USD'
         })
       }

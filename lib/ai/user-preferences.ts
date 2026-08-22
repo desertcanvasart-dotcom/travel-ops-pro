@@ -6,8 +6,10 @@
 // Used in itinerary generation to fill in missing parameters.
 
 import { type ServiceTier, normalizeTier } from '@/lib/ai/parsing-utils'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 
-// Default margin percentage (used if no user preference)
+// Last-resort margin: only reached when neither the user nor the organisation has set one
 export const DEFAULT_MARGIN_PERCENT = 25
 
 export interface UserGenerationPreferences {
@@ -34,6 +36,11 @@ export async function getUserPreferences(supabase: any): Promise<UserGenerationP
 
     if (!user) return defaults
 
+    // The company's margin sits under the user's own: a colleague who never
+    // opened Settings still quotes at what the company decided, not at 25.
+    const orgMargin = await getOrgDefaultMargin(supabase, await getCurrentOrgId())
+    defaults.default_margin_percent = resolveMarginPercent({ orgDefault: orgMargin })
+
     const { data: prefs } = await supabase
       .from('user_preferences')
       .select('*')
@@ -45,7 +52,7 @@ export async function getUserPreferences(supabase: any): Promise<UserGenerationP
     return {
       default_cost_mode: prefs.default_cost_mode || defaults.default_cost_mode,
       default_tier: normalizeTier(prefs.default_tier) || defaults.default_tier,
-      default_margin_percent: prefs.default_margin_percent ?? defaults.default_margin_percent,
+      default_margin_percent: resolveMarginPercent({ userPreference: prefs.default_margin_percent, orgDefault: orgMargin }),
       default_currency: prefs.default_currency || defaults.default_currency
     }
   } catch (error) {

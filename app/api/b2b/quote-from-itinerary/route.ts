@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
+import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -292,11 +293,12 @@ export async function POST(request: NextRequest) {
     const {
       itinerary_id,
       partner_id = null,
-      margin_percent = 25,
+      margin_percent: requestedMargin = null,  // resolved below: request → org default → 25
       tour_leader_included = false,
       is_eur_passport = true,
       language = 'English',
     } = body
+    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
 
     if (!itinerary_id) {
       return NextResponse.json(

@@ -38,6 +38,7 @@ interface Profile {
   offices: Office[]
   default_currency: string
   rate_currency: string
+  default_margin_percent: string
 }
 
 // Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
@@ -60,6 +61,7 @@ export default function CompanyProfileCard() {
     offices: [],
     default_currency: '',
     rate_currency: 'EUR',
+    default_margin_percent: '',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -84,6 +86,7 @@ export default function CompanyProfileCard() {
         document_contacts: data.data.document_contacts ?? {},
         default_currency: data.data.default_currency ?? '',
         rate_currency: data.data.rate_currency ?? 'EUR',
+        default_margin_percent: data.data.default_margin_percent == null ? '' : String(data.data.default_margin_percent),
         offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
           ...EMPTY_OFFICE,
           ...o,
@@ -261,6 +264,20 @@ export default function CompanyProfileCard() {
             ))}
           </select>
           <p className="text-xs text-gray-500 mt-1">{t('rateCurrencyHint')}</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('defaultMargin')}</label>
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            value={form.default_margin_percent}
+            onChange={e => set('default_margin_percent', e.target.value)}
+            placeholder={t('defaultMarginUnset')}
+          />
+          <p className="text-xs text-gray-500 mt-1">{t('defaultMarginHint')}</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('address')}</label>
