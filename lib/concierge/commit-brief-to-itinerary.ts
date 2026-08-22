@@ -26,6 +26,7 @@
 // ============================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { reassertClientId } from '@/lib/itineraries/reassert-client'
 
 const PG_UNIQUE_VIOLATION = '23505'
 
@@ -187,7 +188,7 @@ export async function commitBriefToItinerary(
       source: 'b2c_concierge',
       notes: briefRow.brief_summary ?? null,
     })
-    .select('id, itinerary_code, trip_name')
+    .select('id, itinerary_code, trip_name, client_id')
     .single()
 
   if (insertErr) {
@@ -212,6 +213,13 @@ export async function commitBriefToItinerary(
     }
     throw insertErr
   }
+
+  // Prod drops client_id on INSERT — see lib/itineraries/reassert-client.ts
+  await reassertClientId(
+    supabase,
+    created as { id: string; client_id?: string | null },
+    briefRow.client_id ?? thread.client_id ?? null
+  )
 
   return {
     itineraryId: (created as { id: string }).id,
