@@ -36,6 +36,8 @@ import {
   ResponsiveContainer 
 } from 'recharts'
 import Link from 'next/link'
+import { formatMoney } from '@/lib/currency-totals'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface AnalyticsData {
   revenue: {
@@ -77,9 +79,9 @@ const formatNumber = (num: number, decimals: number = 2): string => {
   return Number(num).toFixed(decimals)
 }
 
-const formatCurrency = (num: number): string => {
-  return `€${Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
+// Analytics figures are stated in the company's billing currency (what it
+// invoices in) — never a hard-coded euro.
+const formatCurrencyIn = (num: number, currency: string): string => formatMoney(Number(num) || 0, currency)
 
 const formatPercent = (num: number): string => {
   return `${Number(num).toFixed(1)}%`
@@ -123,6 +125,8 @@ const emptyData: AnalyticsData = {
 }
 
 export default function AnalyticsPage() {
+  const { currency: reportCurrency } = useCurrency()
+  const formatCurrency = (num: number) => formatCurrencyIn(num, reportCurrency)
   const t = useTranslations('analytics')
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
@@ -574,7 +578,7 @@ export default function AnalyticsPage() {
               <YAxis 
                 stroke="#666" 
                 style={{ fontSize: '12px' }}
-                tickFormatter={(value) => `€${value.toLocaleString()}`}
+                tickFormatter={(value) => formatCurrency(Number(value))}
               />
               <Tooltip 
                 contentStyle={{ 

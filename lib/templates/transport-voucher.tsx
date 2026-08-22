@@ -2,6 +2,7 @@
 // Shows: Company, Vehicle Type, Route, Price per service
 
 import { format } from 'date-fns'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface TransportService {
   date: string
@@ -19,6 +20,8 @@ interface TransportService {
 }
 
 interface TransportVoucherData {
+  /** The document's currency — every amount on the voucher is in it. */
+  currency: string
   voucher_number: string
   created_date: string
   status: string
@@ -105,7 +108,7 @@ export function generateTransportVoucherHTML(data: TransportVoucherData): string
             ` : ''}
           </td>
           <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: #059669;">
-            €${service.total_cost.toFixed(2)}
+            ${formatMoney(service.total_cost, data.currency)}
           </td>
         </tr>
       `).join('')
@@ -223,7 +226,7 @@ export function generateTransportVoucherHTML(data: TransportVoucherData): string
               Total (${data.totals.total_services} service${data.totals.total_services !== 1 ? 's' : ''})
             </td>
             <td style="padding: 14px 16px; text-align: right; font-weight: 700; font-size: 18px; color: #059669;">
-              €${data.totals.total_cost.toFixed(2)}
+              ${formatMoney(data.totals.total_cost, data.currency)}
             </td>
           </tr>
         </tfoot>
@@ -313,6 +316,7 @@ export function prepareTransportVoucherData(
       total_cost: s.total_cost || 0,
       notes: s.notes
     })),
+    currency: document.currency || 'EUR',
     totals: {
       total_services: routeServices.length,
       total_cost: routeServices.reduce((sum: number, s: any) => sum + (s.total_cost || 0), 0)

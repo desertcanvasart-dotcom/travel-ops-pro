@@ -290,10 +290,10 @@ export default function PaymentsPage() {
               exportFinancePDF({
                 title: 'Payments Report',
                 summary: [
-                  { label: 'Total Received', value: `€${stats.totalReceived.toLocaleString()}` },
-                  { label: 'Pending', value: `€${stats.pendingPayments.toLocaleString()}` },
-                  { label: 'Overdue', value: `€${stats.overduePayments.toLocaleString()}` },
-                  { label: 'This Month', value: `€${stats.thisMonthRevenue.toLocaleString()}` },
+                  { label: 'Total Received', value: formatTotals(stats.totalReceived, { defaultCurrency: listCurrency }) },
+                  { label: 'Pending', value: formatTotals(stats.pendingPayments, { defaultCurrency: listCurrency }) },
+                  { label: 'Overdue', value: formatTotals(stats.overduePayments, { defaultCurrency: listCurrency }) },
+                  { label: 'This Month', value: formatTotals(stats.thisMonthRevenue, { defaultCurrency: listCurrency }) },
                 ],
                 data: filteredPayments as unknown as Record<string, unknown>[],
                 columns: cols,

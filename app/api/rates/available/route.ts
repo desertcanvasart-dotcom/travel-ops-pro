@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 // ============================================
 // AVAILABLE RATES API
@@ -27,6 +30,8 @@ interface AvailableRate {
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate amounts in text carry the org's rate-currency symbol, never a hard-coded euro.
+    const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId()))
     const { searchParams } = new URL(request.url)
     const rate_type = searchParams.get('type')
     const city = searchParams.get('city')
@@ -117,7 +122,7 @@ export async function GET(request: NextRequest) {
             default_quantity_mode: 'per_group',
             supplier_id: r.supplier_id,
             supplier_name: (r.suppliers as any)?.name,
-            details: `${tierCount} vehicle tier${tierCount !== 1 ? 's' : ''} | from €${minRate}`
+            details: `${tierCount} vehicle tier${tierCount !== 1 ? 's' : ''} | from ${rateSym}${minRate}`
           })
         }
     }
@@ -134,7 +139,7 @@ export async function GET(request: NextRequest) {
             default_quantity_mode: 'per_group',
             supplier_id: r.supplier_id,
             supplier_name: (r.suppliers as any)?.name,
-            details: `Half: €${r.half_day_rate} | Full: €${r.full_day_rate}`
+            details: `Half: ${rateSym}${r.half_day_rate} | Full: ${rateSym}${r.full_day_rate}`
           })
         }
     }
@@ -185,7 +190,7 @@ export async function GET(request: NextRequest) {
             default_quantity_mode: 'per_night',
             supplier_id: r.supplier_id,
             supplier_name: (r.suppliers as any)?.name,
-            details: `${r.star_rating || ''}★ | Low: €${r.rate_low_season_sgl}`
+            details: `${r.star_rating || ''}★ | Low: ${rateSym}${r.rate_low_season_sgl}`
           })
         }
     }

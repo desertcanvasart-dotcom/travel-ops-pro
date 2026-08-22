@@ -10,12 +10,17 @@ import { createServerClient } from '@/lib/supabase-server'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
 import { enrichSlots } from '@/app/pricing-grid/lib/enrich-slots'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 // ============================================
 // RATE CATALOG BUILDER
 // ============================================
 
-async function buildRateCatalog(supabase: any, tier: string) {
+// `sym` is the org's rate-currency symbol: the AI reads these lines, so they
+// must say what the numbers are.
+async function buildRateCatalog(supabase: any, tier: string, sym: string) {
   // Use select('*') — specific column selects fail silently if a column name doesn't match
   const results = await Promise.all([
     supabase.from('transportation_rates').select('*').eq('is_active', true),
@@ -68,7 +73,7 @@ async function buildRateCatalog(supabase: any, tier: string) {
   const expandCatalogTiers = (r: any, prefix: string) =>
     VEHICLE_TIERS
       .filter(t => parseFloat(r[`${t.key}_rate_eur`]) > 0)
-      .map(t => `ID:${r.id}__${t.key} | ${t.label} (${t.capMin}-${t.capMax}pax) | ${prefix} | ${r.origin_city || r.city || 'any'} | €${r[`${t.key}_rate_eur`]}`)
+      .map(t => `ID:${r.id}__${t.key} | ${t.label} (${t.capMin}-${t.capMax}pax) | ${prefix} | ${r.origin_city || r.city || 'any'} | ${sym}${r[`${t.key}_rate_eur`]}`)
 
   catalog.vehicle = (transportRates || [])
     .filter((r: any) => r.service_type === 'day_tour')
@@ -81,53 +86,53 @@ async function buildRateCatalog(supabase: any, tier: string) {
     .join('\n')
 
   catalog.guide = (guideRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.guide_language} | ${r.guide_type || 'Egyptologist'} | ${r.city || 'any'} | €${r.base_rate_eur || r.rate_eur}`)
+    .map((r: any) => `ID:${r.id} | ${r.guide_language} | ${r.guide_type || 'Egyptologist'} | ${r.city || 'any'} | ${sym}${r.base_rate_eur || r.rate_eur}`)
     .join('\n')
 
   catalog.airport_services = (airportRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.airport_code} | ${r.direction} | €${r.rate_eur}`)
+    .map((r: any) => `ID:${r.id} | ${r.airport_code} | ${r.direction} | ${sym}${r.rate_eur}`)
     .join('\n')
 
   catalog.hotel_services = (hotelServiceRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.service_type} | ${r.hotel_category} | ${r.destination || 'any'} | €${r.rate_eur}`)
+    .map((r: any) => `ID:${r.id} | ${r.service_type} | ${r.hotel_category} | ${r.destination || 'any'} | ${sym}${r.rate_eur}`)
     .join('\n')
 
   catalog.tipping = (tippingRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.role || r.service_code} | €${r.rate_eur || r.amount_eur} | ${r.description || ''}`)
+    .map((r: any) => `ID:${r.id} | ${r.role || r.service_code} | ${sym}${r.rate_eur || r.amount_eur} | ${r.description || ''}`)
     .join('\n')
 
   catalog.boat_rides = (activityRates || [])
     .filter((r: any) => /boat|felucca|motor/i.test(r.activity_name || r.category || ''))
-    .map((r: any) => `ID:${r.id} | ${r.activity_name} | ${r.city || 'any'} | €${r.rate_eur || r.base_rate_eur} | ${r.pricing_type || 'per_group'}`)
+    .map((r: any) => `ID:${r.id} | ${r.activity_name} | ${r.city || 'any'} | ${sym}${r.rate_eur || r.base_rate_eur} | ${r.pricing_type || 'per_group'}`)
     .join('\n')
 
   catalog.accommodation = (accommodationRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.property_name} | ${r.city} | ${r.tier} | ${r.board_basis || 'RO'} | PPD €${r.pp_double_eur} | Supp €${r.single_supp_eur || 0}`)
+    .map((r: any) => `ID:${r.id} | ${r.property_name} | ${r.city} | ${r.tier} | ${r.board_basis || 'RO'} | PPD ${sym}${r.pp_double_eur} | Supp ${sym}${r.single_supp_eur || 0}`)
     .join('\n')
 
   catalog.entrance_fees = (entranceFees || [])
-    .map((r: any) => `ID:${r.id} | ${r.attraction_name} | ${r.city} | EU €${r.eur_rate} | NonEU €${r.non_eur_rate}`)
+    .map((r: any) => `ID:${r.id} | ${r.attraction_name} | ${r.city} | EU ${sym}${r.eur_rate} | NonEU ${sym}${r.non_eur_rate}`)
     .join('\n')
 
   catalog.experiences = (activityRates || [])
     .filter((r: any) => !/boat|felucca|motor/i.test(r.activity_name || r.category || ''))
-    .map((r: any) => `ID:${r.id} | ${r.activity_name} | ${r.city || 'any'} | €${r.rate_eur || r.base_rate_eur} | ${r.pricing_type || 'per_person'}`)
+    .map((r: any) => `ID:${r.id} | ${r.activity_name} | ${r.city || 'any'} | ${sym}${r.rate_eur || r.base_rate_eur} | ${r.pricing_type || 'per_person'}`)
     .join('\n')
 
   catalog.meals = (mealRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.meal_type} | ${r.restaurant_name || 'Restaurant'} | ${r.city} | €${r.base_rate_eur || r.rate_eur}`)
+    .map((r: any) => `ID:${r.id} | ${r.meal_type} | ${r.restaurant_name || 'Restaurant'} | ${r.city} | ${sym}${r.base_rate_eur || r.rate_eur}`)
     .join('\n')
 
   catalog.cruise = (cruiseRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.ship_name} | ${r.route_name || ''} | ${r.duration_nights}N | ${r.cabin_type} | ${r.tier} | Double €${r.rate_double_eur || r.rate_low_double_eur}`)
+    .map((r: any) => `ID:${r.id} | ${r.ship_name} | ${r.route_name || ''} | ${r.duration_nights}N | ${r.cabin_type} | ${r.tier} | Double ${sym}${r.rate_double_eur || r.rate_low_double_eur}`)
     .join('\n')
 
   catalog.cruise_transport_package = (cruiseTransportPkgs || [])
-    .map((r: any) => `ID:${r.id} | ${r.package_name} | ${r.origin_city}→${r.destination_city} | ${r.duration_days}d | Sedan €${r.sedan_rate} | Minivan €${r.minivan_rate} | Van €${r.van_rate} | Includes: ${r.includes || 'vehicle + guide + boat rides'}`)
+    .map((r: any) => `ID:${r.id} | ${r.package_name} | ${r.origin_city}→${r.destination_city} | ${r.duration_days}d | Sedan ${sym}${r.sedan_rate} | Minivan ${sym}${r.minivan_rate} | Van ${sym}${r.van_rate} | Includes: ${r.includes || 'vehicle + guide + boat rides'}`)
     .join('\n')
 
   catalog.flights = (flightRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.airline} | ${r.route_from}→${r.route_to} | ${r.cabin_class} | €${r.base_rate_eur}${r.tax_eur ? ` +tax €${r.tax_eur}` : ''}`)
+    .map((r: any) => `ID:${r.id} | ${r.airline} | ${r.route_from}→${r.route_to} | ${r.cabin_class} | ${sym}${r.base_rate_eur}${r.tax_eur ? ` +tax ${sym}${r.tax_eur}` : ''}`)
     .join('\n')
 
   return { catalog, rawRates: { transportRates, guideRates, airportRates, hotelServiceRates, tippingRates, activityRates, accommodationRates, entranceFees, mealRates, cruiseRates, cruiseTransportPkgs, flightRates } }
@@ -516,7 +521,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Fetch all rates from DB
-    const { catalog, rawRates } = await buildRateCatalog(supabase, tier || 'standard')
+    // The org's rate-currency symbol: the catalogue the AI reads, and the logs, both say what the numbers are.
+    const sym = currencySymbol(await getOrgRateCurrency(supabase, await getCurrentOrgId()))
+    const { catalog, rawRates } = await buildRateCatalog(supabase, tier || 'standard', sym)
 
     // 2. Build prompt with real rate IDs
     const systemPrompt = buildSystemPrompt(catalog)
@@ -1060,7 +1067,7 @@ export async function POST(request: NextRequest) {
         const cruise = rawRates.cruiseRates?.[0]
         if (cruise) {
           slots.cruise = [cruise.id]
-          console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise night → ${cruise.ship_name} (€${cruise.rate_double_eur || cruise.rate_low_double_eur}/pp/night)`)
+          console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise night → ${cruise.ship_name} (${sym}${cruise.rate_double_eur || cruise.rate_low_double_eur}/pp/night)`)
         } else {
           console.log(`Day ${day.dayNumber}: FAILED cruise auto-fill — ${rawRates.cruiseRates?.length || 0} cruise rates`)
         }

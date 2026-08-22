@@ -11,9 +11,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
+import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate amounts in text carry the org's rate-currency symbol, never a hard-coded euro.
+    const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId()))
     const { tour, pax, is_euro_passport, pricing } = await request.json()
 
     const locale = await getServerLocale()
@@ -29,7 +36,7 @@ export async function POST(request: NextRequest) {
     )
     const fontFace = await getJapaneseFontFace()
 
-    const html = generateTourHTML(tour, pax, is_euro_passport, pricing, locale, labels, fontFace)
+    const html = generateTourHTML(tour, pax, is_euro_passport, pricing, locale, labels, fontFace, rateSym)
 
     return new NextResponse(html, {
       headers: {
@@ -55,8 +62,9 @@ function generateTourHTML(
   locale: 'en' | 'ja',
   labels: Record<string, string>,
   fontFace: string,
+  rateSym: string,
 ) {
-  const formatCurrency = (amount: number) => `€${amount.toFixed(2)}`
+  const formatCurrency = (amount: number) => `${rateSym}${amount.toFixed(2)}`
   const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
   const generatedDate = new Date().toLocaleDateString(tag)
 

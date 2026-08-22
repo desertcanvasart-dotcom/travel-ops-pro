@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2, Route, Utensils, UserCheck } from 'lucide-react'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface TransportRate {
   id: string
@@ -120,6 +122,7 @@ interface Supplier {
 }
 
 export default function EditSupplierDocumentPage() {
+  const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
   const params = useParams()
   const router = useRouter()
@@ -1210,7 +1213,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">€{route.unit_rate.toFixed(2)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(route.unit_rate, document?.currency || rateCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1223,7 +1226,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              €{route.total_cost.toFixed(2)}
+                              {formatMoney(route.total_cost, document?.currency || rateCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1247,7 +1250,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            €{calculateRoutesTotal().toFixed(2)}
+                            {formatMoney(calculateRoutesTotal(), document?.currency || rateCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1336,7 +1339,7 @@ export default function EditSupplierDocumentPage() {
                                 </div>
                                 <div className="text-right shrink-0 ml-3">
                                   <p className="text-sm font-semibold text-primary-600">
-                                    €{getRateForVehicle(rate).toFixed(2)}
+                                    {formatMoney(getRateForVehicle(rate), document?.currency || rateCurrency)}
                                   </p>
                                   {rate.supplier_name && (
                                     <p className="text-xs text-gray-400">{rate.supplier_name}</p>
@@ -1764,7 +1767,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">€{attraction.eur_rate.toFixed(2)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(attraction.eur_rate, document?.currency || rateCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1777,7 +1780,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              €{(attraction.eur_rate * attraction.quantity).toFixed(2)}
+                              {formatMoney((attraction.eur_rate * attraction.quantity), document?.currency || rateCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1801,7 +1804,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            €{calculateAttractionsTotal().toFixed(2)}
+                            {formatMoney(calculateAttractionsTotal(), document?.currency || rateCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1888,9 +1891,9 @@ export default function EditSupplierDocumentPage() {
                                 </p>
                               </div>
                               <div className="text-right">
-                                <p className="text-sm font-semibold text-primary-600">€{fee.eur_rate.toFixed(2)}</p>
+                                <p className="text-sm font-semibold text-primary-600">{formatMoney(fee.eur_rate, document?.currency || rateCurrency)}</p>
                                 {fee.non_eur_rate > 0 && fee.non_eur_rate !== fee.eur_rate && (
-                                  <p className="text-xs text-gray-400">{t('nonEU')}: €{fee.non_eur_rate.toFixed(2)}</p>
+                                  <p className="text-xs text-gray-400">{t('nonEU')}: {formatMoney(fee.non_eur_rate, document?.currency || rateCurrency)}</p>
                                 )}
                               </div>
                             </button>

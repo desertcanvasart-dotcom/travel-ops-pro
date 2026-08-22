@@ -6,6 +6,7 @@ import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
+import { currencySymbol } from '@/lib/currency-totals'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -39,7 +40,7 @@ async function getB2BPricingRule(serviceName: string): Promise<any | null> {
 function applyB2BPricingRule(
   rule: any,
   numPax: number
-): { unitCost: number; lineTotal: number; pricingNote: string; quantityMode: string } {
+, rateSym: string): { unitCost: number; lineTotal: number; pricingNote: string; quantityMode: string } {
   const model = rule.pricing_model
 
   switch (model) {
@@ -62,7 +63,7 @@ function applyB2BPricingRule(
         return {
           unitCost: totalCost,
           lineTotal: totalCost,
-          pricingNote: `${unitsNeeded}x ${rule.tier2_label || rule.unit_type} @ €${largeRate} = €${totalCost}`,
+          pricingNote: `${unitsNeeded}x ${rule.tier2_label || rule.unit_type} @ ${rateSym}${largeRate} = ${rateSym}${totalCost}`,
           quantityMode: 'fixed'
         }
       }
@@ -70,7 +71,7 @@ function applyB2BPricingRule(
       return {
         unitCost: rate,
         lineTotal: rate,
-        pricingNote: `${label}: €${rate} flat`,
+        pricingNote: `${label}: ${rateSym}${rate} flat`,
         quantityMode: 'fixed'
       }
     }
@@ -96,7 +97,7 @@ function applyB2BPricingRule(
       return {
         unitCost: rate,
         lineTotal: rate * numPax,
-        pricingNote: `${label}: €${rate}/pax × ${numPax} = €${rate * numPax}`,
+        pricingNote: `${label}: ${rateSym}${rate}/pax × ${numPax} = ${rateSym}${rate * numPax}`,
         quantityMode: 'per_pax'
       }
     }
@@ -362,6 +363,7 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     // What the rate tables (and services' supplier_cost_original) are in.
     const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
+    const rateSym = currencySymbol(rateCurrency)
     const departureDate: string | null = itinerary.start_date
       ? String(itinerary.start_date).slice(0, 10)
       : null
@@ -429,7 +431,7 @@ export async function POST(request: NextRequest) {
         if (serviceType === 'entrance' || serviceType === 'activity') {
           // Check B2B pricing rules first (tiered pricing like felucca)
           const b2bRule = await getB2BPricingRule(serviceName)
-          const ruleResult = b2bRule ? applyB2BPricingRule(b2bRule, numPax) : null
+          const ruleResult = b2bRule ? applyB2BPricingRule(b2bRule, numPax, rateSym) : null
           if (ruleResult && usableRate(ruleResult.lineTotal) !== null) {
             const priceResult = ruleResult
             unitCost = priceResult.unitCost
@@ -444,7 +446,7 @@ export async function POST(request: NextRequest) {
               unitCost = fee.rate
               lineTotal = fee.rate * numPax
               quantityMode = 'per_pax'
-              pricingNote = `${fee.name}: €${fee.rate}/pax (${is_eur_passport ? 'EUR' : 'non-EUR'})`
+              pricingNote = `${fee.name}: ${rateSym}${fee.rate}/pax (${is_eur_passport ? 'EUR' : 'non-EUR'})`
               rateSource = 'entrance_fees'
             }
           }
@@ -460,14 +462,14 @@ export async function POST(request: NextRequest) {
             svc.service_code === 'CRUISE-TRANSPORT' ||
             /transfer|cruise transport|airport/i.test(serviceName)
           if (isTransferOrBundle) {
-            pricingNote = `Kept itinerary rate (transfer/bundled transport): €${Math.round(eurLineTotal * 100) / 100}`
+            pricingNote = `Kept itinerary rate (transfer/bundled transport): ${rateSym}${Math.round(eurLineTotal * 100) / 100}`
           } else {
             const vehicle = await selectVehicleFromB2CTable(numPax, tier)
             if (vehicle) {
               unitCost = vehicle.rate
               lineTotal = vehicle.rate
               quantityMode = 'fixed'
-              pricingNote = `${vehicle.vehicle}: €${vehicle.rate}/day`
+              pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate}/day`
               rateSource = 'vehicles'
             }
           }
@@ -480,7 +482,7 @@ export async function POST(request: NextRequest) {
             unitCost = guide.rate
             lineTotal = guide.rate
             quantityMode = 'fixed'
-            pricingNote = `${guide.name}: €${guide.rate}/day`
+            pricingNote = `${guide.name}: ${rateSym}${guide.rate}/day`
             rateSource = 'guides'
           }
         }
@@ -493,7 +495,7 @@ export async function POST(request: NextRequest) {
             unitCost = hotel.rate
             lineTotal = hotel.rate * numPax
             quantityMode = 'per_pax'
-            pricingNote = `${hotel.name}: €${hotel.rate}/pax (double occupancy)`
+            pricingNote = `${hotel.name}: ${rateSym}${hotel.rate}/pax (double occupancy)`
             rateSource = 'accommodation_rates'
           }
         }
@@ -505,7 +507,7 @@ export async function POST(request: NextRequest) {
             unitCost = mealRate
             lineTotal = unitCost * numPax
             quantityMode = 'per_pax'
-            pricingNote = `€${Math.round(unitCost * 100) / 100}/pax`
+            pricingNote = `${rateSym}${Math.round(unitCost * 100) / 100}/pax`
             rateSource = 'meal_rates'
           }
         }

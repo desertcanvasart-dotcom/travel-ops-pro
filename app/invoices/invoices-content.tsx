@@ -1085,7 +1085,7 @@ export default function InvoicesContent() {
                             />
                           </td>
                           <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                            €{item.amount.toFixed(2)}
+                            {formatMoney(item.amount, formData.currency)}
                           </td>
                           <td className="px-3 py-3">
                             {formData.line_items.length > 1 && (
@@ -1110,7 +1110,7 @@ export default function InvoicesContent() {
                 <div className="w-72 bg-gray-50 rounded-lg p-4 space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">{t('subtotal')}</span>
-                    <span className="font-medium text-gray-900">€{formData.subtotal.toFixed(2)}</span>
+                    <span className="font-medium text-gray-900">{formatMoney(formData.subtotal, formData.currency)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Tax Rate (%)</span>
@@ -1125,7 +1125,7 @@ export default function InvoicesContent() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Tax Amount</span>
-                    <span className="text-gray-900">€{formData.tax_amount.toFixed(2)}</span>
+                    <span className="text-gray-900">{formatMoney(formData.tax_amount, formData.currency)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">{t('discount')}</span>
@@ -1140,7 +1140,7 @@ export default function InvoicesContent() {
                   </div>
                   <div className="flex justify-between pt-3 border-t border-gray-200">
                     <span className="font-semibold text-gray-900">{t('total')}</span>
-                    <span className="font-bold text-xl text-gray-900">€{formData.total_amount.toFixed(2)}</span>
+                    <span className="font-bold text-xl text-gray-900">{formatMoney(formData.total_amount, formData.currency)}</span>
                   </div>
                 </div>
               </div>

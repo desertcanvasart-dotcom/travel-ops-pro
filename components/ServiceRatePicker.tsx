@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, MapPin, Loader2 } from 'lucide-react'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // TYPES
@@ -132,6 +133,7 @@ export default function ServiceRatePicker({
   paxCount = 2,
   onSelectRate
 }: ServiceRatePickerProps) {
+  const { rateSymbol } = useCurrency()
   const [rates, setRates] = useState<RateItem[]>([])
   const [loading, setLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
@@ -338,7 +340,7 @@ export default function ServiceRatePicker({
                   </div>
                 </div>
                 <span className="text-sm font-semibold text-[#647C47] whitespace-nowrap">
-                  €{rate.rate_eur.toFixed(2)}
+                  {rateSymbol}{rate.rate_eur.toFixed(2)}
                 </span>
               </div>
             </button>

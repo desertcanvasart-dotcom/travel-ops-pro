@@ -21,6 +21,8 @@ import {
   Percent
 } from 'lucide-react'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface MonthlyData {
   month: string
@@ -136,6 +138,9 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: string }> = {
 }
 
 export default function FinancialReportsPage() {
+  // Every figure on this page is stated in ONE currency: what the company bills in.
+  const { currency: reportCurrency } = useCurrency()
+  const fmt = (v: unknown) => formatMoney(Number(v) || 0, reportCurrency)
   const t = useTranslations('financialReports')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [monthly, setMonthly] = useState<MonthlyData[]>([])
@@ -152,7 +157,7 @@ export default function FinancialReportsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/financial-reports?year=${selectedYear}`)
+      const response = await fetch(`/api/financial-reports?year=${selectedYear}&currency=${encodeURIComponent(reportCurrency)}`)
       if (response.ok) {
         const result = await response.json()
         if (result.success) {
@@ -171,7 +176,7 @@ export default function FinancialReportsPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedYear])
+  }, [selectedYear, reportCurrency])
 
   useEffect(() => {
     fetchData()
@@ -272,9 +277,9 @@ export default function FinancialReportsPage() {
                   title: `Financial Report ${selectedYear}`,
                   subtitle: `Annual financial overview for ${selectedYear}`,
                   summary: [
-                    { label: 'Total Revenue', value: `€${summary?.total_revenue?.toLocaleString() ?? '0'}` },
-                    { label: 'Total Expenses', value: `€${summary?.total_expenses?.toLocaleString() ?? '0'}` },
-                    { label: 'Gross Profit', value: `€${summary?.gross_profit?.toLocaleString() ?? '0'}` },
+                    { label: 'Total Revenue', value: `${fmt(summary?.total_revenue ?? 0)}` },
+                    { label: 'Total Expenses', value: `${fmt(summary?.total_expenses ?? 0)}` },
+                    { label: 'Gross Profit', value: `${fmt(summary?.gross_profit ?? 0)}` },
                     { label: 'Avg Margin', value: `${avgMargin.toFixed(1)}%` },
                   ],
                   data: data as Record<string, unknown>[],
@@ -324,7 +329,7 @@ export default function FinancialReportsPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
               </div>
               <p className="text-xs text-gray-500 mb-1">{t('totalRevenue')}</p>
-              <p className="text-2xl font-semibold text-blue-600">€{summary.total_revenue.toLocaleString()}</p>
+              <p className="text-2xl font-semibold text-blue-600">{fmt(summary.total_revenue)}</p>
               {yearOverYear && (
                 <p className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(yearOverYear.revenue_change_percent)}`}>
                   {getChangeIcon(yearOverYear.revenue_change_percent)}
@@ -339,7 +344,7 @@ export default function FinancialReportsPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
               </div>
               <p className="text-xs text-gray-500 mb-1">{t('totalExpenses')}</p>
-              <p className="text-2xl font-semibold text-red-600">€{summary.total_expenses.toLocaleString()}</p>
+              <p className="text-2xl font-semibold text-red-600">{fmt(summary.total_expenses)}</p>
               {yearOverYear && (
                 <p className={`text-xs mt-1 flex items-center gap-1 ${getChangeColor(-yearOverYear.expense_change_percent)}`}>
                   {getChangeIcon(yearOverYear.expense_change_percent)}
@@ -355,7 +360,7 @@ export default function FinancialReportsPage() {
               </div>
               <p className="text-xs text-gray-500 mb-1">{t('grossProfit')}</p>
               <p className={`text-2xl font-semibold ${summary.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                €{summary.gross_profit.toLocaleString()}
+                {fmt(summary.gross_profit)}
               </p>
               <p className="text-xs text-gray-400 mt-1">{summary.profit_margin.toFixed(1)}% {t('margin')}</p>
             </div>
@@ -366,7 +371,7 @@ export default function FinancialReportsPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
               </div>
               <p className="text-xs text-gray-500 mb-1">{t('collected')}</p>
-              <p className="text-2xl font-semibold text-emerald-600">€{summary.total_collected.toLocaleString()}</p>
+              <p className="text-2xl font-semibold text-emerald-600">{fmt(summary.total_collected)}</p>
               <p className="text-xs text-gray-400 mt-1">{summary.collection_rate.toFixed(1)}% {t('collectedRate')}</p>
             </div>
 
@@ -377,7 +382,7 @@ export default function FinancialReportsPage() {
               </div>
               <p className="text-xs text-gray-500 mb-1">{t('trips')}</p>
               <p className="text-2xl font-semibold text-purple-600">{summary.trip_count}</p>
-              <p className="text-xs text-gray-400 mt-1">€{summary.average_trip_value.toLocaleString()} {t('avg')}</p>
+              <p className="text-xs text-gray-400 mt-1">{fmt(summary.average_trip_value)} {t('avg')}</p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -410,16 +415,16 @@ export default function FinancialReportsPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">{t('revenue')}</span>
-                      <span className="font-medium text-blue-600">€{q.revenue.toLocaleString()}</span>
+                      <span className="font-medium text-blue-600">{fmt(q.revenue)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">{t('expenses')}</span>
-                      <span className="font-medium text-red-600">€{q.expenses.toLocaleString()}</span>
+                      <span className="font-medium text-red-600">{fmt(q.expenses)}</span>
                     </div>
                     <div className="flex justify-between text-sm border-t border-gray-200 pt-2">
                       <span className="text-gray-500">{t('profit')}</span>
                       <span className={`font-semibold ${q.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        €{q.net_profit.toLocaleString()}
+                        {fmt(q.net_profit)}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -456,12 +461,12 @@ export default function FinancialReportsPage() {
                     <div 
                       className="flex-1 bg-blue-500 rounded-t transition-all"
                       style={{ height: `${(m.revenue / maxMonthlyRevenue) * 100}%` }}
-                      title={`Revenue: €${m.revenue.toLocaleString()}`}
+                      title={`Revenue: ${fmt(m.revenue)}`}
                     />
                     <div 
                       className="flex-1 bg-red-400 rounded-t transition-all"
                       style={{ height: `${(m.expenses / maxMonthlyRevenue) * 100}%` }}
-                      title={`Expenses: €${m.expenses.toLocaleString()}`}
+                      title={`Expenses: ${fmt(m.expenses)}`}
                     />
                   </div>
                   <span className="text-xs text-gray-500">{m.month}</span>
@@ -502,11 +507,11 @@ export default function FinancialReportsPage() {
                 {monthly.map(m => (
                   <tr key={m.month} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{m.month} {m.year}</td>
-                    <td className="px-4 py-3 text-sm text-right text-blue-600">€{m.invoiced.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-sm text-right text-emerald-600">€{m.collected.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-sm text-right text-red-600">€{m.expenses.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-right text-blue-600">{fmt(m.invoiced)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-emerald-600">{fmt(m.collected)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600">{fmt(m.expenses)}</td>
                     <td className={`px-4 py-3 text-sm text-right font-semibold ${m.net_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      €{m.net_profit.toLocaleString()}
+                      {fmt(m.net_profit)}
                     </td>
                     <td className="px-4 py-3 text-sm text-center text-gray-600">{m.trip_count}</td>
                     <td className="px-4 py-3 text-sm text-center text-gray-600">{m.invoice_count}</td>
@@ -515,16 +520,16 @@ export default function FinancialReportsPage() {
                 <tr className="bg-gray-50 font-semibold">
                   <td className="px-4 py-3 text-sm text-gray-900">{t('total')}</td>
                   <td className="px-4 py-3 text-sm text-right text-blue-600">
-                    €{monthly.reduce((sum, m) => sum + m.invoiced, 0).toLocaleString()}
+                    {fmt(monthly.reduce((sum, m) => sum + m.invoiced, 0))}
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-emerald-600">
-                    €{monthly.reduce((sum, m) => sum + m.collected, 0).toLocaleString()}
+                    {fmt(monthly.reduce((sum, m) => sum + m.collected, 0))}
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-red-600">
-                    €{monthly.reduce((sum, m) => sum + m.expenses, 0).toLocaleString()}
+                    {fmt(monthly.reduce((sum, m) => sum + m.expenses, 0))}
                   </td>
                   <td className={`px-4 py-3 text-sm text-right ${summary && summary.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    €{monthly.reduce((sum, m) => sum + m.net_profit, 0).toLocaleString()}
+                    {fmt(monthly.reduce((sum, m) => sum + m.net_profit, 0))}
                   </td>
                   <td className="px-4 py-3 text-sm text-center text-gray-600">
                     {monthly.reduce((sum, m) => sum + m.trip_count, 0)}
@@ -546,30 +551,30 @@ export default function FinancialReportsPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('cashInflows')}</p>
-              <p className="text-xl font-semibold text-green-600">€{cashFlow.inflows.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-green-600">{fmt(cashFlow.inflows)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('cashOutflows')}</p>
-              <p className="text-xl font-semibold text-red-600">€{cashFlow.outflows.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-red-600">{fmt(cashFlow.outflows)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('netCashFlow')}</p>
               <p className={`text-xl font-semibold ${cashFlow.net_cash_flow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                €{cashFlow.net_cash_flow.toLocaleString()}
+                {fmt(cashFlow.net_cash_flow)}
               </p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('pendingReceivables')}</p>
-              <p className="text-xl font-semibold text-blue-600">€{cashFlow.pending_receivables.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-blue-600">{fmt(cashFlow.pending_receivables)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('pendingPayables')}</p>
-              <p className="text-xl font-semibold text-orange-600">€{cashFlow.pending_payables.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-orange-600">{fmt(cashFlow.pending_payables)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('projectedCash')}</p>
               <p className={`text-xl font-semibold ${cashFlow.projected_cash >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
-                €{cashFlow.projected_cash.toLocaleString()}
+                {fmt(cashFlow.projected_cash)}
               </p>
             </div>
           </div>
@@ -599,10 +604,10 @@ export default function FinancialReportsPage() {
                 {cashFlow.monthly_cash_flow.map(m => (
                   <tr key={m.month} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{m.month}</td>
-                    <td className="px-4 py-3 text-sm text-right text-green-600">€{m.inflow.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-sm text-right text-red-600">€{m.outflow.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-right text-green-600">{fmt(m.inflow)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-red-600">{fmt(m.outflow)}</td>
                     <td className={`px-4 py-3 text-sm text-right font-semibold ${m.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      €{m.net.toLocaleString()}
+                      {fmt(m.net)}
                     </td>
                   </tr>
                 ))}
@@ -619,19 +624,19 @@ export default function FinancialReportsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('grossRevenue')}</p>
-              <p className="text-xl font-semibold text-blue-600">€{taxSummary.gross_revenue.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-blue-600">{fmt(taxSummary.gross_revenue)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('totalExpenses')}</p>
-              <p className="text-xl font-semibold text-red-600">€{taxSummary.total_expenses.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-red-600">{fmt(taxSummary.total_expenses)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('deductibleExpenses')}</p>
-              <p className="text-xl font-semibold text-green-600">€{taxSummary.deductible_expenses.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-green-600">{fmt(taxSummary.deductible_expenses)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('taxableIncome')}</p>
-              <p className="text-xl font-semibold text-purple-600">€{taxSummary.taxable_income.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-purple-600">{fmt(taxSummary.taxable_income)}</p>
             </div>
           </div>
 
@@ -641,18 +646,18 @@ export default function FinancialReportsPage() {
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 bg-blue-50 rounded-lg">
                 <p className="text-xs text-blue-600 mb-1">{t('vatCollected')}</p>
-                <p className="text-lg font-semibold text-blue-700">€{taxSummary.estimated_vat_collected.toLocaleString()}</p>
+                <p className="text-lg font-semibold text-blue-700">{fmt(taxSummary.estimated_vat_collected)}</p>
               </div>
               <div className="p-4 bg-red-50 rounded-lg">
                 <p className="text-xs text-red-600 mb-1">{t('vatPaid')}</p>
-                <p className="text-lg font-semibold text-red-700">€{taxSummary.estimated_vat_paid.toLocaleString()}</p>
+                <p className="text-lg font-semibold text-red-700">{fmt(taxSummary.estimated_vat_paid)}</p>
               </div>
               <div className={`p-4 rounded-lg ${taxSummary.net_vat >= 0 ? 'bg-green-50' : 'bg-orange-50'}`}>
                 <p className={`text-xs mb-1 ${taxSummary.net_vat >= 0 ? 'text-green-600' : 'text-orange-600'}`}>
                   {t('netVat')} {taxSummary.net_vat >= 0 ? t('payable') : t('receivable')}
                 </p>
                 <p className={`text-lg font-semibold ${taxSummary.net_vat >= 0 ? 'text-green-700' : 'text-orange-700'}`}>
-                  €{Math.abs(taxSummary.net_vat).toLocaleString()}
+                  {fmt(Math.abs(taxSummary.net_vat))}
                 </p>
               </div>
             </div>
@@ -682,7 +687,7 @@ export default function FinancialReportsPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-gray-500">{cat.percentage.toFixed(1)}%</span>
-                        <span className="font-medium text-gray-900">€{cat.amount.toLocaleString()}</span>
+                        <span className="font-medium text-gray-900">{fmt(cat.amount)}</span>
                       </div>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -706,15 +711,15 @@ export default function FinancialReportsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('totalCommissions')}</p>
-              <p className="text-xl font-semibold text-blue-600">€{commissionSummary.total_commissions.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-blue-600">{fmt(commissionSummary.total_commissions)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('paid')}</p>
-              <p className="text-xl font-semibold text-green-600">€{commissionSummary.total_paid.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-green-600">{fmt(commissionSummary.total_paid)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('pending')}</p>
-              <p className="text-xl font-semibold text-orange-600">€{commissionSummary.total_pending.toLocaleString()}</p>
+              <p className="text-xl font-semibold text-orange-600">{fmt(commissionSummary.total_pending)}</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <p className="text-xs text-gray-500 mb-1">{t('recipients')}</p>
@@ -732,7 +737,7 @@ export default function FinancialReportsPage() {
                   <div key={type.type} className="p-4 bg-gray-50 rounded-lg text-center">
                     <span className="text-2xl">{config.icon}</span>
                     <p className="text-xs text-gray-500 mt-2">{config.label}</p>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">€{type.amount.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-gray-900 mt-1">{fmt(type.amount)}</p>
                     <p className="text-xs text-gray-400">{type.count} {t('payments')}</p>
                   </div>
                 )
@@ -790,13 +795,13 @@ export default function FinancialReportsPage() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">{config.label}</td>
                         <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
-                          €{recipient.total_earned.toLocaleString()}
+                          {fmt(recipient.total_earned)}
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-green-600">
-                          €{recipient.total_paid.toLocaleString()}
+                          {fmt(recipient.total_paid)}
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-orange-600">
-                          €{recipient.total_pending.toLocaleString()}
+                          {fmt(recipient.total_pending)}
                         </td>
                         <td className="px-4 py-3 text-sm text-center text-gray-600">{recipient.trip_count}</td>
                       </tr>

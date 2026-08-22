@@ -49,6 +49,7 @@ interface ClientReceivable {
 }
 
 interface Invoice {
+  currency: string
   id: string
   invoice_number: string
   client_id: string
@@ -156,10 +157,10 @@ export default function AccountsReceivablePage() {
     const body = encodeURIComponent(
       `Dear ${invoice.client_name},\n\n` +
       `This is a friendly reminder that invoice ${invoice.invoice_number} ` +
-      `for €${Number(invoice.balance_due).toFixed(2)} is ${invoice.days_past_due > 0 ? `${invoice.days_past_due} days overdue` : 'due soon'}.\n\n` +
-      `Original amount: €${Number(invoice.total_amount).toFixed(2)}\n` +
-      `Amount paid: €${Number(invoice.amount_paid).toFixed(2)}\n` +
-      `Balance due: €${Number(invoice.balance_due).toFixed(2)}\n` +
+      `for ${formatMoney(Number(invoice.balance_due), invoice.currency)} is ${invoice.days_past_due > 0 ? `${invoice.days_past_due} days overdue` : 'due soon'}.\n\n` +
+      `Original amount: ${formatMoney(Number(invoice.total_amount), invoice.currency)}\n` +
+      `Amount paid: ${formatMoney(Number(invoice.amount_paid), invoice.currency)}\n` +
+      `Balance due: ${formatMoney(Number(invoice.balance_due), invoice.currency)}\n` +
       `Due date: ${new Date(invoice.due_date).toLocaleDateString()}\n\n` +
       `Please arrange payment at your earliest convenience.\n\n` +
       `Best regards,\nTravel2Egypt`
@@ -540,7 +541,7 @@ export default function AccountsReceivablePage() {
                           </div>
                           <div className="flex items-center gap-3">
                             <div className="text-right">
-                              <p className="text-sm font-semibold text-gray-900">€{Number(invoice.balance_due).toLocaleString()}</p>
+                              <p className="text-sm font-semibold text-gray-900">{formatMoney(Number(invoice.balance_due), invoice.currency)}</p>
                               <span className={`text-xs px-2 py-0.5 rounded ${getAgingColor(invoice.aging_bucket)}`}>
                                 {getAgingLabel(invoice.aging_bucket)}
                               </span>
@@ -630,13 +631,13 @@ export default function AccountsReceivablePage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-900">€{Number(invoice.total_amount).toLocaleString()}</span>
+                      <span className="text-sm text-gray-900">{formatMoney(Number(invoice.total_amount), invoice.currency)}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-green-600">€{Number(invoice.amount_paid).toLocaleString()}</span>
+                      <span className="text-sm text-green-600">{formatMoney(Number(invoice.amount_paid), invoice.currency)}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-semibold text-gray-900">€{Number(invoice.balance_due).toLocaleString()}</span>
+                      <span className="text-sm font-semibold text-gray-900">{formatMoney(Number(invoice.balance_due), invoice.currency)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getAgingColor(invoice.aging_bucket)}`}>

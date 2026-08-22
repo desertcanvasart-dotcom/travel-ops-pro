@@ -7,6 +7,7 @@ import {
   CheckCircle, Clock, AlertCircle, Users
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { formatMoney } from '@/lib/currency-totals'
 
 const supabase = createClient()
 
@@ -126,7 +127,7 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
           type: 'booking',
           date: booking.created_at,
           title: t('eventTypes.booking', { name: booking.trip_name }),
-          description: `${booking.itinerary_code} • €${booking.total_cost} • ${booking.status}`,
+          description: `${booking.itinerary_code} • ${formatMoney(Number(booking.total_cost) || 0, booking.currency || 'EUR')} • ${booking.status}`,
           icon: MapPin,
           color: statusColor[booking.status] || 'gray',
           details: booking

@@ -46,6 +46,7 @@ import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import ServiceRatePicker from '@/components/ServiceRatePicker'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -252,6 +253,7 @@ interface Programme {
 }
 
 export default function ItineraryEditorPage() {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
   const dialog = useConfirmDialog()
@@ -2322,7 +2324,7 @@ export default function ItineraryEditorPage() {
                         <div className="text-xs text-gray-500 mt-0.5">📍 {attr.city}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm font-semibold text-[#647C47]">€{attr.base_rate_eur} / €{attr.base_rate_non_eur}</div>
+                        <div className="text-sm font-semibold text-[#647C47]">{rateSymbol}{attr.base_rate_eur} / {rateSymbol}{attr.base_rate_non_eur}</div>
                         <div className="text-[11px] text-gray-500">{t('eurNonEur')}</div>
                       </div>
                     </div>

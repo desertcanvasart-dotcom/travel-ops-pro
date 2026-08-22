@@ -55,6 +55,8 @@ import {
   PointerSensor,
   closestCenter
 } from '@dnd-kit/core'
+import { addToTotals, emptyTotals, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface Booking {
   id: string
@@ -64,6 +66,7 @@ interface Booking {
   end_date: string
   num_travelers: number
   payment_status: string
+  currency?: string | null
   total_cost: number
   destinations: string
   assigned_guide_id?: string | null
@@ -97,7 +100,8 @@ interface Filters {
 
 interface Stats {
   totalBookings: number
-  totalRevenue: number
+  // Per currency — trips billed in yen and euro are two figures, not one sum.
+  totalRevenue: CurrencyTotals
   totalTravelers: number
   statusBreakdown: { [key: string]: number }
   upcomingBookings: number
@@ -118,6 +122,7 @@ interface ConflictDetail {
 }
 
 export default function CalendarPage() {
+  const { currency } = useCurrency()
   const t = useTranslations('calendar')
   const dialog = useConfirmDialog()
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -138,7 +143,7 @@ export default function CalendarPage() {
   const [showStats, setShowStats] = useState(true)
   const [stats, setStats] = useState<Stats>({
     totalBookings: 0,
-    totalRevenue: 0,
+    totalRevenue: emptyTotals(),
     totalTravelers: 0,
     statusBreakdown: {},
     upcomingBookings: 0,
@@ -331,7 +336,8 @@ export default function CalendarPage() {
 
   const calculateStats = () => {
     const totalBookings = filteredBookings.length
-    const totalRevenue = filteredBookings.reduce((sum, b) => sum + (b.total_cost || 0), 0)
+    const totalRevenue = emptyTotals()
+    for (const b of filteredBookings) addToTotals(totalRevenue, b.total_cost || 0, b.currency || 'EUR')
     const totalTravelers = filteredBookings.reduce((sum, b) => sum + (b.num_travelers || 0), 0)
     
     const statusBreakdown: { [key: string]: number } = {}
@@ -612,7 +618,7 @@ export default function CalendarPage() {
             <StatCard
               icon={<DollarSign className="w-4 h-4" />}
               label={t('stats.totalRevenue')}
-              value={`€${stats.totalRevenue.toLocaleString()}`}
+              value={formatTotals(stats.totalRevenue, { defaultCurrency: currency })}
               color="green"
             />
             <StatCard
