@@ -1359,6 +1359,47 @@ npm install
 
 ## 19. Changelog
 
+### 2026-08-22 (session 4) — No euro assumption left anywhere
+
+Two PRs (#152, #153), merged, deployed, proven on production. No migration.
+
+- ✅ **The hotel and cruise rate forms name their currency** (#152). After the USD cut-over
+  the operator opened the hotel form and saw "EU passport holders" with no currency
+  anywhere — which reads as "EUR". Season blocks now read "Low / High / Peak Season Rates
+  (USD)"; the price tiers are worded as what they are — "Travellers holding an EU
+  passport" / "Travellers without an EU passport (Japanese and all others)" — and the
+  two single-column list headers that shared the tier label read "Rate (USD)". EN + JA.
+- ✅ **The billing side** (#153): ~130 literal `€` across reports, payables, receivables,
+  payments, invoices, analytics, calendar, the client timeline, quote PDFs, B2B pricing
+  notes, WhatsApp messages, vouchers and the pricing-grid AI catalogue. Each amount now
+  carries the right currency by one of three rules: **its record's own** (invoice,
+  payment, expense, trip, quote, supplier document, voucher → `formatMoney(amount,
+  record.currency)`); **the company's billing currency** for reporting figures (financial
+  reports — the API already converted into one reporting currency but the page
+  defaulted it to EUR, it now asks for the org's; analytics; calendar revenue); **the
+  org's rate currency** for rate amounts quoted in text (B2B pricing notes, "from $X"
+  service summaries, tour export PDF, the catalogue the pricing-grid AI reads). Tiles
+  that summed across currencies (accounts payable API + page, calendar revenue) now keep
+  per-currency totals, as receivables and payments already did; the AP aging bar shows
+  shares by magnitude, never a summed amount.
+- ✅ Found in passing: the payments page's CSV export called `toLocaleString()` on
+  per-currency totals and would have written "[object Object]". Fixed.
+- ✅ **Guard widened to the whole app** (`__tests__/lib/no-hardcoded-rate-currency.test.ts`):
+  no `€` in front of an amount and no conversion from a literal `'EUR'` anywhere in
+  `app/`, `components/`, `lib/templates`, the WhatsApp sender and the template
+  placeholders. Exempt on purpose: currency pickers, symbol tables, the supplier-invoice
+  parser (which legitimately recognises euro symbols), engine debug logs.
+
+**Lessons**
+- "EU" reads as "EUR" to this operator. Put the currency on every block of amounts and
+  spell passport tiers out as travellers, never as a two-letter code.
+- A converted figure renders in the **user's** display currency; when proving "no €",
+  set the user's preference as well as the org's setting, and match CSS-uppercased
+  headers case-insensitively.
+- Sweep scripts: character classes must admit digits (`days60`) and dotted paths; never
+  insert an import inside a multi-line `import {` block or a hook inside `function X({`
+  prop destructuring.
+
 ### 2026-08-22 (session 3) — The rate currency is a setting; A.T.S's rates are now USD
 
 Three PRs (#148, #149, #150), all merged, deployed and proven on production; one
@@ -1665,7 +1706,7 @@ Postgres on the build machine.
 **Primary Developer:** Islam Mohamed  
 **Project Started:** October 2025  
 **Version:** 1.0.0  
-**Last Updated:** August 22, 2026 (session 3)
+**Last Updated:** August 22, 2026 (session 4)
 
 ---
 
