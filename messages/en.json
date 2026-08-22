@@ -4715,7 +4715,7 @@
       "showing": "Showing",
       "of": "of",
       "rateRequired": "Enter a rate between 0 and 100",
-      "enginePayNote": "Note: the commission generator currently computes every commission as a percentage of the supplier's cost. \"We pay\" from profit is recorded here and will be honoured when the generator learns the second direction."
+      "enginePayNote": "How it is computed when commissions are generated for a trip: \"We receive\" = rate × the supplier's price on the service. \"We pay\" = rate × our profit on the service (client price − supplier cost); a service with no profit pays no commission."
     }
   },
   "profitLoss": {
