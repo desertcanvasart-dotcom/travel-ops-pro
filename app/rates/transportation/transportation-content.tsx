@@ -927,7 +927,7 @@ export default function TransportationContent() {
                           <tr className="text-[10px] uppercase tracking-wider text-gray-400">
                             <th className="text-left py-1 font-medium">{t('vehicle')}</th>
                             <th className="text-center py-1 font-medium">{t('pax')}</th>
-                            <th className="text-right py-1 font-medium">{t('eurRate')}</th>
+                            <th className="text-right py-1 font-medium">{t('rateHeader', { currency: rateCurrency })}</th>
                           </tr>
                         </thead>
                         <tbody>
