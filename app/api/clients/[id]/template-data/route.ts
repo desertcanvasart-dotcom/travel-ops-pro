@@ -95,6 +95,8 @@ export async function GET(
       latestItinerary,
       allItineraries: allItineraries || [],
       placeholderData,
+      // The language this client is written to in — the inbox picks templates in it.
+      clientLanguage: (clientWithName as { preferred_language?: string | null })?.preferred_language || null,
     })
 
   } catch (error: any) {
