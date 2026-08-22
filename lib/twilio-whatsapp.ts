@@ -7,6 +7,7 @@
 // ============================================
 
 import twilio from 'twilio'
+import { formatMoney } from '@/lib/currency-totals'
 
 // Types
 export interface WhatsAppMessage {
@@ -16,6 +17,8 @@ export interface WhatsAppMessage {
 }
 
 export interface QuoteMessage {
+  /** The trip's currency — the amount is stated in it. */
+  currency?: string
   clientName: string
   clientPhone: string
   itineraryId: string
@@ -87,8 +90,8 @@ export function formatWhatsAppNumber(phone: string): string {
 /**
  * Format currency for display
  */
-function formatCurrency(amount: number): string {
-  return `€${amount.toFixed(2)}`
+function formatCurrency(amount: number, currency: string = 'EUR'): string {
+  return formatMoney(amount, currency)
 }
 
 /**
@@ -179,6 +182,7 @@ export async function sendQuoteViaWhatsApp({
   adults,
   children,
   totalCost,
+  currency = 'EUR',
   pdfUrl
 }: QuoteMessage): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
@@ -199,7 +203,7 @@ export async function sendQuoteViaWhatsApp({
       message += `, ${children} child${children > 1 ? 'ren' : ''}`
     }
     
-    message += `\n💰 *Total Cost:* ${formatCurrency(totalCost)}\n\n`
+    message += `\n💰 *Total Cost:* ${formatCurrency(totalCost, currency)}\n\n`
     
     message += `✨ What's Included:\n`
     message += `✅ Professional tour guide\n`
@@ -402,7 +406,8 @@ export async function sendPaymentReminder(
   clientPhone: string,
   tourName: string,
   amountDue: number,
-  dueDate: string
+  dueDate: string,
+  currency: string = 'EUR'
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
@@ -411,7 +416,7 @@ export async function sendPaymentReminder(
       `Dear ${clientName},\n\n` +
       `This is a friendly reminder about your pending payment.\n\n` +
       `📋 *Tour:* ${tourName}\n` +
-      `💰 *Amount Due:* ${formatCurrency(amountDue)}\n` +
+      `💰 *Amount Due:* ${formatCurrency(amountDue, currency)}\n` +
       `📅 *Due Date:* ${formatDate(dueDate)}\n\n` +
       `To secure your booking, please complete your payment at your earliest convenience.\n\n` +
       `📧 Payment details: ${process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'}\n\n` +

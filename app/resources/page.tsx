@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // INTERFACES
@@ -122,6 +123,7 @@ type TabType = 'guides' | 'vehicles' | 'hotels' | 'restaurants' | 'airportStaff'
 // ============================================
 
 export default function ResourcesPage() {
+  const { rateSymbol } = useCurrency()
   const dialog = useConfirmDialog()
   const [resources, setResources] = useState<ResourcesData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -716,7 +718,7 @@ export default function ResourcesPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-semibold text-gray-900">
-                          €{guide.daily_rate || 0}
+                          {rateSymbol}{guide.daily_rate || 0}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">

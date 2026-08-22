@@ -6,11 +6,13 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { ArrowLeft, Save } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface Itinerary {
   id: string
   itinerary_code: string
   client_name: string
+  currency?: string | null
   total_cost: number
   total_paid: number
   payment_status: string
@@ -173,7 +175,7 @@ export default function RecordPaymentPage() {
               <option value="">{t('chooseItinerary')}</option>
               {itineraries.map((itinerary) => (
                 <option key={itinerary.id} value={itinerary.id}>
-                  {itinerary.itinerary_code} - {itinerary.client_name} (€{itinerary.total_cost.toFixed(2)})
+                  {itinerary.itinerary_code} - {itinerary.client_name} ({formatMoney(itinerary.total_cost, itinerary.currency || formData.currency || 'EUR')})
                 </option>
               ))}
             </select>
@@ -186,15 +188,15 @@ export default function RecordPaymentPage() {
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <span className="text-gray-600">{t('totalCost')}:</span>
-                  <p className="font-bold text-gray-900">€{selectedItinerary.total_cost.toFixed(2)}</p>
+                  <p className="font-bold text-gray-900">{formatMoney(selectedItinerary.total_cost, selectedItinerary.currency || formData.currency || 'EUR')}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">{t('alreadyPaid')}:</span>
-                  <p className="font-bold text-success">€{(selectedItinerary.total_paid || 0).toFixed(2)}</p>
+                  <p className="font-bold text-success">{formatMoney(selectedItinerary.total_paid || 0, selectedItinerary.currency || formData.currency || 'EUR')}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">{t('balanceDue')}:</span>
-                  <p className="font-bold text-orange-600">€{calculateBalance().toFixed(2)}</p>
+                  <p className="font-bold text-orange-600">{formatMoney(calculateBalance(), selectedItinerary?.currency || formData.currency || 'EUR')}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">{t('paymentStatus')}:</span>

@@ -5,6 +5,7 @@ import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTi
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -135,7 +136,7 @@ async function getTransportPackage(packageType: string, originCity: string, dest
 function applyB2BPricingRule(
   rule: any, 
   numPax: number
-): { unitCost: number; lineTotal: number; pricingNote: string; quantityMode: string } {
+, rateSym: string): { unitCost: number; lineTotal: number; pricingNote: string; quantityMode: string } {
   const model = rule.pricing_model
 
   switch (model) {
@@ -158,7 +159,7 @@ function applyB2BPricingRule(
         return {
           unitCost: totalCost,
           lineTotal: totalCost,
-          pricingNote: `${unitsNeeded}x ${rule.tier2_label || rule.unit_type} @ €${largeRate} = €${totalCost}`,
+          pricingNote: `${unitsNeeded}x ${rule.tier2_label || rule.unit_type} @ ${rateSym}${largeRate} = ${rateSym}${totalCost}`,
           quantityMode: 'fixed'
         }
       }
@@ -166,7 +167,7 @@ function applyB2BPricingRule(
       return {
         unitCost: rate,
         lineTotal: rate,
-        pricingNote: `${label}: €${rate} flat`,
+        pricingNote: `${label}: ${rateSym}${rate} flat`,
         quantityMode: 'fixed'
       }
     }
@@ -192,7 +193,7 @@ function applyB2BPricingRule(
       return {
         unitCost: rate,
         lineTotal: rate * numPax,
-        pricingNote: `${label}: €${rate}/pax × ${numPax} = €${rate * numPax}`,
+        pricingNote: `${label}: ${rateSym}${rate}/pax × ${numPax} = ${rateSym}${rate * numPax}`,
         quantityMode: 'per_pax'
       }
     }
@@ -383,6 +384,7 @@ export async function POST(request: NextRequest) {
     // What the org's rate tables are in — the engine labels its result with it,
     // and every currency this route reports is that one.
     const rateCurrency = await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId())
+    const rateSym = currencySymbol(rateCurrency)
     const {
       variation_id,
       // Alternative to variation_id: price a template directly. The engine
@@ -720,7 +722,7 @@ export async function POST(request: NextRequest) {
         const b2bRule = await getB2BPricingRule(service.service_name)
         
         if (b2bRule) {
-          const priceResult = applyB2BPricingRule(b2bRule, num_pax)
+          const priceResult = applyB2BPricingRule(b2bRule, num_pax, rateSym)
           unitCost = priceResult.unitCost
           lineTotal = priceResult.lineTotal
           pricingNote = priceResult.pricingNote
@@ -742,7 +744,7 @@ export async function POST(request: NextRequest) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
-            pricingNote = `${vehicle.vehicle}: €${vehicle.rate} (${num_pax} pax)`
+            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${num_pax} pax)`
             rateSource = 'b2b_package'
             console.log(`✅ B2B Package applied: ${service.service_name} -> ${pricingNote}`)
           }
@@ -755,7 +757,7 @@ export async function POST(request: NextRequest) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
-            pricingNote = `${vehicle.vehicle}: €${vehicle.rate} (${num_pax} pax)`
+            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${num_pax} pax)`
             rateSource = 'b2b_package'
           }
         }
@@ -774,9 +776,9 @@ export async function POST(request: NextRequest) {
               unitCost = vehicle.rate
               lineTotal = vehicle.rate
               effectiveQuantityMode = 'fixed'
-              pricingNote = `${vehicle.vehicle}: €${vehicle.rate}/day`
+              pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate}/day`
               rateSource = 'vehicles'
-              console.log(`✅ Vehicle from B2C: ${vehicle.vehicle} -> €${vehicle.rate}`)
+              console.log(`✅ Vehicle from B2C: ${vehicle.vehicle} -> ${rateSym}${vehicle.rate}`)
             }
             break
           }
@@ -787,9 +789,9 @@ export async function POST(request: NextRequest) {
               unitCost = guide.rate
               lineTotal = guide.rate
               effectiveQuantityMode = 'fixed'
-              pricingNote = `${guide.name}: €${guide.rate}/day`
+              pricingNote = `${guide.name}: ${rateSym}${guide.rate}/day`
               rateSource = 'guides'
-              console.log(`✅ Guide from B2C: ${guide.name} -> €${guide.rate}`)
+              console.log(`✅ Guide from B2C: ${guide.name} -> ${rateSym}${guide.rate}`)
             }
             break
           }
@@ -802,9 +804,9 @@ export async function POST(request: NextRequest) {
                 unitCost = fee.rate
                 lineTotal = fee.rate * num_pax
                 effectiveQuantityMode = 'per_pax'
-                pricingNote = `${fee.name}: €${fee.rate}/pax (${is_eur_passport ? 'EUR' : 'non-EUR'})`
+                pricingNote = `${fee.name}: ${rateSym}${fee.rate}/pax (${is_eur_passport ? 'EUR' : 'non-EUR'})`
                 rateSource = 'entrance_fees'
-                console.log(`✅ Entrance from B2C: ${fee.name} -> €${fee.rate}/pax`)
+                console.log(`✅ Entrance from B2C: ${fee.name} -> ${rateSym}${fee.rate}/pax`)
               }
             }
             break
@@ -817,9 +819,9 @@ export async function POST(request: NextRequest) {
               unitCost = hotel.rate
               lineTotal = hotel.rate * num_pax
               effectiveQuantityMode = 'per_pax'
-              pricingNote = `${hotel.name}: €${hotel.rate}/pax (double occupancy)`
+              pricingNote = `${hotel.name}: ${rateSym}${hotel.rate}/pax (double occupancy)`
               rateSource = 'accommodation_rates'
-              console.log(`✅ Hotel: ${hotel.name} -> €${hotel.rate}/pax (${effectiveTier})`)
+              console.log(`✅ Hotel: ${hotel.name} -> ${rateSym}${hotel.rate}/pax (${effectiveTier})`)
             }
             break
           }
@@ -847,7 +849,7 @@ export async function POST(request: NextRequest) {
                 lineTotal = unitCost * num_pax
                 effectiveQuantityMode = 'per_pax'
                 rateSource = 'nile_cruises'
-                console.log(`✅ Cruise from B2C: ${cruise.ship_name} -> €${unitCost}/pax`)
+                console.log(`✅ Cruise from B2C: ${cruise.ship_name} -> ${rateSym}${unitCost}/pax`)
               }
             }
             break
@@ -869,9 +871,9 @@ export async function POST(request: NextRequest) {
               }
               lineTotal = unitCost * num_pax
               effectiveQuantityMode = 'per_pax'
-              pricingNote = `€${unitCost}/pax`
+              pricingNote = `${rateSym}${unitCost}/pax`
               rateSource = 'meal_rates'
-              console.log(`✅ Meal from B2C: ${service.service_name} -> €${unitCost}/pax`)
+              console.log(`✅ Meal from B2C: ${service.service_name} -> ${rateSym}${unitCost}/pax`)
             }
             break
           }
@@ -884,7 +886,7 @@ export async function POST(request: NextRequest) {
       if (rateSource === 'manual' && service.cost_per_unit) {
         unitCost = service.cost_per_unit
         rateSource = 'stored'
-        console.log(`⚠️ Fallback to stored: ${service.service_name} -> €${unitCost}`)
+        console.log(`⚠️ Fallback to stored: ${service.service_name} -> ${rateSym}${unitCost}`)
       }
 
       // ============================================

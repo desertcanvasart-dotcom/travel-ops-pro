@@ -4,6 +4,7 @@ import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
+import { currencySymbol } from '@/lib/currency-totals'
 
 // ============================================
 // B2B QUOTE PDF GENERATION
@@ -31,6 +32,8 @@ function formatDate(dateStr: string, locale: 'en' | 'ja', tbd: string, format: '
 // lookupServerMessage at the route handler. Font is base64-embedded via
 // @font-face — no system-font dependency, no CDN.
 async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record<string, string>): Promise<string> {
+  // Every amount on the PDF is in the quote's own currency (the org's rate currency since #148).
+  const sym = currencySymbol(quote.currency || 'EUR')
   const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
   const today = new Date().toLocaleDateString(tag, { year: 'numeric', month: 'short', day: 'numeric' })
   const template = quote.tour_variations?.tour_templates
@@ -515,8 +518,8 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
             <tr>
               <td>${service.service_name || labels.fallbackService}</td>
               <td>${service.quantity || 1}</td>
-              <td>€${(service.unit_cost || 0).toFixed(2)}</td>
-              <td><strong>€${(service.line_total || 0).toFixed(2)}</strong></td>
+              <td>${sym}${(service.unit_cost || 0).toFixed(2)}</td>
+              <td><strong>${sym}${(service.line_total || 0).toFixed(2)}</strong></td>
             </tr>
           `).join('')}
           ${services.length > 20 ? `
@@ -536,33 +539,33 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     <div class="totals-section">
       <div class="totals-row">
         <span>${labels.subtotalCost}</span>
-        <span>€${(quote.total_cost || 0).toFixed(2)}</span>
+        <span>${sym}${(quote.total_cost || 0).toFixed(2)}</span>
       </div>
       <div class="totals-row">
         <span>${labels.marginPercent.replace('{percent}', String(quote.margin_percent || 0))}</span>
-        <span>€${(quote.margin_amount || 0).toFixed(2)}</span>
+        <span>${sym}${(quote.margin_amount || 0).toFixed(2)}</span>
       </div>
       <div class="totals-row highlight">
         <span class="label">${labels.tableTotal.toUpperCase()}</span>
-        <span class="value">€${(quote.selling_price || 0).toFixed(2)}</span>
+        <span class="value">${sym}${(quote.selling_price || 0).toFixed(2)}</span>
       </div>
     </div>
 
     <div class="per-person-note">
-      ${labels.tableRate}: <strong>€${(quote.price_per_person || 0).toFixed(2)}</strong>
+      ${labels.tableRate}: <strong>${sym}${(quote.price_per_person || 0).toFixed(2)}</strong>
     </div>
 
     ${quote.tour_leader_included && quote.tour_leader_cost ? `
     <div class="tour-leader-badge">
       <span class="label">${labels.tourLeaderIncluded}</span>
-      <span class="value">€${quote.tour_leader_cost.toFixed(2)}</span>
+      <span class="value">${sym}${quote.tour_leader_cost.toFixed(2)}</span>
     </div>
     ` : ''}
 
     ${quote.single_supplement && quote.single_supplement > 0 ? `
     <div class="single-supplement">
       <span class="label">${labels.singleSupplement}</span>
-      <span class="value">€${quote.single_supplement.toFixed(2)}</span>
+      <span class="value">${sym}${quote.single_supplement.toFixed(2)}</span>
     </div>
     ` : ''}
     

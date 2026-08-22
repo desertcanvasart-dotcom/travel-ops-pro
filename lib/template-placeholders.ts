@@ -199,9 +199,9 @@ export const PLACEHOLDER_REFERENCE = [
   { key: 'end_date', label: 'End Date', example: 'January 22, 2025' },
   { key: 'trip_dates', label: 'Date Range', example: 'Jan 15 - Jan 22, 2025' },
   { key: 'total_days', label: 'Duration', example: '7 days' },
-  { key: 'total', label: 'Total Cost', example: '€3,500' },
-  { key: 'deposit', label: 'Deposit Amount', example: '€1,050' },
-  { key: 'balance', label: 'Balance Due', example: '€2,450' },
+  { key: 'total', label: 'Total Cost', example: '3,500' },
+  { key: 'deposit', label: 'Deposit Amount', example: '1,050' },
+  { key: 'balance', label: 'Balance Due', example: '2,450' },
   { key: 'company_name', label: 'Company Name', example: 'Travel2Egypt' },
   { key: 'agent_name', label: 'Agent Name', example: 'Islam' },
 ]

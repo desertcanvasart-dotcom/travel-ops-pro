@@ -23,20 +23,22 @@ import {
   FileText
 } from 'lucide-react'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
+import { formatMoney, formatTotals, addToTotals, emptyTotals, currencySymbol, type CurrencyTotals } from '@/lib/currency-totals'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface AgingBucket {
-  current: number
-  days30: number
-  days60: number
-  days90Plus: number
+  current: CurrencyTotals
+  days30: CurrencyTotals
+  days60: CurrencyTotals
+  days90Plus: CurrencyTotals
 }
 
 interface SupplierPayable {
   supplier_name: string
   supplier_type: string
-  total_expenses: number
-  total_paid: number
-  total_outstanding: number
+  total_expenses: CurrencyTotals
+  total_paid: CurrencyTotals
+  total_outstanding: CurrencyTotals
   expense_count: number
   oldest_expense_date: string
   aging: AgingBucket
@@ -62,16 +64,16 @@ interface Expense {
 }
 
 interface Summary {
-  total_outstanding: number
+  total_outstanding: CurrencyTotals
   supplier_count: number
   expense_count: number
   aging: AgingBucket
   pending_count: number
-  pending_amount: number
+  pending_amount: CurrencyTotals
   approved_count: number
-  approved_amount: number
+  approved_amount: CurrencyTotals
   overdue_count: number
-  overdue_amount: number
+  overdue_amount: CurrencyTotals
 }
 
 const SUPPLIER_TYPES: Record<string, { label: string; icon: string }> = {
@@ -109,6 +111,11 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string }> = {
 const ITEMS_PER_PAGE = 15
 
 export default function AccountsPayablePage() {
+  // Payables default to the rate currency (what suppliers are paid in) when a tile is empty.
+  const { rateCurrency } = useCurrency()
+  const money = (t: CurrencyTotals) => formatTotals(t, { defaultCurrency: rateCurrency })
+  // The aging bar shows SHARES: magnitudes across currencies, never a summed amount.
+  const mag = (t: CurrencyTotals) => Object.values(t).reduce((a, b) => a + Math.abs(b), 0)
   const [suppliers, setSuppliers] = useState<SupplierPayable[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [recentPayments, setRecentPayments] = useState<Expense[]>([])
@@ -206,8 +213,7 @@ export default function AccountsPayablePage() {
   }
 
   const getCurrencySymbol = (currency: string = 'EUR') => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
-    return symbols[currency] || currency
+    return currencySymbol(currency)
   }
 
   const getAgingColor = (bucket: string) => {
@@ -322,9 +328,9 @@ export default function AccountsPayablePage() {
               exportFinancePDF({
                 title: 'Accounts Payable Report',
                 summary: summary ? [
-                  { label: 'Total Outstanding', value: `€${summary.total_outstanding.toLocaleString()}` },
+                  { label: 'Total Outstanding', value: `${money(summary.total_outstanding)}` },
                   { label: 'Supplier Count', value: String(summary.supplier_count) },
-                  { label: 'Overdue Amount', value: `€${summary.overdue_amount.toLocaleString()}` },
+                  { label: 'Overdue Amount', value: `${money(summary.overdue_amount)}` },
                 ] : [],
                 data: filteredSuppliers as unknown as Record<string, unknown>[],
                 columns: cols,
@@ -355,7 +361,7 @@ export default function AccountsPayablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Total Payable</p>
-            <p className="text-2xl font-semibold text-red-600">€{summary.total_outstanding.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-red-600">{money(summary.total_outstanding)}</p>
             <p className="text-xs text-gray-400 mt-1">{summary.expense_count} expenses</p>
           </div>
 
@@ -365,7 +371,7 @@ export default function AccountsPayablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Pending Approval</p>
-            <p className="text-2xl font-semibold text-yellow-600">€{summary.pending_amount.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-yellow-600">{money(summary.pending_amount)}</p>
             <p className="text-xs text-gray-400 mt-1">{summary.pending_count} expenses</p>
           </div>
 
@@ -375,7 +381,7 @@ export default function AccountsPayablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Approved to Pay</p>
-            <p className="text-2xl font-semibold text-blue-600">€{summary.approved_amount.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-blue-600">{money(summary.approved_amount)}</p>
             <p className="text-xs text-gray-400 mt-1">{summary.approved_count} expenses</p>
           </div>
 
@@ -385,7 +391,7 @@ export default function AccountsPayablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">Current</p>
-            <p className="text-2xl font-semibold text-green-600">€{summary.aging.current.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-green-600">{money(summary.aging.current)}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -394,7 +400,7 @@ export default function AccountsPayablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">31-60 Days</p>
-            <p className="text-2xl font-semibold text-orange-600">€{summary.aging.days60.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-orange-600">{money(summary.aging.days60)}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -403,50 +409,50 @@ export default function AccountsPayablePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">90+ Days</p>
-            <p className="text-2xl font-semibold text-red-600">€{summary.aging.days90Plus.toLocaleString()}</p>
+            <p className="text-2xl font-semibold text-red-600">{money(summary.aging.days90Plus)}</p>
           </div>
         </div>
       )}
 
       {/* Aging Report Visual */}
-      {summary && summary.total_outstanding > 0 && (
+      {summary && mag(summary.total_outstanding) > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg p-5">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Aging Report</h3>
           <div className="flex h-8 rounded-lg overflow-hidden">
-            {summary.aging.current > 0 && (
+            {mag(summary.aging.current) > 0 && (
               <div 
                 className="bg-green-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.current / summary.total_outstanding) * 100}%` }}
-                title={`Current: €${summary.aging.current.toLocaleString()}`}
+                style={{ width: `${(mag(summary.aging.current) / mag(summary.total_outstanding)) * 100}%` }}
+                title={`Current: ${money(summary.aging.current)}`}
               >
-                {((summary.aging.current / summary.total_outstanding) * 100).toFixed(0)}%
+                {((mag(summary.aging.current) / mag(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
-            {summary.aging.days30 > 0 && (
+            {mag(summary.aging.days30) > 0 && (
               <div 
                 className="bg-yellow-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.days30 / summary.total_outstanding) * 100}%` }}
-                title={`15-30 Days: €${summary.aging.days30.toLocaleString()}`}
+                style={{ width: `${(mag(summary.aging.days30) / mag(summary.total_outstanding)) * 100}%` }}
+                title={`15-30 Days: ${money(summary.aging.days30)}`}
               >
-                {((summary.aging.days30 / summary.total_outstanding) * 100).toFixed(0)}%
+                {((mag(summary.aging.days30) / mag(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
-            {summary.aging.days60 > 0 && (
+            {mag(summary.aging.days60) > 0 && (
               <div 
                 className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.days60 / summary.total_outstanding) * 100}%` }}
-                title={`31-60 Days: €${summary.aging.days60.toLocaleString()}`}
+                style={{ width: `${(mag(summary.aging.days60) / mag(summary.total_outstanding)) * 100}%` }}
+                title={`31-60 Days: ${money(summary.aging.days60)}`}
               >
-                {((summary.aging.days60 / summary.total_outstanding) * 100).toFixed(0)}%
+                {((mag(summary.aging.days60) / mag(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
-            {summary.aging.days90Plus > 0 && (
+            {mag(summary.aging.days90Plus) > 0 && (
               <div 
                 className="bg-red-500 flex items-center justify-center text-white text-xs font-medium"
-                style={{ width: `${(summary.aging.days90Plus / summary.total_outstanding) * 100}%` }}
-                title={`90+ Days: €${summary.aging.days90Plus.toLocaleString()}`}
+                style={{ width: `${(mag(summary.aging.days90Plus) / mag(summary.total_outstanding)) * 100}%` }}
+                title={`90+ Days: ${money(summary.aging.days90Plus)}`}
               >
-                {((summary.aging.days90Plus / summary.total_outstanding) * 100).toFixed(0)}%
+                {((mag(summary.aging.days90Plus) / mag(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
           </div>
@@ -607,30 +613,30 @@ export default function AccountsPayablePage() {
                     
                     <div className="flex items-center gap-6">
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900">€{supplier.total_outstanding.toLocaleString()}</p>
+                        <p className="text-sm font-semibold text-gray-900">{money(supplier.total_outstanding)}</p>
                         <p className="text-xs text-gray-500">{supplier.expense_count} expense{supplier.expense_count !== 1 ? 's' : ''}</p>
                       </div>
                       
                       {/* Mini aging bars */}
                       <div className="hidden md:flex items-center gap-1">
-                        {supplier.aging.current > 0 && (
+                        {mag(supplier.aging.current) > 0 && (
                           <div className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
-                            €{supplier.aging.current.toLocaleString()}
+                            {money(supplier.aging.current)}
                           </div>
                         )}
-                        {supplier.aging.days30 > 0 && (
+                        {mag(supplier.aging.days30) > 0 && (
                           <div className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-700 rounded">
-                            €{supplier.aging.days30.toLocaleString()}
+                            {money(supplier.aging.days30)}
                           </div>
                         )}
-                        {supplier.aging.days60 > 0 && (
+                        {mag(supplier.aging.days60) > 0 && (
                           <div className="px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded">
-                            €{supplier.aging.days60.toLocaleString()}
+                            {money(supplier.aging.days60)}
                           </div>
                         )}
-                        {supplier.aging.days90Plus > 0 && (
+                        {mag(supplier.aging.days90Plus) > 0 && (
                           <div className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
-                            €{supplier.aging.days90Plus.toLocaleString()}
+                            {money(supplier.aging.days90Plus)}
                           </div>
                         )}
                       </div>

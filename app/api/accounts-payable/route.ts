@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,17 +14,20 @@ interface AgingBucket {
   days90Plus: number
 }
 
+// Per currency: an operator that owes suppliers in dollars and egyptian pounds
+// owes two amounts, not one sum. Every money figure is a CurrencyTotals.
 interface SupplierPayable {
   supplier_name: string
   supplier_type: string
-  total_expenses: number
-  total_paid: number
-  total_outstanding: number
+  total_expenses: CurrencyTotals
+  total_paid: CurrencyTotals
+  total_outstanding: CurrencyTotals
   expense_count: number
   oldest_expense_date: string
-  aging: AgingBucket
+  aging: { current: CurrencyTotals; days30: CurrencyTotals; days60: CurrencyTotals; days90Plus: CurrencyTotals }
   expenses: any[]
 }
+const sumAll = (t: CurrencyTotals) => Object.values(t).reduce((a, b) => a + Math.abs(b), 0)
 
 export async function GET(request: NextRequest) {
   try {
@@ -111,33 +115,27 @@ export async function GET(request: NextRequest) {
         supplierMap.set(supplierKey, {
           supplier_name: exp.supplier_name || 'Unknown Supplier',
           supplier_type: exp.supplier_type || 'other',
-          total_expenses: 0,
-          total_paid: 0,
-          total_outstanding: 0,
+          total_expenses: emptyTotals(),
+          total_paid: emptyTotals(),
+          total_outstanding: emptyTotals(),
           expense_count: 0,
           oldest_expense_date: exp.expense_date,
-          aging: { current: 0, days30: 0, days60: 0, days90Plus: 0 },
+          aging: { current: emptyTotals(), days30: emptyTotals(), days60: emptyTotals(), days90Plus: emptyTotals() },
           expenses: []
         })
       }
 
       const supplier = supplierMap.get(supplierKey)!
       const amount = Number(exp.amount || 0)
-      supplier.total_expenses += amount
-      supplier.total_outstanding += amount
+      const cur = exp.currency || 'EUR'
+      addToTotals(supplier.total_expenses, amount, cur)
+      addToTotals(supplier.total_outstanding, amount, cur)
       supplier.expense_count += 1
       supplier.expenses.push(exp)
 
       // Update aging buckets
-      if (exp.days_outstanding <= 14) {
-        supplier.aging.current += amount
-      } else if (exp.days_outstanding <= 30) {
-        supplier.aging.days30 += amount
-      } else if (exp.days_outstanding <= 60) {
-        supplier.aging.days60 += amount
-      } else {
-        supplier.aging.days90Plus += amount
-      }
+      const bucket = exp.days_outstanding <= 14 ? 'current' : exp.days_outstanding <= 30 ? 'days30' : exp.days_outstanding <= 60 ? 'days60' : 'days90Plus'
+      addToTotals(supplier.aging[bucket], amount, cur)
 
       // Track oldest expense
       if (new Date(exp.expense_date) < new Date(supplier.oldest_expense_date)) {
@@ -146,7 +144,8 @@ export async function GET(request: NextRequest) {
     })
 
     const supplierPayables = Array.from(supplierMap.values())
-      .sort((a, b) => b.total_outstanding - a.total_outstanding)
+      // Ordering only — magnitudes across currencies, never shown as a sum.
+      .sort((a, b) => sumAll(b.total_outstanding) - sumAll(a.total_outstanding))
 
     // Fetch paid expenses for payment history
     const { data: paidExpenses } = await supabaseAdmin
@@ -157,22 +156,24 @@ export async function GET(request: NextRequest) {
       .limit(50)
 
     // Calculate summary
+    const totalsOf = (rows: any[]) => { const t = emptyTotals(); for (const e of rows) addToTotals(t, Number(e.amount || 0), e.currency || 'EUR'); return t }
+    const mergeAll = (pick: (s: SupplierPayable) => CurrencyTotals) => { const t = emptyTotals(); for (const s of supplierPayables) for (const [c, v] of Object.entries(pick(s))) addToTotals(t, v, c); return t }
     const summary = {
-      total_outstanding: supplierPayables.reduce((sum, s) => sum + s.total_outstanding, 0),
+      total_outstanding: mergeAll(s => s.total_outstanding),
       supplier_count: supplierPayables.length,
       expense_count: filteredExpenses.length,
       aging: {
-        current: supplierPayables.reduce((sum, s) => sum + s.aging.current, 0),
-        days30: supplierPayables.reduce((sum, s) => sum + s.aging.days30, 0),
-        days60: supplierPayables.reduce((sum, s) => sum + s.aging.days60, 0),
-        days90Plus: supplierPayables.reduce((sum, s) => sum + s.aging.days90Plus, 0)
+        current: mergeAll(s => s.aging.current),
+        days30: mergeAll(s => s.aging.days30),
+        days60: mergeAll(s => s.aging.days60),
+        days90Plus: mergeAll(s => s.aging.days90Plus),
       },
       pending_count: filteredExpenses.filter(e => e.status === 'pending').length,
-      pending_amount: filteredExpenses.filter(e => e.status === 'pending').reduce((sum, e) => sum + Number(e.amount || 0), 0),
+      pending_amount: totalsOf(filteredExpenses.filter(e => e.status === 'pending')),
       approved_count: filteredExpenses.filter(e => e.status === 'approved').length,
-      approved_amount: filteredExpenses.filter(e => e.status === 'approved').reduce((sum, e) => sum + Number(e.amount || 0), 0),
+      approved_amount: totalsOf(filteredExpenses.filter(e => e.status === 'approved')),
       overdue_count: filteredExpenses.filter(e => e.is_overdue).length,
-      overdue_amount: filteredExpenses.filter(e => e.is_overdue).reduce((sum, e) => sum + Number(e.amount || 0), 0)
+      overdue_amount: totalsOf(filteredExpenses.filter(e => e.is_overdue)),
     }
 
     // Group expenses by category for breakdown

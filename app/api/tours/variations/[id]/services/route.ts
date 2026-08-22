@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 // ============================================
 // TOUR VARIATION SERVICES API - CRUD + BULK
@@ -13,6 +16,8 @@ const supabaseAdmin = createClient(
 )
 
 async function getRateDetails(rateType: string, rateId: string) {
+  // Rate amounts in the details text carry the org's rate-currency symbol, never a hard-coded euro.
+  const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId()))
   let result = null
 
   switch (rateType) {
@@ -31,7 +36,7 @@ async function getRateDetails(rateType: string, rateId: string) {
           rate_eur: minTRate,
           rate_non_eur: minTRate,
           city: transport.city || transport.origin_city,
-          details: `${tRates.length} vehicle tier${tRates.length !== 1 ? 's' : ''} | from €${minTRate}`
+          details: `${tRates.length} vehicle tier${tRates.length !== 1 ? 's' : ''} | from ${rateSym}${minTRate}`
         }
       }
       break
@@ -49,7 +54,7 @@ async function getRateDetails(rateType: string, rateId: string) {
           rate_half_day: guide.half_day_rate,
           rate_full_day: guide.full_day_rate,
           city: guide.city,
-          details: `Half: €${guide.half_day_rate} | Full: €${guide.full_day_rate}`
+          details: `Half: ${rateSym}${guide.half_day_rate} | Full: ${rateSym}${guide.full_day_rate}`
         }
       }
       break
