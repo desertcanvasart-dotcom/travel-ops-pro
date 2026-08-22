@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import {
   FileText,
   Plus,
@@ -128,7 +128,9 @@ export default function TemplatesPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedChannel, setSelectedChannel] = useState('all')
-  const [selectedLanguage, setSelectedLanguage] = useState('all')
+  // Default to the language the operator is working in; 'all' is one click away.
+  const locale = useLocale()
+  const [selectedLanguage, setSelectedLanguage] = useState(locale === 'ja' ? 'ja' : 'en')
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)

@@ -48,6 +48,7 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
+import { useLocale } from 'next-intl'
 
 // Email body formatter - converts ■ bullets to styled lists
 function formatEmailBody(html: string): string {
@@ -142,6 +143,8 @@ interface EmailTemplate {
   content: string
   category: string
   channel?: string 
+  /** 'en' | 'ja' — message_templates carry both; the picker shows one language at a time. */
+  language?: string
 }
 
 interface GmailLabel {
@@ -1628,6 +1631,10 @@ function ComposeModal({
   const [clientItineraries, setClientItineraries] = useState<any[]>([])
   const [selectedItineraryId, setSelectedItineraryId] = useState<string>('')
   const [crmPlaceholderData, setCrmPlaceholderData] = useState<Record<string, string>>({})
+  // Templates are shown in the language the client is written to in (clients.preferred_language),
+  // falling back to the operator's UI locale; the dropdown can switch.
+  const uiLocale = useLocale()
+  const [templateLanguage, setTemplateLanguage] = useState<'en' | 'ja'>(uiLocale === 'ja' ? 'ja' : 'en')
   
   // PARTNER state
   const [activeTab, setActiveTab] = useState<'client' | 'partner'>('client')
@@ -1663,13 +1670,15 @@ function ComposeModal({
             content: t.body || '',
             category: t.category || 'customer',
             channel: t.channel,
+            language: t.language || 'en',
           }))
 
-        // Deduplicate by name (prefer message_templates if same name exists)
-        const existingNames = new Set(emailTemplates.map(t => t.name))
+        // Deduplicate by name + language: the Japanese twin of a template has
+        // the same name, and must not be dropped as a duplicate of the English.
+        const existingKeys = new Set(emailTemplates.map(t => `${t.name}|${t.language || 'en'}`))
         const merged = [
           ...emailTemplates,
-          ...msgTemplates.filter(t => !existingNames.has(t.name))
+          ...msgTemplates.filter(t => !existingKeys.has(`${t.name}|${t.language || 'en'}`))
         ]
         setTemplates(merged)
 
@@ -1771,6 +1780,8 @@ function ComposeModal({
       
       setCrmPlaceholderData(data.placeholderData || {})
       
+      if (data.clientLanguage === 'ja' || data.clientLanguage === 'en') setTemplateLanguage(data.clientLanguage)
+      
       const client = clients.find(c => c.id === clientId)
       if (client?.email) {
         setTo(client.email)
@@ -1795,6 +1806,7 @@ function ComposeModal({
       
       if (data.placeholderData) {
         setCrmPlaceholderData(data.placeholderData)
+        if (data.clientLanguage === 'ja' || data.clientLanguage === 'en') setTemplateLanguage(data.clientLanguage)
       }
     } catch (err) {
       console.error('Error fetching itinerary data:', err)
@@ -2020,10 +2032,24 @@ function ComposeModal({
     </button>
     {showTemplateDropdown && (
       <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 max-h-96 overflow-y-auto">
+        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-gray-100">
+          {(['en', 'ja'] as const).map(lang => (
+            <button
+              key={lang}
+              type="button"
+              onClick={() => setTemplateLanguage(lang)}
+              className={`px-2 py-0.5 text-[10px] font-semibold rounded ${templateLanguage === lang ? 'bg-primary-600 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
+              {lang === 'en' ? 'English' : '日本語'}
+            </button>
+          ))}
+        </div>
         {['customer', 'supplier', 'partner', 'internal'].map(category => {
           const categoryTemplates = templates.filter(t =>
             t.category === (category === 'partner' ? 'b2b' : category) || t.category === category
           ).filter(t => t.channel !== 'whatsapp')
+            // Only the picker's language; a template with no Japanese twin still shows in English.
+            .filter(t => (t.language || 'en') === templateLanguage || (templateLanguage === 'ja' && (t.language || 'en') === 'en' && !templates.some(o => o.name === t.name && o.language === 'ja')))
           if (categoryTemplates.length === 0) return null
 
           return (
