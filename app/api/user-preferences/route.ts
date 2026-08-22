@@ -84,9 +84,14 @@ export async function GET(request: NextRequest) {
     const preferences = data || {
       default_cost_mode: 'auto',
       default_tier: 'standard',
-      default_margin_percent: await orgDefaultMargin(supabase),
+      default_margin_percent: null,
       default_currency: await orgDefaultCurrency(supabase),
     }
+    // A user with no margin of their own — no row, or a row whose margin was
+    // cleared so they follow the company — sees the company's figure, not a
+    // null the Settings form would render as 25 and save back as 25.
+    preferences.default_margin_percent =
+      normaliseMargin(preferences.default_margin_percent) ?? (await orgDefaultMargin(supabase))
 
     // Not a user preference — an org fact the client needs to label engine
     // amounts correctly (the rates are in this, the billing is in default_currency).
