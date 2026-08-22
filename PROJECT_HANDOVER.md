@@ -1359,6 +1359,62 @@ npm install
 
 ## 19. Changelog
 
+### 2026-08-22 (session 3) — The rate currency is a setting; A.T.S's rates are now USD
+
+Three PRs (#148, #149, #150), all merged, deployed and proven on production; one
+migration applied; one data cut-over executed (fully audited, reversible).
+
+**The money model (operator, 2026-08-22):** A.T.S buys hotels and Nile cruises in USD,
+buys transport/tips/meals/assistants in EGP but enters them as USD equivalents, and
+**bills in JPY**. They sell to Japanese clients only.
+
+**Why this was not a rename.** "EUR" meant three different things: (A) the
+`_eur` / `_non_eur` column PAIRS are **EU-passport / non-EU-passport price tiers**,
+not currencies (~120 of 140 EUR-named columns); (B) the engine's base currency —
+rate tables hold plain numbers and the engine stamped `'EUR'` on every result;
+(C) presentation, which already converted per user preference. Renaming 140 columns
+would have changed nothing about (A) and (C). Instead:
+
+- ✅ **`organizations.rate_currency`** (#148, `20260822_org_rate_currency.sql`; default
+  `EUR`, A.T.S → `USD`, editable on the Company Profile card) — "what my supplier rates
+  are in", distinct from `default_currency` ("what I bill in"). The engine labels every
+  result with it; service creation (land **and** cruise — the cruise path had been writing
+  rate-currency numbers under the trip's currency label with `exchange_rate_used: 1`)
+  converts rate currency → trip currency; B2B calculate-price and quote-from-itinerary
+  follow it. **The rule "a Euro-passport traveller forces the trip currency to EUR" is
+  gone** — billing currency is the org's/user's choice; passport selects the tier only.
+- ✅ **Every rate-side screen** (#149): `useCurrency()` exposes `rateCurrency` /
+  `rateSymbol`; 17 display sites convert from the setting instead of a literal `'EUR'`;
+  ~110 hard-coded `€` replaced; passport tiers relabelled "EU passport / non-EU passport"
+  everywhere (22 i18n keys EN+JA); CSV templates say "(EU passport) / (non-EU passport)"
+  (import matches on column *name*, old files still load). Guard test
+  `no-hardcoded-rate-currency.test.ts` keeps the euro from creeping back on the rate side.
+  The billing side (invoices, payments, reports) formats with each record's own currency
+  and was deliberately not touched.
+- ✅ **Cut-over** (#150, `scripts/convert-rate-currency.mjs`): every non-null, non-zero
+  amount in every rate table multiplied by **1.16819** (that day's EUR→USD; the rates had
+  been typed Nov 2025 – Jun 2026 and FX history only begins 11 Aug 2026, so a
+  "rate-when-typed" option did not exist). **281 rows, 1,137 amounts, Σ 180,756.76 →
+  211,158.19.** Each change is in `rate_audit_log` with `full_old_record` /
+  `full_new_record` and `notes = "EUR→USD cut-over 2026-08-22 (factor 1.16819, today's
+  EUR→USD)"` — the trigger covers 13 rate tables; the tool writes the identical row for
+  the five it does not (hotel_contacts, restaurant_contacts, service_fees,
+  b2b_pricing_rules, fixed_daily_costs). Verified: sampled cells moved by exactly the
+  factor, 0 of 281 rows deviate, the live engine prices a template in USD. Trip snapshots
+  (`itinerary_services`, `itinerary_resources`) were never touched.
+  **To reverse:** `node scripts/convert-rate-currency.mjs --factor 0.85602513 --apply --note "revert cut-over"`.
+  **Note:** rate tables are global (no `org_id`), so the E2E org now sees USD figures under
+  EUR labels — harmless for the smoke suite, which uses its own fixtures.
+
+**Lessons**
+- Before touching a "rename X to Y" request, find out how many meanings X has. Here one
+  of three was a passport tier that had nothing to do with currency.
+- A converted figure displays in the **user's** preference currency, so "€0.00" inside a
+  form on a USD org is correct when the user prefers EUR. Proofs that assert "no €" must
+  set both the org's rate currency and the user's display currency.
+- Sweep scripts: never insert an import inside a multi-line `import {` block, nor a hook
+  line inside `function X({` prop destructuring — both compile-looking, both wrong.
+
 ### 2026-08-22 — Security hardening, rates/supplier fixes, and the multi-traveller portal
 
 20 PRs (#116–#135), all merged to `main` and deployed to production (autoura.net via
@@ -1513,7 +1569,7 @@ Postgres on the build machine.
 **Primary Developer:** Islam Mohamed  
 **Project Started:** October 2025  
 **Version:** 1.0.0  
-**Last Updated:** August 22, 2026
+**Last Updated:** August 22, 2026 (session 3)
 
 ---
 
