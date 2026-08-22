@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
@@ -215,6 +216,8 @@ export async function POST(
     if (itinError || !itinerary) {
       return NextResponse.json({ error: 'Failed to create itinerary' }, { status: 500 })
     }
+    // Prod drops client_id on INSERT — keep the converted trip on its client.
+    await reassertClientId(supabaseAdmin, itinerary, clientId)
 
     // Create itinerary days + services. Track failures: a partial conversion
     // must NOT mark the quote 'converted' (that permanently locks the quote to

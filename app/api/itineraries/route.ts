@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Generate unique itinerary code
@@ -213,6 +214,11 @@ export async function POST(request: NextRequest) {
       console.error('Error creating itinerary:', error)
       throw error
     }
+
+    // The database drops client_id on INSERT (prod-only rewrite, see the
+    // helper) — re-assert it so a trip created from a client's page stays
+    // on that client's page.
+    await reassertClientId(supabase, data, body.client_id)
 
     // Create English version automatically
     if (data) {

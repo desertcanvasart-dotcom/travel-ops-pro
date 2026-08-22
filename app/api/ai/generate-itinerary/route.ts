@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { debugLog } from '@/lib/debug-log'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import {
@@ -506,6 +507,8 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (itineraryError) throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
+        // Prod drops client_id on INSERT — see lib/itineraries/reassert-client.ts
+        await reassertClientId(supabase, itinerary, client_id)
 
         debugLog('✅ Created cruise itinerary:', itinerary.id)
 
@@ -890,6 +893,8 @@ export async function POST(request: NextRequest) {
       console.error('❌ Failed to create itinerary:', itineraryError)
       throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
     }
+    // Prod drops client_id on INSERT — see lib/itineraries/reassert-client.ts
+    await reassertClientId(supabase, itinerary, client_id)
 
     debugLog(`✅ Created itinerary ${itinerary.id} with ${duration_days} days`)
 
