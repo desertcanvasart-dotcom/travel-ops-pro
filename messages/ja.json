@@ -3389,7 +3389,12 @@
       "rateCurrencyHint": "サプライヤーレートを入力する通貨で、料金エンジンの計算結果もこの通貨で表示されます。通常は仕入先への支払通貨です。見積・請求書は請求通貨に換算されます。",
       "defaultMargin": "標準マージン（%）",
       "defaultMarginUnset": "未設定 — 25%が適用されます",
-      "defaultMarginHint": "貴社の標準の販売マージンです。個人設定のないメンバーはこの値を引き継ぎます。見積りごとに変更できます。"
+      "defaultMarginHint": "貴社の標準の販売マージンです。個人設定のないメンバーはこの値を引き継ぎます。見積りごとに変更できます。",
+      "rateChangeAlerts": "料金変更の通知",
+      "rateChangeAlertsInApp": "アプリ内",
+      "rateChangeAlertsInAppEmail": "アプリ内＋メール",
+      "rateChangeAlertsOff": "オフ",
+      "rateChangeAlertsHint": "15分ごとに、料金表の変更内容をオーナー・管理者・マネージャーに通知します（編集者×料金表ごとに1件）。編集した本人には通知されません。"
     }
   },
   "translate": {

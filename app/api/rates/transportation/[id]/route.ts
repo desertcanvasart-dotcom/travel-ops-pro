@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
-import { createClient } from '@supabase/supabase-js'
+import { createActorAdminClient } from '@/lib/supabase-actor'
 
 // ============================================
 // TRANSPORTATION RATES API - Single Record
 // File: app/api/rates/transportation/[id]/route.ts
 // ============================================
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
+const supabaseAdmin = createActorAdminClient()
 
 const VEHICLE_TIERS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
 
