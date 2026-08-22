@@ -563,12 +563,15 @@ export default function ResourcesPage() {
               
               <Link
                 href={
-                  activeTab === 'guides' ? '/guides' :
-                  activeTab === 'vehicles' ? '/suppliers' :
-                  activeTab === 'hotels' ? '/hotels' :
+                  // Every roster is the suppliers list filtered to that role —
+                  // the standalone roster pages are gone (guides, hotels,
+                  // hotel-staff never existed here; airport-staff is a redirect).
+                  activeTab === 'guides' ? '/suppliers?type=guide' :
+                  activeTab === 'vehicles' ? '/suppliers?type=transport' :
+                  activeTab === 'hotels' ? '/suppliers?type=hotel' :
                   activeTab === 'restaurants' ? '/restaurants' :
-                  activeTab === 'airportStaff' ? '/airport-staff' :
-                  '/hotel-staff'
+                  activeTab === 'airportStaff' ? '/suppliers?type=airport_assistant' :
+                  '/suppliers?type=hotel_assistant'
                 }
                 className="px-2 py-1 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium"
               >
@@ -728,7 +731,7 @@ export default function ResourcesPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <Link 
-                            href="/guides"
+                            href="/suppliers?type=guide"
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                           >
                             Edit
@@ -762,7 +765,7 @@ export default function ResourcesPage() {
                           <span className="text-3xl text-gray-400">👨‍🏫</span>
                           <p className="text-sm font-medium">No guides found</p>
                           <Link 
-                            href="/guides/new"
+                            href="/suppliers?type=guide"
                             className="mt-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 inline-block"
                           >
                             Add Your First Guide
@@ -918,7 +921,7 @@ export default function ResourcesPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <Link 
-                            href="/hotels"
+                            href="/suppliers?type=hotel"
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                           >
                             Edit
@@ -1082,7 +1085,7 @@ export default function ResourcesPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <Link 
-                            href="/airport-staff"
+                            href="/suppliers?type=airport_assistant"
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                           >
                             Edit

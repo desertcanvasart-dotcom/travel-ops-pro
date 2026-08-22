@@ -451,7 +451,7 @@ export default function B2BPricingRulesPage() {
                 <p className="text-sm text-gray-500">{t('subtitle')}</p>
               </div>
             </div>
-            <Link href="/b2b" className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
+            <Link href="/b2b/quotes" className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
               ← {t('backToB2B')}
             </Link>
           </div>
