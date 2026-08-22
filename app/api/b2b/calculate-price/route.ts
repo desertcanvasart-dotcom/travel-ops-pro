@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -379,6 +380,9 @@ async function getHotelRate(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    // What the org's rate tables are in — the engine labels its result with it,
+    // and every currency this route reports is that one.
+    const rateCurrency = await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId())
     const {
       variation_id,
       // Alternative to variation_id: price a template directly. The engine
@@ -520,6 +524,7 @@ export async function POST(request: NextRequest) {
           // Whose calendar, and which departure — the premium needs both, and
           // the engine charges nothing without them.
           orgId: await getCurrentOrgId() ?? undefined,
+          rateCurrency,
           travelDate: travel_date,
           templateId,
           tier: effectiveTier,
@@ -541,6 +546,7 @@ export async function POST(request: NextRequest) {
         // Call standard auto-pricing service
         autoPriceResult = await calculateAutoPricing({
           orgId: await getCurrentOrgId() ?? undefined,
+          rateCurrency,
           travelDate: travel_date,
           templateId,
           tier: effectiveTier,
@@ -969,7 +975,7 @@ export async function POST(request: NextRequest) {
       selling_price: Math.round(sellingPrice * 100) / 100,
       price_per_person: Math.round(pricePerPerson * 100) / 100,
       single_supplement: 0,  // Not calculated in legacy mode
-      currency: 'EUR',
+      currency: rateCurrency,
       base_selling_price: Math.round(baseSellingPrice * 100) / 100,
       season_uplift: demandSeason
         ? {

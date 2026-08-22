@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -81,9 +82,13 @@ export async function GET(request: NextRequest) {
       default_currency: await orgDefaultCurrency(supabase),
     }
 
+    // Not a user preference — an org fact the client needs to label engine
+    // amounts correctly (the rates are in this, the billing is in default_currency).
+    const rate_currency = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+
     return NextResponse.json({
       success: true,
-      data: preferences
+      data: { ...preferences, rate_currency }
     })
   } catch (error: any) {
     console.error('API error:', error)

@@ -174,14 +174,17 @@ describe('generate-itinerary route — land path end to end (mock DB, stubbed AI
     expect(days![0].itinerary_id).toBe(itin.id)
   })
 
-  it('coerces currency to EUR for a Euro-passport nationality', async () => {
+  it('keeps the billing currency whatever the passport — a Euro passport no longer forces EUR', async () => {
+    // Until 2026-08-22 a Euro-passport nationality silently rewrote the trip's
+    // currency to EUR. For an operator that bills in yen that mislabelled the
+    // quote; passport only selects the EU / non-EU price tier now.
     const res = await POST(
       makeRequest({ ...VALID_BODY, nationality: 'German', currency: 'USD' })
     )
     expect((await res.json()).success).toBe(true)
     const db = (await import('../_mock-supabase')).createMockClient()
     const { data: itins } = await db.from('itineraries').select()
-    expect(itins![0].currency).toBe('EUR')
+    expect(itins![0].currency).toBe('USD')
   })
 
   it('maps meal_plan HB to lunch=true dinner=false when not explicitly set', async () => {

@@ -27,6 +27,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { roundToCurrency } from '@/lib/currency-totals'
+import { DEFAULT_RATE_CURRENCY } from '@/lib/org-rate-currency'
 import {
   seasonForDate,
   type SeasonMatch,
@@ -148,6 +149,10 @@ export interface DayPricingParams {
    *  is otherwise org-blind and must not guess whose dates these are. */
   orgId?: string
   marginPercent?: number
+  /** Currency the rate tables are entered in (organizations.rate_currency).
+   *  The engine only adds numbers; this is the label it puts on the result.
+   *  Omitted → EUR, the historical base. */
+  rateCurrency?: string
 }
 
 // Single pax calculation result
@@ -1842,7 +1847,7 @@ export async function calculateDayBasedPricing(
       singleSupplement: 0,
       services: [],
       paxPricing: [],
-      currency: 'EUR',
+      currency: params.rateCurrency ?? DEFAULT_RATE_CURRENCY,
       marginPercent,
       warnings: ['Template not found'],
       complete: false,
@@ -2627,7 +2632,7 @@ export async function calculateDayBasedPricing(
     singleSupplement: Math.round(singleSupplement * 100) / 100,
     services,
     paxPricing,
-    currency: 'EUR',
+    currency: params.rateCurrency ?? DEFAULT_RATE_CURRENCY,
     marginPercent,
     warnings,
     complete,
@@ -2746,6 +2751,8 @@ export interface PricingParams {
    *  is otherwise org-blind and must not guess whose dates these are. */
   orgId?: string
   marginPercent?: number
+  /** Currency the rate tables are entered in — see DayPricingParams.rateCurrency. */
+  rateCurrency?: string
   mealPlan?: 'none' | 'breakfast_only' | 'lunch_only' | 'dinner_only' | 'half_board' | 'full_board'
   includeAccommodation?: boolean
   tourLeaderIncluded?: boolean
@@ -2939,7 +2946,8 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     tier,
     isEurPassport,
     language,
-    marginPercent
+    marginPercent,
+    rateCurrency: params.rateCurrency
   })
 
   if (!dayResult.success) {
@@ -2964,7 +2972,7 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
       seasonUplift: null,
       sellingPrice: 0,
       pricePerPerson: 0,
-      currency: 'EUR',
+      currency: params.rateCurrency ?? DEFAULT_RATE_CURRENCY,
       ratesUsed: {},
       warnings: dayResult.warnings,
       complete: false,
@@ -3172,7 +3180,9 @@ export function calculateAgeBasedPricing(
   baseAdultCost: number,
   passengers: PassengerBreakdown,
   marginPercent: number = 25,
-  flightCostPerPerson: number = 0
+  flightCostPerPerson: number = 0,
+  /** Label only — what the rate tables are in. */
+  currency: string = DEFAULT_RATE_CURRENCY
 ): AgeBasedPricingResult {
   const { numAdults, numChildren, numInfants } = passengers
   const totalPassengers = numAdults + numChildren + numInfants
@@ -3259,7 +3269,7 @@ export function calculateAgeBasedPricing(
     totalCost: Math.round(totalCost * 100) / 100,
     marginAmount: Math.round(marginAmount * 100) / 100,
     sellingPrice: Math.round(sellingPrice * 100) / 100,
-    currency: 'EUR',
+    currency,
     breakdown
   }
 }
@@ -3295,12 +3305,14 @@ export function composeAgeBasedPricing(
   passengers: PassengerBreakdown,
   marginPercent: number,
   tourLeaderIncluded: boolean,
-  flightCostPerPerson: number = 0
+  flightCostPerPerson: number = 0,
+  /** Label only — what the rate tables are in. */
+  currency: string = DEFAULT_RATE_CURRENCY
 ): ComposedAgeBasedPricing {
   const refPax = paxRow.numPax || 2
   // PRE-margin per-person cost from the reference pax row (no leader).
   const baseAdultCost = paxRow.withoutLeader.totalCost / refPax
-  const ageBasedPricing = calculateAgeBasedPricing(baseAdultCost, passengers, marginPercent, flightCostPerPerson)
+  const ageBasedPricing = calculateAgeBasedPricing(baseAdultCost, passengers, marginPercent, flightCostPerPerson, currency)
 
   const leaderCost = tourLeaderIncluded
     ? Math.max(0, paxRow.withLeader.totalCost - paxRow.withoutLeader.totalCost)
@@ -3349,7 +3361,8 @@ export async function calculatePricingWithPassengerBreakdown(
     tier,
     isEurPassport,
     language,
-    marginPercent
+    marginPercent,
+    rateCurrency: params.rateCurrency
   })
 
   if (!dayResult.success) {
@@ -3374,7 +3387,7 @@ export async function calculatePricingWithPassengerBreakdown(
       seasonUplift: null,
       sellingPrice: 0,
       pricePerPerson: 0,
-      currency: 'EUR',
+      currency: params.rateCurrency ?? DEFAULT_RATE_CURRENCY,
       ratesUsed: {},
       warnings: dayResult.warnings,
       complete: false,
@@ -3400,7 +3413,8 @@ export async function calculatePricingWithPassengerBreakdown(
     passengers,
     marginPercent,
     tourLeaderIncluded,
-    flightCostPerPerson
+    flightCostPerPerson,
+    dayResult.currency
   )
   const ageBasedPricing = composed.ageBasedPricing
   const tourLeaderCost = composed.tourLeaderCost
@@ -3476,7 +3490,7 @@ export async function calculatePricingWithPassengerBreakdown(
     pricePerPerson: payingPassengers > 0
       ? roundToCurrency(sellingWithSeason / payingPassengers, dayResult.currency)
       : Math.round(pricePerPerson * 100) / 100,
-    currency: 'EUR',
+    currency: dayResult.currency,
     ratesUsed,
     warnings: dayResult.warnings,
     paxPricingTable: paxTableWithSeason(dayResult.paxPricing, { season, currency: dayResult.currency }),

@@ -3,6 +3,7 @@ import { debugLog } from '@/lib/debug-log'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import {
   fetchCruiseTransportPricingRules,
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest) {
     // Resolve from the operator's session. Both INSERT paths below (cruise +
     // land) use this same orgId.
     const orgId = await getCurrentOrgId()
+    // What the org's supplier rates are in — the engine's unit and the source
+    // side of the conversion into the trip's billing currency.
+    const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
     if (!orgId) {
       return NextResponse.json(
         { success: false, error: 'No organization context — re-login or contact admin.' },
@@ -364,12 +368,12 @@ export async function POST(request: NextRequest) {
     }
     isEuroPassport = isEuroPassport ?? false
 
-    // Auto-set currency to EUR for Euro passport holders
-    let effectiveCurrency = currency
-    if (isEuroPassport && effectiveCurrency !== 'EUR') {
-      debugLog(`💶 Euro passport detected (${nationality}) — setting currency to EUR (was ${effectiveCurrency})`)
-      effectiveCurrency = 'EUR'
-    }
+    // The trip's currency is what the company bills in (user preference → org
+    // default). It is NOT inferred from the traveller's passport: until
+    // 2026-08-22 a Euro passport silently forced the trip to EUR, which for an
+    // operator billing in yen mislabelled every such quote. Passport only
+    // selects the EU / non-EU price tier.
+    const effectiveCurrency = currency
 
     // Calculate dates
     const startDateObj = new Date(start_date)
@@ -524,6 +528,7 @@ export async function POST(request: NextRequest) {
           tier,
           guideLanguage,
           skipPricing: skip_pricing,
+          rateCurrency,
           marginPercent: margin_percent,
           includeGuide: include_guide,
           effectiveCity,
@@ -911,6 +916,7 @@ export async function POST(request: NextRequest) {
       isEuroPassport,
       tier,
       language: guideLanguage,
+      rateCurrency,
       includeLunch: include_lunch,
       includeDinner: include_dinner,
       includeAccommodation: includeAccommodationFinal,

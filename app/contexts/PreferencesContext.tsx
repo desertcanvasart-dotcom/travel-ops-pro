@@ -14,6 +14,8 @@ export interface UserPreferences {
   default_tier: string
   default_margin_percent: number
   default_currency: string
+  /** The org's supplier-rate currency (what engine amounts are in). Not user-editable. */
+  rate_currency?: string
 }
 
 export interface ExchangeRates {
@@ -45,7 +47,8 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   default_cost_mode: 'auto',
   default_tier: 'standard',
   default_margin_percent: 25,
-  default_currency: 'USD'
+  default_currency: 'USD',
+  rate_currency: 'EUR'
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -295,6 +298,8 @@ export function useCurrency() {
 
   return {
     currency: preferences.default_currency,
+    /** What engine/rate amounts are denominated in — the source side of formatWithConversion. */
+    rateCurrency: preferences.rate_currency || 'EUR',
     formatCurrency,
     convertCurrency,
     formatWithConversion,

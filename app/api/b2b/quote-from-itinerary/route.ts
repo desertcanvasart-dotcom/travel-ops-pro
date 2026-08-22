@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
@@ -359,6 +360,8 @@ export async function POST(request: NextRequest) {
     // same calendar and the same rule as the template engine, so a quote built
     // from an itinerary cannot disagree with one built from a programme.
     const orgId = await getCurrentOrgId()
+    // What the rate tables (and services' supplier_cost_original) are in.
+    const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
     const departureDate: string | null = itinerary.start_date
       ? String(itinerary.start_date).slice(0, 10)
       : null
@@ -397,12 +400,12 @@ export async function POST(request: NextRequest) {
 
       for (const svc of dayServices) {
         // Every re-priced line below is EUR (B2B rate tables are EUR), so
-        // lines KEPT from the itinerary must be normalized to EUR too —
-        // itinerary_services.total_cost is stored in the itinerary's display
-        // currency (e.g. JPY). service-creation stamps supplier_currency /
-        // supplier_cost_original (EUR) / exchange_rate_used for exactly this.
+        // lines KEPT from the itinerary must be normalized to the rate currency
+        // too — itinerary_services.total_cost is stored in the itinerary's
+        // display currency (e.g. JPY). service-creation stamps supplier_currency
+        // / supplier_cost_original / exchange_rate_used for exactly this.
         const eurLineTotal =
-          svc.supplier_currency === 'EUR' && svc.supplier_cost_original != null
+          svc.supplier_currency === rateCurrency && svc.supplier_cost_original != null
             ? Number(svc.supplier_cost_original) || 0
             : Number(svc.exchange_rate_used) > 0
               ? (Number(svc.total_cost) || 0) / Number(svc.exchange_rate_used)
@@ -616,10 +619,10 @@ export async function POST(request: NextRequest) {
         season_name: season?.name ?? null,
         season_uplift_percent: season?.upliftPercent ?? 0,
         season_uplift_amount: seasonUplift,
-        // Every line in services_snapshot is EUR (B2B rate tables + the
-        // EUR-normalized kept lines above) — saving the itinerary's display
-        // currency here mislabeled the amounts whenever it wasn't EUR.
-        currency: 'EUR',
+        // Every line in services_snapshot is in the RATE currency (B2B rate
+        // tables + the normalized kept lines above) — saving the itinerary's
+        // display currency here mislabeled the amounts whenever it differed.
+        currency: rateCurrency,
         status: 'draft',
         valid_until: validUntil.toISOString().split('T')[0],
         notes: `Created from WhatsApp-parsed itinerary ${itinerary.itinerary_code}`,
