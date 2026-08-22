@@ -529,6 +529,7 @@ export async function POST(request: NextRequest) {
           guideLanguage,
           skipPricing: skip_pricing,
           rateCurrency,
+          currency: effectiveCurrency,
           marginPercent: margin_percent,
           includeGuide: include_guide,
           effectiveCity,

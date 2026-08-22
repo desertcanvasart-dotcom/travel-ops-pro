@@ -264,8 +264,8 @@ export default function TransportationContent() {
     }
   }
 
-  const { formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<TransportationRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])

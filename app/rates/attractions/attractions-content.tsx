@@ -213,8 +213,8 @@ export default function AttractionsContent() {
   const [activeLanguage, setActiveLanguage] = useState('en')
 
   // Currency conversion
-  const { currency, formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { currency, formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
   
   const [attractions, setAttractions] = useState<Attraction[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])

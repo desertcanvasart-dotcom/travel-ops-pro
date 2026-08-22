@@ -80,8 +80,8 @@ export default function TrainRatesContent() {
   const searchParams = useSearchParams()
 
   // Currency conversion
-  const { currency, formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { currency, formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<TrainRate[]>([])
   const [loading, setLoading] = useState(true)

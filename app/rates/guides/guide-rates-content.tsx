@@ -100,11 +100,11 @@ export default function GuideRatesContent() {
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
   // Currency conversion
-  const { currency, formatWithConversion, convertCurrency } = useCurrency()
+  const { currency, formatWithConversion, convertCurrency, rateCurrency } = useCurrency()
 
   // Helper to format rate from EUR to user's preferred currency
   const formatRate = (eurAmount: number) => {
-    return formatWithConversion(eurAmount, 'EUR')
+    return formatWithConversion(eurAmount, rateCurrency)
   }
 
   const [rates, setRates] = useState<GuideRate[]>([])

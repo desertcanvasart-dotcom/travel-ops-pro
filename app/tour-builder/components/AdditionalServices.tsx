@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface ServiceFee {
   id: string
@@ -36,6 +37,7 @@ export default function AdditionalServices({
   isEuroPassport,
   onServicesChange
 }: AdditionalServicesProps) {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('tourBuilder.services')
   const [services, setServices] = useState<ServiceFee[]>([])
   const [loading, setLoading] = useState(false)
@@ -201,7 +203,7 @@ export default function AdditionalServices({
 
                         <div className="text-right">
                           <div className="font-semibold text-sm text-gray-900">
-                            {isSelected ? `€${cost.toFixed(2)}` : `€${(isEuroPassport ? service.base_rate_eur : service.base_rate_non_eur).toFixed(2)}`}
+                            {isSelected ? `${rateSymbol}${cost.toFixed(2)}` : `${rateSymbol}${(isEuroPassport ? service.base_rate_eur : service.base_rate_non_eur).toFixed(2)}`}
                           </div>
                           <div className="text-xs text-gray-500">
                             {service.rate_type === 'per_person' && t('perPerson', { pax })}
@@ -226,7 +228,7 @@ export default function AdditionalServices({
                   {t('totalServices')}
                 </span>
                 <span className="text-xl font-bold text-green-700">
-                  €{getTotalCost().toFixed(2)}
+                  {rateSymbol}{getTotalCost().toFixed(2)}
                 </span>
               </div>
               <div className="text-xs text-green-700 mt-1">

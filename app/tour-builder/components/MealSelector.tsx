@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { MealRate } from '../types'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface MealSelectorProps {
   city: string
@@ -21,6 +22,7 @@ export default function MealSelector({
   isEuroPassport,
   onSelect
 }: MealSelectorProps) {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('tourBuilder.meals')
   const [meals, setMeals] = useState<MealRate[]>([])
   const [loading, setLoading] = useState(false)
@@ -189,13 +191,13 @@ export default function MealSelector({
                   </div>
                   <div className="text-right ml-4">
                     <div className="font-bold text-gray-900 text-sm">
-                      €{getPrice(meal).toFixed(2)}
+                      {rateSymbol}{getPrice(meal).toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-500">
                       {pax} pax
                     </div>
                     <div className="text-xs text-gray-400">
-                      €{(isEuroPassport ? meal.base_rate_eur : meal.base_rate_non_eur).toFixed(2)}{t('perPerson')}
+                      {rateSymbol}{(isEuroPassport ? meal.base_rate_eur : meal.base_rate_non_eur).toFixed(2)}{t('perPerson')}
                     </div>
                   </div>
                 </div>
@@ -219,10 +221,10 @@ export default function MealSelector({
             </div>
             <div className="text-right">
               <div className="text-lg font-bold text-green-900">
-                €{getPrice(selectedMeal).toFixed(2)}
+                {rateSymbol}{getPrice(selectedMeal).toFixed(2)}
               </div>
               <div className="text-xs text-green-700">
-                {pax} pax × €{(isEuroPassport ? selectedMeal.base_rate_eur : selectedMeal.base_rate_non_eur).toFixed(2)}
+                {pax} pax × {rateSymbol}{(isEuroPassport ? selectedMeal.base_rate_eur : selectedMeal.base_rate_non_eur).toFixed(2)}
               </div>
             </div>
           </div>

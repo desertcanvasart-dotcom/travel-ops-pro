@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Droplets, Coins, Plus, Edit, Save, X, Check, Loader2, AlertTriangle, Settings } from 'lucide-react'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface FixedCost {
   id: string
@@ -28,6 +29,7 @@ const COST_TYPE_CONFIG: Record<string, { icon: any; color: string; bgColor: stri
 const HIDDEN_COST_TYPES = ['Daily Tips']
 
 export default function FixedCostsPage() {
+  const { rateSymbol, rateCurrency } = useCurrency()
   const [costs, setCosts] = useState<FixedCost[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -77,7 +79,7 @@ export default function FixedCostsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        showNotice('success', `${cost.cost_type} rate updated to €${parseFloat(editValue).toFixed(2)}`)
+        showNotice('success', `${cost.cost_type} rate updated to ${rateSymbol}${parseFloat(editValue).toFixed(2)}`)
         setEditingId(null)
         fetchCosts()
       } else {
@@ -123,7 +125,7 @@ export default function FixedCostsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        showNotice('success', `"${newCostType}" added at €${parseFloat(newCostRate).toFixed(2)} per person/day`)
+        showNotice('success', `"${newCostType}" added at ${rateSymbol}${parseFloat(newCostRate).toFixed(2)} per person/day`)
         setShowAddForm(false)
         setNewCostType('')
         setNewCostRate('')
@@ -238,7 +240,7 @@ export default function FixedCostsPage() {
                     {isEditing ? (
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
-                          <span className="text-lg font-bold text-gray-400">€</span>
+                          <span className="text-lg font-bold text-gray-400">{rateSymbol}</span>
                           <input
                             type="number"
                             value={editValue}
@@ -268,7 +270,7 @@ export default function FixedCostsPage() {
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <div className="flex items-baseline gap-1">
-                            <span className="text-3xl font-bold text-gray-900">€{cost.cost_per_person_per_day.toFixed(2)}</span>
+                            <span className="text-3xl font-bold text-gray-900">{rateSymbol}{cost.cost_per_person_per_day.toFixed(2)}</span>
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5">per person / per day</p>
                         </div>
@@ -335,7 +337,7 @@ export default function FixedCostsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Rate (EUR per person per day) *</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Rate ({rateCurrency} per person per day) *</label>
                 <input
                   type="number"
                   value={newCostRate}

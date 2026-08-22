@@ -177,8 +177,8 @@ export default function HotelServicesPage() {
   const t = useTranslations('rates.hotelServices')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  const { formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<HotelStaffRate[]>([])
   const [loading, setLoading] = useState(true)
@@ -710,7 +710,7 @@ export default function HotelServicesPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateEur')} *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateEur', { currency: rateCurrency })} *</label>
                 <input
                   type="number"
                   name="rate_eur"
@@ -720,7 +720,7 @@ export default function HotelServicesPage() {
                   step="0.01"
                   required
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600"
-                  title={t('form.rateEur')}
+                  title={t('form.rateEur', { currency: rateCurrency })}
                 />
               </div>
               <div>

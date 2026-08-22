@@ -8,8 +8,10 @@ import DayPlanner from './components/DayPlanner'
 import PricingSidebar from './components/PricingSidebar'
 import { Users, Globe, ArrowLeft, Save, FileDown } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 export default function TourBuilderPage() {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('tourBuilder')
   const dialog = useConfirmDialog()
   const [step, setStep] = useState<1 | 2 | 3>(1)
@@ -329,10 +331,10 @@ export default function TourBuilderPage() {
                           <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
                         </div>
                         <div className="text-2xl font-bold text-gray-900">
-                          €{pricing.totals.grand_total.toFixed(2)}
+                          {rateSymbol}{pricing.totals.grand_total.toFixed(2)}
                         </div>
                         <div className="text-xs text-gray-600 mt-1">
-                          €{pricing.per_person.toFixed(2)} {t('review.perPerson')} ({pax} {t('pax')})
+                          {rateSymbol}{pricing.per_person.toFixed(2)} {t('review.perPerson')} ({pax} {t('pax')})
                         </div>
                       </div>
                     )}

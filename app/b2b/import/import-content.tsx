@@ -11,6 +11,7 @@ import {
   ArrowRight, ArrowLeft, Check, Eye, Calculator
 } from 'lucide-react'
 import Link from 'next/link'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // TYPES
@@ -205,6 +206,7 @@ function ImportAttractionInput({
   existingAttractions: string[]
   dayCity?: string | null
 }) {
+  const { rateSymbol } = useCurrency()
   const [search, setSearch] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [cityFilter, setCityFilter] = useState<string | null>(null)
@@ -330,9 +332,9 @@ function ImportAttractionInput({
                   </div>
                   <div className="text-right flex-shrink-0 ml-3">
                     <div className="text-xs font-semibold text-[#647C47]">
-                      €{attr.base_rate_eur} / €{attr.base_rate_non_eur}
+                      {rateSymbol}{attr.base_rate_eur} / {rateSymbol}{attr.base_rate_non_eur}
                     </div>
-                    <div className="text-[10px] text-gray-400">EUR / Non-EUR</div>
+                    <div className="text-[10px] text-gray-400">EU / non-EU passport</div>
                   </div>
                 </div>
               )
@@ -366,6 +368,7 @@ function ImportAttractionInput({
 // ============================================
 
 export default function ImportContent() {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bImport')
   const router = useRouter()
 

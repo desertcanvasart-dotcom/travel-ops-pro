@@ -969,7 +969,7 @@
     "preferences": "設定",
     "passportType": "パスポートタイプ",
     "selectOption": "選択...",
-    "euroPassport": "欧州パスポート",
+    "euroPassport": "EUパスポート",
     "otherPassport": "その他のパスポート",
     "preferredLanguage": "希望言語",
     "preferredContactMethod": "希望連絡方法",
@@ -1642,7 +1642,7 @@
       "tip4": "料金計算はレート表から再生成します",
       "searchAttractionsPlaceholder": "アトラクションを検索...",
       "allCities": "すべての都市",
-      "eurNonEur": "EUR / 非EUR",
+      "eurNonEur": "EU / 非EUパスポート",
       "noAttractionsFound": "アトラクションが見つかりません",
       "programme": "プログラム",
       "programmeHint": "この旅行の元となるプログラムです。お客様ページには、これをもとに作成した日程表が表示されます。",
@@ -1862,7 +1862,7 @@
         "final": "最終支払",
         "full": "全額支払"
       },
-      "amount": "金額（€）",
+      "amount": "金額",
       "currency": "通貨",
       "paymentMethod": "支払方法",
       "paymentMethods": {
@@ -1965,7 +1965,7 @@
         "final": "最終支払",
         "full": "全額支払"
       },
-      "amount": "金額（€）",
+      "amount": "金額",
       "currency": "通貨",
       "paymentMethod": "支払方法",
       "paymentMethods": {
@@ -2961,8 +2961,8 @@
     "service": "サービス",
     "vehicle": "車両",
     "route": "ルート",
-    "eurRate": "EUR料金",
-    "nonEurRate": "非EUR",
+    "eurRate": "EUパスポート料金",
+    "nonEurRate": "非EUパスポート",
     "noCity": "都市なし",
     "noEmail": "メールなし",
     "errors": {
@@ -3555,8 +3555,8 @@
     "createNewTour": "新しいツアーパッケージを作成",
     "pax": "人数",
     "passport": "パスポート",
-    "euro": "ユーロ圏",
-    "nonEuro": "非ユーロ圏",
+    "euro": "EUパスポート",
+    "nonEuro": "非EUパスポート",
     "steps": {
       "tourSetup": "ツアー設定",
       "dailyPlanning": "日程計画",
@@ -4052,7 +4052,7 @@
         "selectArrival": "到着都市を選択してください",
         "differentCities": "出発地と到着地は異なる必要があります",
         "selectAirline": "航空会社を選択してください",
-        "validEurRate": "有効なEUR料金を入力してください"
+        "validEurRate": "有効な料金を入力してください"
       },
       "economy": "エコノミー",
       "business": "ビジネス",
@@ -4143,7 +4143,7 @@
       "validation": {
         "selectCity": "出発都市を選択してください",
         "selectDestination": "都市間/市内送迎サービスには到着都市を選択してください",
-        "validEurRate": "有効なEUR料金を入力してください"
+        "validEurRate": "有効な料金を入力してください"
       }
     },
     "meals": {
@@ -4522,7 +4522,7 @@
       "standard": "標準",
       "addons": "アドオン",
       "cities": "都市",
-      "avgEurRate": "平均EUR料金",
+      "avgEurRate": "平均料金（EUパスポート）",
       "searchPlaceholder": "名前、都市、コード、カテゴリーで検索...",
       "allCities": "すべての都市",
       "allCategories": "すべてのカテゴリー",
@@ -4550,7 +4550,7 @@
         "standard": "標準",
         "addons": "アドオン",
         "cities": "都市",
-        "avgEurRate": "平均EUR料金"
+        "avgEurRate": "平均料金（EUパスポート）"
       },
       "form": {
         "basicInfo": "基本情報",
@@ -5030,7 +5030,7 @@
         "airport": "空港",
         "serviceType": "サービスタイプ",
         "direction": "方向",
-        "rateEur": "料金 (€)",
+        "rateEur": "料金（{currency}）",
         "description": "説明",
         "descriptionPlaceholder": "例：VIPミート&グリート（ラウンジアクセス付き）",
         "serviceCode": "サービスコード",
@@ -5107,7 +5107,7 @@
         "hotelCategory": "ホテルカテゴリ",
         "destination": "目的地",
         "allDestinations": "すべての目的地（デフォルト）",
-        "rateEur": "料金 (€)",
+        "rateEur": "料金（{currency}）",
         "description": "説明",
         "descriptionPlaceholder": "例：ポーターサービス（1滞在あたり）",
         "serviceCode": "サービスコード",
@@ -5166,7 +5166,7 @@
         "context": "コンテキスト",
         "noContext": "コンテキストなし",
         "rateUnit": "料金単位",
-        "amount": "金額 (€)",
+        "amount": "金額（{currency}）",
         "description": "説明",
         "descriptionPlaceholder": "例：終日ツアーガイドチップ",
         "serviceCodePlaceholder": "空欄の場合は自動生成"
@@ -6753,7 +6753,7 @@
     "tier4Optional": "第4段階（任意）",
     "minPax": "最小人数",
     "maxPax": "最大人数",
-    "rateEur": "料金（€）",
+    "rateEur": "料金（{currency}）",
     "label": "ラベル",
     "notes": "備考",
     "additionalNotes": "追加の備考...",
@@ -6779,7 +6779,7 @@
     "typeCruiseTransfer": "クルーズ送迎",
     "typeMultiDay": "複数日ツアー",
     "typeDayTour": "日帰りツアー",
-    "vehicleRates": "車両料金（€）",
+    "vehicleRates": "車両料金（{currency}）",
     "whatsIncluded": "含まれるもの",
     "updatePackage": "パッケージ更新",
     "createPackage": "パッケージ作成",
@@ -6957,7 +6957,7 @@
     "resetChanges": "リセット",
     "failedToSaveItinerary": "旅程の保存に失敗しました",
     "seasonPremium": "{season}割増 +{percent}%",
-    "seasonPremiumNote": "€{base}に対して€{amount}。通常日程であれば€{base_price}です。",
+    "seasonPremiumNote": "{base}に対して{amount}。通常日程であれば{base_price}です。",
     "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {

@@ -542,7 +542,7 @@
     "preferences": "Preferences",
     "passportType": "Passport Type",
     "selectOption": "Select...",
-    "euroPassport": "Euro Passport",
+    "euroPassport": "EU passport",
     "otherPassport": "Other Passport",
     "preferredLanguage": "Preferred Language",
     "preferredContactMethod": "Preferred Contact Method",
@@ -1100,7 +1100,7 @@
       "duration": "Duration",
       "editContent": "Edit Content",
       "editContentHint": "Edit itinerary content",
-      "eurNonEur": "EUR / Non-EUR",
+      "eurNonEur": "EU / non-EU passport",
       "failedToSaveDraft": "Failed to save draft",
       "failedToUpdateStatus": "Failed to update status",
       "from": "From",
@@ -1435,7 +1435,7 @@
         "final": "Final Payment",
         "full": "Full Payment"
       },
-      "amount": "Amount (€)",
+      "amount": "Amount",
       "currency": "Currency",
       "paymentMethod": "Payment Method",
       "paymentMethods": {
@@ -1538,7 +1538,7 @@
         "final": "Final Payment",
         "full": "Full Payment"
       },
-      "amount": "Amount (€)",
+      "amount": "Amount",
       "currency": "Currency",
       "paymentMethod": "Payment Method",
       "paymentMethods": {
@@ -2097,8 +2097,8 @@
     "service": "Service",
     "vehicle": "Vehicle",
     "route": "Route",
-    "eurRate": "EUR Rate",
-    "nonEurRate": "Non-EUR",
+    "eurRate": "EU passport rate",
+    "nonEurRate": "Non-EU passport",
     "noCity": "No city",
     "noEmail": "No email",
     "errors": {
@@ -3327,8 +3327,8 @@
       "peak": "Peak",
       "from": "From",
       "to": "To",
-      "eurPassportHolders": "EUR Passport Holders",
-      "nonEurPassportHolders": "Non-EUR Passport Holders",
+      "eurPassportHolders": "EU passport holders",
+      "nonEurPassportHolders": "Non-EU passport holders",
       "single": "Single",
       "double": "Double",
       "triple": "Triple",
@@ -3458,7 +3458,7 @@
         "selectArrival": "Please select an arrival city",
         "differentCities": "Departure and arrival cities must be different",
         "selectAirline": "Please select an airline",
-        "validEurRate": "Please enter a valid EUR rate"
+        "validEurRate": "Please enter a valid rate"
       },
       "economy": "Economy",
       "business": "Business",
@@ -3549,7 +3549,7 @@
       "validation": {
         "selectCity": "Please select a departure city",
         "selectDestination": "Please select a destination city for intercity/city transfer services",
-        "validEurRate": "Please enter a valid EUR rate"
+        "validEurRate": "Please enter a valid rate"
       }
     },
     "cruises": {
@@ -3647,8 +3647,8 @@
         "to": "To",
         "period2From": "Period 2 From",
         "period2To": "Period 2 To",
-        "eurPassportHolders": "EUR Passport Holders",
-        "nonEurPassportHolders": "Non-EUR Passport Holders",
+        "eurPassportHolders": "EU passport holders",
+        "nonEurPassportHolders": "Non-EU passport holders",
         "single": "Single",
         "double": "Double",
         "triple": "Triple",
@@ -4029,7 +4029,7 @@
       "standard": "Standard",
       "addons": "Add-ons",
       "cities": "Cities",
-      "avgEurRate": "Avg. EUR Rate",
+      "avgEurRate": "Avg. rate (EU passport)",
       "searchPlaceholder": "Search by name, city, code, or category...",
       "allCities": "All Cities",
       "allCategories": "All Categories",
@@ -4057,7 +4057,7 @@
         "standard": "Standard",
         "addons": "Add-ons",
         "cities": "Cities",
-        "avgEurRate": "Avg. EUR Rate"
+        "avgEurRate": "Avg. rate (EU passport)"
       },
       "form": {
         "basicInfo": "Basic Information",
@@ -4182,7 +4182,7 @@
         "context": "Context",
         "noContext": "No specific context",
         "rateUnit": "Rate Unit",
-        "amount": "Amount (€)",
+        "amount": "Amount ({currency})",
         "description": "Description",
         "descriptionPlaceholder": "e.g., Full day tour guide tip",
         "serviceCodePlaceholder": "Auto-generated if empty"
@@ -4265,7 +4265,7 @@
         "airport": "Airport",
         "serviceType": "Service Type",
         "direction": "Direction",
-        "rateEur": "Rate (€)",
+        "rateEur": "Rate ({currency})",
         "description": "Description",
         "descriptionPlaceholder": "e.g., VIP meet & greet with lounge access",
         "serviceCode": "Service Code",
@@ -4342,7 +4342,7 @@
         "hotelCategory": "Hotel Category",
         "destination": "Destination",
         "allDestinations": "All Destinations (default)",
-        "rateEur": "Rate (€)",
+        "rateEur": "Rate ({currency})",
         "description": "Description",
         "descriptionPlaceholder": "e.g., Porter service per stay",
         "serviceCode": "Service Code",
@@ -5346,8 +5346,8 @@
     "createNewTour": "Create a new tour package",
     "pax": "Pax",
     "passport": "Passport",
-    "euro": "Euro",
-    "nonEuro": "Non-Euro",
+    "euro": "EU passport",
+    "nonEuro": "Non-EU passport",
     "steps": {
       "tourSetup": "Tour Setup",
       "dailyPlanning": "Daily Planning",
@@ -6167,7 +6167,7 @@
     "tier4Optional": "Tier 4 (Optional)",
     "minPax": "Min Pax",
     "maxPax": "Max Pax",
-    "rateEur": "Rate (€)",
+    "rateEur": "Rate ({currency})",
     "label": "Label",
     "notes": "Notes",
     "additionalNotes": "Additional notes...",
@@ -6193,7 +6193,7 @@
     "typeCruiseTransfer": "Cruise Transfer",
     "typeMultiDay": "Multi-Day Tour",
     "typeDayTour": "Day Tour",
-    "vehicleRates": "Vehicle Rates (€)",
+    "vehicleRates": "Vehicle rates ({currency})",
     "whatsIncluded": "What's Included",
     "updatePackage": "Update Package",
     "createPackage": "Create Package",
@@ -6371,7 +6371,7 @@
     "resetChanges": "Reset",
     "failedToSaveItinerary": "Failed to save itinerary changes",
     "seasonPremium": "{season} premium +{percent}%",
-    "seasonPremiumNote": "€{amount} on €{base}. On an ordinary date this trip sells for €{base_price}.",
+    "seasonPremiumNote": "{amount} on {base}. On an ordinary date this trip sells for {base_price}.",
     "seasonBadge": "{season} +{percent}%"
   },
   "bookings": {

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { SlotDefinition, SlotValue, RateOption, SelectedItem, PassportType } from '../types'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface SlotRowProps {
   definition: SlotDefinition
@@ -15,6 +16,7 @@ interface SlotRowProps {
 }
 
 export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden }: SlotRowProps) {
+  const { rateSymbol } = useCurrency()
   const [search, setSearch] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
@@ -130,7 +132,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                 <option value="">— Select —</option>
                 {displayOpts.map(opt => (
                   <option key={opt.id} value={opt.id}>
-                    {opt.name} — €{opt[rateKey].toFixed(2)}
+                    {opt.name} — {rateSymbol}{opt[rateKey].toFixed(2)}
                     {opt.details ? ` (${opt.details})` : ''}
                   </option>
                 ))}
@@ -150,7 +152,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                     title="Click to remove"
                   >
                     {item.name.length > 30 ? item.name.substring(0, 30) + '...' : item.name}
-                    {' '}€{item[rateKey].toFixed(2)}
+                    {' '}{rateSymbol}{item[rateKey].toFixed(2)}
                     <span className="font-bold ml-0.5 text-[10px]">×</span>
                   </span>
                 ))}
@@ -205,7 +207,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                           {opt.name}
                           {opt.city && search ? ` (${opt.city})` : ''}
                         </span>
-                        <span className="text-gray-500 whitespace-nowrap">€{opt[rateKey].toFixed(2)}</span>
+                        <span className="text-gray-500 whitespace-nowrap">{rateSymbol}{opt[rateKey].toFixed(2)}</span>
                       </label>
                     )
                   })}
@@ -226,7 +228,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
         <span className={`text-xs font-bold tabular-nums ${
           slotCost > 0 ? 'text-green-600' : 'text-gray-200'
         }`}>
-          €{slotCost.toFixed(2)}
+          {rateSymbol}{slotCost.toFixed(2)}
         </span>
       </div>
     </div>

@@ -11,6 +11,7 @@ import {
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // B2B QUOTES LIST PAGE
@@ -50,6 +51,7 @@ interface Quote {
 }
 
 export default function QuotesListPage() {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bQuotes')
   const confirmDialog = useConfirm()
   const [quotes, setQuotes] = useState<Quote[]>([])
@@ -337,8 +339,8 @@ export default function QuotesListPage() {
                   <td className="px-4 py-3 text-center text-sm">{quote.num_adults}{quote.tour_leader_included && <span className="text-xs text-blue-500 ml-1">(+1)</span>}</td>
                   <td className="px-4 py-3 text-center text-sm">{quote.travel_date ? formatDate(quote.travel_date) : '-'}</td>
                   <td className="px-4 py-3 text-right">
-                    <p className="text-sm font-bold text-[#647C47]">€{quote.selling_price?.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500">€{quote.price_per_person?.toFixed(2)}{t('perPerson')}</p>
+                    <p className="text-sm font-bold text-[#647C47]">{rateSymbol}{quote.selling_price?.toFixed(2)}</p>
+                    <p className="text-xs text-gray-500">{rateSymbol}{quote.price_per_person?.toFixed(2)}{t('perPerson')}</p>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <LanguageIndicator availableLanguages={quote.available_languages || []} size="sm" />

@@ -14,6 +14,7 @@ import QuoteRevisions from '@/components/QuoteRevisions'
 import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // B2B QUOTE DETAIL PAGE
@@ -95,6 +96,7 @@ interface Quote {
 }
 
 export default function QuoteDetailPage() {
+  const { rateSymbol } = useCurrency()
   const params = useParams()
   const quoteId = params?.id as string
   const t = useTranslations('b2bQuotes')
@@ -402,8 +404,8 @@ export default function QuoteDetailPage() {
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-4 py-2">{service.service_name || t('serviceColumn')}</td>
                       <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
-                      <td className="px-4 py-2 text-right">€{(service.unit_cost || 0).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-medium">€{(service.line_total || 0).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">{rateSymbol}{(service.unit_cost || 0).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right font-medium">{rateSymbol}{(service.line_total || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -446,16 +448,16 @@ export default function QuoteDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">{t('subtotal')}</span>
-                <span>€{quote.total_cost?.toFixed(2)}</span>
+                <span>{rateSymbol}{quote.total_cost?.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">{t('margin')} ({quote.margin_percent}%)</span>
-                <span className="text-green-600">€{quote.margin_amount?.toFixed(2)}</span>
+                <span className="text-green-600">{rateSymbol}{quote.margin_amount?.toFixed(2)}</span>
               </div>
               {quote.tour_leader_included && quote.tour_leader_cost && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">{t('tourLeaderCost')}</span>
-                  <span className="text-blue-600">€{quote.tour_leader_cost.toFixed(2)}</span>
+                  <span className="text-blue-600">{rateSymbol}{quote.tour_leader_cost.toFixed(2)}</span>
                 </div>
               )}
               {/* Without this line the three figures above do not add up to the
@@ -468,21 +470,21 @@ export default function QuoteDetailPage() {
                       percent: quote.season_uplift_percent ?? 0,
                     })}
                   </span>
-                  <span className="text-[#4a5c35]">€{quote.season_uplift_amount.toFixed(2)}</span>
+                  <span className="text-[#4a5c35]">{rateSymbol}{quote.season_uplift_amount.toFixed(2)}</span>
                 </div>
               )}
               <div className="pt-3 border-t">
                 <div className="flex justify-between">
                   <span className="font-medium">{t('sellingPrice')}</span>
-                  <span className="text-xl font-bold text-[#647C47]">€{quote.selling_price?.toFixed(2)}</span>
+                  <span className="text-xl font-bold text-[#647C47]">{rateSymbol}{quote.selling_price?.toFixed(2)}</span>
                 </div>
-                <p className="text-xs text-gray-500 text-right mt-1">€{quote.price_per_person?.toFixed(2)} {t('perPersonLong')}</p>
+                <p className="text-xs text-gray-500 text-right mt-1">{rateSymbol}{quote.price_per_person?.toFixed(2)} {t('perPersonLong')}</p>
               </div>
               {quote.single_supplement && quote.single_supplement > 0 && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <div className="flex justify-between text-sm">
                     <span className="text-amber-800">{t('singleSupplement')}</span>
-                    <span className="font-medium text-amber-700">€{quote.single_supplement.toFixed(2)}</span>
+                    <span className="font-medium text-amber-700">{rateSymbol}{quote.single_supplement.toFixed(2)}</span>
                   </div>
                 </div>
               )}

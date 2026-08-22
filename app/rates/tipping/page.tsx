@@ -173,8 +173,8 @@ export default function TippingPage() {
   const t = useTranslations('rates.tipping')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  const { formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<TippingRate[]>([])
   const [loading, setLoading] = useState(true)
@@ -635,7 +635,7 @@ export default function TippingPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.amount')} *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.amount', { currency: rateCurrency })} *</label>
                   <input
                     type="number"
                     name="rate_eur"

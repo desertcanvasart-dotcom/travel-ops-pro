@@ -269,7 +269,7 @@ interface AttractionDropdownProps {
 
 function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemove }: AttractionDropdownProps) {
   // Entrance rates are stored in EUR per passport type; show them converted.
-  const { formatWithConversion } = useCurrency()
+  const { formatWithConversion, rateCurrency } = useCurrency()
   const [searchTerm, setSearchTerm] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -346,7 +346,7 @@ function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemo
                       <div>
                         <p className="text-sm text-gray-900">{attr.attraction_name}</p>
                         <p className="text-xs text-gray-500">
-                          EUR passport: {formatWithConversion(attr.eur_rate, 'EUR')} / Non-EUR: {formatWithConversion(attr.non_eur_rate, 'EUR')}
+                          EU passport: {formatWithConversion(attr.eur_rate, rateCurrency)} / Non-EU: {formatWithConversion(attr.non_eur_rate, rateCurrency)}
                         </p>
                       </div>
                       <Plus className="w-4 h-4 text-gray-400 group-hover:text-green-600" />

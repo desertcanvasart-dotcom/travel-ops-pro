@@ -28,6 +28,7 @@ import {
   Crown,
   Star
 } from 'lucide-react'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // CONSTANTS
@@ -169,6 +170,7 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
 // ============================================
 
 export default function RestaurantsContent() {
+  const { rateSymbol, rateCurrency } = useCurrency()
   const confirmDialog = useConfirm()
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -726,7 +728,7 @@ export default function RestaurantsContent() {
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
             <p className="text-xs text-gray-600">Avg. Lunch Rate</p>
-            <p className="text-2xl font-bold text-gray-900">€{avgRate}</p>
+            <p className="text-2xl font-bold text-gray-900">{rateSymbol}{avgRate}</p>
           </div>
 
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
@@ -832,8 +834,8 @@ export default function RestaurantsContent() {
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Type</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">City</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Tier</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Lunch (EUR)</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Dinner (EUR)</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Lunch ({rateCurrency})</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Dinner ({rateCurrency})</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Drinks</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Child %</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">Status</th>
@@ -867,13 +869,13 @@ export default function RestaurantsContent() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-green-600">
-                          {(restaurant.rate_lunch_eur || 0) > 0 ? `€${restaurant.rate_lunch_eur}` : 
-                           (restaurant.rate_per_person_eur || 0) > 0 ? `€${restaurant.rate_per_person_eur}` : '—'}
+                          {(restaurant.rate_lunch_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_lunch_eur}` : 
+                           (restaurant.rate_per_person_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_per_person_eur}` : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-semibold text-gray-900">
-                          {(restaurant.rate_dinner_eur || 0) > 0 ? `€${restaurant.rate_dinner_eur}` : '—'}
+                          {(restaurant.rate_dinner_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_dinner_eur}` : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -990,14 +992,14 @@ export default function RestaurantsContent() {
                       <div>
                         <p className="text-xs text-gray-500">Lunch</p>
                         <p className="text-sm font-bold text-green-600">
-                          {(restaurant.rate_lunch_eur || 0) > 0 ? `€${restaurant.rate_lunch_eur}` : 
-                           (restaurant.rate_per_person_eur || 0) > 0 ? `€${restaurant.rate_per_person_eur}` : '—'}
+                          {(restaurant.rate_lunch_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_lunch_eur}` : 
+                           (restaurant.rate_per_person_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_per_person_eur}` : '—'}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Dinner</p>
                         <p className="text-sm font-bold text-gray-900">
-                          {(restaurant.rate_dinner_eur || 0) > 0 ? `€${restaurant.rate_dinner_eur}` : '—'}
+                          {(restaurant.rate_dinner_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_dinner_eur}` : '—'}
                         </p>
                       </div>
                     </div>
@@ -1065,8 +1067,8 @@ export default function RestaurantsContent() {
                   </div>
                   <div className="text-right">
                     <span className="text-sm font-bold text-green-600">
-                      {(restaurant.rate_lunch_eur || 0) > 0 ? `€${restaurant.rate_lunch_eur}` : 
-                       (restaurant.rate_per_person_eur || 0) > 0 ? `€${restaurant.rate_per_person_eur}` : '—'}
+                      {(restaurant.rate_lunch_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_lunch_eur}` : 
+                       (restaurant.rate_per_person_eur || 0) > 0 ? `${rateSymbol}${restaurant.rate_per_person_eur}` : '—'}
                     </span>
                   </div>
                 </div>
@@ -1266,22 +1268,22 @@ export default function RestaurantsContent() {
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Default (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Default ({rateSymbol})</label>
                     <input type="number" name="rate_per_person_eur" value={formData.rate_per_person_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Breakfast (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Breakfast ({rateSymbol})</label>
                     <input type="number" name="rate_breakfast_eur" value={formData.rate_breakfast_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Lunch (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Lunch ({rateSymbol})</label>
                     <input type="number" name="rate_lunch_eur" value={formData.rate_lunch_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Dinner (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Dinner ({rateSymbol})</label>
                     <input type="number" name="rate_dinner_eur" value={formData.rate_dinner_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>
@@ -1296,22 +1298,22 @@ export default function RestaurantsContent() {
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Default (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Default ({rateSymbol})</label>
                     <input type="number" name="rate_per_person_non_eur" value={formData.rate_per_person_non_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Breakfast (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Breakfast ({rateSymbol})</label>
                     <input type="number" name="rate_breakfast_non_eur" value={formData.rate_breakfast_non_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Lunch (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Lunch ({rateSymbol})</label>
                     <input type="number" name="rate_lunch_non_eur" value={formData.rate_lunch_non_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Dinner (€)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Dinner ({rateSymbol})</label>
                     <input type="number" name="rate_dinner_non_eur" value={formData.rate_dinner_non_eur} onChange={handleChange} step="0.01" min="0"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm" placeholder="0.00" />
                   </div>

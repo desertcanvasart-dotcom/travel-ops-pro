@@ -13,6 +13,7 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, Download,
   Globe, DollarSign, FileText, Check, TrainFront, Plane, ConciergeBell, BellRing
 } from 'lucide-react'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // Types
 interface Supplier {
@@ -169,6 +170,7 @@ function MultiSelect({ options, value, onChange, placeholder, labelFor = (v) => 
 }
 
 export default function SuppliersContent() {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('suppliers')
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -949,7 +951,7 @@ export default function SuppliersContent() {
                   ) : (
                     <table className="w-full">
                       <thead><tr className="bg-gray-50"><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('service')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('vehicle')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('route')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('eurRate')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('nonEurRate')}</th></tr></thead>
-                      <tbody>{supplierRates.map(rate => (<tr key={rate.id} className="border-t border-gray-100"><td className="px-3 py-2 text-sm font-medium">{rate.service_code}</td><td className="px-3 py-2 text-sm">{rate.vehicle_type}</td><td className="px-3 py-2 text-sm">{rate.city}{rate.destination_city && ` → ${rate.destination_city}`}</td><td className="px-3 py-2 text-sm text-right font-medium text-green-600">€{rate.base_rate_eur}</td><td className="px-3 py-2 text-sm text-right">€{rate.base_rate_non_eur}</td></tr>))}</tbody>
+                      <tbody>{supplierRates.map(rate => (<tr key={rate.id} className="border-t border-gray-100"><td className="px-3 py-2 text-sm font-medium">{rate.service_code}</td><td className="px-3 py-2 text-sm">{rate.vehicle_type}</td><td className="px-3 py-2 text-sm">{rate.city}{rate.destination_city && ` → ${rate.destination_city}`}</td><td className="px-3 py-2 text-sm text-right font-medium text-green-600">{rateSymbol}{rate.base_rate_eur}</td><td className="px-3 py-2 text-sm text-right">{rateSymbol}{rate.base_rate_non_eur}</td></tr>))}</tbody>
                     </table>
                   )}
                 </div>

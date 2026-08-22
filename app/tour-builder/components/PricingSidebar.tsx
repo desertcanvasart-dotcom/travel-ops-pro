@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { TourPricingBreakdown } from '../types'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface PricingSidebarProps {
   pricing: TourPricingBreakdown | null
@@ -16,6 +17,7 @@ export default function PricingSidebar({
   isCalculating,
   onRecalculate
 }: PricingSidebarProps) {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('tourBuilder.pricing')
 
   if (!pricing) {
@@ -45,10 +47,10 @@ export default function PricingSidebar({
       <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 rounded-t-lg">
         <h3 className="text-lg font-bold mb-2">💰 {t('title')}</h3>
         <div className="text-3xl font-bold">
-          €{pricing.totals.grand_total.toFixed(2)}
+          {rateSymbol}{pricing.totals.grand_total.toFixed(2)}
         </div>
         <div className="text-green-100 text-sm mt-1">
-          €{pricing.per_person.toFixed(2)} {t('perPerson')}
+          {rateSymbol}{pricing.per_person.toFixed(2)} {t('perPerson')}
         </div>
       </div>
 
@@ -63,7 +65,7 @@ export default function PricingSidebar({
               </span>
             </div>
             <span className="font-semibold text-gray-900">
-              €{pricing.totals.total_accommodation.toFixed(2)}
+              {rateSymbol}{pricing.totals.total_accommodation.toFixed(2)}
             </span>
           </div>
 
@@ -75,7 +77,7 @@ export default function PricingSidebar({
               </span>
             </div>
             <span className="font-semibold text-gray-900">
-              €{pricing.totals.total_meals.toFixed(2)}
+              {rateSymbol}{pricing.totals.total_meals.toFixed(2)}
             </span>
           </div>
 
@@ -87,7 +89,7 @@ export default function PricingSidebar({
               </span>
             </div>
             <span className="font-semibold text-gray-900">
-              €{pricing.totals.total_guides.toFixed(2)}
+              {rateSymbol}{pricing.totals.total_guides.toFixed(2)}
             </span>
           </div>
 
@@ -99,7 +101,7 @@ export default function PricingSidebar({
               </span>
             </div>
             <span className="font-semibold text-gray-900">
-              €{pricing.totals.total_transportation.toFixed(2)}
+              {rateSymbol}{pricing.totals.total_transportation.toFixed(2)}
             </span>
           </div>
 
@@ -111,7 +113,7 @@ export default function PricingSidebar({
               </span>
             </div>
             <span className="font-semibold text-gray-900">
-              €{pricing.totals.total_entrances.toFixed(2)}
+              {rateSymbol}{pricing.totals.total_entrances.toFixed(2)}
             </span>
           </div>
         </div>
@@ -131,7 +133,7 @@ export default function PricingSidebar({
                   Day {day.day_number} - {day.city}
                 </span>
                 <span className="font-semibold text-gray-900">
-                  €{day.daily_total.toFixed(2)}
+                  {rateSymbol}{day.daily_total.toFixed(2)}
                 </span>
               </div>
             ))}
@@ -143,7 +145,7 @@ export default function PricingSidebar({
           <div className="text-xs text-blue-800 mb-1">{t('passengers')}</div>
           <div className="text-2xl font-bold text-blue-900">{pax}</div>
           <div className="text-xs text-blue-700 mt-1">
-            €{pricing.per_person.toFixed(2)} {t('perPerson')}
+            {rateSymbol}{pricing.per_person.toFixed(2)} {t('perPerson')}
           </div>
         </div>
 
@@ -163,7 +165,7 @@ export default function PricingSidebar({
             <div className="bg-gray-50 p-3 rounded-lg">
               <div className="text-xs text-gray-600 mb-1">{t('avgPerDay')}</div>
               <div className="text-lg font-bold text-gray-900">
-                €{(pricing.totals.grand_total / pricing.daily_breakdown.length).toFixed(0)}
+                {rateSymbol}{(pricing.totals.grand_total / pricing.daily_breakdown.length).toFixed(0)}
               </div>
             </div>
             <div className="bg-gray-50 p-3 rounded-lg">

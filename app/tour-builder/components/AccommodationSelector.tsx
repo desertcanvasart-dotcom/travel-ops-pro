@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { AccommodationRate } from '../types'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface AccommodationSelectorProps {
   city: string
@@ -19,6 +20,7 @@ export default function AccommodationSelector({
   isEuroPassport,
   onSelect
 }: AccommodationSelectorProps) {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('tourBuilder.accommodation')
   const [accommodations, setAccommodations] = useState<AccommodationRate[]>([])
   const [loading, setLoading] = useState(false)
@@ -201,13 +203,13 @@ export default function AccommodationSelector({
                   </div>
                   <div className="text-right ml-4">
                     <div className="font-bold text-gray-900">
-                      €{getPrice(acc).toFixed(2)}
+                      {rateSymbol}{getPrice(acc).toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-500">
                       {pax} {pax > 1 ? t('persons') : t('person')}
                     </div>
                     <div className="text-xs text-gray-400">
-                      €{(isEuroPassport ? acc.pp_double_eur : acc.pp_double_non_eur).toFixed(2)}{t('perPerson')}
+                      {rateSymbol}{(isEuroPassport ? acc.pp_double_eur : acc.pp_double_non_eur).toFixed(2)}{t('perPerson')}
                     </div>
                   </div>
                 </div>
@@ -238,7 +240,7 @@ export default function AccommodationSelector({
             </div>
             <div className="text-right">
               <div className="text-lg font-bold text-blue-900">
-                €{getPrice(selectedAccommodation).toFixed(2)}
+                {rateSymbol}{getPrice(selectedAccommodation).toFixed(2)}
               </div>
               <div className="text-xs text-blue-700">
                 {t('totalForPax', { pax })}
