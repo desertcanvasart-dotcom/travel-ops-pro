@@ -254,11 +254,24 @@ describe('currency and date', () => {
 })
 
 describe('commission direction', () => {
+  // Two directions (operator, 2026-08-22). WE RECEIVE a share of the
+  // supplier's sale (a shop); WE PAY a supplier a share of OUR PROFIT (a guide
+  // who sold an optional tour). Until then every commission was computed off
+  // the supplier's cost regardless of direction — a "we pay" guide would have
+  // been owed a percentage of their own invoice.
+  const payable = (over: Partial<CommissionSourceService> = {}) =>
+    service({
+      id: 'tour-1',
+      service_type: 'activity',
+      service_name: 'Optional: Sound & Light at Karnak',
+      client_price: 150,
+      total_cost: 100,
+      supplier: { id: 'guide-1', name: 'Ahmed (guide)', commission_type: 'payable', default_commission_rate: 20 },
+      ...over,
+    })
+
   it("takes the supplier's own commission_type", () => {
-    const { pairs } = buildCommissions(
-      [service({ supplier: { ...service().supplier!, commission_type: 'payable' } })],
-      CTX
-    )
+    const { pairs } = buildCommissions([payable()], CTX)
     expect(pairs[0].commission.commission_type).toBe('payable')
   })
 
@@ -268,5 +281,74 @@ describe('commission direction', () => {
       CTX
     )
     expect(pairs[0].commission.commission_type).toBe('receivable')
+  })
+
+  it('we receive: a share of the SUPPLIER price', () => {
+    const { pairs } = buildCommissions([service({ client_price: 1000, total_cost: 800 })], CTX)
+    expect(pairs[0].commission).toMatchObject({ commission_type: 'receivable', base_amount: 800, cost_amount: 800, commission_amount: 80 })
+  })
+
+  it('we pay: a share of OUR PROFIT on the service, never of the client price', () => {
+    // client 150, cost 100 → profit 50 → 20% = 10. Not 20% of 150 (30) and
+    // not 20% of 100 (20), which is what the old code would have paid.
+    const { pairs } = buildCommissions([payable()], CTX)
+    expect(pairs[0].commission).toMatchObject({
+      commission_type: 'payable',
+      base_amount: 50,
+      cost_amount: 100,
+      commission_rate: 20,
+      commission_amount: 10,
+    })
+    expect(pairs[0].commission.notes).toMatch(/of profit/)
+  })
+
+  it('we pay: rounds the profit and the commission to cents', () => {
+    const { pairs } = buildCommissions([payable({ client_price: 123.45, total_cost: 100.1 })], CTX)
+    expect(pairs[0].commission.base_amount).toBe(23.35)
+    expect(pairs[0].commission.commission_amount).toBe(4.67) // 20% of 23.35 = 4.67
+  })
+
+  it('we pay: no profit, no commission — and says so', () => {
+    const { pairs, skipped } = buildCommissions(
+      [
+        payable({ id: 'break-even', client_price: 100, total_cost: 100 }),
+        payable({ id: 'loss', client_price: 90, total_cost: 100 }),
+      ],
+      CTX
+    )
+    expect(pairs).toHaveLength(0)
+    expect(skipped.map(s => s.reason)).toEqual(['no_profit', 'no_profit'])
+    expect(skipped[0].detail).toMatch(/loss/)
+  })
+
+  it('we pay: a service with no client price has no profit to share', () => {
+    const { pairs, skipped } = buildCommissions(
+      [payable({ id: 'unpriced', client_price: null }), payable({ id: 'zero', client_price: 0 })],
+      CTX
+    )
+    expect(pairs).toHaveLength(0)
+    expect(skipped.map(s => s.reason)).toEqual(['no_client_price', 'no_client_price'])
+    expect(skipped[0].detail).toMatch(/Rates › Commissions/)
+  })
+
+  it('we pay: still needs the supplier cost — profit cannot be computed without it', () => {
+    const { pairs, skipped } = buildCommissions([payable({ total_cost: null })], CTX)
+    expect(pairs).toHaveLength(0)
+    expect(skipped[0].reason).toBe('no_base_amount')
+  })
+
+  it('a mixed trip produces both directions, each on its own base', () => {
+    const { pairs } = buildCommissions(
+      [
+        service({ id: 'shop', service_type: 'activity', client_price: 500, total_cost: 400,
+          supplier: { id: 'shop-1', name: 'Khan el-Khalili Bazaar', commission_type: 'receivable', default_commission_rate: 25 } }),
+        payable({ id: 'tour' }),
+      ],
+      CTX
+    )
+    expect(pairs.map(p => [p.serviceId, p.commission.commission_type, p.commission.base_amount, p.commission.commission_amount])).toEqual([
+      ['shop', 'receivable', 400, 100],
+      ['tour', 'payable', 50, 10],
+    ])
   })
 })

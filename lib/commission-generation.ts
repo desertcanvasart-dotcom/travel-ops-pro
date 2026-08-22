@@ -22,6 +22,21 @@
 // is 0 or null). So a correct run still produces zero commissions. Returning a
 // bare "generated: 0" would be indistinguishable from the broken behaviour it
 // replaces, so every skipped service is returned with the reason.
+//
+// TWO DIRECTIONS (operator, 2026-08-22)
+//
+//   receivable  WE RECEIVE a share of the supplier's SALE — a shop our clients
+//               visit. Base = the supplier's price (total_cost).
+//   payable     WE PAY the supplier a share of OUR PROFIT — a guide who sold an
+//               optional tour gets a cut of what we made on it. Base = profit on
+//               that service (client_price − total_cost). No profit, no
+//               commission: we do not pay a cut of a loss, and we do not pay it
+//               off the client price as if there were no cost.
+//
+// The direction is the supplier's `commission_type` (set under Rates ›
+// Commissions). Until 2026-08-22 every commission was computed off the
+// supplier's cost regardless of direction, so a "we pay" supplier would have
+// been owed a percentage of their own invoice.
 
 import { SERVICE_TYPE_ROUTING } from './departments'
 
@@ -72,10 +87,13 @@ export const SERVICE_TYPE_TO_CATEGORY: Readonly<Record<string, CommissionCategor
   supplies: 'other',
 }
 
+export type CommissionDirection = 'payable' | 'receivable'
+
 export interface CommissionSupplier {
   id?: string | null
   name?: string | null
-  /** 'payable' (we owe them) or 'receivable' (they owe us). */
+  /** 'payable' (we owe them a share of our profit) or 'receivable' (they owe
+   *  us a share of their sale). Anything else reads as receivable. */
   commission_type?: string | null
   default_commission_rate?: number | string | null
 }
@@ -84,9 +102,11 @@ export interface CommissionSourceService {
   id: string
   service_type?: string | null
   service_name?: string | null
-  /** What we charge the client. NOT the commission base — see buildCommissions. */
+  /** What we charge the client. Enters the base only through PROFIT, for a
+   *  payable commission — never as the base itself. */
   client_price?: number | string | null
-  /** What the supplier charges us. This is the commission base. */
+  /** What the supplier charges us. The base for a receivable commission; the
+   *  cost side of profit for a payable one. */
   total_cost?: number | string | null
   supplier_id?: string | null
   commission_rate?: number | string | null
@@ -116,7 +136,11 @@ export interface CommissionRow {
   category: CommissionCategory
   source_name: string | null
   description: string
+  /** What the rate applies to: supplier cost (receivable) or profit (payable). */
   base_amount: number
+  /** The supplier's cost on the service, whichever direction — so a payable
+   *  row still shows what the profit was made against. */
+  cost_amount: number
   commission_rate: number
   commission_amount: number
   currency: string
@@ -130,6 +154,8 @@ export type SkipReason =
   | 'no_supplier'
   | 'no_rate'
   | 'no_base_amount'
+  | 'no_client_price'
+  | 'no_profit'
 
 export interface SkippedService {
   service_id: string
@@ -155,6 +181,16 @@ const SKIP_DETAIL: Record<SkipReason, string> = {
     'Neither the service nor the supplier carries a commission rate. Set the rate on the supplier (default_commission_rate) or on the service.',
   no_base_amount:
     'The service has no supplier cost to calculate a commission from. Commission is a percentage of the SUPPLIER price, so a service priced only to the client is skipped rather than commissioned off our markup.',
+  no_client_price:
+    'This supplier is paid a share of OUR PROFIT, and the service has no client price, so there is no profit to share. Price the service to the client, or change the supplier\'s commission direction under Rates › Commissions.',
+  no_profit:
+    'This supplier is paid a share of OUR PROFIT, and this service made none (client price is not above the supplier cost). No commission is paid on a loss.',
+}
+
+/** The direction a supplier's commission runs in. Anything but 'payable' is
+ *  receivable — the common case is a supplier owing us. */
+export function commissionDirection(supplier: CommissionSupplier | null | undefined): CommissionDirection {
+  return supplier?.commission_type === 'payable' ? 'payable' : 'receivable'
 }
 
 const toNumber = (value: unknown): number => {
@@ -219,10 +255,31 @@ export function buildCommissions(
     // is skipped, not priced off the marked-up figure. Falling back would
     // reintroduce the exact error this line exists to prevent, on precisely the
     // rows where nobody would notice.
-    const baseAmount = toNumber(s.total_cost)
-    if (baseAmount <= 0) {
+    const costAmount = toNumber(s.total_cost)
+    if (costAmount <= 0) {
       skip(s, 'no_base_amount')
       continue
+    }
+
+    const direction = commissionDirection(s.supplier)
+
+    // Receivable: a share of what the supplier charged. Payable: a share of
+    // what WE made on the service — the guide who sold the optional tour is
+    // paid out of the profit on it, never out of the client price and never
+    // on a loss.
+    let baseAmount = costAmount
+    if (direction === 'payable') {
+      const clientPrice = toNumber(s.client_price)
+      if (clientPrice <= 0) {
+        skip(s, 'no_client_price')
+        continue
+      }
+      const profit = Math.round((clientPrice - costAmount) * 100) / 100
+      if (profit <= 0) {
+        skip(s, 'no_profit')
+        continue
+      }
+      baseAmount = profit
     }
 
     const serviceType = (s.service_type || '').trim().toLowerCase()
@@ -234,12 +291,12 @@ export function buildCommissions(
         itinerary_id: ctx.itineraryId,
         supplier_id: s.supplier_id,
         client_id: ctx.clientId || null,
-        // Falls back to 'receivable': the common case is a supplier owing us.
-        commission_type: s.supplier.commission_type || 'receivable',
+        commission_type: direction,
         category: SERVICE_TYPE_TO_CATEGORY[serviceType] || 'other',
         source_name: s.supplier.name || null,
         description: `${s.service_name || s.service_type || 'Service'} - ${ctx.itineraryCode}`,
         base_amount: baseAmount,
+        cost_amount: costAmount,
         commission_rate: rate,
         // (base × rate / 100) rounded to cents. That is algebraically
         // Math.round(base × rate) / 100 — the two /100s cancel — which looks
@@ -253,7 +310,10 @@ export function buildCommissions(
         currency,
         status: 'pending',
         transaction_date: transactionDate,
-        notes: `Auto-generated from itinerary ${ctx.itineraryCode}`,
+        notes:
+          direction === 'payable'
+            ? `Auto-generated from itinerary ${ctx.itineraryCode} — ${rate}% of profit (client price − supplier cost ${costAmount})`
+            : `Auto-generated from itinerary ${ctx.itineraryCode} — ${rate}% of supplier price`,
       },
     })
   }
