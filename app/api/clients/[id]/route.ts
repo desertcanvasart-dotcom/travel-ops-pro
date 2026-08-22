@@ -171,13 +171,22 @@ export async function DELETE(
           .select('id')
           .eq('itinerary_id', itin.id)
 
+        // Each step is checked: these used to be fire-and-forget, and the
+        // services delete filtered on `day_id` — a column that does not exist
+        // (it is `itinerary_day_id`) — so it failed with 42703 every time, the
+        // day delete then hit the services' FK, and the cascade left the trip's
+        // days and services behind while reporting the client deleted.
+        const step = async (label: string, q: PromiseLike<{ error: { message: string } | null }>) => {
+          const { error } = await q
+          if (error) throw new Error(`force delete: ${label} — ${error.message}`)
+        }
         if (days && days.length > 0) {
           const dayIds = days.map(d => d.id)
-          await supabaseAdmin.from('itinerary_services').delete().in('day_id', dayIds)
-          await supabaseAdmin.from('itinerary_day_versions').delete().in('itinerary_day_id', dayIds)
+          await step('trip services', supabaseAdmin.from('itinerary_services').delete().in('itinerary_day_id', dayIds))
+          await step('day versions', supabaseAdmin.from('itinerary_day_versions').delete().in('itinerary_day_id', dayIds))
         }
-        await supabaseAdmin.from('itinerary_days').delete().eq('itinerary_id', itin.id)
-        await supabaseAdmin.from('itinerary_versions').delete().eq('itinerary_id', itin.id)
+        await step('trip days', supabaseAdmin.from('itinerary_days').delete().eq('itinerary_id', itin.id))
+        await step('trip versions', supabaseAdmin.from('itinerary_versions').delete().eq('itinerary_id', itin.id))
 
         // Detach bookings from this itinerary
         await supabaseAdmin.from('bookings').delete().eq('itinerary_id', itin.id)
@@ -191,7 +200,7 @@ export async function DELETE(
         await supabaseAdmin.from('tour_quotes').delete().eq('itinerary_id', itin.id)
 
         // Delete the itinerary itself
-        await supabaseAdmin.from('itineraries').delete().eq('id', itin.id)
+        await step('trip', supabaseAdmin.from('itineraries').delete().eq('id', itin.id))
       }
     }
 
