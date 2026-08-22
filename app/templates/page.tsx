@@ -188,7 +188,7 @@ export default function TemplatesPage() {
 
   const fetchPlaceholders = async () => {
     try {
-      const response = await fetch('/api/templates/placeholders')
+      const response = await fetch(`/api/templates/placeholders?locale=${locale}`)
       if (response.ok) {
         const data = await response.json()
         setPlaceholders(data.data || [])

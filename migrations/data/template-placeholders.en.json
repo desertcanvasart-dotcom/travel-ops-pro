@@ -1,0 +1,1274 @@
+[
+ {
+  "placeholder": "{{AmendmentDetails}}",
+  "display_name": "Amendment Details",
+  "description": "Details of requested changes",
+  "category": "amendment",
+  "example_value": "Change room type from Standard to Deluxe",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AmendmentReason}}",
+  "display_name": "Amendment Reason",
+  "description": "Reason for the change",
+  "category": "amendment",
+  "example_value": "Guest preference",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{NewDetails}}",
+  "display_name": "New Details",
+  "description": "New booking details after amendment",
+  "category": "amendment",
+  "example_value": "Deluxe Room with Nile View",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{OriginalDate}}",
+  "display_name": "Original Date",
+  "description": "Original booking date before amendment",
+  "category": "amendment",
+  "example_value": "10 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{OriginalService}}",
+  "display_name": "Original Service",
+  "description": "Original service before amendment",
+  "category": "amendment",
+  "example_value": "Standard Room",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AccommodationDetails}}",
+  "display_name": "Accommodation Details",
+  "description": "Detailed accommodation info",
+  "category": "b2b",
+  "example_value": "Night 1-2: Marriott...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AccommodationSummary}}",
+  "display_name": "Accommodation Summary",
+  "description": "Summary of all accommodation",
+  "category": "b2b",
+  "example_value": "2 nights Cairo, 3 nights cruise...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AffectedArea}}",
+  "display_name": "Affected Area",
+  "description": "Geographic area affected",
+  "category": "b2b",
+  "example_value": "South Sinai",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AffectedBookings}}",
+  "display_name": "Affected Bookings",
+  "description": "List of affected bookings",
+  "category": "b2b",
+  "example_value": "BKG-001, BKG-002, BKG-003",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AgentName}}",
+  "display_name": "Agent Name",
+  "description": "Name of the travel agent contact",
+  "category": "b2b",
+  "example_value": "John Smith",
+  "data_source": "user_profiles.full_name"
+ },
+ {
+  "placeholder": "{{AlternativeOptions}}",
+  "display_name": "Alternative Options",
+  "description": "Available alternatives",
+  "category": "b2b",
+  "example_value": "Option A: Reschedule to...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AmountDue}}",
+  "display_name": "Amount Due",
+  "description": "Amount due for payment",
+  "category": "b2b",
+  "example_value": "1,000.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AmountPaid}}",
+  "display_name": "Amount Paid",
+  "description": "Total amount already paid",
+  "category": "b2b",
+  "example_value": "1,000.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{AmountReceived}}",
+  "display_name": "Amount Received",
+  "description": "Payment amount received",
+  "category": "b2b",
+  "example_value": "1,000.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Assumptions}}",
+  "display_name": "Assumptions",
+  "description": "Quote assumptions and conditions",
+  "category": "b2b",
+  "example_value": "• Based on 4-star hotels...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Balance}}",
+  "display_name": "Balance",
+  "description": "Remaining balance",
+  "category": "b2b",
+  "example_value": "2,500.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{BalanceDue}}",
+  "display_name": "Balance Due",
+  "description": "Outstanding balance amount",
+  "category": "b2b",
+  "example_value": "2,500.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{BalanceDueDate}}",
+  "display_name": "Balance Due Date",
+  "description": "Balance payment due date",
+  "category": "b2b",
+  "example_value": "1 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{BankDetails}}",
+  "display_name": "Bank Details",
+  "description": "Bank account details for transfer",
+  "category": "b2b",
+  "example_value": "Bank: XYZ Bank...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CancellationBreakdown}}",
+  "display_name": "Cancellation Breakdown",
+  "description": "Detailed cancellation charges",
+  "category": "b2b",
+  "example_value": "Hotel: $200, Cruise: $500...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CancellationCharges}}",
+  "display_name": "Cancellation Charges",
+  "description": "Total cancellation charges",
+  "category": "b2b",
+  "example_value": "700.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CancellationPolicy}}",
+  "display_name": "Cancellation Policy",
+  "description": "Cancellation terms",
+  "category": "b2b",
+  "example_value": "30+ days: 10% penalty...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ChangesSummary}}",
+  "display_name": "Changes Summary",
+  "description": "Summary of changes made",
+  "category": "b2b",
+  "example_value": "• Upgraded from 4* to 5* hotels",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Clarifications}}",
+  "display_name": "Clarifications",
+  "description": "Questions needing clarification",
+  "category": "b2b",
+  "example_value": "• Private or shared tours?",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ConfirmedServices}}",
+  "display_name": "Confirmed Services",
+  "description": "List of confirmed services",
+  "category": "b2b",
+  "example_value": "Day 1: Airport transfer...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CurrentStatus}}",
+  "display_name": "Current Status",
+  "description": "Current situation status",
+  "category": "b2b",
+  "example_value": "Under Review",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{DayByDayServices}}",
+  "display_name": "Day-by-Day Services",
+  "description": "Complete day-by-day breakdown",
+  "category": "b2b",
+  "example_value": "Day 1: Arrival...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{DepositAmount}}",
+  "display_name": "Deposit Amount",
+  "description": "Required deposit amount",
+  "category": "b2b",
+  "example_value": "1,000.00",
+  "data_source": "invoices.deposit"
+ },
+ {
+  "placeholder": "{{DepositDeadline}}",
+  "display_name": "Deposit Deadline",
+  "description": "Deposit payment deadline",
+  "category": "b2b",
+  "example_value": "3 March 2026",
+  "data_source": "invoices.deposit_due"
+ },
+ {
+  "placeholder": "{{DueDate}}",
+  "display_name": "Due Date",
+  "description": "Payment due date",
+  "category": "b2b",
+  "example_value": "5 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Duration}}",
+  "display_name": "Duration",
+  "description": "Trip duration",
+  "category": "b2b",
+  "example_value": "8 days / 7 nights",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{EffectiveDate}}",
+  "display_name": "Effective Date",
+  "description": "Date issue became effective",
+  "category": "b2b",
+  "example_value": "1 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{EffectivePeriod}}",
+  "display_name": "Effective Period",
+  "description": "Period rates/update applies",
+  "category": "b2b",
+  "example_value": "November 2026 - March 2027",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{EmergencyContact}}",
+  "display_name": "Emergency Contact",
+  "description": "Emergency contact details",
+  "category": "b2b",
+  "example_value": "+20 123 456 7890 (24/7)",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Exclusions}}",
+  "display_name": "Exclusions",
+  "description": "List of excluded items",
+  "category": "b2b",
+  "example_value": "• International flights...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{GuideServices}}",
+  "display_name": "Guide Services",
+  "description": "Guide service details",
+  "category": "b2b",
+  "example_value": "English-speaking guide: Days 1-8",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{HoldExpiry}}",
+  "display_name": "Hold Expiry",
+  "description": "Provisional hold expiry date/time",
+  "category": "b2b",
+  "example_value": "5 March 2026, 18:00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Inclusions}}",
+  "display_name": "Inclusions",
+  "description": "List of included services",
+  "category": "b2b",
+  "example_value": "• Airport transfers...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{IssueType}}",
+  "display_name": "Issue Type",
+  "description": "Type of operational issue",
+  "category": "b2b",
+  "example_value": "Force Majeure",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{KeyHighlights}}",
+  "display_name": "Key Highlights",
+  "description": "Key points to highlight",
+  "category": "b2b",
+  "example_value": "• 15% reduction on 5* hotels...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{MealsSummary}}",
+  "display_name": "Meals Summary",
+  "description": "Summary of included meals",
+  "category": "b2b",
+  "example_value": "7 breakfasts, 4 lunches, 3 dinners",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{MissingInfo}}",
+  "display_name": "Missing Info",
+  "description": "List of missing information",
+  "category": "b2b",
+  "example_value": "• Exact nationality...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{NextSteps}}",
+  "display_name": "Next Steps",
+  "description": "Next steps after payment",
+  "category": "b2b",
+  "example_value": "Balance due by 1 March. Vouchers will be issued upon final payment.",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{OriginalDueDate}}",
+  "display_name": "Original Due Date",
+  "description": "Original payment due date",
+  "category": "b2b",
+  "example_value": "25 February 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Pax}}",
+  "display_name": "Pax",
+  "description": "Number of travelers",
+  "category": "b2b",
+  "example_value": "4 adults, 2 children",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PaymentDate}}",
+  "display_name": "Payment Date",
+  "description": "Date payment was received",
+  "category": "b2b",
+  "example_value": "3 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PaymentMethod}}",
+  "display_name": "Payment Method",
+  "description": "Method of payment",
+  "category": "b2b",
+  "example_value": "Bank Transfer",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PaymentTerms}}",
+  "display_name": "Payment Terms",
+  "description": "Payment schedule and terms",
+  "category": "b2b",
+  "example_value": "30% deposit, balance 30 days prior",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PaymentType}}",
+  "display_name": "Payment Type",
+  "description": "Type of payment requested",
+  "category": "b2b",
+  "example_value": "Deposit",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PolicyReference}}",
+  "display_name": "Policy Reference",
+  "description": "Reference to applicable policy",
+  "category": "b2b",
+  "example_value": "As per our T&Cs section 5.2...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PreviousTotal}}",
+  "display_name": "Previous Total",
+  "description": "Previous quote total",
+  "category": "b2b",
+  "example_value": "3,200.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PreviousVersion}}",
+  "display_name": "Previous Version",
+  "description": "Previous quote version number",
+  "category": "b2b",
+  "example_value": "1",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PricingBreakdown}}",
+  "display_name": "Pricing Breakdown",
+  "description": "Detailed price breakdown",
+  "category": "b2b",
+  "example_value": "Accommodation: $1,200...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{QuoteRef}}",
+  "display_name": "Quote Reference",
+  "description": "Unique quotation reference number",
+  "category": "b2b",
+  "example_value": "QT-2026-0042",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{QuoteVersion}}",
+  "display_name": "Quote Version",
+  "description": "Version number of the quote",
+  "category": "b2b",
+  "example_value": "2",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{RecommendedActions}}",
+  "display_name": "Recommended Actions",
+  "description": "Suggested actions to take",
+  "category": "b2b",
+  "example_value": "Consider alternative dates...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{RefundDue}}",
+  "display_name": "Refund Due",
+  "description": "Amount to be refunded",
+  "category": "b2b",
+  "example_value": "300.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{RefundInstructions}}",
+  "display_name": "Refund Instructions",
+  "description": "Instructions for refund processing",
+  "category": "b2b",
+  "example_value": "Refund will be processed within 14 working days.",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ResponseTime}}",
+  "display_name": "Response Time",
+  "description": "Expected response timeframe",
+  "category": "b2b",
+  "example_value": "24-48 hours",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{RevisionReason}}",
+  "display_name": "Revision Reason",
+  "description": "Reason for quote revision",
+  "category": "b2b",
+  "example_value": "hotel category upgrade",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Season}}",
+  "display_name": "Season",
+  "description": "Travel season",
+  "category": "b2b",
+  "example_value": "Winter",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServiceImpact}}",
+  "display_name": "Service Impact",
+  "description": "Impact on services",
+  "category": "b2b",
+  "example_value": "Abu Simbel flights suspended",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServiceLevel}}",
+  "display_name": "Service Level",
+  "description": "Service tier/category",
+  "category": "b2b",
+  "example_value": "Deluxe",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServicesOnHold}}",
+  "display_name": "Services on Hold",
+  "description": "List of services on provisional hold",
+  "category": "b2b",
+  "example_value": "• Marriott Mena House...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServicesProvided}}",
+  "display_name": "Services Provided",
+  "description": "Summary of services delivered",
+  "category": "b2b",
+  "example_value": "Cairo tour, Nile cruise, Luxor tour",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{SituationDescription}}",
+  "display_name": "Situation Description",
+  "description": "Description of the situation",
+  "category": "b2b",
+  "example_value": "Due to weather conditions...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{SupplierContacts}}",
+  "display_name": "Supplier Contacts",
+  "description": "Emergency supplier contact list",
+  "category": "b2b",
+  "example_value": "Hotel: +20 xxx, Guide: +20 xxx",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{TotalBookingValue}}",
+  "display_name": "Total Booking Value",
+  "description": "Original total booking value",
+  "category": "b2b",
+  "example_value": "3,500.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{TotalCost}}",
+  "display_name": "Total Cost",
+  "description": "Total booking cost",
+  "category": "b2b",
+  "example_value": "3,500.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{TotalPaid}}",
+  "display_name": "Total Paid",
+  "description": "Total amount paid to date",
+  "category": "b2b",
+  "example_value": "1,000.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{TotalPrice}}",
+  "display_name": "Total Price",
+  "description": "Total quotation price",
+  "category": "b2b",
+  "example_value": "3,500.00",
+  "data_source": "invoices.total"
+ },
+ {
+  "placeholder": "{{TourName}}",
+  "display_name": "Tour Name",
+  "description": "Name of the tour package",
+  "category": "b2b",
+  "example_value": "Classic Egypt 8 Days",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{TransactionRef}}",
+  "display_name": "Transaction Ref",
+  "description": "Payment transaction reference",
+  "category": "b2b",
+  "example_value": "TRX-20260303-001",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{TransportSummary}}",
+  "display_name": "Transport Summary",
+  "description": "Summary of transport services",
+  "category": "b2b",
+  "example_value": "Private A/C vehicle throughout",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{TravelDates}}",
+  "display_name": "Travel Dates",
+  "description": "Travel date range",
+  "category": "b2b",
+  "example_value": "10-17 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{UpdateDetails}}",
+  "display_name": "Update Details",
+  "description": "Details of the update",
+  "category": "b2b",
+  "example_value": "New contracted rates with hotels...",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{UpdateType}}",
+  "display_name": "Update Type",
+  "description": "Type of update notification",
+  "category": "b2b",
+  "example_value": "New Season Rates",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ValidUntil}}",
+  "display_name": "Valid Until",
+  "description": "Quote validity expiry date",
+  "category": "b2b",
+  "example_value": "15 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Year}}",
+  "display_name": "Year",
+  "description": "Year",
+  "category": "b2b",
+  "example_value": "2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{BookingRef}}",
+  "display_name": "Booking Reference",
+  "description": "Internal booking reference number",
+  "category": "booking",
+  "example_value": "BKG-2026-0042",
+  "data_source": "itineraries.reference"
+ },
+ {
+  "placeholder": "{{ConfirmationDeadline}}",
+  "display_name": "Confirmation Deadline",
+  "description": "Date by which confirmation is needed",
+  "category": "booking",
+  "example_value": "5 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServiceDate}}",
+  "display_name": "Service Date",
+  "description": "Date of the service",
+  "category": "booking",
+  "example_value": "15 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServiceDescription}}",
+  "display_name": "Service Description",
+  "description": "Detailed description of the service",
+  "category": "booking",
+  "example_value": "Private airport pickup with meet & greet",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServiceLocation}}",
+  "display_name": "Service Location",
+  "description": "Location where service is provided",
+  "category": "booking",
+  "example_value": "Cairo International Airport",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServiceTime}}",
+  "display_name": "Service Time",
+  "description": "Time of the service",
+  "category": "booking",
+  "example_value": "09:00 AM",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ServiceType}}",
+  "display_name": "Service Type",
+  "description": "Type of service booked",
+  "category": "booking",
+  "example_value": "Airport Transfer",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CancellationDate}}",
+  "display_name": "Cancellation Date",
+  "description": "Date of cancellation request",
+  "category": "cancellation",
+  "example_value": "1 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CancellationReason}}",
+  "display_name": "Cancellation Reason",
+  "description": "Reason for cancellation",
+  "category": "cancellation",
+  "example_value": "Change of travel plans",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{BoardingDate}}",
+  "display_name": "Boarding Date",
+  "description": "Cruise boarding date",
+  "category": "cruise",
+  "example_value": "15 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CabinType}}",
+  "display_name": "Cabin Type",
+  "description": "Type of cabin requested",
+  "category": "cruise",
+  "example_value": "Suite with Balcony",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{CruiseRoute}}",
+  "display_name": "Cruise Route",
+  "description": "Cruise itinerary route",
+  "category": "cruise",
+  "example_value": "Luxor to Aswan",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{DisembarkationDate}}",
+  "display_name": "Disembarkation Date",
+  "description": "Cruise disembarkation date",
+  "category": "cruise",
+  "example_value": "19 March 2026",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{NumCabins}}",
+  "display_name": "Number of Cabins",
+  "description": "Number of cabins requested",
+  "category": "cruise",
+  "example_value": "1",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{BalanceAmount}}",
+  "display_name": "Balance Amount",
+  "description": "Remaining payment",
+  "category": "financial",
+  "example_value": "1,960",
+  "data_source": "invoices.balance"
+ },
+ {
+  "placeholder": "{{PaidAmount}}",
+  "display_name": "Paid Amount",
+  "description": "Amount received",
+  "category": "financial",
+  "example_value": "490",
+  "data_source": "invoices.paid"
+ },
+ {
+  "placeholder": "{{PaymentLink}}",
+  "display_name": "Payment Link",
+  "description": "Online payment URL",
+  "category": "financial",
+  "example_value": "https://pay.travel2egypt.com/inv123",
+  "data_source": "invoices.payment_link"
+ },
+ {
+  "placeholder": "{{AdditionalNotes}}",
+  "display_name": "Additional Notes",
+  "description": "Additional notes for supplier",
+  "category": "general",
+  "example_value": "Please provide water bottles",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{OtherRequests}}",
+  "display_name": "Other Requests",
+  "description": "Other special requests",
+  "category": "general",
+  "example_value": "Flowers in room",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{SpecialNotes}}",
+  "display_name": "Special Notes",
+  "description": "Additional notes",
+  "category": "general",
+  "example_value": "VIP guests - extra attention",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ClientEmail}}",
+  "display_name": "Client Email",
+  "description": "Client email address",
+  "category": "guest",
+  "example_value": "john@example.com",
+  "data_source": "clients.email"
+ },
+ {
+  "placeholder": "{{ClientPhone}}",
+  "display_name": "Client Phone",
+  "description": "Client WhatsApp/phone",
+  "category": "guest",
+  "example_value": "+44 7700 900123",
+  "data_source": "clients.phone"
+ },
+ {
+  "placeholder": "{{DietaryRequirements}}",
+  "display_name": "Dietary Requirements",
+  "description": "Special dietary needs",
+  "category": "guest",
+  "example_value": "Vegetarian",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{GroupName}}",
+  "display_name": "Group Name",
+  "description": "Name of the group/family",
+  "category": "guest",
+  "example_value": "The Smith Family",
+  "data_source": "clients.company"
+ },
+ {
+  "placeholder": "{{GuestName}}",
+  "display_name": "Guest Name",
+  "description": "Primary guest/client name",
+  "category": "guest",
+  "example_value": "John Smith",
+  "data_source": "clients.name"
+ },
+ {
+  "placeholder": "{{Nationality}}",
+  "display_name": "Nationality",
+  "description": "Guest nationality",
+  "category": "guest",
+  "example_value": "American",
+  "data_source": "clients.nationality"
+ },
+ {
+  "placeholder": "{{NumGuests}}",
+  "display_name": "Number of Guests",
+  "description": "Total number of guests",
+  "category": "guest",
+  "example_value": "4",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PaxCount}}",
+  "display_name": "Number of Guests",
+  "description": "Total travelers",
+  "category": "guest",
+  "example_value": "4",
+  "data_source": "itineraries.pax"
+ },
+ {
+  "placeholder": "{{SpecialOccasions}}",
+  "display_name": "Special Occasions",
+  "description": "Birthdays, anniversaries, etc.",
+  "category": "guest",
+  "example_value": "Honeymoon",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{SpecialRequests}}",
+  "display_name": "Special Requests",
+  "description": "Any special requests",
+  "category": "guest",
+  "example_value": "Early check-in requested",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{SpecialRequirements}}",
+  "display_name": "Special Requirements",
+  "description": "Special service requirements",
+  "category": "guest",
+  "example_value": "Wheelchair accessible",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{DriverName}}",
+  "display_name": "Driver Name",
+  "description": "Assigned driver",
+  "category": "guide",
+  "example_value": "Mohamed Ali",
+  "data_source": "team_members.name"
+ },
+ {
+  "placeholder": "{{DriverPhone}}",
+  "display_name": "Driver Phone",
+  "description": "Driver contact",
+  "category": "guide",
+  "example_value": "+20 100 765 4321",
+  "data_source": "team_members.phone"
+ },
+ {
+  "placeholder": "{{GuidePhone}}",
+  "display_name": "Guide Phone",
+  "description": "Guide contact",
+  "category": "guide",
+  "example_value": "+20 100 123 4567",
+  "data_source": "team_members.phone"
+ },
+ {
+  "placeholder": "{{PlateNo}}",
+  "display_name": "Plate Number",
+  "description": "Vehicle registration",
+  "category": "guide",
+  "example_value": "ABC 1234",
+  "data_source": "vehicles.plate"
+ },
+ {
+  "placeholder": "{{CheckInDate}}",
+  "display_name": "Check-in Date",
+  "description": "Hotel check-in date",
+  "category": "hotel",
+  "example_value": "10 March 2026",
+  "data_source": "bookings.check_in"
+ },
+ {
+  "placeholder": "{{CheckOutDate}}",
+  "display_name": "Check-out Date",
+  "description": "Hotel check-out date",
+  "category": "hotel",
+  "example_value": "12 March 2026",
+  "data_source": "bookings.check_out"
+ },
+ {
+  "placeholder": "{{HotelAddress}}",
+  "display_name": "Hotel Address",
+  "description": "Hotel location",
+  "category": "hotel",
+  "example_value": "6 Pyramids Road, Giza",
+  "data_source": "accommodations.address"
+ },
+ {
+  "placeholder": "{{HotelPhone}}",
+  "display_name": "Hotel Phone",
+  "description": "Hotel contact",
+  "category": "hotel",
+  "example_value": "+20 2 3377 3222",
+  "data_source": "accommodations.phone"
+ },
+ {
+  "placeholder": "{{MealPlan}}",
+  "display_name": "Meal Plan",
+  "description": "Included meals",
+  "category": "hotel",
+  "example_value": "Breakfast included",
+  "data_source": "bookings.meal_plan"
+ },
+ {
+  "placeholder": "{{NumNights}}",
+  "display_name": "Number of Nights",
+  "description": "Total number of nights",
+  "category": "hotel",
+  "example_value": "2",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{RoomType}}",
+  "display_name": "Room Type",
+  "description": "Type of room requested",
+  "category": "hotel",
+  "example_value": "Deluxe Pyramid View",
+  "data_source": "bookings.room_type"
+ },
+ {
+  "placeholder": "{{ItineraryLink}}",
+  "display_name": "Itinerary Link",
+  "description": "Online itinerary URL",
+  "category": "links",
+  "example_value": "https://travel2egypt.com/trip/abc123",
+  "data_source": "itineraries.public_link"
+ },
+ {
+  "placeholder": "{{ReviewLink}}",
+  "display_name": "Review Link",
+  "description": "Review request URL",
+  "category": "links",
+  "example_value": "https://g.page/travel2egypt/review",
+  "data_source": "settings.review_link"
+ },
+ {
+  "placeholder": "{{VoucherLink}}",
+  "display_name": "Voucher Link",
+  "description": "Voucher download",
+  "category": "links",
+  "example_value": "https://travel2egypt.com/voucher/abc123",
+  "data_source": "itineraries.voucher_link"
+ },
+ {
+  "placeholder": "{{AgentPhone}}",
+  "display_name": "Agent Phone",
+  "description": "Agent contact",
+  "category": "ops",
+  "example_value": "+20 100 123 4567",
+  "data_source": "user_profiles.phone"
+ },
+ {
+  "placeholder": "{{CompanyName}}",
+  "display_name": "Company Name",
+  "description": "Your company",
+  "category": "ops",
+  "example_value": "Travel2Egypt",
+  "data_source": "settings.company_name"
+ },
+ {
+  "placeholder": "{{Emergency24_7Phone}}",
+  "display_name": "Emergency Phone",
+  "description": "24/7 emergency line",
+  "category": "ops",
+  "example_value": "+20 100 911 0000",
+  "data_source": "settings.emergency_phone"
+ },
+ {
+  "placeholder": "{{OpsManagerName}}",
+  "display_name": "Ops Manager",
+  "description": "Operations contact",
+  "category": "ops",
+  "example_value": "Sara Ahmed",
+  "data_source": "settings.ops_manager_name"
+ },
+ {
+  "placeholder": "{{OpsManagerPhone}}",
+  "display_name": "Ops Phone",
+  "description": "Operations WhatsApp",
+  "category": "ops",
+  "example_value": "+20 100 999 8888",
+  "data_source": "settings.ops_manager_phone"
+ },
+ {
+  "placeholder": "{{Currency}}",
+  "display_name": "Currency",
+  "description": "Payment currency",
+  "category": "payment",
+  "example_value": "USD",
+  "data_source": "invoices.currency"
+ },
+ {
+  "placeholder": "{{InvoiceDetails}}",
+  "display_name": "Invoice Details",
+  "description": "Invoice number and details",
+  "category": "payment",
+  "example_value": "INV-2026-0042",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PaymentAmount}}",
+  "display_name": "Payment Amount",
+  "description": "Amount being paid",
+  "category": "payment",
+  "example_value": "1,500.00",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{ProviderName}}",
+  "display_name": "Provider Name",
+  "description": "Supplier name",
+  "category": "provider",
+  "example_value": "Nile Cruises Ltd",
+  "data_source": "suppliers.name"
+ },
+ {
+  "placeholder": "{{ProviderRef}}",
+  "display_name": "Provider Reference",
+  "description": "Supplier booking ref",
+  "category": "provider",
+  "example_value": "HTL-2025-0891",
+  "data_source": "bookings.provider_ref"
+ },
+ {
+  "placeholder": "{{Date}}",
+  "display_name": "Date",
+  "description": "Specific date",
+  "category": "schedule",
+  "example_value": "16 March 2025",
+  "data_source": "context.date"
+ },
+ {
+  "placeholder": "{{DropoffPoint}}",
+  "display_name": "Drop-off Point",
+  "description": "Drop location",
+  "category": "schedule",
+  "example_value": "Cairo Airport",
+  "data_source": "itinerary_days.dropoff_point"
+ },
+ {
+  "placeholder": "{{PickupPoint}}",
+  "display_name": "Pickup Point",
+  "description": "Collection location",
+  "category": "schedule",
+  "example_value": "Hotel lobby",
+  "data_source": "itinerary_days.pickup_point"
+ },
+ {
+  "placeholder": "{{CruiseName}}",
+  "display_name": "Cruise Name",
+  "description": "Name of the Nile cruise",
+  "category": "supplier",
+  "example_value": "MS Oberoi Philae",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{GuideName}}",
+  "display_name": "Guide Name",
+  "description": "Name of the tour guide",
+  "category": "supplier",
+  "example_value": "Ahmed Hassan",
+  "data_source": "team_members.name"
+ },
+ {
+  "placeholder": "{{HotelName}}",
+  "display_name": "Hotel Name",
+  "description": "Name of the hotel",
+  "category": "supplier",
+  "example_value": "Marriott Mena House",
+  "data_source": "accommodations.name"
+ },
+ {
+  "placeholder": "{{SupplierEmail}}",
+  "display_name": "Supplier Email",
+  "description": "Email address of the supplier",
+  "category": "supplier",
+  "example_value": "bookings@supplier.com",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{SupplierName}}",
+  "display_name": "Supplier Name",
+  "description": "Name of the supplier/vendor",
+  "category": "supplier",
+  "example_value": "Pyramids Transport Co.",
+  "data_source": "suppliers.name"
+ },
+ {
+  "placeholder": "{{SupplierPhone}}",
+  "display_name": "Supplier Phone",
+  "description": "Phone number of the supplier",
+  "category": "supplier",
+  "example_value": "+20 123 456 7890",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{SupplierWhatsApp}}",
+  "display_name": "Supplier WhatsApp",
+  "description": "WhatsApp number of the supplier",
+  "category": "supplier",
+  "example_value": "+20 123 456 7890",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Itinerary}}",
+  "display_name": "Itinerary",
+  "description": "Detailed tour itinerary",
+  "category": "tour",
+  "example_value": "Pyramids - Sphinx - Lunch - Museum",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{Languages}}",
+  "display_name": "Languages",
+  "description": "Language requirements",
+  "category": "tour",
+  "example_value": "English",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{MeetingPoint}}",
+  "display_name": "Meeting Point",
+  "description": "Where to meet the guide",
+  "category": "tour",
+  "example_value": "Hotel Lobby",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{MeetingTime}}",
+  "display_name": "Meeting Time",
+  "description": "Time to meet",
+  "category": "tour",
+  "example_value": "08:30 AM",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{DropoffLocation}}",
+  "display_name": "Drop-off Location",
+  "description": "Drop-off address or location",
+  "category": "transport",
+  "example_value": "Giza Pyramids",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{NumPassengers}}",
+  "display_name": "Number of Passengers",
+  "description": "Total number of passengers",
+  "category": "transport",
+  "example_value": "4",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PickupLocation}}",
+  "display_name": "Pickup Location",
+  "description": "Pickup address or location",
+  "category": "transport",
+  "example_value": "Four Seasons Hotel Cairo",
+  "data_source": null
+ },
+ {
+  "placeholder": "{{PickupTime}}",
+  "display_name": "Pickup Time",
+  "description": "Scheduled pickup time",
+  "category": "transport",
+  "example_value": "08:00 AM",
+  "data_source": "itinerary_days.pickup_time"
+ },
+ {
+  "placeholder": "{{VehicleType}}",
+  "display_name": "Vehicle Type",
+  "description": "Type of vehicle requested",
+  "category": "transport",
+  "example_value": "Mercedes Viano",
+  "data_source": "vehicles.type"
+ },
+ {
+  "placeholder": "{{Airport}}",
+  "display_name": "Airport",
+  "description": "Arrival airport",
+  "category": "trip",
+  "example_value": "Cairo International (CAI)",
+  "data_source": "itineraries.airport"
+ },
+ {
+  "placeholder": "{{ArrivalDateTime}}",
+  "display_name": "Arrival Date/Time",
+  "description": "Flight arrival",
+  "category": "trip",
+  "example_value": "15 March 2025, 14:30",
+  "data_source": "itineraries.arrival_datetime"
+ },
+ {
+  "placeholder": "{{Cities}}",
+  "display_name": "Cities",
+  "description": "Cities visited",
+  "category": "trip",
+  "example_value": "Cairo, Luxor, Aswan",
+  "data_source": "itinerary_days.cities"
+ },
+ {
+  "placeholder": "{{FlightNo}}",
+  "display_name": "Flight Number",
+  "description": "Arrival flight",
+  "category": "trip",
+  "example_value": "BA155",
+  "data_source": "itineraries.flight_number"
+ },
+ {
+  "placeholder": "{{TripDates}}",
+  "display_name": "Trip Dates",
+  "description": "Full date range",
+  "category": "trip",
+  "example_value": "15-22 March 2025",
+  "data_source": "itineraries.start_date - end_date"
+ },
+ {
+  "placeholder": "{{TripName}}",
+  "display_name": "Trip Name",
+  "description": "Itinerary title",
+  "category": "trip",
+  "example_value": "Classic Egypt Explorer",
+  "data_source": "itineraries.title"
+ }
+]
