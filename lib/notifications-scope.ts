@@ -29,3 +29,23 @@ export function notificationScopeFilter(userId: string, teamMemberIds: string[])
   const safe = teamMemberIds.filter(id => UUID.test(id))
   return safe.length ? `user_id.eq.${userId},team_member_id.in.(${safe.join(',')})` : `user_id.eq.${userId}`
 }
+
+/**
+ * Ids of the viewer's notifications matching `where`, resolved with a SELECT.
+ * Mutations then target `id IN (...)`. PostgREST accepts the `or=` scope on
+ * reads but rejects it on PATCH/DELETE for this column (42703, seen in prod
+ * 2026-08-23), so no mutation may carry the scope filter directly.
+ */
+export async function ownNotificationIds(
+  db: Db,
+  userId: string,
+  where: { id?: string; unreadOnly?: boolean } = {}
+): Promise<string[]> {
+  const scope = notificationScopeFilter(userId, await linkedTeamMemberIds(db, userId))
+  let q = db.from('notifications').select('id').or(scope).limit(1000)
+  if (where.id) q = q.eq('id', where.id)
+  if (where.unreadOnly) q = q.eq('is_read', false)
+  const { data, error } = await q
+  if (error) throw error
+  return ((data ?? []) as Array<{ id: string }>).map(r => r.id)
+}
