@@ -235,7 +235,7 @@ export function gridCompleteness(
 
     // --- Cross-cutting per slot ---
     for (const s of day.slots) {
-      // A selection that priced to €0 → warn, UNLESS every selection is
+      // A selection that priced to 0 → warn, UNLESS every selection is
       // a known free item.
       const hasSel = (s.selectedItems?.length ?? 0) > 0
       if (hasSel && !slotIsPriced(s)) {
@@ -245,7 +245,7 @@ export function gridCompleteness(
             dayNumber: dn,
             severity: 'warn',
             code: 'zero-resolved-selection',
-            message: `Day ${dn}: "${s.slotId}" has a selection that priced to €0 — confirm it is intentionally free.`,
+            message: `Day ${dn}: "${s.slotId}" has a selection that priced to 0 — confirm it is intentionally free.`,
           })
         }
       }

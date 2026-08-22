@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // B2B PRICING RULES MANAGEMENT
@@ -168,6 +169,7 @@ const DEFAULT_PACKAGE_FORM: PackageFormData = {
 }
 
 export default function B2BPricingRulesPage() {
+  const { rateCurrency, rateSymbol } = useCurrency()
   const t = useTranslations('b2bPricingRules')
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([])
   const [transportPackages, setTransportPackages] = useState<TransportPackage[]>([])
@@ -521,28 +523,28 @@ export default function B2BPricingRulesPage() {
                               <div className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
                                 <span className="text-green-700 font-medium">{rule.tier1_label || t('tier1Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier1_min_pax}-{rule.tier1_max_pax} pax)</span>
-                                <span className="text-green-600 font-bold">€{rule.tier1_rate_eur}</span>
+                                <span className="text-green-600 font-bold">{rateSymbol}{rule.tier1_rate_eur}</span>
                               </div>
                             )}
                             {rule.tier2_rate_eur && (
                               <div className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
                                 <span className="text-blue-700 font-medium">{rule.tier2_label || t('tier2Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier2_min_pax}-{rule.tier2_max_pax || '∞'} pax)</span>
-                                <span className="text-blue-600 font-bold">€{rule.tier2_rate_eur}</span>
+                                <span className="text-blue-600 font-bold">{rateSymbol}{rule.tier2_rate_eur}</span>
                               </div>
                             )}
                             {rule.tier3_rate_eur && (
                               <div className="px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg">
                                 <span className="text-purple-700 font-medium">{rule.tier3_label || t('tier3Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier3_min_pax}-{rule.tier3_max_pax || '∞'} pax)</span>
-                                <span className="text-purple-600 font-bold">€{rule.tier3_rate_eur}</span>
+                                <span className="text-purple-600 font-bold">{rateSymbol}{rule.tier3_rate_eur}</span>
                               </div>
                             )}
                             {rule.tier4_rate_eur && (
                               <div className="px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
                                 <span className="text-orange-700 font-medium">{rule.tier4_label || t('tier4Default')}</span>
                                 <span className="text-gray-500 mx-1">({rule.tier4_min_pax}+ pax)</span>
-                                <span className="text-orange-600 font-bold">€{rule.tier4_rate_eur}</span>
+                                <span className="text-orange-600 font-bold">{rateSymbol}{rule.tier4_rate_eur}</span>
                               </div>
                             )}
                           </div>
@@ -626,27 +628,27 @@ export default function B2BPricingRulesPage() {
                           <div className="grid grid-cols-5 gap-2 text-sm mt-3">
                             <div className="text-center p-2 bg-gray-50 rounded">
                               <p className="text-xs text-gray-500">{t('sedan')}</p>
-                              <p className="font-semibold text-gray-900">€{pkg.sedan_rate}</p>
+                              <p className="font-semibold text-gray-900">{rateSymbol}{pkg.sedan_rate}</p>
                               <p className="text-xs text-gray-400">1-{pkg.sedan_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
                               <p className="text-xs text-gray-500">{t('minivan')}</p>
-                              <p className="font-semibold text-gray-900">€{pkg.minivan_rate}</p>
+                              <p className="font-semibold text-gray-900">{rateSymbol}{pkg.minivan_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.sedan_capacity + 1}-{pkg.minivan_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
                               <p className="text-xs text-gray-500">{t('van')}</p>
-                              <p className="font-semibold text-gray-900">€{pkg.van_rate}</p>
+                              <p className="font-semibold text-gray-900">{rateSymbol}{pkg.van_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.minivan_capacity + 1}-{pkg.van_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
                               <p className="text-xs text-gray-500">{t('minibus')}</p>
-                              <p className="font-semibold text-gray-900">€{pkg.minibus_rate}</p>
+                              <p className="font-semibold text-gray-900">{rateSymbol}{pkg.minibus_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.van_capacity + 1}-{pkg.minibus_capacity} pax</p>
                             </div>
                             <div className="text-center p-2 bg-gray-50 rounded">
                               <p className="text-xs text-gray-500">{t('bus')}</p>
-                              <p className="font-semibold text-gray-900">€{pkg.bus_rate}</p>
+                              <p className="font-semibold text-gray-900">{rateSymbol}{pkg.bus_rate}</p>
                               <p className="text-xs text-gray-400">{pkg.minibus_capacity + 1}+ pax</p>
                             </div>
                           </div>
@@ -799,7 +801,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('rateEur', { currency: rateCurrency })}</label>
                     <input
                       type="number"
                       value={ruleForm.tier1_rate_eur || ''}
@@ -845,7 +847,7 @@ export default function B2BPricingRulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('rateEur', { currency: rateCurrency })}</label>
                     <input
                       type="number"
                       value={ruleForm.tier2_rate_eur || ''}
@@ -891,7 +893,7 @@ export default function B2BPricingRulesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('rateEur', { currency: rateCurrency })}</label>
                         <input
                           type="number"
                           value={ruleForm.tier3_rate_eur || ''}
@@ -934,7 +936,7 @@ export default function B2BPricingRulesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">{t('rateEur')}</label>
+                        <label className="block text-xs text-gray-600 mb-1">{t('rateEur', { currency: rateCurrency })}</label>
                         <input
                           type="number"
                           value={ruleForm.tier4_rate_eur || ''}
@@ -1075,7 +1077,7 @@ export default function B2BPricingRulesPage() {
               </div>
 
               <div>
-                <h4 className="font-medium text-gray-900 mb-3">{t('vehicleRates')}</h4>
+                <h4 className="font-medium text-gray-900 mb-3">{t('vehicleRates', { currency: rateCurrency })}</h4>
                 <div className="grid grid-cols-5 gap-3">
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <label className="block text-xs font-medium text-gray-600 mb-2">{t('sedan')}</label>
@@ -1084,7 +1086,7 @@ export default function B2BPricingRulesPage() {
                       value={packageForm.sedan_rate || ''}
                       onChange={(e) => setPackageForm({ ...packageForm, sedan_rate: parseFloat(e.target.value) || 0 })}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder="€"
+                      placeholder={rateSymbol}
                     />
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <span>1-</span>
@@ -1105,7 +1107,7 @@ export default function B2BPricingRulesPage() {
                       value={packageForm.minivan_rate || ''}
                       onChange={(e) => setPackageForm({ ...packageForm, minivan_rate: parseFloat(e.target.value) || 0 })}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder="€"
+                      placeholder={rateSymbol}
                     />
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <span>{packageForm.sedan_capacity + 1}-</span>
@@ -1126,7 +1128,7 @@ export default function B2BPricingRulesPage() {
                       value={packageForm.van_rate || ''}
                       onChange={(e) => setPackageForm({ ...packageForm, van_rate: parseFloat(e.target.value) || 0 })}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder="€"
+                      placeholder={rateSymbol}
                     />
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <span>{packageForm.minivan_capacity + 1}-</span>
@@ -1147,7 +1149,7 @@ export default function B2BPricingRulesPage() {
                       value={packageForm.minibus_rate || ''}
                       onChange={(e) => setPackageForm({ ...packageForm, minibus_rate: parseFloat(e.target.value) || 0 })}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder="€"
+                      placeholder={rateSymbol}
                     />
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <span>{packageForm.van_capacity + 1}-</span>
@@ -1168,7 +1170,7 @@ export default function B2BPricingRulesPage() {
                       value={packageForm.bus_rate || ''}
                       onChange={(e) => setPackageForm({ ...packageForm, bus_rate: parseFloat(e.target.value) || 0 })}
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder="€"
+                      placeholder={rateSymbol}
                     />
                     <div className="text-xs text-gray-500">
                       {packageForm.minibus_capacity + 1}+ pax

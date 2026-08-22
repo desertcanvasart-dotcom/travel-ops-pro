@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag } from 'lucide-react'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
@@ -131,6 +132,7 @@ function AttractionInput({ onAdd, placeholder }: { onAdd: (name: string) => void
 }
 
 export default function TourPriceCalculator() {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
   const params = useParams()
   const variationId = params?.id as string
@@ -1112,9 +1114,9 @@ export default function TourPriceCalculator() {
                       </span>
                       <span className="text-sm text-[#4a5c35]">
                         {t('seasonPremiumNote', {
-                          amount: result.season_uplift.amount.toFixed(2),
-                          base: result.season_uplift.base.toFixed(2),
-                          base_price: (result.base_selling_price ?? 0).toFixed(2),
+                          amount: `${rateSymbol}${result.season_uplift.amount.toFixed(2)}`,
+                          base: `${rateSymbol}${result.season_uplift.base.toFixed(2)}`,
+                          base_price: `${rateSymbol}${(result.base_selling_price ?? 0).toFixed(2)}`,
                         })}
                       </span>
                     </div>

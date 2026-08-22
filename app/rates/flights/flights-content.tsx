@@ -176,8 +176,8 @@ export default function FlightsContent() {
   const dialog = useConfirmDialog()
 
   // Currency conversion
-  const { formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<FlightRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])

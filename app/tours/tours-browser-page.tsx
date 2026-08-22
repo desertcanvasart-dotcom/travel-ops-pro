@@ -42,7 +42,7 @@ export default function ToursBrowsePage() {
   const t = useTranslations('tours')
   // Program prices come out of the EUR-denominated B2B engine; display them in
   // the user's preferred currency like the rates pages do.
-  const { formatWithConversion } = useCurrency()
+  const { formatWithConversion, rateCurrency } = useCurrency()
   const [tours, setTours] = useState<TourTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -413,7 +413,7 @@ export default function ToursBrowsePage() {
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide">{t('card.startingFrom')}</p>
                     <p className="text-xl font-semibold text-[#647C47]">
-                      {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
+                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
                     </p>
                     <p className="text-[10px] text-gray-400">
                       {t('card.perPerson')}{tour.starting_from_tier ? ` • ${tour.starting_from_tier}` : ''}
@@ -505,7 +505,7 @@ export default function ToursBrowsePage() {
                   </div>
                   <div className="text-right min-w-[70px]">
                     <p className="font-semibold text-[#647C47] text-sm">
-                      {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
+                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
                     </p>
                     <p className="text-[10px] text-gray-400">{t('card.perPerson')}</p>
                   </div>
@@ -606,7 +606,7 @@ export default function ToursBrowsePage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <p className="font-semibold text-[#647C47] text-sm">
-                        {tour.starting_from ? formatWithConversion(tour.starting_from, 'EUR') : 'N/A'}
+                        {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
                       </p>
                       <p className="text-[10px] text-gray-400">{tour.starting_from_tier || ''}</p>
                     </td>

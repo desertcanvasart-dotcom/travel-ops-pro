@@ -153,7 +153,7 @@ export default function TourDetailPage() {
   const params = useParams()
   const t = useTranslations('tours')
   // Engine prices are EUR; render them in the preferred currency.
-  const { formatWithConversion, currency } = useCurrency()
+  const { formatWithConversion, currency, rateCurrency } = useCurrency()
   const currencySymbol = CURRENCY_SYMBOLS[currency] || currency
   const [tour, setTour] = useState<TourDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -518,7 +518,7 @@ export default function TourDetailPage() {
             {pricingLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : pricing ? (
-              formatWithConversion(pricing.price_per_person, 'EUR')
+              formatWithConversion(pricing.price_per_person, rateCurrency)
             ) : (
               'N/A'
             )}
@@ -776,11 +776,11 @@ export default function TourDetailPage() {
                     )}
                   </div>
                   <p className="text-3xl font-bold text-[#647C47]">
-                    {formatWithConversion(pricing.price_per_person, 'EUR')}
+                    {formatWithConversion(pricing.price_per_person, rateCurrency)}
                   </p>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#647C47]/20">
                     <span className="text-sm text-gray-600">{t('detail.totalFor')} {selectedPax} {selectedPax === 1 ? t('detail.person') : t('detail.people')}</span>
-                    <span className="text-lg font-semibold text-gray-900">{formatWithConversion(pricing.selling_price, 'EUR')}</span>
+                    <span className="text-lg font-semibold text-gray-900">{formatWithConversion(pricing.selling_price, rateCurrency)}</span>
                   </div>
                 </div>
 
@@ -808,13 +808,13 @@ export default function TourDetailPage() {
                             <span>{getCategoryIcon(service.service_category)}</span>
                             <span className="truncate max-w-[180px]">{service.service_name}</span>
                           </span>
-                          <span className="text-gray-900 font-medium">{formatWithConversion(service.line_total, 'EUR')}</span>
+                          <span className="text-gray-900 font-medium">{formatWithConversion(service.line_total, rateCurrency)}</span>
                         </div>
                       ))}
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-medium">
                       <span className="text-gray-700">{t('detail.subtotal')}</span>
-                      <span className="text-gray-900">{formatWithConversion(pricing.subtotal_cost, 'EUR')}</span>
+                      <span className="text-gray-900">{formatWithConversion(pricing.subtotal_cost, rateCurrency)}</span>
                     </div>
                   </div>
                 )}
@@ -827,7 +827,7 @@ export default function TourDetailPage() {
                       {pricing.optional_services.map((service, idx) => (
                         <div key={idx} className="flex items-center justify-between text-sm">
                           <span className="text-amber-800">{service.service_name}</span>
-                          <span className="text-amber-900 font-medium">+{formatWithConversion(service.line_total, 'EUR')}</span>
+                          <span className="text-amber-900 font-medium">+{formatWithConversion(service.line_total, rateCurrency)}</span>
                         </div>
                       ))}
                     </div>

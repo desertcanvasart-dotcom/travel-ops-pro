@@ -526,8 +526,8 @@ export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
-  const { formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [cruises, setCruises] = useState<Cruise[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])

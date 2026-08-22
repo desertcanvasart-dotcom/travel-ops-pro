@@ -21,6 +21,7 @@ import {
   formatTipNotes,
 } from '@/lib/tipping-utils'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
+import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeRate, persistExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 
 // ============================================
 // SHARED GUIDE RATE LOOKUP
@@ -132,6 +133,8 @@ export async function createCruiseItineraryServices(
     effectiveCity: string
     /** Currency the supplier rates are entered in (organizations.rate_currency). Default EUR. */
     rateCurrency?: string
+    /** The trip's billing currency. Service amounts are converted into it, as the land path does. */
+    currency?: string
   }
 ): Promise<{
   createdDays: CruiseCreatedDay[]
@@ -144,6 +147,7 @@ export async function createCruiseItineraryServices(
     totalPax, isEuroPassport, tier, guideLanguage, skipPricing,
     marginPercent, includeGuide, effectiveCity,
     rateCurrency = 'EUR',
+    currency = rateCurrency,
   } = params
 
   const warnings: string[] = []
@@ -158,6 +162,32 @@ export async function createCruiseItineraryServices(
   // Margin helper
   const marginMultiplier = 1 + (marginPercent / 100)
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
+
+  // Conversion into the trip's billing currency — the same contract as the
+  // land path. Until 2026-08-22 the cruise path wrote rate-currency amounts
+  // into rows labelled with the trip currency (exchange_rate_used: 1), so a
+  // yen-billed cruise trip carried euro numbers under a ¥ sign.
+  let exchangeRates: ExchangeRates | null = null
+  let rateToTarget: number | null = null
+  const needsConversion = currency !== rateCurrency
+  if (needsConversion) {
+    try {
+      exchangeRates = await fetchExchangeRates(rateCurrency)
+      rateToTarget = getExchangeRate(rateCurrency, currency, exchangeRates)
+      if (rateToTarget) {
+        await persistExchangeRate(supabase, rateCurrency, currency, rateToTarget, isUsingFallbackRates() ? 'fallback' : 'frankfurter')
+      }
+    } catch (e) {
+      console.warn(`[Cruise Service Creation] exchange rates unavailable, amounts stay in ${rateCurrency}:`, e)
+    }
+  }
+  let currencyConversionFailed = false
+  const toTarget = (amount: number): number => {
+    if (!needsConversion || !exchangeRates) return amount
+    const converted = convertCurrency(amount, rateCurrency, currency, exchangeRates)
+    if (converted === null) { currencyConversionFailed = true; return amount }
+    return Math.round(converted * 100) / 100
+  }
 
   // Insert helper: a failed service insert must NOT count toward totals —
   // previously all six insert sites ignored the returned error, so saved
@@ -291,12 +321,12 @@ export async function createCruiseItineraryServices(
         quantity: totalPax,
         rate_eur: cruiseRate.totalPerNight / totalPax,
         rate_non_eur: cruiseRate.totalPerNight / totalPax,
-        total_cost: nightCost,
-        client_price: withMargin(nightCost),
+        total_cost: toTarget(nightCost),
+        client_price: toTarget(withMargin(nightCost)),
         notes: `Night ${dayData.day_number}: ${dayOvernight} | ${cruiseRate.season} season | ${cabinDesc}`,
         supplier_currency: rateCurrency,
         supplier_cost_original: nightCost,
-        exchange_rate_used: 1,
+        exchange_rate_used: rateToTarget || 1,
       })) {
         totalSupplierCost += nightCost
         totalClientPrice += withMargin(nightCost)
@@ -314,12 +344,12 @@ export async function createCruiseItineraryServices(
         quantity: 1,
         rate_eur: cruiseTransportRate,
         rate_non_eur: cruiseTransportRate,
-        total_cost: cruiseTransportRate,
-        client_price: withMargin(cruiseTransportRate),
+        total_cost: toTarget(cruiseTransportRate),
+        client_price: toTarget(withMargin(cruiseTransportRate)),
         notes: `Bundled transport for ${durationDays}D cruise: transfers + sightseeing (${cruiseTransportVehicle})`,
         supplier_currency: rateCurrency,
         supplier_cost_original: cruiseTransportRate,
-        exchange_rate_used: 1,
+        exchange_rate_used: rateToTarget || 1,
       })) {
         totalSupplierCost += cruiseTransportRate
         totalClientPrice += withMargin(cruiseTransportRate)
@@ -341,12 +371,12 @@ export async function createCruiseItineraryServices(
         quantity: 1,
         rate_eur: guideResult.guidePerDay,
         rate_non_eur: guideResult.guidePerDay,
-        total_cost: guideResult.guidePerDay,
-        client_price: withMargin(guideResult.guidePerDay),
+        total_cost: toTarget(guideResult.guidePerDay),
+        client_price: toTarget(withMargin(guideResult.guidePerDay)),
         notes: `Professional ${guideLanguage} guide`,
         supplier_currency: rateCurrency,
         supplier_cost_original: guideResult.guidePerDay,
-        exchange_rate_used: 1,
+        exchange_rate_used: rateToTarget || 1,
       })) {
         totalSupplierCost += guideResult.guidePerDay
         totalClientPrice += withMargin(guideResult.guidePerDay)
@@ -376,12 +406,12 @@ export async function createCruiseItineraryServices(
           quantity: tipRole.quantity,
           rate_eur: tipRate,
           rate_non_eur: tipRate,
-          total_cost: totalTipCost,
-          client_price: withMargin(totalTipCost),
+          total_cost: toTarget(totalTipCost),
+          client_price: toTarget(withMargin(totalTipCost)),
           notes: formatTipNotes(tipRole.role, tipRole.context, tipRole.quantity),
           supplier_currency: rateCurrency,
           supplier_cost_original: totalTipCost,
-          exchange_rate_used: 1,
+          exchange_rate_used: rateToTarget || 1,
         })) {
           totalSupplierCost += totalTipCost
           totalClientPrice += withMargin(totalTipCost)
@@ -464,12 +494,12 @@ export async function createCruiseItineraryServices(
           quantity: totalPax,
           rate_eur: dayEntranceTotal / totalPax,
           rate_non_eur: dayEntranceTotal / totalPax,
-          total_cost: dayEntranceTotal,
-          client_price: withMargin(dayEntranceTotal),
+          total_cost: toTarget(dayEntranceTotal),
+          client_price: toTarget(withMargin(dayEntranceTotal)),
           notes: `Sites: ${matchedAttractions.join(', ')}`,
           supplier_currency: rateCurrency,
           supplier_cost_original: dayEntranceTotal,
-          exchange_rate_used: 1,
+          exchange_rate_used: rateToTarget || 1,
         })) {
           totalSupplierCost += dayEntranceTotal
           totalClientPrice += withMargin(dayEntranceTotal)
@@ -488,12 +518,12 @@ export async function createCruiseItineraryServices(
         quantity: totalPax,
         rate_eur: waterRatePerPerson,
         rate_non_eur: waterRatePerPerson,
-        total_cost: waterCost,
-        client_price: withMargin(waterCost),
+        total_cost: toTarget(waterCost),
+        client_price: toTarget(withMargin(waterCost)),
         notes: 'Bottled water',
         supplier_currency: rateCurrency,
         supplier_cost_original: waterCost,
-        exchange_rate_used: 1,
+        exchange_rate_used: rateToTarget || 1,
       })) {
         totalSupplierCost += waterCost
         totalClientPrice += withMargin(waterCost)
@@ -507,10 +537,14 @@ export async function createCruiseItineraryServices(
     warnings.forEach(w => console.warn(`  • ${w}`))
   }
 
+  if (needsConversion && currencyConversionFailed) {
+    warnings.push(`Currency conversion ${rateCurrency} → ${currency} was unavailable; some service amounts are still in ${rateCurrency}.`)
+  }
+
   return {
     createdDays,
-    totalSupplierCost,
-    totalClientPrice,
+    totalSupplierCost: toTarget(totalSupplierCost),
+    totalClientPrice: toTarget(totalClientPrice),
     warnings,
   }
 }

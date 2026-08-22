@@ -153,8 +153,8 @@ export default function ActivityRatesContent() {
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
   // Currency conversion
-  const { currency, formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { currency, formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<ActivityRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])

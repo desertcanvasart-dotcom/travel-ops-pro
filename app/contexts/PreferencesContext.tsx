@@ -300,6 +300,8 @@ export function useCurrency() {
     currency: preferences.default_currency,
     /** What engine/rate amounts are denominated in — the source side of formatWithConversion. */
     rateCurrency: preferences.rate_currency || 'EUR',
+    /** Symbol for rateCurrency — for labels that prefix a raw rate-table amount. */
+    rateSymbol: CURRENCY_SYMBOLS[preferences.rate_currency || 'EUR'] || (preferences.rate_currency || 'EUR'),
     formatCurrency,
     convertCurrency,
     formatWithConversion,

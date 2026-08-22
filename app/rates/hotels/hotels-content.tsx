@@ -357,8 +357,8 @@ export default function HotelsContent() {
   const dialog = useConfirmDialog()
 
   // Currency conversion
-  const { currency, formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { currency, formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<AccommodationRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])

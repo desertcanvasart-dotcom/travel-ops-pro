@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface EntranceFee {
   id: string
@@ -49,6 +50,7 @@ export default function ActivityBuilder({
   isEuroPassport,
   onActivitiesChange
 }: ActivityBuilderProps) {
+  const { rateSymbol } = useCurrency()
   const t = useTranslations('tourBuilder.activities')
   const [entrances, setEntrances] = useState<EntranceFee[]>([])
   const [transportations, setTransportations] = useState<Transportation[]>([])
@@ -296,10 +298,10 @@ export default function ActivityBuilder({
                             </div>
                             <div className="text-right ml-3">
                               <div className="font-semibold text-sm text-gray-900">
-                                €{rate.toFixed(2)}
+                                {rateSymbol}{rate.toFixed(2)}
                               </div>
                               <div className="text-xs text-gray-500">
-                                €{(pax * rate).toFixed(2)} {t('total')}
+                                {rateSymbol}{(pax * rate).toFixed(2)} {t('total')}
                               </div>
                             </div>
                           </label>
@@ -336,7 +338,7 @@ export default function ActivityBuilder({
                       const rate = isEuroPassport ? transport.base_rate_eur : transport.base_rate_non_eur
                       return (
                         <option key={transport.id} value={transport.id}>
-                          {transport.vehicle_type} ({transport.capacity_min}-{transport.capacity_max} pax) - €{rate}
+                          {transport.vehicle_type} ({transport.capacity_min}-{transport.capacity_max} pax) - {rateSymbol}{rate}
                         </option>
                       )
                     })}
@@ -366,7 +368,7 @@ export default function ActivityBuilder({
               <div className="bg-blue-50 border border-blue-200 rounded p-3 flex justify-between items-center">
                 <span className="text-sm font-medium text-blue-900">{t('activityCost')}:</span>
                 <span className="text-lg font-bold text-blue-700">
-                  €{calculateActivityCost(activity).toFixed(2)}
+                  {rateSymbol}{calculateActivityCost(activity).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -380,7 +382,7 @@ export default function ActivityBuilder({
                   {t('totalActivitiesCost', { count: activities.length })}
                 </span>
                 <span className="text-2xl font-bold text-green-700">
-                  €{getTotalCost().toFixed(2)}
+                  {rateSymbol}{getTotalCost().toFixed(2)}
                 </span>
               </div>
             </div>

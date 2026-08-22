@@ -188,8 +188,8 @@ type TabType = 'transportation' | 'guides' | 'entrances' | 'accommodation' | 'me
 
 export default function RatesPage() {
   const t = useTranslations('rates.overview')
-  const { formatWithConversion } = useCurrency()
-  const formatRate = (eurAmount: number) => formatWithConversion(eurAmount, 'EUR')
+  const { formatWithConversion, rateCurrency } = useCurrency()
+  const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<RatesData | null>(null)
   const [loading, setLoading] = useState(true)
