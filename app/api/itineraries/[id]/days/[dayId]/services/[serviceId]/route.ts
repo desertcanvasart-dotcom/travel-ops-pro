@@ -1,10 +1,45 @@
 // API Route: /api/itineraries/[id]/days/[dayId]/services/[serviceId]/route.ts
 // Updated to handle transport-specific fields
+//
+// Until 2026-08-22 every handler here filtered on `day_id`, a column
+// itinerary_services does not have (it is `itinerary_day_id`), so PostgREST
+// answered 42703 and GET/PUT/DELETE returned 400 on EVERY call — the same
+// defect that had kept generate-commissions from ever running. The editor
+// writes services through Supabase directly, which is why nobody noticed.
+//
+// The ownership check is now the full chain: itinerary ∈ org, day ∈ itinerary,
+// service ∈ day. Checking only the itinerary's org let a caller pair their
+// own itinerary id with any other org's day and service ids.
 
 import { createClient } from '@/lib/supabase/server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+
+/** 404 unless the itinerary belongs to the org AND the day belongs to the itinerary. */
+async function ownedDay(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  itineraryId: string,
+  dayId: string
+): Promise<boolean> {
+  const { data: parent } = await supabase
+    .from('itineraries')
+    .select('id')
+    .eq('id', itineraryId)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  if (!parent) return false
+  const { data: day } = await supabase
+    .from('itinerary_days')
+    .select('id')
+    .eq('id', dayId)
+    .eq('itinerary_id', itineraryId)
+    .maybeSingle()
+  return !!day
+}
+
+const NOT_FOUND = NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
 
 export async function PUT(
   request: Request,
@@ -18,19 +53,8 @@ export async function PUT(
     const supabase = createClient()
     const body = await request.json()
 
-    // Confirm the itinerary belongs to this org before mutating child service
-    const { data: parent } = await supabase
-      .from('itineraries')
-      .select('id')
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .maybeSingle()
-    if (!parent) {
-      return NextResponse.json(
-        { success: false, error: 'Itinerary not found' },
-        { status: 404 }
-      )
-    }
+    // itinerary ∈ org, day ∈ itinerary — before mutating child service
+    if (!(await ownedDay(supabase, orgId, id, dayId))) return NOT_FOUND
 
     // Extract all fields including transport-specific ones
     const updateData: Record<string, any> = {
@@ -68,7 +92,7 @@ export async function PUT(
       .from('itinerary_services')
       .update(updateData)
       .eq('id', serviceId)
-      .eq('day_id', dayId)
+      .eq('itinerary_day_id', dayId)
       .select()
       .single()
 
@@ -101,25 +125,14 @@ export async function DELETE(
     const { id, dayId, serviceId } = await params
     const supabase = createClient()
 
-    // Confirm the itinerary belongs to this org before deleting child service
-    const { data: parent } = await supabase
-      .from('itineraries')
-      .select('id')
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .maybeSingle()
-    if (!parent) {
-      return NextResponse.json(
-        { success: false, error: 'Itinerary not found' },
-        { status: 404 }
-      )
-    }
+    // itinerary ∈ org, day ∈ itinerary — before deleting child service
+    if (!(await ownedDay(supabase, orgId, id, dayId))) return NOT_FOUND
 
     const { error } = await supabase
       .from('itinerary_services')
       .delete()
       .eq('id', serviceId)
-      .eq('day_id', dayId)
+      .eq('itinerary_day_id', dayId)
 
     if (error) {
       console.error('Error deleting service:', error)
@@ -150,36 +163,17 @@ export async function GET(
     const { id, dayId, serviceId } = await params
     const supabase = createClient()
 
-    // Confirm the itinerary belongs to this org before reading child service
-    const { data: parent } = await supabase
-      .from('itineraries')
-      .select('id')
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .maybeSingle()
-    if (!parent) {
-      return NextResponse.json(
-        { success: false, error: 'Itinerary not found' },
-        { status: 404 }
-      )
-    }
+    // itinerary ∈ org, day ∈ itinerary — before reading child service
+    if (!(await ownedDay(supabase, orgId, id, dayId))) return NOT_FOUND
 
     const { data, error } = await supabase
       .from('itinerary_services')
-      .select(`
-        *,
-        suppliers (
-          id,
-          name,
-          type,
-          contact_name,
-          contact_phone,
-          contact_email,
-          city
-        )
-      `)
+      // Two FKs point at suppliers (supplier_id + sold_by_supplier_id since
+      // 20260822_service_sold_by.sql): the embed must name its column or
+      // PostgREST answers PGRST201 (ambiguous). Keeps the `suppliers` key.
+      .select('*, suppliers:suppliers!supplier_id(id, name, type, contact_name, contact_phone, contact_email, city)')
       .eq('id', serviceId)
-      .eq('day_id', dayId)
+      .eq('itinerary_day_id', dayId)
       .single()
 
     if (error) {
