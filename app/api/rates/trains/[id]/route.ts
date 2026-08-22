@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createClient } from '@supabase/supabase-js'
+import { createActorAdminClient } from '@/lib/supabase-actor'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
+const supabaseAdmin = createActorAdminClient()
 
 export async function GET(
   request: NextRequest,

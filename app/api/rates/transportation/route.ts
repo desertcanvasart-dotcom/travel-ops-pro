@@ -2,17 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
-import { createClient } from '@supabase/supabase-js'
+import { createActorAdminClient } from '@/lib/supabase-actor'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
 // File: app/api/rates/transportation/route.ts
 // ============================================
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
+const supabaseAdmin = createActorAdminClient()
 
 // Canonical service_type taxonomy — locked in 2026-06-23. Matches the DB
 // CHECK constraint and the bulk-import validator enum. See memory:

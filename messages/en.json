@@ -2650,7 +2650,12 @@
       "rateCurrencyHint": "What your supplier rates are entered in, and what the pricing engine reports. Usually what you pay suppliers in. Quotes and invoices convert to the billing currency.",
       "defaultMargin": "Default margin (%)",
       "defaultMarginUnset": "Not set — 25% applies",
-      "defaultMarginHint": "The margin the company sells at. Colleagues who have set no margin of their own inherit it; each quote can still override it."
+      "defaultMarginHint": "The margin the company sells at. Colleagues who have set no margin of their own inherit it; each quote can still override it.",
+      "rateChangeAlerts": "Rate-change alerts",
+      "rateChangeAlertsInApp": "In the app",
+      "rateChangeAlertsInAppEmail": "In the app + e-mail",
+      "rateChangeAlertsOff": "Off",
+      "rateChangeAlertsHint": "Every 15 minutes, owners, admins and managers are told what changed in the rate tables — one notice per editor and table. The editor is not told about their own change."
     }
   },
   "translate": {

@@ -24,3 +24,11 @@ command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/process-agent-memory
 [[cron]]
 schedule = "15 3 * * *"  # nightly at 03:15 UTC
 command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/data-invariants\" -H \"Authorization: Bearer $CRON_SECRET\""
+
+# Rate-change digest (see app/api/cron/rate-change-digest/route.ts): tells
+# owners/admins/managers what changed in the rate tables since the last run,
+# one notification per editor × table. Reads the trigger-written audit log,
+# so imports and SQL-editor edits are covered too.
+[[cron]]
+schedule = "*/15 * * * *"
+command = "curl -fsS -X GET \"$NEXT_PUBLIC_APP_URL/api/cron/rate-change-digest\" -H \"Authorization: Bearer $CRON_SECRET\""

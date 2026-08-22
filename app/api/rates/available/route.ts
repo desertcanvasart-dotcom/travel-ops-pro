@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createActorAdminClient } from '@/lib/supabase-actor'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -10,10 +10,8 @@ import { currencySymbol } from '@/lib/currency-totals'
 // File: app/api/rates/available/route.ts
 // ============================================
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
+const supabaseAdmin = createActorAdminClient()
 
 interface AvailableRate {
   rate_type: string

@@ -41,6 +41,8 @@ const FIELDS = [
   'rate_currency',
   // The margin the company sells at by default; users without a preference inherit it.
   'default_margin_percent',
+  // Rate-change digest for managers: off | in_app | in_app_email
+  'rate_change_alerts',
 ] as const
 
 /** Offices arrive as arbitrary JSON; keep only the known string fields, cap
@@ -112,6 +114,8 @@ export async function PUT(request: NextRequest) {
               : {}
             : field === 'default_margin_percent'
             ? normaliseMargin(body.default_margin_percent)
+            : field === 'rate_change_alerts'
+            ? (['off', 'in_app', 'in_app_email'].includes(body.rate_change_alerts) ? body.rate_change_alerts : 'in_app')
             : typeof body[field] === 'string'
               ? body[field].trim() || null
               : null

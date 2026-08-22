@@ -39,6 +39,7 @@ interface Profile {
   default_currency: string
   rate_currency: string
   default_margin_percent: string
+  rate_change_alerts: string
 }
 
 // Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
@@ -62,6 +63,7 @@ export default function CompanyProfileCard() {
     default_currency: '',
     rate_currency: 'EUR',
     default_margin_percent: '',
+    rate_change_alerts: 'in_app',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -87,6 +89,7 @@ export default function CompanyProfileCard() {
         default_currency: data.data.default_currency ?? '',
         rate_currency: data.data.rate_currency ?? 'EUR',
         default_margin_percent: data.data.default_margin_percent == null ? '' : String(data.data.default_margin_percent),
+        rate_change_alerts: data.data.rate_change_alerts ?? 'in_app',
         offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
           ...EMPTY_OFFICE,
           ...o,
@@ -278,6 +281,15 @@ export default function CompanyProfileCard() {
             placeholder={t('defaultMarginUnset')}
           />
           <p className="text-xs text-gray-500 mt-1">{t('defaultMarginHint')}</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('rateChangeAlerts')}</label>
+          <select className={inputClass} value={form.rate_change_alerts} onChange={e => set('rate_change_alerts', e.target.value)}>
+            <option value="in_app">{t('rateChangeAlertsInApp')}</option>
+            <option value="in_app_email">{t('rateChangeAlertsInAppEmail')}</option>
+            <option value="off">{t('rateChangeAlertsOff')}</option>
+          </select>
+          <p className="text-xs text-gray-500 mt-1">{t('rateChangeAlertsHint')}</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('address')}</label>

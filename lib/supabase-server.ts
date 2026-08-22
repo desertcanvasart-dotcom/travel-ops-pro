@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createActorAdminClient } from '@/lib/supabase-actor'
 
 // ============================================
 // SERVER-SIDE SUPABASE CLIENT
@@ -10,11 +10,11 @@ import { createClient } from '@supabase/supabase-js'
 // intermittently due to missing auth context.
 // ============================================
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey)
+// Both clients send the verified user as x-tops-actor (see lib/supabase-actor)
+// so triggers can attribute service-role writes; outside a request the
+// header is simply absent.
+export const supabaseServer = createActorAdminClient()
 
 export function createServerClient() {
-  return createClient(supabaseUrl, supabaseServiceKey)
+  return createActorAdminClient()
 }
