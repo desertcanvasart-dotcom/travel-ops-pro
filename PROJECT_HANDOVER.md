@@ -1359,6 +1359,102 @@ npm install
 
 ## 19. Changelog
 
+### 2026-08-22 (session 2) — Suppliers simplified, commissions modelled, and four production-only defects found by probing
+
+10 PRs (#137–#146), all merged to `main`, deployed to production via Railway, and each
+proven live against production on throwaway data (created and deleted in the same run).
+Four migrations applied. Started from a full check of everything shipped 08-18 → 08-22.
+
+**The check that opened the session**
+- ✅ Every PR #89–#135 confirmed merged, CI-green, and serving on prod; 25 of 26 migration
+  artefacts present. The one missing — `organizations.default_currency`
+  (`20260820_org_default_currency.sql`) — had left **`GET /api/organization/branding`
+  answering 500 since 08-20** (the Company Profile card could neither load nor save).
+  Applied by the operator; A.T.S backfilled to JPY, E2E org to EUR.
+
+**Health probe (#137)**
+- ✅ `/api/health/system` classified every refused anon read as an *error* (supabase-js's
+  head-count path returns `{message:''}` on 42501), so 168 clean denials showed as 168
+  blank probe errors and a real failure could hide among them. Probe is now a raw GET
+  that keeps the SQLSTATE; `deniedCount: 168, probeErrors: []` on prod, and the E2E test
+  asserts `probeErrors` is empty **and** `deniedCount > 0`.
+
+**Suppliers and commissions (operator decisions)**
+- ✅ **Supplier form = contact + location only (#138).** Name, roles, status, contact
+  person, email, phone, WhatsApp, website, city, address, notes — the same for every
+  role. Nine per-role extras removed (vehicle types, routes, ship name, cabin count,
+  star rating, property type, cuisine, capacity, languages, daily rate), plus the unused
+  company→property hierarchy (0 of 96 suppliers linked). The assistants' "Daily Rate"
+  had been in *neither* API whitelist — shown, never saved. `lib/suppliers/fields.ts` is
+  the one vocabulary shared by the form and both API routes. Retired columns keep their
+  data; no migration.
+- ✅ Details moved to the rates area: guide **languages** edited on Guide Rates
+  (`GuideLanguagesEditor`, shown when a guide is selected); new **Rates › Commissions**
+  page (direction + rate per supplier); vehicle types on the resources view derived
+  from the supplier's rate rows.
+- ✅ **Two commission directions (#140).** *We receive* = rate × the supplier's price
+  (shops). *We pay* = rate × **our profit** on the service (client price − supplier
+  cost), e.g. a guide who sold an optional tour; no commission on a loss
+  (`no_profit`, `no_client_price` skips). Before this the generator computed every
+  commission off supplier cost regardless of direction. `cost_amount` now written on
+  every row.
+- ✅ **"Sold by" (#141).** `itinerary_services.sold_by_supplier_id` names the guide who
+  sold a third party's tour; a second, payable commission to the seller at the seller's
+  rate × the same profit, category `optional_tour`. Editor has a "🧭 Sold by" picker per
+  service row. Migration `20260822_service_sold_by.sql` (PGlite-tested) — it is the
+  **second FK from itinerary_services to suppliers**, so every embed must name its
+  column (`suppliers!supplier_id`); a source-scanning test now enforces that.
+- ✅ **Sleeping-train cabins are Single and Half Twin only (#146)** — one vocabulary in
+  `lib/rates/sleeping-train-cabins.ts`, enforced by the form, filter, both API routes
+  (400 + normaliser) and the CSV importer. Column has no CHECK; table had 0 rows.
+
+**Production-only defects found by probing, and fixed**
+- ✅ `/api/itineraries/[id]/days/[dayId]/services/[serviceId]` GET/PUT/DELETE filtered
+  on `day_id` — a column that does not exist — so they **400'd on every call since
+  written** (#142). The client force-delete cascade had the same column, never checked
+  its errors, and reported success while leaving every trip's days and services behind.
+  Service route now checks the full chain itinerary ∈ org → day ∈ itinerary → service
+  ∈ day. Guard test: no query may filter itinerary services on `day_id`.
+- ✅ **Every trip created from a client's page arrived unlinked.** `INSERT` into
+  `itineraries` returned `client_id: null` under every role; `UPDATE` kept it. Cause:
+  `auto_link_client_trigger`, a `BEFORE INSERT` trigger **present only in production**
+  (in no migration, sibling migration, or historical `.sql`) whose
+  `SELECT … INTO NEW.client_id` assigns NULL on no match — overwriting the client the
+  app had set. Identified from the operator's `pg_trigger` output after this machine's
+  introspection options were exhausted. App-side safeguard first (#143: re-assert by
+  UPDATE at all five insert sites, a no-op on a healthy DB), then the root cause
+  (#144, `20260822_itineraries_client_triggers.sql`): never overwrite a given
+  `client_id`, fill a missing one only on an unambiguous email/name match. **All five
+  unversioned `itineraries` triggers are now in the repo**; the two duplicate
+  status-upgrade triggers folded into one.
+- ✅ **Client booking count = confirmed trips (#145,
+  `20260822_client_booking_stats_confirmed.sql`).** The stats columns had two writers —
+  the 08-21 invoice-based recompute and a prod-only `+1`-per-insert trigger that counted
+  drafts and never decremented. Now one writer: `total_bookings_count` = trips with
+  status confirmed/completed, **recomputed** on insert, status/client change and delete;
+  revenue stays invoice-based; the `+1` trigger is dropped; all clients backfilled.
+- ✅ Dead roster links (#139, with the other session): `/guides`, `/guides/new`,
+  `/hotels`, `/hotel-staff`, `/follow-ups`, `/b2b` repointed; a guard test scans every
+  static `href` (incl. ternary branches) against `app/**/page.tsx`.
+
+**Migrations applied to production this session** (all PGlite-tested first, all verified
+live): `20260820_org_default_currency`; `20260822_service_sold_by`;
+`20260822_itineraries_client_triggers`; `20260822_client_booking_stats_confirmed`.
+
+**Lessons**
+- A green CI and a matching `/api/version` SHA still do not prove the running route
+  code — but a *behavioural* read-only signal does (new i18n text in a page payload, a
+  new 409 from a delete guard). Use those before suspecting a stale build.
+- A proof script can be the bug: a string-replace that padded bulk-insert rows also
+  matched *inside* `sold_by_supplier_id: …`, creating a duplicate key whose later
+  `null` won. Check replace counts against expectations before trusting a FAIL.
+- The PostgREST API exposes only `public`/`graphql_public`, `pg_graphql` is off and no
+  RPC runs dynamic SQL: **triggers, rules and function bodies can only be read by the
+  operator in the SQL editor.** When behaviour is unexplained by any `.sql` in the repo,
+  ask for `pg_trigger` output early.
+- Production carried objects no migration defined (five triggers on `itineraries`).
+  Anything found there goes into a versioned, PGlite-tested migration the same day.
+
 ### 2026-08-22 — Security hardening, rates/supplier fixes, and the multi-traveller portal
 
 20 PRs (#116–#135), all merged to `main` and deployed to production (autoura.net via
@@ -1513,7 +1609,7 @@ Postgres on the build machine.
 **Primary Developer:** Islam Mohamed  
 **Project Started:** October 2025  
 **Version:** 1.0.0  
-**Last Updated:** August 22, 2026
+**Last Updated:** August 22, 2026 (session 2)
 
 ---
 
