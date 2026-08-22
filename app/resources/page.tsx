@@ -728,7 +728,7 @@ export default function ResourcesPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <Link 
-                            href="/guides"
+                            href="/suppliers?type=guide"
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                           >
                             Edit
@@ -762,7 +762,7 @@ export default function ResourcesPage() {
                           <span className="text-3xl text-gray-400">👨‍🏫</span>
                           <p className="text-sm font-medium">No guides found</p>
                           <Link 
-                            href="/guides/new"
+                            href="/suppliers?type=guide"
                             className="mt-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 inline-block"
                           >
                             Add Your First Guide
@@ -1082,7 +1082,7 @@ export default function ResourcesPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <Link 
-                            href="/airport-staff"
+                            href="/suppliers?type=airport_assistant"
                             className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                           >
                             Edit
