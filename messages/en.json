@@ -1222,7 +1222,10 @@
       "programmeNone": "Not linked",
       "programmeLengthMismatch": "This programme is {programmeDays} days but the trip has {tripDays}. The 日程表 will not match what was sold.",
       "programmePreview": "Preview the 日程表",
-      "programmeUnlinkedNote": "Without a programme, the portal falls back to the plain day list."
+      "programmeUnlinkedNote": "Without a programme, the portal falls back to the plain day list.",
+      "soldBy": "Sold by",
+      "soldByNone": "Not sold by a guide",
+      "soldByHint": "The guide who sold this to the client is paid a \"we pay\" commission on our profit from it (Rates › Commissions)."
     },
     "delete": "Delete",
     "clickToConfirm": "Click again to confirm",
@@ -4686,7 +4689,7 @@
       "backToHub": "Rates Hub",
       "loading": "Loading commissions...",
       "explainTitle": "Two directions",
-      "explainPay": "We pay: a share of our profit to the supplier — e.g. a guide who sold an optional tour.",
+      "explainPay": "We pay: a share of our profit to the supplier — e.g. a guide who sold an optional tour. Name the guide as \"Sold by\" on the service in the itinerary editor when the tour is supplied by someone else.",
       "explainReceive": "We receive: a share of the supplier's sale — e.g. a shop our clients visit.",
       "searchPlaceholder": "Search suppliers...",
       "allDirections": "All directions",

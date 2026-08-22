@@ -145,6 +145,9 @@ interface ItineraryService {
   service_name: string
   supplier_id?: string | null
   supplier_name?: string | null
+  /** Who SOLD this service to the client (a guide), distinct from the supplier
+   *  who provides it. Paid a "we pay" commission on our profit from it. */
+  sold_by_supplier_id?: string | null
   quantity: number
   rate_eur: number
   rate_non_eur: number
@@ -162,6 +165,8 @@ interface Supplier {
   id: string
   name: string
   type: string
+  /** Every role the supplier fills — a guide is anyone with 'guide' among them. */
+  types?: string[] | null
   city?: string
   contact_phone?: string
 }
@@ -505,7 +510,7 @@ export default function ItineraryEditorPage() {
       console.log('Loading suppliers...')
       const { data, error } = await supabase
         .from('suppliers')
-        .select('id, name, type, city, contact_phone')
+        .select('id, name, type, types, city, contact_phone')
         .order('type')
         .order('name')
 
@@ -709,6 +714,7 @@ export default function ItineraryEditorPage() {
       service_name: t('newService'),
       supplier_id: null,
       supplier_name: null,
+      sold_by_supplier_id: null,
       quantity: 1,
       rate_eur: 0,
       rate_non_eur: 0,
@@ -1901,6 +1907,25 @@ export default function ItineraryEditorPage() {
                                           </select>
                                         </>
                                       )}
+                                    </div>
+
+                                    {/* Row 2b: Sold by — the guide who sold this, paid from our profit on it */}
+                                    <div className="flex items-center gap-2 pl-3">
+                                      <label className="text-xs font-medium text-gray-600 whitespace-nowrap" title={t('soldByHint')}>
+                                        🧭 {t('soldBy')}:
+                                      </label>
+                                      <select
+                                        value={service.sold_by_supplier_id || ''}
+                                        onChange={(e) => updateService(service.id, { sold_by_supplier_id: e.target.value || null })}
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47] bg-white"
+                                      >
+                                        <option value="">{t('soldByNone')}</option>
+                                        {suppliers
+                                          .filter(sp => sp.type === 'guide' || (sp.types || []).includes('guide'))
+                                          .map(sp => (
+                                            <option key={sp.id} value={sp.id}>{sp.name}{sp.city ? ` (${sp.city})` : ''}</option>
+                                          ))}
+                                      </select>
                                     </div>
 
                                     {/* Row 3: Qty, Rate, Total, Actions */}

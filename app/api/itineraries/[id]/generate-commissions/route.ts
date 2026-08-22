@@ -58,7 +58,12 @@ export async function POST(
     // the broken version looked like.
     const { data: services, error: servicesError } = await supabaseAdmin
       .from('itinerary_services')
-      .select('id, service_type, service_name, client_price, total_cost, supplier_id, commission_rate, commission_status, supplier:suppliers(id, name, commission_type, default_commission_rate)')
+      // Two FKs point at suppliers (provider + seller) since
+      // 20260822_service_sold_by.sql, so each embed names its column — an
+      // unhinted `suppliers(...)` is PGRST201 (ambiguous) from then on. ONE
+      // literal string: supabase-js types the result by parsing it, and a
+      // concatenated or interpolated expression collapses to an error type.
+      .select('id, service_type, service_name, client_price, total_cost, supplier_id, commission_rate, commission_status, sold_by_supplier_id, supplier:suppliers!supplier_id(id, name, commission_type, default_commission_rate), seller:suppliers!sold_by_supplier_id(id, name, commission_type, default_commission_rate)')
       .in('itinerary_day_id', dayIds)
 
     if (servicesError) {
@@ -76,6 +81,7 @@ export async function POST(
         ...s,
         // PostgREST types an embedded row as an array; take the single row.
         supplier: Array.isArray(s.supplier) ? s.supplier[0] : s.supplier,
+        seller: Array.isArray(s.seller) ? s.seller[0] : s.seller,
       })),
       {
         orgId,

@@ -352,3 +352,84 @@ describe('commission direction', () => {
     ])
   })
 })
+
+describe('sold by — the guide who sold a third party\'s tour', () => {
+  // itinerary_services.sold_by_supplier_id names the SELLER, distinct from the
+  // provider. The seller is paid a share of our profit on the service, at the
+  // seller's own rate, in addition to whatever the provider is owed or owes.
+  const guide = { id: 'guide-1', name: 'Ahmed (guide)', commission_type: 'payable', default_commission_rate: 20 }
+  const sold = (over: Partial<CommissionSourceService> = {}) =>
+    service({
+      id: 'tour-1',
+      service_type: 'activity',
+      service_name: 'Optional: Sound & Light at Karnak',
+      client_price: 150,
+      total_cost: 100,
+      supplier_id: 'provider-1',
+      supplier: { id: 'provider-1', name: 'Karnak Shows Co', commission_type: 'receivable', default_commission_rate: 10 },
+      sold_by_supplier_id: 'guide-1',
+      seller: guide,
+      ...over,
+    })
+
+  it('pays the seller a share of the profit AND keeps the provider\'s own commission', () => {
+    const { pairs, skipped } = buildCommissions([sold()], CTX)
+    expect(skipped).toEqual([])
+    expect(pairs.map(p => p.serviceId)).toEqual(['tour-1', 'tour-1'])
+    const seller = pairs.find(p => p.commission.supplier_id === 'guide-1')!.commission
+    const provider = pairs.find(p => p.commission.supplier_id === 'provider-1')!.commission
+    // seller: 20% of (150 − 100) = 10, payable, credited as an optional-tour sale
+    expect(seller).toMatchObject({ commission_type: 'payable', category: 'optional_tour', base_amount: 50, cost_amount: 100, commission_rate: 20, commission_amount: 10, source_name: 'Ahmed (guide)' })
+    expect(seller.description).toMatch(/sold by Ahmed/)
+    // provider: unchanged — 10% of its own 100, receivable
+    expect(provider).toMatchObject({ commission_type: 'receivable', base_amount: 100, commission_amount: 10 })
+  })
+
+  it('pays the seller even when the provider has no commission at all', () => {
+    const { pairs, skipped } = buildCommissions(
+      [sold({ supplier: { id: 'provider-1', name: 'Karnak Shows Co', commission_type: null, default_commission_rate: null } })],
+      CTX
+    )
+    expect(pairs).toHaveLength(1)
+    expect(pairs[0].commission.supplier_id).toBe('guide-1')
+    expect(skipped.map(s => s.reason)).toEqual(['no_rate']) // the provider's skip is still reported
+  })
+
+  it('seller with no rate: skipped with a reason, provider still processed', () => {
+    const { pairs, skipped } = buildCommissions([sold({ seller: { ...guide, default_commission_rate: 0 } })], CTX)
+    expect(skipped.map(s => s.reason)).toEqual(['seller_no_rate'])
+    expect(pairs.map(p => p.commission.supplier_id)).toEqual(['provider-1'])
+  })
+
+  it('seller set to "we receive" is never paid as a seller — it says so', () => {
+    const { pairs, skipped } = buildCommissions([sold({ seller: { ...guide, commission_type: 'receivable' } })], CTX)
+    expect(skipped[0].reason).toBe('seller_not_payable')
+    expect(skipped[0].detail).toMatch(/We pay/)
+    expect(pairs.map(p => p.commission.supplier_id)).toEqual(['provider-1'])
+  })
+
+  it('no profit, no seller commission', () => {
+    const { pairs, skipped } = buildCommissions(
+      [sold({ id: 'loss', client_price: 90 }), sold({ id: 'unpriced', client_price: null })],
+      CTX
+    )
+    expect(skipped.filter(s => s.reason === 'seller_no_profit').map(s => s.service_id)).toEqual(['loss', 'unpriced'])
+    // the provider (receivable, on cost) is unaffected by the missing profit
+    expect(pairs.map(p => p.commission.supplier_id)).toEqual(['provider-1', 'provider-1'])
+  })
+
+  it('a sold_by id without the embedded seller row is ignored, not crashed on', () => {
+    const { pairs } = buildCommissions([sold({ seller: null })], CTX)
+    expect(pairs.map(p => p.commission.supplier_id)).toEqual(['provider-1'])
+  })
+
+  it('seller and provider can be the same guide — paid once as seller, once as provider', () => {
+    // A guide who supplies AND sells an extra: two rows, two bases, both payable.
+    const { pairs } = buildCommissions(
+      [sold({ supplier_id: 'guide-1', supplier: guide })],
+      CTX
+    )
+    expect(pairs).toHaveLength(2)
+    expect(pairs.map(p => [p.commission.category, p.commission.commission_amount])).toEqual([['optional_tour', 10], ['activity', 10]])
+  })
+})
