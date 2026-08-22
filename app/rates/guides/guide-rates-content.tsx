@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import GuideLanguagesEditor from '@/components/rates/GuideLanguagesEditor'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -196,8 +197,8 @@ export default function GuideRatesContent() {
   // wrote guides.id into guide_rates.supplier_id, and most of those ids
   // didn't exist in suppliers, so the FK rejected. Reading from suppliers
   // matches the other 5 rate forms and guarantees the FK passes.
-  // Language-based filtering is dropped (suppliers has no `languages`
-  // column; reintroducing it is part of the deferred G2 guide-model work).
+  // suppliers.languages is edited HERE (GuideLanguagesEditor, shown when a
+  // guide is selected) since the supplier form stopped collecting it.
   const fetchGuides = async () => {
     try {
       const response = await fetch('/api/suppliers?type=guide&status=active')
@@ -222,11 +223,7 @@ export default function GuideRatesContent() {
     setCurrentPage(1)
   }, [searchTerm, selectedCity, selectedLanguage, selectedGuide, selectedGuideType, showInactive, itemsPerPage])
 
-  // Filter the supplier-guides by city (the only attribute suppliers carries
-  // that the dropdown previously filtered on). Language-based filtering was
-  // dropped when the picker source switched from `guides` → `suppliers` —
-  // suppliers has no `languages` column; restoring this is part of the
-  // deferred G2 guide-model work.
+  // Filter the supplier-guides by the form's city.
   const filteredGuidesForDropdown = useMemo(() => {
     return guides.filter(guide => {
       if (formData.city && guide.city && guide.city !== formData.city) {
@@ -719,6 +716,17 @@ export default function GuideRatesContent() {
           </select>
         </div>
       </div>
+
+      {/* Languages of the selected guide — a supplier fact, priced here */}
+      {selectedGuide && (() => {
+        const guide = guides.find(g => g.id === selectedGuide)
+        return guide ? (
+          <GuideLanguagesEditor
+            guide={guide}
+            onSaved={(languages) => setGuides(prev => prev.map(g => (g.id === guide.id ? { ...g, languages } : g)))}
+          />
+        ) : null
+      })()}
 
       {/* Rates Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

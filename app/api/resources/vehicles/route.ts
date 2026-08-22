@@ -37,6 +37,25 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query
 
+    // Vehicle types come from the supplier's RATE rows, not from a field on
+    // the supplier: the rate is where a vehicle is priced and the only place
+    // a band is maintained since the supplier form lost its extras (2026-08-22).
+    const ids = (data || []).map((s: { id: string }) => s.id)
+    const vehicleTypesBySupplier = new Map<string, string[]>()
+    if (ids.length > 0) {
+      const { data: rateRows } = await supabaseAdmin
+        .from('transportation_rates')
+        .select('supplier_id, vehicle_type')
+        .in('supplier_id', ids)
+        .eq('is_active', true)
+      for (const r of rateRows || []) {
+        if (!r.supplier_id || !r.vehicle_type) continue
+        const list = vehicleTypesBySupplier.get(r.supplier_id) || []
+        if (!list.includes(r.vehicle_type)) list.push(r.vehicle_type)
+        vehicleTypesBySupplier.set(r.supplier_id, list)
+      }
+    }
+
     if (error) {
       console.error('Error fetching transport suppliers:', error)
       return NextResponse.json(
@@ -54,7 +73,7 @@ export async function GET(request: NextRequest) {
       phone: supplier.contact_phone || supplier.whatsapp || null,
       whatsapp: supplier.whatsapp || null,
       email: supplier.contact_email || null,
-      vehicle_types: supplier.vehicle_types || [],
+      vehicle_types: (vehicleTypesBySupplier.get(supplier.id) || []).sort(),
       notes: supplier.notes || null,
       is_active: supplier.status === 'active',
       created_at: supplier.created_at,

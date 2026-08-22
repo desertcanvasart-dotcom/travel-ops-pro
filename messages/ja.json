@@ -266,7 +266,8 @@
     "integrations": "外部連携",
     "departments": "部署",
     "activityLog": "操作ログ",
-    "seasonalPremiums": "季節料金"
+    "seasonalPremiums": "季節料金",
+    "commissionRates": "コミッション"
   },
   "roles": {
     "admin": "管理者",
@@ -2971,7 +2972,19 @@
     "bulkDeleted": "{count}件のサプライヤーを削除しました",
     "bulkPartial": "{ok}件を削除、{failed}件は削除できませんでした：{reason}",
     "dismiss": "閉じる",
-    "show": "表示"
+    "show": "表示",
+    "roles": "役割",
+    "rolesHint": "このサプライヤーが担う役割をすべて選択してください（ドライバーが空港送迎も担うなど）。",
+    "sectionIdentity": "サプライヤー",
+    "sectionContact": "連絡先",
+    "sectionLocation": "所在地",
+    "sectionNotes": "備考",
+    "selectOption": "{field}を選択",
+    "enterValue": "{field}を入力",
+    "detailsLiveInRates": "言語・車両・ルート・コミッションはレート画面で管理します。",
+    "commissionWePay": "支払コミッション",
+    "commissionWeReceive": "受取コミッション",
+    "manageInCommissionRates": "レート › コミッションで管理"
   },
   "copilot": {
     "concierge": {
@@ -4483,7 +4496,14 @@
       "activeRate": "有効（予約可能）",
       "loading": "ガイド料金を読み込み中...",
       "viewGuides": "ガイド",
-      "export": "エクスポート"
+      "export": "エクスポート",
+      "guideLanguages": "このガイドの対応言語",
+      "editLanguages": "言語を編集",
+      "saveLanguages": "言語を保存",
+      "noLanguages": "言語が未登録です",
+      "languagesSaved": "{name}の言語を保存しました",
+      "languagesFailed": "言語の保存に失敗しました",
+      "languagesHint": "ガイドレート行がない場合に、料金エンジンが言語でガイドを照合する際に使用します。"
     },
     "attractions": {
       "title": "観光スポット・入場料金",
@@ -5493,6 +5513,43 @@
       "failedToLoad": "シーズンの読み込みに失敗しました",
       "failedToSave": "保存に失敗しました",
       "failedToDelete": "削除に失敗しました"
+    },
+    "commissions": {
+      "title": "コミッション率",
+      "subtitle": "サプライヤーごとの支払・受取コミッション",
+      "backToHub": "レート一覧",
+      "loading": "コミッションを読み込み中...",
+      "explainTitle": "2つの方向",
+      "explainPay": "支払：当社の利益の一部をサプライヤーへ支払う（例：オプショナルツアーを販売したガイド）。",
+      "explainReceive": "受取：サプライヤーの売上の一部を当社が受け取る（例：お客様が訪問するショップ）。",
+      "searchPlaceholder": "サプライヤーを検索...",
+      "allDirections": "すべての方向",
+      "allRoles": "すべての役割",
+      "withRateOnly": "設定済みのみ",
+      "directionPay": "支払",
+      "directionReceive": "受取",
+      "directionNone": "コミッションなし",
+      "supplier": "サプライヤー",
+      "role": "役割",
+      "direction": "方向",
+      "rate": "率",
+      "actions": "操作",
+      "percentOfProfit": "利益の%",
+      "percentOfSale": "売上の%",
+      "edit": "編集",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "clear": "クリア",
+      "saving": "保存中...",
+      "saved": "{name}のコミッションを保存しました",
+      "cleared": "{name}のコミッションをクリアしました",
+      "failedToSave": "コミッションの保存に失敗しました",
+      "noSuppliers": "該当するサプライヤーがありません",
+      "count": "{count}件のサプライヤー",
+      "showing": "表示",
+      "of": "/",
+      "rateRequired": "0〜100の率を入力してください",
+      "enginePayNote": "注：現在のコミッション生成はすべてサプライヤー原価に対する割合で計算されます。「支払（利益の%）」はここに記録され、生成側が第2の方向に対応した時点で反映されます。"
     }
   },
   "profitLoss": {

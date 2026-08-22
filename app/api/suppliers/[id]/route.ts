@@ -7,16 +7,12 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// All valid supplier fields (including new ones from migration)
-const VALID_FIELDS = [
-  'name', 'type', 'types', 'contact_name', 'contact_email', 'contact_phone',
-  'phone2', 'whatsapp', 'website', 'address', 'city', 'country',
-  'default_commission_rate', 'commission_type', 'payment_terms',
-  'bank_details', 'status', 'notes',
-  // New type-specific fields
-  'languages', 'vehicle_types', 'star_rating', 'property_type',
-  'cuisine_types', 'routes', 'ship_name', 'cabin_count', 'capacity'
-]
+import { SUPPLIER_WRITABLE_FIELDS } from '@/lib/suppliers/fields'
+
+// One whitelist with create and the form (lib/suppliers/fields.ts), so a
+// field cannot be shown but silently dropped on save — which is exactly what
+// happened to the assistants' "Daily Rate" before 2026-08-22.
+const VALID_FIELDS = SUPPLIER_WRITABLE_FIELDS
 
 // Filter object to only include valid fields
 function filterValidFields(obj: Record<string, any>): Record<string, any> {
