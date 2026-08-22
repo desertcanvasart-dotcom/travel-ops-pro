@@ -9,11 +9,22 @@ const supabase = createClient(
 // GET - List all placeholders
 export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
+    // Labels come back in the caller's locale; the English columns are the
+    // fallback for any placeholder without a Japanese label.
+    const locale = request.nextUrl.searchParams.get('locale') === 'ja' ? 'ja' : 'en'
+    const { data: rows, error } = await supabase
       .from('template_placeholders')
       .select('*')
       .order('category')
       .order('placeholder')
+    const data = locale === 'ja' && rows
+      ? rows.map((r: any) => ({
+          ...r,
+          display_name: r.display_name_ja || r.display_name,
+          description: r.description_ja || r.description,
+          example_value: r.example_value_ja || r.example_value,
+        }))
+      : rows
 
     if (error) {
       console.error('Error fetching placeholders:', error)
