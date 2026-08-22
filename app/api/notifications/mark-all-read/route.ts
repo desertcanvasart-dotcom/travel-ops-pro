@@ -1,27 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUserId } from '@/lib/auth/current-org'
+import { linkedTeamMemberIds, notificationScopeFilter } from '@/lib/notifications-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// PUT - Mark all notifications as read
-export async function PUT(request: NextRequest) {
+// PUT - Mark all of the signed-in user's notifications as read
+export async function PUT(_request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const teamMemberId = searchParams.get('teamMemberId')
+    const userId = await getCurrentUserId()
+    if (!userId) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
+    const scope = notificationScopeFilter(userId, await linkedTeamMemberIds(supabase, userId))
 
-    let query = supabase
+    const { data, error } = await supabase
       .from('notifications')
       .update({ is_read: true, updated_at: new Date().toISOString() })
       .eq('is_read', false)
-
-    if (teamMemberId) {
-      query = query.eq('team_member_id', teamMemberId)
-    }
-
-    const { data, error } = await query.select()
+      .or(scope)
+      .select('id')
 
     if (error) throw error
 
