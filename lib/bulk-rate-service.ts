@@ -1,3 +1,4 @@
+import { SLEEPING_TRAIN_CABIN_VALUES } from '@/lib/rates/sleeping-train-cabins'
 /**
  * Bulk Rate Import/Export Service
  * Provides CSV import/export for all rate tables with validation and upsert.
@@ -443,7 +444,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       id(), serviceCode(),
       col('origin_city', 'Origin City', 'text', true),
       col('destination_city', 'Destination City', 'text', true),
-      col('cabin_type', 'Cabin Type', 'text', true),
+      colEnum('cabin_type', 'Cabin Type', SLEEPING_TRAIN_CABIN_VALUES, true),
       col('rate_oneway_eur', 'One-Way EUR', 'number', true),
       col('rate_roundtrip_eur', 'Roundtrip EUR', 'number', false),
       col('departure_time', 'Departure Time', 'text', false),
