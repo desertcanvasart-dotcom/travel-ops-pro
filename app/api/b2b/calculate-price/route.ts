@@ -3,9 +3,10 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -401,13 +402,14 @@ export async function POST(request: NextRequest) {
       flight_cost_per_person = 0,  // Optional flight cost
       travel_date = new Date().toISOString().split('T')[0],
       is_eur_passport = true,
-      margin_percent = 25,
+      margin_percent: requestedMargin = null,  // resolved below: request → org default → 25
       partner_id = null,
       include_optionals = false,
       language = 'English',
       tier = 'standard',
       tour_leader_included = false
     } = body
+    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
 
     // Determine if using passenger breakdown or simple num_pax
     const usePassengerBreakdown = num_adults !== undefined && num_adults !== null

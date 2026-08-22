@@ -11,6 +11,8 @@ import { clientMessage } from '@/lib/api-errors'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { NextRequest, NextResponse } from 'next/server'
+import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
       itinerary_id,
       num_travelers = 2,
       tier = null,
-      margin_percent = 25,
+      margin_percent: requestedMargin = null,  // resolved below: request → org default → 25
       valid_days = 30,
       currency,
       client_id = null,
@@ -57,6 +59,7 @@ export async function POST(request: NextRequest) {
       client_notes = null,
       created_by = null,
     } = body
+    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
 
     if (!itinerary_id) {
       return NextResponse.json({ success: false, error: 'itinerary_id is required' }, { status: 400 })

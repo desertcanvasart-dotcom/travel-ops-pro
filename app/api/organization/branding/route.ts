@@ -11,6 +11,7 @@
 // on the document, never as a placeholder company.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { normaliseMargin } from '@/lib/org-default-margin'
 import { createClient } from '@supabase/supabase-js'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { requireRole } from '@/lib/auth/current-org'
@@ -38,6 +39,8 @@ const FIELDS = [
   // What the company's supplier RATES are entered in (the *_eur columns).
   // Distinct from default_currency, what it bills in. Engine output follows it.
   'rate_currency',
+  // The margin the company sells at by default; users without a preference inherit it.
+  'default_margin_percent',
 ] as const
 
 /** Offices arrive as arbitrary JSON; keep only the known string fields, cap
@@ -107,6 +110,8 @@ export async function PUT(request: NextRequest) {
             ? body.document_contacts && typeof body.document_contacts === 'object'
               ? body.document_contacts
               : {}
+            : field === 'default_margin_percent'
+            ? normaliseMargin(body.default_margin_percent)
             : typeof body[field] === 'string'
               ? body[field].trim() || null
               : null

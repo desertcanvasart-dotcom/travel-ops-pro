@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import { createServerClient } from '@/lib/supabase-server'
 import { gridCompleteness } from '@/app/pricing-grid/lib/grid-completeness'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { DEFAULT_DAY_TYPE } from '@/app/pricing-grid/types'
 
 // ============================================
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
         return dsum + line
       }, 0)
     }, 0)
-    const marginPct = config.marginPercent || 25
+    const marginPct = resolveMarginPercent({ requested: config.marginPercent, orgDefault: await getOrgDefaultMargin(supabase, await getCurrentOrgId()) })
     const computedSellingTotal = Math.round(supplierTotal * (1 + marginPct / 100) * 100) / 100
     const finalSellingTotal = (totals?.sellingPriceTotal && totals.sellingPriceTotal > 0)
       ? totals.sellingPriceTotal

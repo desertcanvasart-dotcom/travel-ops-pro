@@ -4,6 +4,7 @@ import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getOrgDefaultMargin, normaliseMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 
 async function createClient() {
   const cookieStore = await cookies()
@@ -35,6 +36,11 @@ async function createClient() {
  * one — it is not a good answer, which is the point: it should be visibly wrong
  * rather than quietly plausible.
  */
+// The company's margin, for a user who has set none of their own (→ 25 when the org has none either).
+async function orgDefaultMargin(supabase: Awaited<ReturnType<typeof createClient>>): Promise<number> {
+  return resolveMarginPercent({ orgDefault: await getOrgDefaultMargin(supabase, await getCurrentOrgId()) })
+}
+
 async function orgDefaultCurrency(
   supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<string> {
@@ -78,7 +84,7 @@ export async function GET(request: NextRequest) {
     const preferences = data || {
       default_cost_mode: 'auto',
       default_tier: 'standard',
-      default_margin_percent: 25,
+      default_margin_percent: await orgDefaultMargin(supabase),
       default_currency: await orgDefaultCurrency(supabase),
     }
 
@@ -117,7 +123,7 @@ export async function PUT(request: NextRequest) {
       user_id: user.id,
       default_cost_mode: body.default_cost_mode || 'auto',
       default_tier: body.default_tier || 'standard',
-      default_margin_percent: body.default_margin_percent || 25,
+      default_margin_percent: normaliseMargin(body.default_margin_percent) ?? (await orgDefaultMargin(supabase)),
       default_currency: body.default_currency || (await orgDefaultCurrency(supabase)),
       updated_at: new Date().toISOString()
     }
