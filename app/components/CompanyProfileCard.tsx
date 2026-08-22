@@ -37,6 +37,7 @@ interface Profile {
   document_contacts: Record<string, string>
   offices: Office[]
   default_currency: string
+  rate_currency: string
 }
 
 // Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
@@ -58,6 +59,7 @@ export default function CompanyProfileCard() {
     document_contacts: {},
     offices: [],
     default_currency: '',
+    rate_currency: 'EUR',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -81,6 +83,7 @@ export default function CompanyProfileCard() {
         company_address: data.data.company_address ?? '',
         document_contacts: data.data.document_contacts ?? {},
         default_currency: data.data.default_currency ?? '',
+        rate_currency: data.data.rate_currency ?? 'EUR',
         offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
           ...EMPTY_OFFICE,
           ...o,
@@ -245,6 +248,19 @@ export default function CompanyProfileCard() {
             ))}
           </select>
           <p className="text-xs text-gray-500 mt-1">{t('billingCurrencyHint')}</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('rateCurrency')}</label>
+          <select
+            className={inputClass}
+            value={form.rate_currency}
+            onChange={e => set('rate_currency', e.target.value)}
+          >
+            {['EUR', 'USD', 'GBP', 'EGP', 'JPY'].map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">{t('rateCurrencyHint')}</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('address')}</label>

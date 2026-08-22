@@ -130,6 +130,8 @@ export async function createCruiseItineraryServices(
     marginPercent: number
     includeGuide?: boolean // Global override: true=always, false=never, undefined=per-day
     effectiveCity: string
+    /** Currency the supplier rates are entered in (organizations.rate_currency). Default EUR. */
+    rateCurrency?: string
   }
 ): Promise<{
   createdDays: CruiseCreatedDay[]
@@ -141,6 +143,7 @@ export async function createCruiseItineraryServices(
     itineraryId, cruiseContent, cruiseRate, startDateObj, durationDays,
     totalPax, isEuroPassport, tier, guideLanguage, skipPricing,
     marginPercent, includeGuide, effectiveCity,
+    rateCurrency = 'EUR',
   } = params
 
   const warnings: string[] = []
@@ -291,7 +294,7 @@ export async function createCruiseItineraryServices(
         total_cost: nightCost,
         client_price: withMargin(nightCost),
         notes: `Night ${dayData.day_number}: ${dayOvernight} | ${cruiseRate.season} season | ${cabinDesc}`,
-        supplier_currency: 'EUR',
+        supplier_currency: rateCurrency,
         supplier_cost_original: nightCost,
         exchange_rate_used: 1,
       })) {
@@ -314,7 +317,7 @@ export async function createCruiseItineraryServices(
         total_cost: cruiseTransportRate,
         client_price: withMargin(cruiseTransportRate),
         notes: `Bundled transport for ${durationDays}D cruise: transfers + sightseeing (${cruiseTransportVehicle})`,
-        supplier_currency: 'EUR',
+        supplier_currency: rateCurrency,
         supplier_cost_original: cruiseTransportRate,
         exchange_rate_used: 1,
       })) {
@@ -341,7 +344,7 @@ export async function createCruiseItineraryServices(
         total_cost: guideResult.guidePerDay,
         client_price: withMargin(guideResult.guidePerDay),
         notes: `Professional ${guideLanguage} guide`,
-        supplier_currency: 'EUR',
+        supplier_currency: rateCurrency,
         supplier_cost_original: guideResult.guidePerDay,
         exchange_rate_used: 1,
       })) {
@@ -376,7 +379,7 @@ export async function createCruiseItineraryServices(
           total_cost: totalTipCost,
           client_price: withMargin(totalTipCost),
           notes: formatTipNotes(tipRole.role, tipRole.context, tipRole.quantity),
-          supplier_currency: 'EUR',
+          supplier_currency: rateCurrency,
           supplier_cost_original: totalTipCost,
           exchange_rate_used: 1,
         })) {
@@ -464,7 +467,7 @@ export async function createCruiseItineraryServices(
           total_cost: dayEntranceTotal,
           client_price: withMargin(dayEntranceTotal),
           notes: `Sites: ${matchedAttractions.join(', ')}`,
-          supplier_currency: 'EUR',
+          supplier_currency: rateCurrency,
           supplier_cost_original: dayEntranceTotal,
           exchange_rate_used: 1,
         })) {
@@ -488,7 +491,7 @@ export async function createCruiseItineraryServices(
         total_cost: waterCost,
         client_price: withMargin(waterCost),
         notes: 'Bottled water',
-        supplier_currency: 'EUR',
+        supplier_currency: rateCurrency,
         supplier_cost_original: waterCost,
         exchange_rate_used: 1,
       })) {

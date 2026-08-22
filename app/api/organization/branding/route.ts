@@ -35,6 +35,9 @@ const FIELDS = [
   // rather than in a settings page of its own — and it is what a colleague with
   // no preference of their own inherits.
   'default_currency',
+  // What the company's supplier RATES are entered in (the *_eur columns).
+  // Distinct from default_currency, what it bills in. Engine output follows it.
+  'rate_currency',
 ] as const
 
 /** Offices arrive as arbitrary JSON; keep only the known string fields, cap

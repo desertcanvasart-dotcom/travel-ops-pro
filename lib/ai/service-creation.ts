@@ -638,6 +638,8 @@ export async function createLandItineraryServices(
     marginPercent: number
     startDate: string
     currency?: string  // Target currency for client-facing prices (default: EUR)
+    /** Currency the supplier rates are entered in (organizations.rate_currency). Default EUR. */
+    rateCurrency?: string
   }
 ): Promise<{
   createdDays: CreateDayServicesResult[]
@@ -650,7 +652,7 @@ export async function createLandItineraryServices(
     itineraryId, itineraryData, rates, startDateObj, durationDays,
     effectivePackageType, effectiveCity, totalPax, isEuroPassport,
     tier, language, includeLunch, includeDinner, includeAccommodation,
-    includeGuide, skipPricing, marginPercent, startDate, currency = 'EUR',
+    includeGuide, skipPricing, marginPercent, startDate, currency = 'EUR', rateCurrency = 'EUR',
     mealPlan,
   } = params
 
@@ -683,26 +685,26 @@ export async function createLandItineraryServices(
 
   // Fetch exchange rates for currency conversion
   let exchangeRates: ExchangeRates | null = null
-  const needsConversion = currency !== 'EUR'
+  const needsConversion = currency !== rateCurrency
   let eurToTargetRate: number | null = null
   if (needsConversion) {
     try {
-      exchangeRates = await fetchExchangeRates('EUR')
-      eurToTargetRate = getExchangeRate('EUR', currency, exchangeRates)
+      exchangeRates = await fetchExchangeRates(rateCurrency)
+      eurToTargetRate = getExchangeRate(rateCurrency, currency, exchangeRates)
       if (isUsingFallbackRates()) {
-        console.warn(`⚠️ [Service Creation] Using FALLBACK exchange rates! EUR → ${currency} = ${eurToTargetRate || 'N/A'}. Live API unavailable.`)
+        console.warn(`⚠️ [Service Creation] Using FALLBACK exchange rates! ${rateCurrency} → ${currency} = ${eurToTargetRate || 'N/A'}. Live API unavailable.`)
       } else {
-        console.log(`[Service Creation] Currency conversion: EUR → ${currency}, rate: ${eurToTargetRate || 'N/A'} (live)`)
+        console.log(`[Service Creation] Currency conversion: ${rateCurrency} → ${currency}, rate: ${eurToTargetRate || 'N/A'} (live)`)
       }
       // Persist the exchange rate snapshot for audit trail
       if (eurToTargetRate) {
         await persistExchangeRate(
-          supabase, 'EUR', currency, eurToTargetRate,
+          supabase, rateCurrency, currency, eurToTargetRate,
           isUsingFallbackRates() ? 'fallback' : 'frankfurter'
         )
       }
     } catch (e) {
-      console.warn('[Service Creation] Failed to fetch exchange rates, prices will remain in EUR:', e)
+      console.warn('[Service Creation] Failed to fetch exchange rates, prices will remain in the rate currency:', e)
     }
   }
 
@@ -716,7 +718,7 @@ export async function createLandItineraryServices(
   let currencyConversionFailed = false
   const toTargetCurrency = (eurAmount: number): number => {
     if (!needsConversion || !exchangeRates) return eurAmount
-    const converted = convertCurrency(eurAmount, 'EUR', currency, exchangeRates)
+    const converted = convertCurrency(eurAmount, rateCurrency, currency, exchangeRates)
     if (converted === null) {
       currencyConversionFailed = true
       return eurAmount
@@ -1096,7 +1098,7 @@ export async function createLandItineraryServices(
         itinerary_day_id: day.id,
         ...svc,
         // Multi-currency: all rates are EUR-based; store original cost + exchange rate
-        supplier_currency: 'EUR',
+        supplier_currency: rateCurrency,
         supplier_cost_original: svc.total_cost,
         exchange_rate_used: eurToTargetRate || 1,
         // Convert client-facing prices to target currency
@@ -2029,7 +2031,7 @@ export async function createLandItineraryServices(
       itinerary_day_id: day.id,
       ...svc,
       // Multi-currency: all rates are EUR-based; store original cost + exchange rate
-      supplier_currency: 'EUR',
+      supplier_currency: rateCurrency,
       supplier_cost_original: svc.total_cost,
       exchange_rate_used: eurToTargetRate || 1,
       // Convert client-facing prices to target currency; rate_eur/rate_non_eur stay in EUR
