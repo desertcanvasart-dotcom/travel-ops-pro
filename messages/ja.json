@@ -4913,8 +4913,6 @@
       "adjustFilters": "フィルターを調整してください",
       "addFirstRate": "最初の料金を追加",
       "singleCabin": "シングルキャビン",
-      "doubleCabin": "ダブルキャビン",
-      "suiteCabin": "スイートキャビン",
       "royalSuite": "ロイヤルスイート",
       "dinnerBreakfast": "夕食＆朝食",
       "linkToSupplier": "サプライヤーをリンク",
@@ -4978,6 +4976,10 @@
         "rateDeleted": "を削除しました。",
         "failedToSave": "料金の保存に失敗しました。もう一度お試しください。",
         "failedToDelete": "料金の削除に失敗しました。もう一度お試しください。"
+      },
+      "cabins": {
+        "single": "シングル",
+        "halfTwin": "ハーフツイン"
       }
     },
     "airportServices": {

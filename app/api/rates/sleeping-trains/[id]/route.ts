@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normaliseSleepingTrainCabin, SLEEPING_TRAIN_CABIN_ERROR } from '@/lib/rates/sleeping-train-cabins'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
@@ -45,7 +46,13 @@ export async function PUT(
     if (body.service_code !== undefined) updateData.service_code = body.service_code
     if (body.origin_city !== undefined) updateData.origin_city = body.origin_city || null
     if (body.destination_city !== undefined) updateData.destination_city = body.destination_city || null
-    if (body.cabin_type !== undefined) updateData.cabin_type = body.cabin_type || null
+    if (body.cabin_type !== undefined) {
+      const cabin = normaliseSleepingTrainCabin(body.cabin_type)
+      if (!cabin) {
+        return NextResponse.json({ error: SLEEPING_TRAIN_CABIN_ERROR }, { status: 400 })
+      }
+      updateData.cabin_type = cabin
+    }
     if (body.rate_oneway_eur !== undefined) updateData.rate_oneway_eur = parseFloat(body.rate_oneway_eur) || 0
     if (body.rate_roundtrip_eur !== undefined) updateData.rate_roundtrip_eur = body.rate_roundtrip_eur ? parseFloat(body.rate_roundtrip_eur) : null
     if (body.departure_time !== undefined) updateData.departure_time = body.departure_time || null

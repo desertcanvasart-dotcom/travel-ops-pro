@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
+import { SLEEPING_TRAIN_CABINS } from '@/lib/rates/sleeping-train-cabins'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -40,12 +41,8 @@ const SLEEPER_CITIES = [
   'Aswan'
 ]
 
-const CABIN_TYPES = [
-  'Single Cabin',
-  'Double Cabin',
-  'Suite Cabin',
-  'Royal Suite'
-]
+// The two cabins this operator sells — see lib/rates/sleeping-train-cabins.ts.
+const CABIN_TYPES = SLEEPING_TRAIN_CABINS
 
 const OPERATORS = [
   'Watania Sleeping Trains',
@@ -573,7 +570,7 @@ export default function SleepingTrainRatesContent() {
           >
             <option value="">{t('allCabins')}</option>
             {CABIN_TYPES.map(cabin => (
-              <option key={cabin} value={cabin}>{cabin}</option>
+              <option key={cabin.value} value={cabin.value}>{t(`cabins.${cabin.labelKey}`)}</option>
             ))}
           </select>
 
@@ -1001,7 +998,7 @@ export default function SleepingTrainRatesContent() {
                     >
                       <option value="">{t('form.selectCabin')}</option>
                       {CABIN_TYPES.map(cabin => (
-                        <option key={cabin} value={cabin}>{cabin}</option>
+                        <option key={cabin.value} value={cabin.value}>{t(`cabins.${cabin.labelKey}`)}</option>
                       ))}
                     </select>
                   </div>

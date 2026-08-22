@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normaliseSleepingTrainCabin, SLEEPING_TRAIN_CABIN_ERROR } from '@/lib/rates/sleeping-train-cabins'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createClient } from '@supabase/supabase-js'
@@ -51,11 +52,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
     }
 
+    // Two cabins, by operator decision; the column has no CHECK so this is it.
+    const cabin = normaliseSleepingTrainCabin(body.cabin_type)
+    if (!cabin) {
+      return NextResponse.json({ error: SLEEPING_TRAIN_CABIN_ERROR }, { status: 400 })
+    }
+
     const newRate = {
       service_code: body.service_code || `SLP-${Date.now().toString(36).toUpperCase()}`,
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
-      cabin_type: body.cabin_type || null,
+      cabin_type: cabin,
       rate_oneway_eur: parseFloat(body.rate_oneway_eur) || 0,
       rate_roundtrip_eur: body.rate_roundtrip_eur ? parseFloat(body.rate_roundtrip_eur) : null,
       departure_time: body.departure_time || null,

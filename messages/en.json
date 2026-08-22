@@ -3822,8 +3822,6 @@
       "adjustFilters": "Try adjusting your filters",
       "addFirstRate": "Add First Rate",
       "singleCabin": "Single Cabin",
-      "doubleCabin": "Double Cabin",
-      "suiteCabin": "Suite Cabin",
       "royalSuite": "Royal Suite",
       "dinnerBreakfast": "Dinner & Breakfast",
       "linkToSupplier": "Link to Supplier",
@@ -3887,6 +3885,10 @@
         "rateDeleted": "has been deleted successfully.",
         "failedToSave": "Failed to save rate. Please try again.",
         "failedToDelete": "Failed to delete rate. Please try again."
+      },
+      "cabins": {
+        "single": "Single",
+        "halfTwin": "Half Twin"
       }
     },
     "guides": {
