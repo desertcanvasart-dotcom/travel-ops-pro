@@ -10,17 +10,11 @@
 // two can never drift apart again.
 // ============================================
 
-/** Columns a create request may set. `types` MUST be here — see above. */
-export const VALID_SUPPLIER_FIELDS = [
-  'name', 'type', 'contact_name', 'contact_email', 'contact_phone',
-  'phone2', 'whatsapp', 'website', 'address', 'city', 'country',
-  'default_commission_rate', 'commission_type', 'payment_terms',
-  'bank_details', 'status', 'notes',
-  'languages', 'vehicle_types', 'star_rating', 'property_type',
-  'cuisine_types', 'routes', 'ship_name', 'cabin_count', 'capacity',
-  'is_property', 'parent_supplier_id',
-  'types',
-] as const
+import { SUPPLIER_WRITABLE_FIELDS } from './fields'
+
+/** Columns a create request may set. One list with the update route and the
+ *  form — see lib/suppliers/fields.ts. `types` MUST be in it — see above. */
+export const VALID_SUPPLIER_FIELDS = SUPPLIER_WRITABLE_FIELDS
 
 export type SupplierInsert =
   | { ok: true; row: Record<string, unknown> }
@@ -43,8 +37,6 @@ export function buildSupplierInsert(body: Record<string, any>): SupplierInsert {
 
   row.country = b.country || 'Egypt'
   row.status = b.status || 'active'
-  row.is_property = b.is_property || false
-  row.parent_supplier_id = b.parent_supplier_id || null
 
   return { ok: true, row }
 }

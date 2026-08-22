@@ -8,6 +8,7 @@ import { useAuth } from '@/app/contexts/AuthContext'
 import { useRole, UserRole } from '@/hooks/useRole'
 import NotificationBell from '@/components/NotificationBell'
 import {
+  Percent,
   LayoutDashboard,
   Users,
   DollarSign,
@@ -187,6 +188,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'hotelServices', href: '/rates/hotel-services', icon: ConciergeBell },
       { labelKey: 'tipping', href: '/rates/tipping', icon: DollarSign },
       { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
+      { labelKey: 'commissionRates', href: '/rates/commissions', icon: Percent },
       { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange },
     ]
   },

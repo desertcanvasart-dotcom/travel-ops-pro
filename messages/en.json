@@ -266,7 +266,8 @@
     "integrations": "Integrations",
     "departments": "Departments",
     "activityLog": "Activity Log",
-    "seasonalPremiums": "Seasonal Premiums"
+    "seasonalPremiums": "Seasonal Premiums",
+    "commissionRates": "Commissions"
   },
   "roles": {
     "admin": "Admin",
@@ -2107,7 +2108,19 @@
     "bulkDeleted": "{count} suppliers deleted",
     "bulkPartial": "{ok} deleted, {failed} could not be deleted: {reason}",
     "dismiss": "Dismiss",
-    "show": "Show"
+    "show": "Show",
+    "roles": "Role(s)",
+    "rolesHint": "Pick every role this supplier fills — a driver can also meet clients at the airport.",
+    "sectionIdentity": "Supplier",
+    "sectionContact": "Contact",
+    "sectionLocation": "Location",
+    "sectionNotes": "Notes",
+    "selectOption": "Select {field}",
+    "enterValue": "Enter {field}",
+    "detailsLiveInRates": "Languages, vehicles, routes and commissions are managed under Rates.",
+    "commissionWePay": "We pay",
+    "commissionWeReceive": "We receive",
+    "manageInCommissionRates": "Manage in Rates › Commissions"
   },
   "copilot": {
     "concierge": {
@@ -3988,7 +4001,14 @@
       },
       "loading": "Loading guide rates...",
       "viewGuides": "Guides",
-      "export": "Export"
+      "export": "Export",
+      "guideLanguages": "Languages this guide works in",
+      "editLanguages": "Edit languages",
+      "saveLanguages": "Save languages",
+      "noLanguages": "No languages recorded yet",
+      "languagesSaved": "Languages saved for {name}",
+      "languagesFailed": "Failed to save languages",
+      "languagesHint": "Used by the pricing engine to match a guide to a language when no guide rate row exists."
     },
     "attractions": {
       "title": "Attractions & Entrance Fees",
@@ -4659,6 +4679,43 @@
       "failedToLoad": "Failed to load seasons",
       "failedToSave": "Failed to save",
       "failedToDelete": "Failed to delete"
+    },
+    "commissions": {
+      "title": "Commission Rates",
+      "subtitle": "Who pays whom, and how much — per supplier",
+      "backToHub": "Rates Hub",
+      "loading": "Loading commissions...",
+      "explainTitle": "Two directions",
+      "explainPay": "We pay: a share of our profit to the supplier — e.g. a guide who sold an optional tour.",
+      "explainReceive": "We receive: a share of the supplier's sale — e.g. a shop our clients visit.",
+      "searchPlaceholder": "Search suppliers...",
+      "allDirections": "All directions",
+      "allRoles": "All roles",
+      "withRateOnly": "With a rate only",
+      "directionPay": "We pay",
+      "directionReceive": "We receive",
+      "directionNone": "No commission",
+      "supplier": "Supplier",
+      "role": "Role",
+      "direction": "Direction",
+      "rate": "Rate",
+      "actions": "Actions",
+      "percentOfProfit": "% of profit",
+      "percentOfSale": "% of sale",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "clear": "Clear",
+      "saving": "Saving...",
+      "saved": "Commission for {name} saved",
+      "cleared": "Commission for {name} cleared",
+      "failedToSave": "Failed to save commission",
+      "noSuppliers": "No suppliers match",
+      "count": "{count} suppliers",
+      "showing": "Showing",
+      "of": "of",
+      "rateRequired": "Enter a rate between 0 and 100",
+      "enginePayNote": "Note: the commission generator currently computes every commission as a percentage of the supplier's cost. \"We pay\" from profit is recorded here and will be honoured when the generator learns the second direction."
     }
   },
   "profitLoss": {
