@@ -159,10 +159,14 @@ async function seed() {
   //     changed under specs that had not been touched — which is how the
   //     deposit assertions in quote-to-booking came to fail on their own.
   let [itin] = await select('itineraries', `itinerary_code=eq.${ITIN_CODE}&select=id,org_id`)
+  // A ONE-day trip: one day row, total_days 1, end_date === start_date.
+  // It used to carry a 2-day date span with a single Day 1 row, so the app
+  // recalculated total_days to 1 and the span no longer matched — which the
+  // nightly data-invariants sweep correctly reported as daycount drift every
+  // night. Keep the three facts in step if this fixture ever grows a Day 2.
   const start = new Date()
   start.setDate(start.getDate() + 120)
   const end = new Date(start)
-  end.setDate(end.getDate() + 1)
   const d = (x) => x.toISOString().split('T')[0]
 
   if (!itin) {
@@ -174,7 +178,7 @@ async function seed() {
       trip_name: 'E2E Smoke Trip',
       start_date: d(start),
       end_date: d(end),
-      total_days: 2,
+      total_days: 1,
       num_adults: 2,
       num_children: 0,
       currency: 'EUR',
@@ -199,6 +203,7 @@ async function seed() {
     await rest('PATCH', `/rest/v1/itineraries?id=eq.${itin.id}`, {
       start_date: d(start),
       end_date: d(end),
+      total_days: 1,
     })
     await rest('PATCH', `/rest/v1/itinerary_days?itinerary_id=eq.${itin.id}&day_number=eq.1`, {
       date: d(start),
