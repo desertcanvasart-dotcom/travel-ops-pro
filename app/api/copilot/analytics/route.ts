@@ -71,9 +71,16 @@ export async function GET(request: NextRequest) {
     if (r.status === 'sent') byChannel[ch].sent += 1
   }
 
+  // ---------- Instrumented rows ----------
+  // Tone, RAG usage and pre-generation are only knowable for drafts written
+  // after the app started recording them. Rows from before that are not
+  // "tone unknown, no retrieval" — they are unmeasured, and averaging them in
+  // would understate all three for months. Rates below use this denominator.
+  const instrumented = rows.filter((r) => typeof (r.ai_flags as any)?.pregenerated === 'boolean')
+
   // ---------- By tone ----------
   const byTone: Record<string, number> = {}
-  for (const r of rows) {
+  for (const r of instrumented) {
     const tone = (r.ai_flags as any)?.tone || 'unknown'
     byTone[tone] = (byTone[tone] || 0) + 1
   }
@@ -107,7 +114,7 @@ export async function GET(request: NextRequest) {
   // ---------- RAG hit rate (fraction with at least one retrieval match) ----------
   let withRetrieval = 0
   const knowledgeUsage = new Map<string, number>()
-  for (const r of rows) {
+  for (const r of instrumented) {
     const retrieved = (r.context_used as any)?.retrieved
     if (Array.isArray(retrieved) && retrieved.length > 0) {
       withRetrieval += 1
@@ -116,14 +123,14 @@ export async function GET(request: NextRequest) {
       }
     }
   }
-  const ragHitRate = total > 0 ? withRetrieval / total : 0
+  const ragHitRate = instrumented.length > 0 ? withRetrieval / instrumented.length : 0
 
   // ---------- Pre-generated ratio ----------
   let pregenerated = 0
-  for (const r of rows) {
+  for (const r of instrumented) {
     if ((r.ai_flags as any)?.pregenerated) pregenerated += 1
   }
-  const pregeneratedRate = total > 0 ? pregenerated / total : 0
+  const pregeneratedRate = instrumented.length > 0 ? pregenerated / instrumented.length : 0
 
   // ---------- Top-retrieved knowledge entries ----------
   let topKnowledge: Array<{ id: string; title: string | null; source_type: string; times_used: number }> = []
@@ -206,6 +213,8 @@ export async function GET(request: NextRequest) {
       edit_rate: editRate,
       rag_hit_rate: ragHitRate,
       pregenerated_rate: pregeneratedRate,
+      // How many drafts the three rates above could be measured on.
+      measured_drafts: instrumented.length,
       kb_entries: kbTotal || 0,
     },
     confidence,

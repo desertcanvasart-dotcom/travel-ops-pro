@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { generateDraft } from '@/lib/ai/draft-generator'
+import { generateDraft, draftFlags } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
 import type { GenerateDraftRequest, CopilotTone } from '@/types/copilot'
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         operator_notes: result.output.operator_notes,
         ai_model: MODEL_DRAFT,
         ai_confidence: result.output.confidence,
-        ai_flags: result.output.flags,
+        ai_flags: draftFlags(result.output.flags, { tone, pregenerated: body.pregenerated === true }),
         context_used: result.context,
         generation_time_ms: result.generationTimeMs,
         status: 'pending',
