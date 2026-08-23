@@ -17,7 +17,23 @@ import {
   CopilotChannel,
   CopilotTone,
   ClaudeDraftOutput,
+  CopilotRetrievedRef,
+  AIFlags,
+  StoredDraftFlags,
 } from '@/types/copilot'
+
+/**
+ * The flags stored on a draft: what the model reported, plus two facts only
+ * the caller knows — the tone it was written in, and whether it was drafted
+ * ahead of the operator opening the thread. Analytics reported on both long
+ * before anything wrote them (permanently "unknown" / 0%).
+ */
+export function draftFlags(
+  modelFlags: Partial<AIFlags> | null | undefined,
+  meta: { tone: CopilotTone; pregenerated: boolean }
+): StoredDraftFlags {
+  return { ...(modelFlags ?? {}), tone: meta.tone, pregenerated: meta.pregenerated }
+}
 
 interface GenerateDraftParams {
   inboxMessageId: string
@@ -40,6 +56,8 @@ interface GenerateDraftResult {
   generationTimeMs: number
   // How many knowledge-base entries were retrieved and injected (0 = un-grounded).
   knowledgeUsed: number
+  // Which ones — persisted on the draft so the analytics can report them.
+  retrieved: CopilotRetrievedRef[]
 }
 
 /**
@@ -73,6 +91,7 @@ export async function generateDraft(
   // no org on the thread) must NEVER block draft generation — we fall back to the
   // un-grounded draft and just record knowledgeUsed = 0.
   let knowledgeUsed = 0
+  let retrieved: CopilotRetrievedRef[] = []
   try {
     const orgId = params.orgId ?? (await resolveThreadOrgId(params.threadId, supabase))
     const query = (params.messageBody || '').trim()
@@ -81,6 +100,12 @@ export async function generateDraft(
       const block = formatRetrievalContext(items)
       if (block) {
         knowledgeUsed = items.length
+        retrieved = items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          source_type: i.source_type,
+          similarity: Math.round(i.similarity * 1000) / 1000,
+        }))
         systemPrompt +=
           `\n\n# RETRIEVED KNOWLEDGE BASE (RAG)\n` +
           `Ground your reply in the material below. Treat "Relevant business knowledge" as ` +
@@ -116,9 +141,12 @@ export async function generateDraft(
 
   return {
     output,
-    context,
+    // The stored context records what retrieval returned, so "why did the
+    // draft say that?" stays answerable after the fact.
+    context: { ...context, retrieved },
     generationTimeMs,
     knowledgeUsed,
+    retrieved,
   }
 }
 

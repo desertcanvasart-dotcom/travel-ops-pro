@@ -58,6 +58,18 @@ export interface AIFlags {
   urgency?: string
 }
 
+/**
+ * What is actually stored in communication_drafts.ai_flags: the model's own
+ * flags plus two facts only the caller knows. The analytics grouped drafts by
+ * both of these long before anything wrote them.
+ */
+export type StoredDraftFlags = Partial<AIFlags> & {
+  /** The tone the draft was written in. */
+  tone: CopilotTone
+  /** True when the poller drafted this before the operator opened the thread. */
+  pregenerated: boolean
+}
+
 export interface CopilotDraft {
   id: string
   thread_id: string
@@ -69,7 +81,7 @@ export interface CopilotDraft {
   operator_notes: string | null
   ai_model: string | null
   ai_confidence: AIConfidence | null
-  ai_flags: AIFlags
+  ai_flags: AIFlags & Partial<Pick<StoredDraftFlags, 'tone' | 'pregenerated'>>
   context_used: CopilotContext
   generation_time_ms: number | null
   status: DraftStatus
@@ -145,12 +157,29 @@ export interface CopilotContextMessage {
   sent_at: string
 }
 
+/**
+ * One knowledge-base entry that was retrieved for a draft. Stored on the
+ * draft (context_used.retrieved) so the analytics can report which entries
+ * are actually earning their place — the counts used to read this key while
+ * nothing ever wrote it, so the RAG hit rate was permanently 0%.
+ * Deliberately a reference, not the text: the entry itself lives in
+ * copilot_knowledge.
+ */
+export interface CopilotRetrievedRef {
+  id: string
+  title: string | null
+  source_type: string
+  similarity: number
+}
+
 export interface CopilotContext {
   client: CopilotContextClient | null
   itineraries: CopilotContextItinerary[]
   invoices: CopilotContextInvoice[]
   payments: CopilotContextPayment[]
   recent_messages: CopilotContextMessage[]
+  /** Present once retrieval has run; an empty array means "ran, found nothing". */
+  retrieved?: CopilotRetrievedRef[]
 }
 
 // ============================================
@@ -197,6 +226,8 @@ export interface CopilotDraftResponse {
 export interface GenerateDraftRequest {
   inbox_message_id: string
   thread_id: string
+  /** True when the background poller drafted this before the operator opened the thread. */
+  pregenerated?: boolean
 }
 
 export interface ApproveDraftRequest {

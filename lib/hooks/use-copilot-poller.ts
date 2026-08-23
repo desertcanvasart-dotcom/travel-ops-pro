@@ -62,6 +62,8 @@ export function useCopilotPoller({
                 inbox_message_id: inbox.id,
                 thread_id: thread.id,
                 user_id: userId,
+                // Drafted ahead of the operator opening the thread.
+                pregenerated: true,
               }),
             })
           } catch (err) {

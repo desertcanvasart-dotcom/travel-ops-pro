@@ -14,6 +14,7 @@ interface Summary {
   edit_rate: number
   rag_hit_rate: number
   pregenerated_rate: number
+  measured_drafts: number
   kb_entries: number
 }
 
@@ -100,9 +101,20 @@ export default function CopilotAnalyticsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <RateCard label="Accept rate" value={data.summary.accept_rate} tooltip="Approved or sent, out of all reviewed drafts" />
             <RateCard label="Edit rate" value={data.summary.edit_rate} tooltip="Share of sent drafts the agent edited before sending" />
-            <RateCard label="RAG hit rate" value={data.summary.rag_hit_rate} tooltip="Drafts with at least one knowledge-base match" />
-            <RateCard label="Pre-generated" value={data.summary.pregenerated_rate} tooltip="Drafts created in the background vs on-demand" />
+            <RateCard label="RAG hit rate" value={data.summary.rag_hit_rate} tooltip={`Drafts with at least one knowledge-base match, of the ${data.summary.measured_drafts} drafts this can be measured on`} />
+            <RateCard label="Pre-generated" value={data.summary.pregenerated_rate} tooltip={`Drafted in the background before the thread was opened, of the ${data.summary.measured_drafts} drafts this can be measured on`} />
           </div>
+
+          {/* Say what the last two cards (and the tone breakdown) are measured on:
+              drafts written before the app recorded tone and retrieval cannot
+              contribute, and a rate quietly averaged over them would mislead. */}
+          {data.summary.measured_drafts < data.summary.total_generated && (
+            <p className="text-xs text-gray-500 -mt-1">
+              RAG hit rate, pre-generated share and the tone breakdown are measured on{' '}
+              {data.summary.measured_drafts} of {data.summary.total_generated} drafts — the rest were
+              written before the app recorded those details.
+            </p>
+          )}
 
           {/* Daily chart */}
           {data.by_day.length > 0 && (
