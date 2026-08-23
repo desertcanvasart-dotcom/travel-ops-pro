@@ -1,13 +1,20 @@
 // ============================================
 // API: COPILOT SETTINGS
 // ============================================
-// GET  /api/copilot/settings — Get user's copilot settings
-// PUT  /api/copilot/settings — Update user's copilot settings
+// GET        /api/copilot/settings — the signed-in user's copilot settings
+// PUT/PATCH  /api/copilot/settings — update them ({ tone })
+//
+// The user is the SIGNED-IN user, resolved server-side. The route used to
+// take a client-supplied user_id — any signed-in user could read or set a
+// colleague's tone — and 400'd without one, which is how the Knowledge
+// page's tone card (no user_id, PATCH) never worked. A user_id in the
+// request is ignored.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,21 +23,18 @@ const supabase = createClient(
 
 const VALID_TONES = ['professional', 'friendly', 'formal']
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get('user_id')
+    const userId = await getCurrentUserId()
     if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'user_id is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
     const { data: settings } = await supabase
       .from('copilot_settings')
       .select('*')
       .eq('user_id', userId)
-      .single()
+      .maybeSingle()
 
     // Return defaults if no settings exist
     return NextResponse.json({
@@ -51,15 +55,12 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { user_id, tone } = body
-
+    const user_id = await getCurrentUserId()
     if (!user_id) {
-      return NextResponse.json(
-        { success: false, error: 'user_id is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
+    const body = await request.json().catch(() => ({}))
+    const { tone } = body
 
     if (tone && !VALID_TONES.includes(tone)) {
       return NextResponse.json(
@@ -93,3 +94,6 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+
+// The Knowledge page saves with PATCH; same contract.
+export const PATCH = PUT

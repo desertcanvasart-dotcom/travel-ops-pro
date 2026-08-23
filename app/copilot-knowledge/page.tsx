@@ -54,11 +54,12 @@ export default function CopilotKnowledgePage() {
   const saveTone = async (next: Tone) => {
     setTone(next)
     setToneSaving(true)
-    await fetch('/api/copilot/settings', {
-      method: 'PATCH',
+    const res = await fetch('/api/copilot/settings', {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tone: next }),
-    }).catch(() => {})
+    }).catch(() => null)
+    if (!res?.ok) await loadSettings() // show what is actually stored, not the click
     setToneSaving(false)
   }
 
