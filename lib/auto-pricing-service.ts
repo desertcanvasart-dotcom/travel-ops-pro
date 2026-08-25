@@ -1738,7 +1738,12 @@ export function getCruiseTransportRate(
   if (pkg.minibus_capacity != null && numPax <= pkg.minibus_capacity && pkg.minibus_rate) {
     return { vehicleType: 'Minibus', rate: pkg.minibus_rate }
   }
-  return { vehicleType: 'Bus', rate: pkg.bus_rate ?? pkg.minibus_rate ?? 0 }
+  // Overflow: largest PRICED vehicle. A package's blank vehicles are ones the
+  // operator does not run — fall through them rather than pricing at 0.
+  return {
+    vehicleType: 'Bus',
+    rate: pkg.bus_rate ?? pkg.minibus_rate ?? pkg.van_rate ?? pkg.minivan_rate ?? pkg.sedan_rate ?? 0,
+  }
 }
 
 /**
