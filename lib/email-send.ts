@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 
 /**
@@ -123,9 +124,9 @@ function buildSimpleEmail(to: string, subject: string, body: string): string {
   // raw 8-bit text under a default 7-bit assumption.
   const emailLines = [
     `From: ${fromName} <${fromAddress}>`,
-    `To: ${to}`,
+    `To: ${safeEmailAddress(to)}`,
     `Bcc: ${fromAddress}`,
-    `Subject: ${encodeEmailHeader(subject)}`,
+    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
     'Content-Transfer-Encoding: base64',
@@ -153,9 +154,9 @@ function buildEmailWithAttachment(
 
   const emailParts = [
     `From: ${fromName} <${fromAddress}>`,
-    `To: ${to}`,
+    `To: ${safeEmailAddress(to)}`,
     `Bcc: ${fromAddress}`,
-    `Subject: ${encodeEmailHeader(subject)}`,
+    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',

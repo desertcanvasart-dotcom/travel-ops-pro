@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -8,13 +9,12 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get('userId')
-
+    // WHOSE integration status comes from the session, never the query string.
+    // It used to read `?userId=`, so any authenticated user could enumerate any
+    // other user's connected accounting providers and company names.
+    const userId = await getCurrentUserId()
     if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { data, error } = await supabase
