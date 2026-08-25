@@ -77,6 +77,7 @@ console.log(`Seeding project: ${projectRef(URL_)}  (${URL_})`)
 
 const ORG_NAME = 'E2E Smoke Org'
 const ITIN_CODE = 'E2E-SMOKE-001'
+const TEMPLATE_CODE = 'E2E-TMPL-001'
 const DEFAULT_EMAIL = 'e2e-smoke@travelops.test'
 
 const headers = {
@@ -202,6 +203,28 @@ async function seed() {
   if (staleClients?.length) {
     await del('clients', `email=eq.${encodeURIComponent(email)}`)
     console.log('✓ removed the old permanent client (specs now mint their own)')
+  }
+
+  // 4b. A tour template.
+  //
+  // The programme picker on the edit page is populated from
+  // /api/tours/templates?slim=1; a spec asserts the list arrives with more than
+  // the empty option. tour_templates carries no org_id (a template is shared),
+  // so one active row is enough. In production these come from the importer; the
+  // CI project's schema was copied without data, so the harness supplies its own.
+  const [tmpl] = await select('tour_templates', `template_code=eq.${TEMPLATE_CODE}&select=id`)
+  if (!tmpl) {
+    await insert('tour_templates', {
+      template_code: TEMPLATE_CODE,
+      template_name: 'E2E Smoke Programme',
+      tour_type: 'land',
+      duration_days: 1,
+      hotels: [],
+      is_active: true,
+    })
+    console.log('✓ tour template created')
+  } else {
+    console.log('= tour template exists')
   }
 
   // 5. Itinerary in the E2E org (+ Day 1)
