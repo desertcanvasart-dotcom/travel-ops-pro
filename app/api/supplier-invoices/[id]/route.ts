@@ -99,15 +99,27 @@ export async function DELETE(
 
     const { id } = await params
 
-    const { error } = await supabaseAdmin
+    // A paid, approved or disputed invoice is a financial record with downstream
+    // state (payments, approvals, an open dispute); deleting it erases the trail.
+    // Only a draft/pending/cancelled invoice may be deleted, enforced in the
+    // WHERE so a concurrent approval/payment cannot slip through the check.
+    const { data, error } = await supabaseAdmin
       .from('supplier_invoices')
       .delete()
       .eq('id', id)
       .eq('org_id', orgId)
+      .in('status', ['draft', 'pending', 'cancelled'])
+      .select('id')
 
     if (error) {
       console.error('Error deleting supplier invoice:', error)
       return NextResponse.json({ error: 'Failed to delete supplier invoice' }, { status: 500 })
+    }
+    if (!data?.length) {
+      return NextResponse.json(
+        { error: 'Only a draft, pending or cancelled invoice can be deleted.' },
+        { status: 409 }
+      )
     }
 
     return NextResponse.json({ success: true })

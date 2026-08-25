@@ -66,6 +66,16 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
+    // A negative amount flips the sign of what is owed and corrupts the payables
+    // total (accounts-payable sums amounts). Reject it — a credit note is a
+    // different document, not a negative invoice.
+    if (Number(body.amount) < 0 || !Number.isFinite(Number(body.amount))) {
+      return NextResponse.json(
+        { error: 'amount must be a non-negative number' },
+        { status: 400 }
+      )
+    }
+
     if (!body.supplier_invoice_number || !body.supplier_name || !body.invoice_date || body.amount == null) {
       return NextResponse.json(
         { error: 'supplier_invoice_number, supplier_name, invoice_date, and amount are required' },

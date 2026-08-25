@@ -32,7 +32,10 @@ export async function POST(
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
     }
 
-    if (invoice.status === 'paid' || invoice.status === 'cancelled') {
+    // A DISPUTED invoice must be resolved (un-disputed) before it can be
+    // approved — approving straight over a dispute, then paying, is how a
+    // contested charge gets paid anyway. paid/cancelled are terminal.
+    if (['paid', 'cancelled', 'disputed'].includes(invoice.status)) {
       return NextResponse.json(
         { error: `Cannot approve invoice with status: ${invoice.status}` },
         { status: 400 }
@@ -68,6 +71,7 @@ export async function POST(
       .eq('org_id', orgId)
       .neq('status', 'paid')
       .neq('status', 'cancelled')
+      .neq('status', 'disputed')
     if (!override) {
       updateQuery = updateQuery.eq('match_status', 'matched')
     }

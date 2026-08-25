@@ -37,6 +37,10 @@ export async function POST(
       )
     }
 
+    // ATOMIC. The pre-check above read the status, but a payment could land
+    // between that read and this write; without re-checking status in the WHERE,
+    // the dispute would overwrite a 'paid' row and lose the payment. Excluding
+    // paid/disputed here means a concurrent payment wins and this matches 0 rows.
     const { data, error } = await supabaseAdmin
       .from('supplier_invoices')
       .update({
@@ -46,8 +50,17 @@ export async function POST(
       })
       .eq('id', id)
       .eq('org_id', orgId)
+      .neq('status', 'paid')
+      .neq('status', 'disputed')
       .select()
-      .single()
+      .maybeSingle()
+
+    if (!error && !data) {
+      return NextResponse.json(
+        { error: 'Invoice can no longer be disputed (it was paid or disputed concurrently).' },
+        { status: 409 }
+      )
+    }
 
     if (error) {
       return NextResponse.json({ error: 'Failed to dispute' }, { status: 500 })
