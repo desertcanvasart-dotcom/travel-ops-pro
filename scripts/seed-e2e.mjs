@@ -9,10 +9,12 @@
 //     the suite can never touch the real operator org
 //   - itinerary E2E-SMOKE-001 ("E2E Smoke Trip") + Day 1, in the E2E org
 //
-// It deliberately creates NO client. `clients` has no org_id, so a permanent
-// one would sit in the operator's real list looking like junk to tidy away —
-// and tidying it away red-lit CI across two merges. The specs that need a
-// client now mint their own per run (e2e/fixtures.ts createTestClient).
+// It deliberately creates NO client. That began because `clients` had no org_id,
+// so a permanent one sat in the operator's real list looking like junk to tidy
+// away — and tidying it away red-lit CI across two merges. clients IS org-scoped
+// now (migrations/20260825_clients_org_id.sql) so that hazard is gone, but the
+// per-run fixture is still the better shape: no cross-run state to collide over.
+// See e2e/fixtures.ts createTestClient.
 //
 // Usage:
 //   node scripts/seed-e2e.mjs             # create/ensure everything
