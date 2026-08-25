@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { notFoundInOrg } from '@/lib/api/org-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -18,6 +20,9 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
 
     const { data, error } = await supabaseAdmin
@@ -46,9 +51,11 @@ export async function PUT(
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
+    if (!error && !data) return notFoundInOrg('Transport package')
     if (error) {
       console.error('Error updating transport package:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -67,12 +74,17 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('b2b_transport_packages')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
 
+    if (!error && !data?.length) return notFoundInOrg('Transport package')
     if (error) {
       console.error('Error deleting transport package:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
