@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { sanitizeTiers } from '@/lib/rates/activity-tiers'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 
@@ -59,6 +60,8 @@ export async function PUT(
       base_rate_non_eur: parseFloat(body.base_rate_non_eur) || 0,
       // Add-on pricing fields
       pricing_type: body.pricing_type || 'per_person',
+      // Volume-discount bands (pricing_type='tiered'); invalid payloads read as no tiers
+      tiers: sanitizeTiers(body.tiers),
       unit_label: body.unit_label || null,
       min_capacity: parseInt(body.min_capacity) || 1,
       max_capacity: parseInt(body.max_capacity) || 99,
