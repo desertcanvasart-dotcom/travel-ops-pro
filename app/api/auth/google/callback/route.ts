@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { encryptToken } from '@/lib/crypto/token-cipher'
 import { createClient } from '@supabase/supabase-js'
 import { getTokensFromCode, getUserEmail } from '@/lib/gmail'
 import { verifyState } from '@/lib/oauth-state'
@@ -83,8 +84,8 @@ export async function GET(request: NextRequest) {
       .upsert({
         user_id: userId,
         email,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: encryptToken(tokens.access_token),
+        refresh_token: encryptToken(tokens.refresh_token),
         token_expiry: expiryDate.toISOString(),
         updated_at: new Date().toISOString(),
       }, {

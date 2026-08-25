@@ -1,4 +1,5 @@
 import { google } from 'googleapis'
+import { decryptToken, encryptToken } from '@/lib/crypto/token-cipher'
 import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 
 // A FRESH OAuth2 client per call — never a shared, mutated singleton.
@@ -52,8 +53,10 @@ export async function getAuthenticatedGmail(userId: string): Promise<Authenticat
     throw new GmailAuthError('Gmail not connected. Please connect your Gmail account first.')
   }
 
-  let accessToken = tokenData.access_token
-  const refreshToken = tokenData.refresh_token
+  // Decrypt at the boundary — everything below works with plaintext tokens,
+  // legacy plaintext rows pass through unchanged.
+  let accessToken = decryptToken(tokenData.access_token)!
+  const refreshToken = decryptToken(tokenData.refresh_token)!
   const emailAddress = tokenData.email_address || ''
 
   // Check if token is expired and refresh if needed
@@ -65,7 +68,7 @@ export async function getAuthenticatedGmail(userId: string): Promise<Authenticat
       await supabase
         .from('gmail_tokens')
         .update({
-          access_token: newCredentials.access_token,
+          access_token: encryptToken(newCredentials.access_token),
           token_expiry: new Date(newCredentials.expiry_date || Date.now() + 3600000).toISOString(),
           updated_at: new Date().toISOString(),
         })

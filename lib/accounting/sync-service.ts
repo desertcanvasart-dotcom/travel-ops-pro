@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { decryptToken, encryptToken } from '@/lib/crypto/token-cipher'
 import { AccountingProvider, AccountingAuthError, AccountingSyncError, AccountingConfigError, SyncEntityType, AccountingProviderType } from './types'
 import { XeroProvider } from './xero-provider'
 import { QuickBooksProvider } from './quickbooks-provider'
@@ -41,8 +42,8 @@ export async function getAuthenticatedProvider(userId: string): Promise<{
     return null // No accounting connected
   }
 
-  let accessToken = tokenData.access_token
-  const refreshToken = tokenData.refresh_token
+  let accessToken = decryptToken(tokenData.access_token) as string
+  const refreshToken = decryptToken(tokenData.refresh_token) as string
   const providerType = tokenData.provider as AccountingProviderType
 
   // Check if token is expired and refresh if needed
@@ -61,8 +62,8 @@ export async function getAuthenticatedProvider(userId: string): Promise<{
       await supabase
         .from('accounting_tokens')
         .update({
-          access_token: newTokens.access_token,
-          refresh_token: newTokens.refresh_token,
+          access_token: encryptToken(newTokens.access_token),
+          refresh_token: encryptToken(newTokens.refresh_token),
           token_expiry: new Date(newTokens.expiry_date).toISOString(),
           updated_at: new Date().toISOString(),
         })

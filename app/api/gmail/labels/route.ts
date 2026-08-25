@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { decryptToken, encryptToken } from '@/lib/crypto/token-cipher'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { google } from 'googleapis'
@@ -36,7 +37,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
     }
 
-    let { access_token, refresh_token, token_expiry } = tokenData
+    let access_token = decryptToken(tokenData.access_token)
+    const refresh_token = decryptToken(tokenData.refresh_token) as string
+    const token_expiry = tokenData.token_expiry
 
     if (new Date(token_expiry) <= new Date()) {
       const newTokens = await refreshAccessToken(refresh_token)
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
       await supabase
         .from('gmail_tokens')
         .update({
-          access_token: newTokens.access_token,
+          access_token: encryptToken(newTokens.access_token),
           token_expiry: new Date(newTokens.expiry_date || Date.now() + 3600000).toISOString(),
         })
         .eq('user_id', userId)
@@ -88,7 +91,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
     }
 
-    let { access_token, refresh_token, token_expiry } = tokenData
+    let access_token = decryptToken(tokenData.access_token)
+    const refresh_token = decryptToken(tokenData.refresh_token) as string
+    const token_expiry = tokenData.token_expiry
 
     if (new Date(token_expiry) <= new Date()) {
       const newTokens = await refreshAccessToken(refresh_token)
@@ -137,7 +142,9 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
     }
 
-    let { access_token, refresh_token, token_expiry } = tokenData
+    let access_token = decryptToken(tokenData.access_token)
+    const refresh_token = decryptToken(tokenData.refresh_token) as string
+    const token_expiry = tokenData.token_expiry
 
     if (new Date(token_expiry) <= new Date()) {
       const newTokens = await refreshAccessToken(refresh_token)
