@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -57,7 +58,9 @@ export async function POST(
       .from('supplier_invoices')
       .update({
         status: 'approved',
-        approved_by: body.userId || null,
+        // Attribution is the signed-in approver, never a client-supplied id —
+        // an approval record a caller can forge the author of is worthless.
+        approved_by: await getCurrentUserId(),
         approved_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
