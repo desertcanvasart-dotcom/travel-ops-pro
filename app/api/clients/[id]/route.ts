@@ -247,7 +247,10 @@ export async function DELETE(
           .update({ itinerary_id: null })
           .eq('itinerary_id', itin.id)
           .not('variation_id', 'is', null)
-        await supabaseAdmin.from('tour_quotes').delete().eq('itinerary_id', itin.id)
+        // Already transitively ours — the client was org-verified above and
+        // these are its itineraries — but the filter costs nothing and means
+        // this line reads safely on its own.
+        await supabaseAdmin.from('tour_quotes').delete().eq('itinerary_id', itin.id).eq('org_id', orgId)
 
         // Delete the itinerary itself
         await step('trip', supabaseAdmin.from('itineraries').delete().eq('id', itin.id))

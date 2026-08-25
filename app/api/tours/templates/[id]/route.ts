@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 
 // Admin client for all operations (bypasses RLS)
@@ -186,6 +187,11 @@ export async function DELETE(
   try {
     const { id } = await params
 
+    // Needed for the quote cascade below: templates are shared across
+    // organisations, the quotes built from them are not.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     // 1. Get all days first
     const { data: days, error: daysErr } = await supabaseAdmin
       .from('tour_days')
@@ -219,11 +225,17 @@ export async function DELETE(
     if (variations && variations.length > 0) {
       const variationIds = variations.map(v => v.id)
 
-      // Detach quotes that also have an itinerary_id (set variation_id to null)
+      // Detach quotes that also have an itinerary_id (set variation_id to null).
+      //
+      // SCOPED. tour_templates and tour_variations carry no org_id, so a
+      // template is shared across organisations — but the QUOTES built from it
+      // are not. Unscoped, deleting a template reached into every other
+      // organisation's quotes and deleted them. Only our own are touched.
       const { error: detachErr } = await supabaseAdmin
         .from('tour_quotes')
         .update({ variation_id: null })
         .in('variation_id', variationIds)
+        .eq('org_id', orgId)
         .not('itinerary_id', 'is', null)
       if (detachErr) console.error('Error detaching quotes:', detachErr)
 
@@ -232,6 +244,7 @@ export async function DELETE(
         .from('tour_quotes')
         .delete()
         .in('variation_id', variationIds)
+        .eq('org_id', orgId)
       if (delQuotesErr) console.error('Error deleting quotes:', delQuotesErr)
 
       // Delete variation daily itinerary

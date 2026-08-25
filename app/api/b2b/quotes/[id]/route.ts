@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -19,6 +21,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
 
     const { data, error } = await supabaseAdmin
       .from('tour_quotes')
@@ -119,6 +124,9 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
     const body = await request.json()
 
     // Remove id from body if present to avoid conflicts
@@ -164,6 +172,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
 
     const { error } = await supabaseAdmin
       .from('tour_quotes')

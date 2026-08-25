@@ -6,7 +6,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserRole } from '@/lib/auth/current-org'
+import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,10 +26,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'quote_ids array is required' }, { status: 400 })
     }
 
+    // TENANT BOUNDARY, folded into the statement rather than checked first:
+    // ids arrive as a list from the body, and a manager in one organisation
+    // could delete another's quotes simply by naming them. Filtering inside the
+    // DELETE means a mixed list silently drops the ids that are not ours, and
+    // the returned rows say exactly what was removed.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { data, error } = await supabaseAdmin
       .from('tour_quotes')
       .delete()
       .in('id', quote_ids)
+      .eq('org_id', orgId)
       .select('id')
 
     if (error) {

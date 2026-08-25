@@ -599,6 +599,7 @@ export async function POST(request: NextRequest) {
     const { data: quote, error: quoteError } = await supabaseAdmin
       .from('tour_quotes')
       .insert({
+        org_id: orgId,
         variation_id: null,
         itinerary_id,
         partner_id: partner_id || null,
