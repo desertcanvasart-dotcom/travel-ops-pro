@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
@@ -44,6 +45,9 @@ async function latestInbox(threadId: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const limited = await guardAiRate()
+    if (limited) return limited
+
     const body = await request.json()
     const conversationId: string | undefined = body.email_conversation_id
     if (!conversationId) {

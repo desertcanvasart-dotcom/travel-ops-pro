@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { generateReplyOptions } from '@/lib/ai/reply-suggestions'
@@ -39,6 +40,9 @@ async function latestInbox(threadId: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const limited = await guardAiRate()
+    if (limited) return limited
+
     const body = await request.json()
     const conversationId: string | undefined = body.whatsapp_conversation_id
     if (!conversationId) {
