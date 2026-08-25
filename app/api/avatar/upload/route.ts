@@ -34,6 +34,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Reject an oversized upload BEFORE parsing the multipart body. formData()
+    // buffers the ENTIRE request into memory, so checking file.size afterwards
+    // (below) still let a caller force the whole allocation first. The 2 MiB
+    // file limit plus MIME/multipart overhead fits comfortably under 3 MiB.
+    const declaredLen = Number(request.headers.get('content-length') || '0')
+    if (declaredLen > 3 * 1024 * 1024) {
+      return NextResponse.json(
+        { success: false, error: 'File too large. Maximum size is 2MB.' },
+        { status: 413 }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 

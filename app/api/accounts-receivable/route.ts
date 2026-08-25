@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
       .gt('balance_due', 0)
       .not('status', 'eq', 'cancelled')
       .order('due_date', { ascending: true })
+      .limit(1000)
 
     if (clientId) {
       query = query.eq('client_id', clientId)

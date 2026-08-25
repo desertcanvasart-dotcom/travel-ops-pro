@@ -26,6 +26,7 @@ export async function GET(
       .eq('quote_type', 'b2b')
       .eq('quote_id', id)
       .order('version_number', { ascending: false })
+      .limit(200)
 
     if (error) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
