@@ -171,13 +171,13 @@ export async function GET(request: NextRequest) {
     const destinationMap = new Map<string, { bookings: number; revenue: number }>()
     itineraries.forEach(itinerary => {
       const raw = itinerary.destinations
-      const cities: string[] = Array.isArray(raw)
+      const cityNames: string[] = Array.isArray(raw)
         ? raw.map(String)
         : typeof raw === 'string'
           ? raw.split(',').map(c => c.trim()).filter(Boolean)
           : []
 
-      cities.forEach(city => {
+      cityNames.forEach(city => {
         const existing = destinationMap.get(city) || { bookings: 0, revenue: 0 }
         existing.bookings += 1
         if (itinerary.status === 'confirmed' || itinerary.status === 'completed') {
@@ -274,7 +274,11 @@ function groupByWeek(data: any[], range: string): { month: string; revenue: numb
     const weekKey = weekStart.toISOString().split('T')[0]
     
     const existing = weekMap.get(weekKey) || 0
-    weekMap.set(weekKey, existing + (parseFloat(item.total_price) || 0))
+    // total_cost, not total_price. The rename reached the three call sites in
+    // the handler but not this helper, so every week summed `undefined` to 0 and
+    // the trend chart auto-scaled to an empty axis while the headline figure
+    // above it was correct.
+    weekMap.set(weekKey, existing + (parseFloat(item.total_cost) || 0))
   })
 
   // Convert to array and sort
