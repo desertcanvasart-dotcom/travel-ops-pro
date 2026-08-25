@@ -7,6 +7,7 @@ import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { currencySymbol } from '@/lib/currency-totals'
+import { escapeHtml as esc } from '@/lib/html-escape'
 
 // ============================================
 // B2B QUOTE PDF GENERATION
@@ -51,7 +52,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${quote.quote_number} - Quote</title>
+  <title>${esc(quote.quote_number)} - Quote</title>
   <style>
     ${fontFace}
     * {
@@ -449,7 +450,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
         </div>
       </div>
       <div class="quote-box">
-        <div class="quote-number">${quote.quote_number}</div>
+        <div class="quote-number">${esc(quote.quote_number)}</div>
         <div class="quote-dates">
           ${labels.issued}: ${today}<br>
           ${labels.validUntil}: ${formatDate(quote.valid_until, locale, tbd, 'short')}
@@ -462,9 +463,9 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
       ${partner ? `
       <div class="info-card">
         <h4>${labels.partner}</h4>
-        <p>${partner.company_name}</p>
-        <p class="secondary">${partner.partner_code}</p>
-        ${partner.contact_name ? `<p class="secondary">${partner.contact_name}</p>` : ''}
+        <p>${esc(partner.company_name)}</p>
+        <p class="secondary">${esc(partner.partner_code)}</p>
+        ${partner.contact_name ? `<p class="secondary">${esc(partner.contact_name)}</p>` : ''}
       </div>
       ` : `
       <div class="info-card">
@@ -475,10 +476,10 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
 
       <div class="info-card">
         <h4>${labels.client}</h4>
-        <p>${quote.client_name || labels.clientTBC}</p>
-        ${quote.client_email ? `<p class="secondary">${quote.client_email}</p>` : ''}
-        ${quote.client_phone ? `<p class="secondary">${quote.client_phone}</p>` : ''}
-        ${quote.client_nationality ? `<p class="secondary">${quote.client_nationality}</p>` : ''}
+        <p>${esc(quote.client_name || labels.clientTBC)}</p>
+        ${quote.client_email ? `<p class="secondary">${esc(quote.client_email)}</p>` : ''}
+        ${quote.client_phone ? `<p class="secondary">${esc(quote.client_phone)}</p>` : ''}
+        ${quote.client_nationality ? `<p class="secondary">${esc(quote.client_nationality)}</p>` : ''}
       </div>
     </div>
     
@@ -518,7 +519,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
         <tbody>
           ${services.slice(0, 20).map((service: any) => `
             <tr>
-              <td>${service.service_name || labels.fallbackService}</td>
+              <td>${esc(service.service_name || labels.fallbackService)}</td>
               <td>${service.quantity || 1}</td>
               <td>${sym}${(service.unit_cost || 0).toFixed(2)}</td>
               <td><strong>${sym}${(service.line_total || 0).toFixed(2)}</strong></td>
@@ -575,7 +576,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     ${quote.notes ? `
     <div class="notes-section">
       <h4>${labels.notes}</h4>
-      <p>${quote.notes}</p>
+      <p>${esc(quote.notes)}</p>
     </div>
     ` : ''}
 
@@ -734,6 +735,19 @@ export async function GET(
     
     try {
     const page = await browser.newPage()
+
+    // SSRF GUARD. The template inlines its fonts and logo as data URIs, so a
+    // genuine render fetches nothing over the network. Abort every request that
+    // is not the in-memory document or a data: URI — otherwise markup smuggled
+    // into a quote field (client name, notes, a service description) could make
+    // THIS SERVER fetch an internal URL and render the response into the PDF.
+    await page.setRequestInterception(true)
+    page.on('request', req => {
+      if (req.isNavigationRequest() && req.frame() === page.mainFrame()) return void req.continue()
+      const scheme = req.url().split(':', 1)[0]
+      if (scheme === 'data') return void req.continue()
+      void req.abort()
+    })
 
     // NOT networkidle0 — puppeteer 25 dropped it from setContent, and it was
     // the wrong signal anyway: this template inlines its fonts, so there is no

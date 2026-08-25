@@ -183,10 +183,19 @@ export default function FinancialReportsPage() {
   }, [fetchData])
 
   const exportToCSV = (data: any[], filename: string) => {
-    const headers = Object.keys(data[0] || {}).join(',')
-    const rows = data.map(row => Object.values(row).join(','))
-    const csv = [headers, ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
+    // Quote-wrap every cell (so commas/quotes in values don't break columns)
+    // AND neutralise formula triggers: a value starting with = + - @ is executed
+    // by Excel/Sheets when opened. Prefix those with a single quote.
+    const cell = (v: unknown) => {
+      const s = String(v ?? '')
+      const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s
+      return `"${safe.replace(/"/g, '""')}"`
+    }
+    const keys = Object.keys(data[0] || {})
+    const headers = keys.map(cell).join(',')
+    const rows = data.map(row => keys.map(k => cell((row as Record<string, unknown>)[k])).join(','))
+    const csv = ['\ufeff' + headers, ...rows].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

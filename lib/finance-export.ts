@@ -32,6 +32,14 @@ export interface PDFExportOptions {
 // CSV EXPORT
 // ============================================
 
+// A cell whose text begins with = + - @ (or a leading tab/CR) is executed as a
+// FORMULA by Excel and Google Sheets when the CSV is opened — CSV injection.
+// Quote-wrapping does not stop it; the spreadsheet still evaluates "=cmd". Prefix
+// such a value with a single quote so it is shown literally and never run.
+function csvSafeCell(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+}
+
 export function exportFinanceCSV(
   data: Record<string, unknown>[],
   columns: ExportColumn[],
@@ -44,8 +52,9 @@ export function exportFinanceCSV(
     columns.map(col => {
       const value = row[col.key]
       const formatted = col.format ? col.format(value) : String(value ?? '')
-      // Escape quotes and wrap in quotes for CSV safety
-      return `"${String(formatted).replace(/"/g, '""')}"`
+      // Neutralise formula triggers, THEN escape quotes and wrap.
+      const safe = csvSafeCell(String(formatted))
+      return `"${safe.replace(/"/g, '""')}"`
     })
   )
 
