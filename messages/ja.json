@@ -260,7 +260,7 @@
     "readyMadePackages": "既製パッケージ",
     "importItinerary": "旅程インポート",
     "partners": "パートナー",
-    "pricingRules": "価格ルール",
+    "pricingRules": "輸送パッケージ",
     "settings": "設定",
     "userManagement": "ユーザー管理",
     "help": "ヘルプ",
@@ -6713,8 +6713,8 @@
     "seasonPremium": "{season}割増（{percent}%）"
   },
   "b2bPricingRules": {
-    "title": "B2B料金ルール",
-    "subtitle": "段階料金、ボートサイズ、輸送パッケージの管理",
+    "title": "輸送パッケージ",
+    "subtitle": "クルーズ観光・日帰りツアー向けの輸送パッケージ管理",
     "backToB2B": "B2Bに戻る",
     "loadingPricingRules": "料金ルールを読み込み中...",
     "failedToLoadRules": "料金ルールの読み込みに失敗しました",

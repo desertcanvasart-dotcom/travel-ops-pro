@@ -260,7 +260,7 @@
     "readyMadePackages": "Ready Made Packages",
     "importItinerary": "Import Itinerary",
     "partners": "Partners",
-    "pricingRules": "Pricing Rules",
+    "pricingRules": "Transport Packages",
     "settings": "Settings",
     "userManagement": "User Management",
     "help": "Help",
@@ -6127,8 +6127,8 @@
     "seasonPremium": "{season} premium ({percent}%)"
   },
   "b2bPricingRules": {
-    "title": "B2B Pricing Rules",
-    "subtitle": "Manage tiered pricing, boat sizes, and transport packages",
+    "title": "Transport Packages",
+    "subtitle": "Bundled transport packages for cruise sightseeing and day tours",
     "backToB2B": "Back to B2B",
     "loadingPricingRules": "Loading pricing rules...",
     "failedToLoadRules": "Failed to load pricing rules",
