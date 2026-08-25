@@ -159,7 +159,11 @@ async function seed() {
       id: user.id,
       email,
       full_name: 'E2E Smoke User',
-      role: 'owner',
+      // user_profiles.role is the DISPLAY MIRROR, and its CHECK predates the
+      // one-role migration — it allows admin|manager|agent|viewer but NOT
+      // 'owner'. The real owner access comes from the organization_members row
+      // below; this value only has to satisfy the constraint.
+      role: 'admin',
       is_active: true,
     },
     { Prefer: 'resolution=merge-duplicates' }
