@@ -61,6 +61,8 @@ import {
   Plug,
   Building2,
   ScrollText,
+  ReceiptText,
+  HandCoins,
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
@@ -209,8 +211,8 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'receipts', href: '/receipts', icon: Receipt },
       { labelKey: 'receivables', href: '/accounts-receivable', icon: Wallet },
       { labelKey: 'payables', href: '/accounts-payable', icon: CreditCard },
-      { labelKey: 'supplierInvoices', href: '/supplier-invoices', icon: FileText },
-      { labelKey: 'expenses', href: '/expenses', icon: Receipt },
+      { labelKey: 'supplierInvoices', href: '/supplier-invoices', icon: ReceiptText },
+      { labelKey: 'expenses', href: '/expenses', icon: HandCoins },
       { labelKey: 'commissions', href: '/commissions', icon: Handshake },
       { labelKey: 'profitLoss', href: '/profit-loss', icon: TrendingUp },
       { labelKey: 'financialReports', href: '/financial-reports', icon: BarChart3 },
