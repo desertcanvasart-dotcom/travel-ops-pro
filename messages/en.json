@@ -408,7 +408,19 @@
     "fromLastMonth": "from last month",
     "overdue": "overdue",
     "days": "days",
-    "startNow": "Start now →"
+    "startNow": "Start now →",
+    "departingThisWeek": "Departing This Week",
+    "next7Days": "Next 7 days",
+    "tripsInProgress": "Trips in Progress",
+    "onTheGround": "On the ground now",
+    "unreadInbox": "Unread Inbox",
+    "acrossWhatsappEmail": "WhatsApp + Email",
+    "tasksDueToday": "Tasks Due Today",
+    "newThisMonth": "New this month",
+    "vsLastMonth": "vs {count} last month",
+    "unifiedInbox": "Unified Inbox",
+    "manageConversations": "WhatsApp & email conversations",
+    "paymentsReceived": "Payments Received"
   },
   "analytics": {
     "title": "Analytics Dashboard",
