@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get('id')
     const partner_id = searchParams.get('partner_id')
     const status = searchParams.get('status')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    // Clamp: an unbounded ?limit extracts the whole table / exhausts memory.
+    const rawLimit = parseInt(searchParams.get('limit') || '50')
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50
 
     // Get single quote by ID
     if (id) {

@@ -7,7 +7,9 @@ export default defineConfig({
     environment: 'node',
     // Playwright owns e2e/ — its specs use @playwright/test and must not be
     // collected by Vitest (they fail at import).
-    exclude: ['**/node_modules/**', '**/e2e/**'],
+    // '.claude/**' skips git worktrees the harness leaves under .claude/worktrees
+    // — vitest would otherwise run a stale duplicate of the suite from them.
+    exclude: ['**/node_modules/**', '**/e2e/**', '**/.claude/**'],
   },
   resolve: {
     alias: {

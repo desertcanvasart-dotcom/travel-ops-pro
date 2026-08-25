@@ -49,6 +49,28 @@ export async function POST(request: NextRequest) {
 
     const effectiveEndDate = end_date || start_date
 
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveEndDate)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid end_date format. Use YYYY-MM-DD' },
+        { status: 400 }
+      )
+    }
+    // A reversed range would scan nothing yet report "available" for a trip that
+    // cannot be served; an unbounded one is a cheap way to force a huge scan.
+    if (effectiveEndDate < start_date) {
+      return NextResponse.json(
+        { success: false, error: 'end_date must not be before start_date' },
+        { status: 400 }
+      )
+    }
+    const spanDays = (Date.parse(effectiveEndDate) - Date.parse(start_date)) / 86_400_000
+    if (spanDays > 366) {
+      return NextResponse.json(
+        { success: false, error: 'Date range too large (max 366 days)' },
+        { status: 400 }
+      )
+    }
+
     // Use admin client since this is called by AI agent without user auth
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 

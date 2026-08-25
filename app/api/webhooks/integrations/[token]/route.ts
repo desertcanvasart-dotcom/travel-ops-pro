@@ -47,6 +47,14 @@ export async function POST(
 ) {
   const { token } = await params
 
+  // 0. Reject an oversized body BEFORE buffering it. request.text() reads the
+  //    whole stream into memory; an unbounded delivery is a cheap DoS. 1 MiB is
+  //    far above a legitimate departures batch.
+  const declaredLen = Number(request.headers.get('content-length') || '0')
+  if (declaredLen > 1_048_576) {
+    return NextResponse.json({ success: false, error: 'Request body too large' }, { status: 413 })
+  }
+
   // 1. RAW body first. JSON.parse → JSON.stringify reorders keys and drops
   //    whitespace, producing a different digest than the partner signed.
   let rawBody: string
@@ -54,6 +62,10 @@ export async function POST(
     rawBody = await request.text()
   } catch {
     return NextResponse.json({ success: false, error: 'Could not read request body' }, { status: 400 })
+  }
+  // Also cap the ACTUAL size — content-length can lie or be absent.
+  if (rawBody.length > 1_048_576) {
+    return NextResponse.json({ success: false, error: 'Request body too large' }, { status: 413 })
   }
 
   // 2. Resolve the connection from the token alone. The org comes from the row,

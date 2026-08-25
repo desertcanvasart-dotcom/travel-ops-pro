@@ -27,6 +27,9 @@ export async function PUT(request: NextRequest) {
     if (!Array.isArray(quote_ids) || quote_ids.length === 0) {
       return NextResponse.json({ success: false, error: 'quote_ids array is required' }, { status: 400 })
     }
+    if (quote_ids.length > 500) {
+      return NextResponse.json({ success: false, error: 'Too many quotes in one request (max 500)' }, { status: 400 })
+    }
     if (!status) {
       return NextResponse.json({ success: false, error: 'status is required' }, { status: 400 })
     }
