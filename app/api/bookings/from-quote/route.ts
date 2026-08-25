@@ -106,9 +106,11 @@ export async function POST(request: NextRequest) {
     const depositPercent = depositCheck.value
 
     // ---------- Load the quote ----------
-    // b2c_quotes carries org_id; tour_quotes does NOT (it predates org scoping),
-    // so for B2B the org check is enforced on the linked itinerary below. That is
-    // why the itinerary fetch is org-scoped for both paths and is not optional.
+    // BOTH quote tables now carry org_id — tour_quotes gained it in
+    // migrations/20260825_tour_quotes_org_id.sql — so each is filtered directly
+    // rather than leaning on the linked itinerary. The itinerary fetch below
+    // stays org-scoped regardless: it is a second, independent check on the
+    // object this booking actually attaches to.
     const table = QUOTE_TABLES[quoteType]
     // Column lists are literals per branch — never interpolated into .select(),
     // which is what broke the build in PR #38.
@@ -124,9 +126,7 @@ export async function POST(request: NextRequest) {
             .from(table)
             .select('id, status, itinerary_id, selling_price, currency, quote_number')
             .eq('id', quote_id)
-    if (quoteType === 'b2c') {
-      quoteQuery = quoteQuery.eq('org_id', orgId)
-    }
+    quoteQuery = quoteQuery.eq('org_id', orgId)
 
     const { data: quote, error: quoteError } = (await quoteQuery.maybeSingle()) as {
       data: ResolvedQuote | null

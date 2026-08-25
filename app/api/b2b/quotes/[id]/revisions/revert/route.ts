@@ -5,9 +5,10 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserRole } from '@/lib/auth/current-org'
+import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,6 +21,12 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // TENANT BOUNDARY — see lib/b2b/quote-scope.ts. The quote is addressed by an
+    // id from the URL on a service-role client; without this, one organisation
+    // reaches another's quote.
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
 
     // Reverting overwrites the live quote — restrict to manager+.
     const role = await getCurrentUserRole()

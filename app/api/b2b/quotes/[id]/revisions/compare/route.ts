@@ -4,6 +4,8 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -53,6 +55,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // TENANT BOUNDARY — see lib/b2b/quote-scope.ts. The quote is addressed by an
+    // id from the URL on a service-role client; without this, one organisation
+    // reaches another's quote.
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
     const { searchParams } = new URL(request.url)
     const fromVersion = parseInt(searchParams.get('from') || '0', 10)
     const toVersion = parseInt(searchParams.get('to') || '0', 10)

@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
+import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
 import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -32,6 +33,10 @@ export async function POST(
         { status: 403 }
       )
     }
+
+    // TENANT BOUNDARY — converting someone else's quote would create an
+    // itinerary in OUR org from THEIR priced work.
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
 
     const { data: quote, error: quoteError } = await supabaseAdmin
       .from('tour_quotes')

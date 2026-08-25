@@ -79,6 +79,12 @@ export async function DELETE(
   try {
     const { id } = await params
 
+    // DELIBERATELY UNSCOPED. b2b_partners carries no org_id, so a partner is
+    // shared across organisations — and this is a refusal, not a disclosure: it
+    // blocks the delete if ANY organisation still has quotes against this
+    // partner. Narrowing it to our own org would let one operator delete a
+    // partner another is still quoting against. The safe direction here is the
+    // broader query.
     const { data: quotes } = await supabaseAdmin
       .from('tour_quotes')
       .select('id')

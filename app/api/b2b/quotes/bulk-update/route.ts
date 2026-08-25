@@ -8,7 +8,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserRole } from '@/lib/auth/current-org'
+import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,10 +31,16 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'status is required' }, { status: 400 })
     }
 
+    // See bulk-delete: scoped inside the statement, so a list naming another
+    // organisation's quotes updates nothing of theirs.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { data, error } = await supabaseAdmin
       .from('tour_quotes')
       .update({ status, updated_at: new Date().toISOString() })
       .in('id', quote_ids)
+      .eq('org_id', orgId)
       .select('id')
 
     if (error) {
