@@ -408,10 +408,14 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
           {/* Document */}
           <div className="bg-white border border-gray-200 rounded-lg p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Document</h3>
-            {invoice.document_url ? (
+            {(invoice.document_storage_path || invoice.document_url) ? (
               <div className="space-y-2">
                 <a
-                  href={invoice.document_url as string}
+                  /* Always the app's signed-URL route (the bucket is private).
+                     Works for legacy rows too — they still carry the storage
+                     path even though their old document_url is now a dead public
+                     link. */
+                  href={`/api/supplier-invoices/${id}/document`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-3 py-2 text-sm text-[#647C47] bg-[#647C47]/10 rounded-lg hover:bg-[#647C47]/20"
