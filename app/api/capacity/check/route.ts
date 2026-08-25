@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { determineCapacityResult } from '@/lib/capacity-availability'
@@ -23,14 +24,13 @@ import { determineCapacityResult } from '@/lib/capacity-availability'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { org_id, start_date, end_date, group_size = 1 } = body
+    const { start_date, end_date, group_size = 1 } = body
 
-    if (!org_id) {
-      return NextResponse.json(
-        { success: false, error: 'org_id is required' },
-        { status: 400 }
-      )
-    }
+    // WHOSE capacity is read comes from the SESSION, never the body. It used to
+    // take `org_id` straight from the request, so any authenticated caller could
+    // read any organisation's capacity calendar by naming its id.
+    const org_id = await getCurrentOrgId()
+    if (!org_id) return noOrgResponse()
 
     if (!start_date) {
       return NextResponse.json(

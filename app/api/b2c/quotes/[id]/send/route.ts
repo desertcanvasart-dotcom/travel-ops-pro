@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserRole } from '@/lib/auth/current-org'
+import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
@@ -31,14 +31,19 @@ export async function POST(
     if (!role || !['owner', 'admin', 'manager'].includes(role)) {
       return NextResponse.json({ success: false, error: 'Insufficient permissions. Requires manager role or higher.' }, { status: 403 })
     }
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const body = await request.json().catch(() => ({}))
     const sendVia: 'email' | 'whatsapp' = body.send_via === 'whatsapp' ? 'whatsapp' : 'email'
 
+    // Scoped: a manager must not be able to send ANOTHER organisation's quote —
+    // its pricing and customer details — to a recipient of their choosing.
     const { data: quote, error } = await supabaseAdmin
       .from('b2c_quotes')
       .select('*, itineraries (trip_name, client_name, client_email)')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
     if (error || !quote) {
       return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
@@ -90,6 +95,7 @@ export async function POST(
       .from('b2c_quotes')
       .update({ status: 'sent', sent_via: sendVia, sent_at: new Date().toISOString() })
       .eq('id', id)
+      .eq('org_id', orgId)
 
     try {
       await supabaseAdmin.rpc('create_b2c_quote_revision', {

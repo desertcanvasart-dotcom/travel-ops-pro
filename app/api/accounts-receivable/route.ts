@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
 
@@ -36,10 +37,15 @@ export async function GET(request: NextRequest) {
     const clientId = searchParams.get('clientId')
     const agingFilter = searchParams.get('aging') // current, 30, 60, 90
 
+    // TENANT BOUNDARY — invoices are org-scoped.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     // Fetch all unpaid/partially paid invoices
     let query = supabaseAdmin
       .from('invoices')
       .select('*')
+      .eq('org_id', orgId)
       .gt('balance_due', 0)
       .not('status', 'eq', 'cancelled')
       .order('due_date', { ascending: true })

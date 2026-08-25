@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
 
@@ -37,10 +38,16 @@ export async function GET(request: NextRequest) {
     const agingFilter = searchParams.get('aging')
     const status = searchParams.get('status') // pending, approved, paid
 
+    // TENANT BOUNDARY — expenses are org-scoped; the service-role client
+    // bypasses RLS, so without this every organisation's payables were pooled.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     // Fetch all unpaid expenses (pending or approved but not paid)
     let query = supabaseAdmin
       .from('expenses')
       .select('*')
+      .eq('org_id', orgId)
       .in('status', ['pending', 'approved'])
       .order('expense_date', { ascending: true })
 
