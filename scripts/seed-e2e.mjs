@@ -205,6 +205,31 @@ async function seed() {
     console.log('✓ removed the old permanent client (specs now mint their own)')
   }
 
+  // 4a. Departments + their service-type ownership.
+  //
+  // /api/departments/routing reports every service type present in the data
+  // that no department owns, and a spec asserts that list is empty — an
+  // unrouted type becomes an unassignable task that looks like one nobody
+  // picked up. Departments carry no org_id (they are global), so these mirror
+  // production's four exactly; their service_types partition the full set.
+  const DEPARTMENTS = [
+    { name: 'Reservation', service_types: ['accommodation', 'cruise', 'meal', 'transportation'] },
+    { name: 'Aviation', service_types: ['flight'] },
+    { name: 'Execution', service_types: ['guide', 'entrance', 'activity', 'airport_service', 'airport_services', 'hotel_service', 'hotel_services', 'tips', 'supplies'] },
+    { name: 'Accounting', service_types: ['invoice', 'payment', 'commission'] },
+  ]
+  for (const dept of DEPARTMENTS) {
+    const [existing] = await select('departments', `name=eq.${encodeURIComponent(dept.name)}&select=id`)
+    if (existing) {
+      // Enforce ownership — a drifted service_types set would leave a type
+      // unrouted and fail the routing spec.
+      await rest('PATCH', `/rest/v1/departments?id=eq.${existing.id}`, { service_types: dept.service_types, is_active: true })
+    } else {
+      await insert('departments', { ...dept, is_active: true })
+    }
+  }
+  console.log(`✓ ${DEPARTMENTS.length} departments ensured`)
+
   // 4b. A tour template.
   //
   // The programme picker on the edit page is populated from
