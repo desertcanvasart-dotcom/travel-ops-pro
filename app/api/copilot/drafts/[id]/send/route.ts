@@ -10,6 +10,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { getAuthenticatedGmail } from '@/lib/gmail'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +29,15 @@ export async function POST(
     const { id } = await params
     draftId = id
     const body = await request.json()
-    const userId = body.user_id
+
+    // WHO is sending, and on behalf of WHICH organisation, both come from the
+    // session. `user_id` used to be read from the body and handed to
+    // getAuthenticatedGmail below, which loads that user's stored OAuth token —
+    // so a caller could send mail FROM a colleague's Gmail account, signed with
+    // their name. Same failure as the avatar route (#171) and /api/email/sync.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const userId = await getCurrentUserId()
 
     // 1. Fetch the draft
     const { data: draft, error: draftError } = await supabase
@@ -44,15 +53,7 @@ export async function POST(
       )
     }
 
-    // 2. Verify draft is approved (man-in-the-loop gate)
-    if (draft.status !== 'approved') {
-      return NextResponse.json(
-        { success: false, error: `Cannot send a draft with status "${draft.status}". Draft must be approved first.` },
-        { status: 400 }
-      )
-    }
-
-    // 3. Fetch the thread and inbox message
+    // 2. Fetch the thread and inbox message
     const [threadResult, inboxResult] = await Promise.all([
       supabase.from('communication_threads').select('*').eq('id', draft.thread_id).single(),
       supabase.from('communication_inbox').select('*').eq('id', draft.inbox_message_id).single(),
@@ -65,6 +66,30 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: 'Thread or inbox message not found' },
         { status: 404 }
+      )
+    }
+
+    // 3. TENANT BOUNDARY. The draft is addressed only by an id from the URL and
+    // this route runs on the service-role client, so without this an operator
+    // could send another organisation's drafted reply to that organisation's
+    // customer. communication_drafts carries no org_id of its own; the thread
+    // it belongs to does.
+    //
+    // Checked BEFORE the status gate below, deliberately: answering "this draft
+    // is not approved" for a draft belonging to someone else confirms it exists
+    // and reveals its state. A plain 404 says nothing.
+    if (thread.org_id !== orgId) {
+      return NextResponse.json(
+        { success: false, error: 'Draft not found' },
+        { status: 404 }
+      )
+    }
+
+    // 4. Verify draft is approved (man-in-the-loop gate)
+    if (draft.status !== 'approved') {
+      return NextResponse.json(
+        { success: false, error: `Cannot send a draft with status "${draft.status}". Draft must be approved first.` },
+        { status: 400 }
       )
     }
 

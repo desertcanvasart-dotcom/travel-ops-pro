@@ -329,7 +329,8 @@ export function UnifiedConversationList({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
+          // No user_id: the route syncs the signed-in user's mailbox. Sending
+          // it was how any account could pull somebody else's Gmail.
           full_sync: false,
           max_results: 100,
           days_back: 30

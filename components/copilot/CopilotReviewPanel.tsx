@@ -164,7 +164,9 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
       const res = await fetch(`/api/copilot/drafts/${draft.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user?.id }),
+        // No user_id: the route sends as the signed-in user. Passing it was
+        // how a caller could send mail from someone else's Gmail account.
+        body: JSON.stringify({}),
       })
       const data = await res.json()
       if (data.success) {
