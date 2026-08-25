@@ -13,6 +13,9 @@ export default function UnifiedCommunicationsPage() {
   const [selectedConversation, setSelectedConversation] = useState<UnifiedConversation | null>(null)
   const [showCompose, setShowCompose] = useState(false)
   const [isGmailConnected, setIsGmailConnected] = useState(false)
+  // Bumped after a conversation is deleted so the list refetches immediately
+  // instead of waiting for its 30s auto-refresh.
+  const [listRefreshKey, setListRefreshKey] = useState(0)
 
   // Check Gmail connection before enabling polling (matches Email Inbox pattern)
   useEffect(() => {
@@ -47,6 +50,13 @@ export default function UnifiedCommunicationsPage() {
     )
   }, [])
 
+  // A delete succeeded server-side (WhatsApp: hidden; Email: trashed). Clear the
+  // open thread if it was the deleted one and force the list to drop the row now.
+  const handleConversationDeleted = useCallback((deletedId: string) => {
+    setSelectedConversation(prev => (prev?.id === deletedId ? null : prev))
+    setListRefreshKey(k => k + 1)
+  }, [])
+
   return (
     <div className="flex h-[calc(100vh-64px)] bg-gray-100">
       {/* Conversation List */}
@@ -55,6 +65,7 @@ export default function UnifiedCommunicationsPage() {
           onSelectConversation={handleSelectConversation}
           selectedConversationId={selectedConversation?.id}
           userId={user?.id}
+          refreshKey={listRefreshKey}
         />
         {/* Compose Email FAB */}
         <button
@@ -71,6 +82,7 @@ export default function UnifiedCommunicationsPage() {
         <UnifiedMessageThread
           conversation={selectedConversation}
           onConversationUpdate={handleConversationUpdate}
+          onConversationDeleted={handleConversationDeleted}
         />
       </div>
 

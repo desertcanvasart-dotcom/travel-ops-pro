@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Search, RefreshCw, User, Filter, Loader2,
@@ -16,6 +16,7 @@ interface UnifiedConversationListProps {
   selectedConversationId?: string
   clientId?: string // Optional: filter by client
   userId?: string // Current user ID for sync
+  refreshKey?: number // Bump to force an immediate refetch (e.g. after a delete)
 }
 
 interface FilterState {
@@ -263,6 +264,7 @@ export function UnifiedConversationList({
   selectedConversationId,
   clientId,
   userId,
+  refreshKey,
 }: UnifiedConversationListProps) {
   const t = useTranslations('communications')
   const tCommon = useTranslations('common')
@@ -377,6 +379,17 @@ export function UnifiedConversationList({
     }, 30000)
     return () => clearInterval(interval)
   }, [fetchConversations])
+
+  // Refetch on demand when the parent bumps refreshKey (e.g. after a delete).
+  // Skips the initial mount (that fetch is handled above).
+  const didMountRef = useRef(false)
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
+    fetchConversations(false)
+  }, [refreshKey])
 
   const formatTime = (dateString: string | null) => {
     if (!dateString) return ''
