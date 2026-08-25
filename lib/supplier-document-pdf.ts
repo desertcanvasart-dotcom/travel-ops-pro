@@ -1,6 +1,6 @@
 // lib/supplier-document-pdf.ts
 // Professional Supplier Document PDF Generator
-// Unified branding with Travel2Egypt / Autoura colors
+// Brand colors for the document frame; company identity comes from the org profile
 
 import jsPDF from 'jspdf'
 import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
@@ -54,8 +54,11 @@ export interface SupplierDocPdfLabels {
 }
 
 const FALLBACK_LABELS_EN: SupplierDocPdfLabels = {
-  brand: 'TRAVEL2EGYPT',
-  tagline: 'Your Gateway to Egypt',
+  // Company identity comes from the organization's Company Profile (passed in
+  // options.labels / options.company by the caller). The fallback is BLANK,
+  // never a placeholder company — same rule as the invoice generator.
+  brand: '',
+  tagline: '',
   documentNumber: 'Document Number',
   issueDate: 'Issue Date',
   supplier: 'Supplier',
@@ -81,9 +84,9 @@ const FALLBACK_LABELS_EN: SupplierDocPdfLabels = {
   paymentTerms: 'PAYMENT TERMS',
   totalAmount: 'TOTAL AMOUNT',
   total: 'Total',
-  authorizedBy: 'Authorized by Travel2Egypt',
+  authorizedBy: '',
   supplierConfirmationStamp: 'Supplier Confirmation & Stamp',
-  footerContact: 'Travel2Egypt | www.travel2egypt.com | reservations@travel2egypt.com | +20 100 XXX XXXX',
+  footerContact: '',
   nationality: 'Nationality',
   paxComposition: (a, c) => `${a} Adult${a !== 1 ? 's' : ''}${c > 0 ? ` + ${c} Child${c !== 1 ? 'ren' : ''}` : ''}`,
   driverTBA: 'To be assigned',
@@ -119,6 +122,9 @@ const FALLBACK_LABELS_EN: SupplierDocPdfLabels = {
 export interface SupplierDocPdfOptions {
   locale?: 'en' | 'ja'
   labels?: SupplierDocPdfLabels
+  /** Organization logo as a data URL (see lib/company-info-client). When
+   *  present it replaces the text brand mark in the header. */
+  logoDataUrl?: string | null
 }
 
 interface ServiceItem {
@@ -277,19 +283,36 @@ export async function generateSupplierDocumentPDF(
   
   y = 15
   
-  // Company Logo Area (Left side)
-  pdf.setFillColor(BRAND.primaryLight.r, BRAND.primaryLight.g, BRAND.primaryLight.b)
-  pdf.roundedRect(margin, y, 55, 20, 3, 3, 'F')
-  
-  pdf.setFontSize(16)
-  pdf.setFont(fontFamily, 'bold')
-  pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-  pdf.text(labels.brand, margin + 5, y + 9)
-  
-  pdf.setFontSize(7)
-  pdf.setFont(fontFamily, 'normal')
-  pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text(labels.tagline, margin + 5, y + 15)
+  // Company identity (left side): the organization's logo when available,
+  // otherwise its name/address as text. Nothing is drawn when the Company
+  // Profile is unfilled — a blank corner, never a placeholder company.
+  if (options.logoDataUrl) {
+    try {
+      const props = pdf.getImageProperties(options.logoDataUrl)
+      const maxH = 20, maxW = 55
+      let w = (props.width / props.height) * maxH
+      let h = maxH
+      if (w > maxW) { h = (props.height / props.width) * maxW; w = maxW }
+      pdf.addImage(options.logoDataUrl, margin, y + (maxH - h) / 2, w, h)
+    } catch {
+      // an undrawable logo is not worth failing a voucher over
+    }
+  } else if (labels.brand) {
+    pdf.setFillColor(BRAND.primaryLight.r, BRAND.primaryLight.g, BRAND.primaryLight.b)
+    pdf.roundedRect(margin, y, 55, 20, 3, 3, 'F')
+
+    pdf.setFontSize(16)
+    pdf.setFont(fontFamily, 'bold')
+    pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
+    pdf.text(labels.brand, margin + 5, y + 9)
+
+    if (labels.tagline) {
+      pdf.setFontSize(7)
+      pdf.setFont(fontFamily, 'normal')
+      pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
+      pdf.text(labels.tagline, margin + 5, y + 15)
+    }
+  }
   
   // Document Type & Number (Right side)
   const rightBoxX = pageWidth - margin - 65
@@ -735,7 +758,7 @@ export async function generateSupplierDocumentPDF(
   pdf.setFontSize(8)
   pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text(labels.authorizedBy, margin, y + 18)
+  if (labels.authorizedBy) pdf.text(labels.authorizedBy, margin, y + 18)
   
   // Supplier signature
   pdf.line(pageWidth - margin - sigWidth, y + 12, pageWidth - margin, y + 12)
@@ -752,7 +775,7 @@ export async function generateSupplierDocumentPDF(
   pdf.setFontSize(7)
   pdf.setFont(fontFamily, 'normal')
   pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  pdf.text(labels.footerContact, pageWidth / 2, footerY, { align: 'center' })
+  if (labels.footerContact) pdf.text(labels.footerContact, pageWidth / 2, footerY, { align: 'center' })
   
   pdf.setFontSize(6)
   pdf.setTextColor(BRAND.textLight.r, BRAND.textLight.g, BRAND.textLight.b)

@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Download, Send, Mail, MessageSquare, Printer, CheckCircle, Eye } from 'lucide-react'
 import { generateSupplierDocumentPDF } from '@/lib/supplier-document-pdf'
+import { fetchCompanyInfo } from '@/lib/company-info-client'
+import type { CompanyInfo } from '@/lib/invoice-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
@@ -51,12 +53,19 @@ export default function SupplierDocumentViewPage() {
   const tBrand = useTranslations('pdf')
   const currentLocale = useLocale()
 
+  // Company identity comes from the organization's Company Profile (Settings →
+  // Organization) — the same source the invoice and 日程表 letterheads use.
+  // Fetched once per page visit; a missing profile means BLANK identity on the
+  // voucher, never a placeholder company.
+  const companyPromiseRef = useRef<Promise<CompanyInfo | undefined> | null>(null)
+  const getCompany = () => (companyPromiseRef.current ??= fetchCompanyInfo())
+
   // Caller-side builder for the voucher PDF labels — pulls from i18n so a
   // JA operator gets a Japanese voucher even though the generator itself is
   // a pure utility.
-  const buildVoucherLabels = () => ({
-    brand: 'TRAVEL2EGYPT',                                  // brand mark stays Latin
-    tagline: tBrand('voucher.supplier') === 'サプライヤー' ? 'エジプトへの架け橋' : 'Your Gateway to Egypt',
+  const buildVoucherLabels = (company?: CompanyInfo) => ({
+    brand: company?.name || '',
+    tagline: company?.address || '',
     documentNumber: tVoucher('documentNumber'),
     issueDate: tVoucher('issueDate'),
     supplier: tVoucher('supplier'),
@@ -107,9 +116,13 @@ export default function SupplierDocumentViewPage() {
     paymentTerms: currentLocale === 'ja' ? 'お支払い条件' : 'PAYMENT TERMS',
     totalAmount: tBrand('total').toUpperCase(),
     total: tBrand('total'),
-    authorizedBy: currentLocale === 'ja' ? 'Travel2Egyptが承認' : 'Authorized by Travel2Egypt',
+    authorizedBy: company?.name
+      ? (currentLocale === 'ja' ? `${company.name}が承認` : `Authorized by ${company.name}`)
+      : '',
     supplierConfirmationStamp: currentLocale === 'ja' ? 'サプライヤー確認 & 押印' : 'Supplier Confirmation & Stamp',
-    footerContact: 'Travel2Egypt | www.travel2egypt.com | reservations@travel2egypt.com | +20 100 XXX XXXX',
+    footerContact: [company?.name, company?.website, company?.email, company?.phone]
+      .filter(Boolean)
+      .join(' | '),
     documentTitle: {
       hotel_voucher: tVoucher('hotelVoucher').toUpperCase(),
       service_order: tVoucher('serviceOrder').toUpperCase(),
@@ -121,10 +134,14 @@ export default function SupplierDocumentViewPage() {
     },
   })
 
-  const pdfOptions = () => ({
-    locale: (currentLocale === 'ja' ? 'ja' : 'en') as 'en' | 'ja',
-    labels: buildVoucherLabels(),
-  })
+  const pdfOptions = async () => {
+    const company = await getCompany()
+    return {
+      locale: (currentLocale === 'ja' ? 'ja' : 'en') as 'en' | 'ja',
+      labels: buildVoucherLabels(company),
+      logoDataUrl: company?.logoDataUrl ?? null,
+    }
+  }
   const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
@@ -171,7 +188,7 @@ export default function SupplierDocumentViewPage() {
   const handleDownload = async () => {
     if (!document) return
 
-    const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
+    const pdf = await generateSupplierDocumentPDF(document, await pdfOptions())
     const filename = `${document.document_number}_${document.supplier_name.replace(/\s+/g, '_')}.pdf`
     pdf.save(filename)
   }
@@ -179,7 +196,7 @@ export default function SupplierDocumentViewPage() {
   const handlePrint = async () => {
     if (!document) return
 
-    const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
+    const pdf = await generateSupplierDocumentPDF(document, await pdfOptions())
     const pdfBlob = pdf.output('blob')
     const pdfUrl = URL.createObjectURL(pdfBlob)
 
@@ -194,7 +211,7 @@ export default function SupplierDocumentViewPage() {
   const handlePreviewPDF = async () => {
     if (!document) return
 
-    const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
+    const pdf = await generateSupplierDocumentPDF(document, await pdfOptions())
     const blob = pdf.output('blob')
     setPdfPreviewBlob(blob)
     setShowPdfPreview(true)
@@ -208,7 +225,7 @@ export default function SupplierDocumentViewPage() {
 
     setActionLoading('email')
     try {
-      const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
+      const pdf = await generateSupplierDocumentPDF(document, await pdfOptions())
       const pdfBase64 = pdf.output('datauristring').split(',')[1]
 
       const response = await fetch('/api/send-supplier-document', {
@@ -258,7 +275,7 @@ export default function SupplierDocumentViewPage() {
 
     setActionLoading('whatsapp')
     try {
-      const pdf = await generateSupplierDocumentPDF(document, pdfOptions())
+      const pdf = await generateSupplierDocumentPDF(document, await pdfOptions())
       const pdfBase64 = pdf.output('datauristring').split(',')[1]
 
       const response = await fetch('/api/whatsapp/send-supplier-document', {
