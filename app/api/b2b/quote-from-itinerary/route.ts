@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
+import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
@@ -26,44 +27,6 @@ const supabaseAdmin = createClient(
 // ============================================
 // HELPER FUNCTIONS (same as calculate-price/route.ts)
 // ============================================
-
-async function selectVehicleFromB2CTable(numPax: number, tier: string = 'standard'): Promise<{ rate: number; vehicle: string; id: string } | null> {
-  const { data: vehicles, error } = await supabaseAdmin
-    .from('vehicles')
-    .select('id, vehicle_type, name, daily_rate, passenger_capacity, tier, is_preferred')
-    .eq('is_active', true)
-    .order('is_preferred', { ascending: false })
-
-  if (error || !vehicles || vehicles.length === 0) return null
-
-  let selectedVehicle = vehicles.find((v: any) =>
-    v.tier === tier &&
-    numPax <= (v.passenger_capacity || 99)
-  )
-
-  if (!selectedVehicle) {
-    selectedVehicle = vehicles.find((v: any) =>
-      numPax <= (v.passenger_capacity || 99)
-    )
-  }
-
-  if (!selectedVehicle) {
-    selectedVehicle = vehicles[vehicles.length - 1]
-  }
-
-  if (!selectedVehicle) return null
-
-  // A vehicle on file with no daily rate is not a €0 vehicle — it is a vehicle
-  // nobody has priced yet, and the caller must keep the cost it already had.
-  const rate = usableRate(selectedVehicle.daily_rate)
-  if (rate === null) return null
-
-  return {
-    rate,
-    vehicle: selectedVehicle.vehicle_type || selectedVehicle.name || 'Vehicle',
-    id: selectedVehicle.id
-  }
-}
 
 async function selectGuideFromB2CTable(language: string = 'English', tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
   const { data: guides, error } = await supabaseAdmin
@@ -212,6 +175,11 @@ export async function POST(request: NextRequest) {
       is_eur_passport = true,
       language = 'English',
     } = body
+
+    // Day-tour vehicle rates come from transportation_rates (operator catalog,
+    // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
+    const findDayTourVehicle = makeDayTourVehicleFinder()
+
     const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
 
     if (!itinerary_id) {
@@ -382,13 +350,13 @@ export async function POST(request: NextRequest) {
           if (isTransferOrBundle) {
             pricingNote = `Kept itinerary rate (transfer/bundled transport): ${rateSym}${Math.round(eurLineTotal * 100) / 100}`
           } else {
-            const vehicle = await selectVehicleFromB2CTable(numPax, tier)
+            const vehicle = await findDayTourVehicle(day.city || day.overnight_location, numPax, is_eur_passport)
             if (vehicle) {
               unitCost = vehicle.rate
               lineTotal = vehicle.rate
               quantityMode = 'fixed'
               pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate}/day`
-              rateSource = 'vehicles'
+              rateSource = 'transportation_rates'
             }
           }
         }
@@ -459,9 +427,10 @@ export async function POST(request: NextRequest) {
     let tourLeaderCost = 0
     if (tour_leader_included) {
       const guide = await selectGuideFromB2CTable(language, tier)
-      const vehicle = await selectVehicleFromB2CTable(numPax + 1, tier)
+      const leaderCity = (days || [])[0]?.city || (days || [])[0]?.overnight_location || ''
+      const vehicle = await findDayTourVehicle(leaderCity, numPax + 1, is_eur_passport)
       const guideRate = guide?.rate || 0
-      const baseVehicle = await selectVehicleFromB2CTable(numPax, tier)
+      const baseVehicle = await findDayTourVehicle(leaderCity, numPax, is_eur_passport)
       const vehicleDiff = vehicle ? (vehicle.rate - (baseVehicle?.rate ?? 0)) : 0
       const touringDays = (days || []).filter((d: any) =>
         (d.itinerary_services || []).some((s: any) => s.service_type === 'guide' || s.service_type === 'entrance')
